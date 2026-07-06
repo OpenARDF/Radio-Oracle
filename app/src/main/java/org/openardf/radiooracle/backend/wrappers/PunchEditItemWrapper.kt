@@ -54,7 +54,7 @@ data class PunchEditItemWrapper(
         fun getWrappers(punches: ArrayList<AliasPunch>): ArrayList<PunchEditItemWrapper> {
             return ArrayList(punches.map { ap ->
                 PunchEditItemWrapper(
-                    ap.punch,
+                    ap.punch.copyForEditing(),
                     isCodeValid = true,
                     isTimeValid = true,
                     isDayValid = true,
@@ -89,8 +89,8 @@ data class PunchEditItemWrapper(
                             null,
                             null,
                             0,
-                            result.startTime!!,
-                            result.startTime!!,
+                            SITime(result.startTime!!),
+                            SITime(result.startTime!!),
                             SIRecordType.START,
                             0,
                             PunchStatus.VALID,
@@ -126,8 +126,8 @@ data class PunchEditItemWrapper(
                             null,
                             null,
                             0,
-                            result.finishTime!!,
-                            result.finishTime!!,
+                            SITime(result.finishTime!!),
+                            SITime(result.finishTime!!),
                             SIRecordType.FINISH,
                             0,
                             PunchStatus.VALID,
@@ -154,5 +154,11 @@ data class PunchEditItemWrapper(
                 }
             }
         }
+
+        private fun Punch.copyForEditing(): Punch =
+            copy(
+                siTime = SITime(siTime),
+                origSiTime = SITime(origSiTime)
+            )
     }
 }

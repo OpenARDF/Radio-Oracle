@@ -154,12 +154,12 @@ class RaceEditDialogFragment : DialogFragment() {
                 )
             }
             RaceEditActions.EDIT -> {
-                race = args.race!!
+                race = args.race!!.copy()
                 dialog?.setTitle(R.string.race_edit)
                 nameEditText.setText(race.name)
             }
             else -> {
-                race = args.race!!
+                race = args.race!!.copy()
                 dialog?.setTitle(R.string.race_import)
                 nameEditText.setText(race.name)
 

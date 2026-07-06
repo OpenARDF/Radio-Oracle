@@ -38,7 +38,7 @@ data class AliasEditItemWrapper(
         fun getWrappers(aliases: ArrayList<Alias>): ArrayList<AliasEditItemWrapper> {
             return ArrayList(aliases.map { aliasWrapper ->
                 AliasEditItemWrapper(
-                    aliasWrapper,
+                    aliasWrapper.copy(),
                     isCodeValid = true,
                     isNameValid = true,
                 )

@@ -42,6 +42,8 @@ import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.openardf.radiooracle.backend.wrappers.PunchEditItemWrapper
+import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
+import org.openardf.radiooracle.shared.sportident.SportIdentRunTimingStatus
 import java.time.Duration
 import java.time.LocalTime
 import java.util.UUID
@@ -51,6 +53,7 @@ class PunchEditRecyclerViewAdapter(
     private val onPunchesChanged: (() -> Unit)? = null
 ) :
     RecyclerView.Adapter<PunchEditRecyclerViewAdapter.PunchViewHolder>() {
+    private var semanticTimeErrorPositions: Set<Int> = emptySet()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PunchViewHolder {
         val adapterLayout = LayoutInflater.from(parent.context)
@@ -112,6 +115,8 @@ class PunchEditRecyclerViewAdapter(
             if (item.punch.punchType != SIRecordType.START && item.punch.punchType != SIRecordType.FINISH) {
                 if (!codeWatcher(holder.bindingAdapterPosition, cs.toString())) {
                     holder.code.error = holder.code.context.getString(R.string.general_invalid)
+                } else {
+                    holder.refreshValidationErrors()
                 }
             }
         }
@@ -119,20 +124,75 @@ class PunchEditRecyclerViewAdapter(
         holder.time.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
             if (!timeWatcher(holder.bindingAdapterPosition, cs.toString())) {
                 holder.time.error = holder.code.context.getString(R.string.general_invalid)
+            } else {
+                holder.refreshValidationErrors()
             }
         }
 
         holder.weekday.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
             if (!dayWatcher(holder.bindingAdapterPosition, cs.toString())) {
                 holder.weekday.error = holder.code.context.getString(R.string.general_invalid)
+            } else {
+                holder.refreshValidationErrors()
             }
         }
 
         holder.week.doOnTextChanged { cs: CharSequence?, i: Int, i1: Int, i2: Int ->
             if (!weekWatcher(holder.bindingAdapterPosition, cs.toString())) {
                 holder.week.error = holder.code.context.getString(R.string.general_invalid)
+            } else {
+                holder.refreshValidationErrors()
             }
         }
+
+        holder.applyValidationErrors(item, position)
+    }
+
+    fun refreshSemanticTimeErrors() {
+        val newSemanticTimeErrorPositions = semanticTimeErrorPositions()
+        if (semanticTimeErrorPositions != newSemanticTimeErrorPositions) {
+            semanticTimeErrorPositions = newSemanticTimeErrorPositions
+            notifyDataSetChanged()
+        }
+    }
+
+    private fun semanticTimeErrorPositions(): Set<Int> {
+        val startPosition = values.indexOfFirst { it.punch.punchType == SIRecordType.START }
+        val finishPosition = values.indexOfFirst { it.punch.punchType == SIRecordType.FINISH }
+        val controls = values.withIndex().filter { it.value.punch.punchType == SIRecordType.CONTROL }
+
+        val timing = SportIdentReadoutTiming.calculate(
+            startSeconds = values.getOrNull(startPosition)?.punch?.siTime?.getSeconds(),
+            finishSeconds = values.getOrNull(finishPosition)?.punch?.siTime?.getSeconds(),
+            controlSeconds = controls.map { it.value.punch.siTime.getSeconds() }
+        )
+
+        val positions = mutableSetOf<Int>()
+        timing.issues.forEach { issue ->
+            when (issue.status) {
+                SportIdentRunTimingStatus.FINISH_BEFORE_START -> {
+                    positions += startPosition
+                    positions += finishPosition
+                }
+
+                SportIdentRunTimingStatus.FINISH_BEFORE_CONTROL -> {
+                    positions += finishPosition
+                }
+
+                SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START -> {
+                    positions += startPosition
+                    issue.controlIndex?.let { controls.getOrNull(it)?.index }?.let(positions::add)
+                }
+
+                SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL -> {
+                    issue.controlIndex?.let { controls.getOrNull(it)?.index }?.let(positions::add)
+                }
+
+                SportIdentRunTimingStatus.MISSING_START_OR_FINISH,
+                SportIdentRunTimingStatus.VALID -> Unit
+            }
+        }
+        return positions.filter { it >= 0 }.toSet()
     }
 
     private fun addPunch(position: Int) {
@@ -274,6 +334,21 @@ class PunchEditRecyclerViewAdapter(
                         false
                     }
                 }
+            }
+        }
+
+        fun applyValidationErrors(item: PunchEditItemWrapper, position: Int) {
+            val invalid = code.context.getString(R.string.general_invalid)
+            code.error = if (item.isCodeValid) null else invalid
+            time.error = if (item.isTimeValid && position !in semanticTimeErrorPositions) null else invalid
+            weekday.error = if (item.isDayValid) null else invalid
+            week.error = if (item.isWeekValid) null else invalid
+        }
+
+        fun refreshValidationErrors() {
+            val position = bindingAdapterPosition
+            if (position != RecyclerView.NO_POSITION) {
+                applyValidationErrors(values[position], position)
             }
         }
     }

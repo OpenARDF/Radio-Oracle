@@ -150,7 +150,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
             categoryPicker.setText(getString(R.string.no_category), false)
         } else {
             dialog?.setTitle(R.string.competitor_edit)
-            competitor = args.competitor!!
+            competitor = args.competitor!!.copy()
 
             firstNameTextView.setText(competitor.firstName)
             lastNameTextView.setText(competitor.lastName)

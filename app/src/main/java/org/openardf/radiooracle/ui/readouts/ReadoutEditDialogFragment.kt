@@ -92,6 +92,11 @@ class ReadoutEditDialogFragment : DialogFragment() {
     private lateinit var okButton: Button
     private lateinit var cancelButton: Button
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setStyle(STYLE_NORMAL, R.style.add_dialog)
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -100,12 +105,14 @@ class ReadoutEditDialogFragment : DialogFragment() {
         return inflater.inflate(R.layout.dialog_edit_readout, container, false)
     }
 
-    private fun DialogFragment.setWidthPercent(percentage: Int) {
-        val percent = percentage.toFloat() / 100
+    private fun DialogFragment.setWindowSizePercent(widthPercentage: Int, heightPercentage: Int) {
+        val widthPercent = widthPercentage.toFloat() / 100
+        val heightPercent = heightPercentage.toFloat() / 100
         val dm = Resources.getSystem().displayMetrics
         val rect = dm.run { Rect(0, 0, widthPixels, heightPixels) }
-        val percentWidth = rect.width() * percent
-        dialog?.window?.setLayout(percentWidth.toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+        val percentWidth = rect.width() * widthPercent
+        val percentHeight = rect.height() * heightPercent
+        dialog?.window?.setLayout(percentWidth.toInt(), percentHeight.toInt())
     }
 
     private fun sortCompetitorsLocaleSafe(competitors: List<Competitor>): List<Competitor> {
@@ -117,8 +124,6 @@ class ReadoutEditDialogFragment : DialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        setStyle(STYLE_NORMAL, R.style.add_dialog)
-        setWidthPercent(98)
 
         val sl: SelectedRaceViewModel by activityViewModels()
         selectedRaceViewModel = sl
@@ -139,6 +144,11 @@ class ReadoutEditDialogFragment : DialogFragment() {
 
         populateFields()
         setButtons()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        setWindowSizePercent(widthPercentage = 98, heightPercentage = 82)
     }
 
     private fun populateFields() {
@@ -169,8 +179,8 @@ class ReadoutEditDialogFragment : DialogFragment() {
 
         } else {
             dialog?.setTitle(R.string.readout_edit_readout)
-            result = args.resultData!!.result
-            origResult = result
+            result = args.resultData!!.result.copyForEditing()
+            origResult = args.resultData!!.result
 
             siNumberView.text = requireContext().getString(
                 R.string.readout_si_number,
@@ -187,7 +197,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
             }
 
             if (result.competitorId != null) {
-                competitor = selectedRaceViewModel.getCompetitor(result.competitorId!!)
+                competitor = selectedRaceViewModel.getCompetitor(result.competitorId!!)?.copy()
                 competitorPicker.setText(competitor?.getNameWithStartNumber())
             } else {
                 competitorPicker.setText(getString(R.string.readout_unknown_competitor), false)
@@ -396,6 +406,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
     }
 
     private fun updateIssueExplanation() {
+        (punchEditRecyclerView.adapter as? PunchEditRecyclerViewAdapter)?.refreshSemanticTimeErrors()
         val issueExplanation = editableResultData()?.toSharedReadoutDisplayState()?.issueExplanation
         issueExplanationView.text = issueExplanation.orEmpty()
         issueExplanationView.visibility = if (issueExplanation.isNullOrBlank()) {
@@ -448,11 +459,18 @@ class ReadoutEditDialogFragment : DialogFragment() {
             origSiTime = SITime(origSiTime)
         )
 
+    private fun Result.copyForEditing(): Result =
+        copy(
+            checkTime = checkTime?.let(::SITime),
+            startTime = startTime?.let(::SITime),
+            finishTime = finishTime?.let(::SITime)
+        ).also { it.place = place }
+
     private fun getCompetitorFromPicker(): Competitor? {
         val compText = competitorPicker.text.toString()
         val compPos = competitorArr.indexOf(compText)
         return if (compPos > 0) {
-            competitors[compPos - 1]
+            competitors[compPos - 1].copy()
         } else null
     }
 

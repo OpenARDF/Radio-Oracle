@@ -170,7 +170,7 @@ class CategoryEditDialogFragment : DialogFragment() {
         //Edit category
         else {
             dialog?.setTitle(R.string.category_edit)
-            category = args.category!!
+            category = args.category!!.copy()
             nameEditText.setText(category.name)
 
             if (category.maxAge != null) {

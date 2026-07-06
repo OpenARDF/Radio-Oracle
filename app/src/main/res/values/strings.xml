@@ -338,8 +338,8 @@
     </array>
 
     <!--Preferences:readouts-->
-    <string name="preferences_sounds_enable_error_sounds">Enable Error Sounds</string>
-    <string name="preferences_sounds_enable_sounds_hint">Enable if you want error sounds after card was read</string>
+    <string name="preferences_sounds_enable_error_sounds">Sound effects</string>
+    <string name="preferences_sounds_enable_sounds_hint">Play sounds for readout errors and unmatched cards</string>
     <string name="preferences_readout_duplicate_actions">Duplicate SI Card Actions</string>
     <string name="preferences_readout_duplicate_actions_hint">Select what should be performed when a card is read twice.</string>
     <string name="preferences_readout_duplicate_ignore">Ignore</string>

@@ -59,7 +59,7 @@
 
         <Button
             android:id="@+id/assign_dialog_cancel"
-            style="@style/dialog_ok_cancel_button"
+            style="@style/dialog_action_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="15dp"
@@ -68,12 +68,12 @@
 
         <Button
             android:id="@+id/assign_dialog_ok"
-            style="@style/dialog_ok_cancel_button"
+            style="@style/dialog_action_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="10dp"
             android:layout_weight="1"
-            android:text="@string/general_ok" />
+            android:text="@string/general_save" />
     </LinearLayout>
 
 

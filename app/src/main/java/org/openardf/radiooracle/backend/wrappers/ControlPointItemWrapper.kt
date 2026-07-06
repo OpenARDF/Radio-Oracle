@@ -37,7 +37,7 @@ data class ControlPointItemWrapper(
         fun getWrappers(controlPoints: ArrayList<ControlPoint>): ArrayList<ControlPointItemWrapper> {
             return ArrayList(controlPoints.map { controlPoint ->
                 ControlPointItemWrapper(
-                    controlPoint,
+                    controlPoint.copy(),
                     true
                 )
             })
