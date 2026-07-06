@@ -50,6 +50,12 @@ class DesktopNavigationTest {
         "Save Android Race File..."
     )
 
+    private val androidEventSeriesMenuLabels = listOf(
+        "Send Series To Android",
+        "Receive Series From Android",
+        "Save Android Series File..."
+    )
+
     @Test
     fun exposesVisibleWorkflowGroupsInBottomNavigationOrder() {
         assertEquals(
@@ -156,6 +162,10 @@ class DesktopNavigationTest {
             DesktopNavAction.ExportEventSeries,
             roots.first { it.label == "Export Series..." }.action
         )
+        assertEquals(
+            androidEventSeriesMenuLabels,
+            roots.first { it.label == "Android..." }.children.map { it.label }
+        )
     }
 
     @Test
@@ -204,6 +214,7 @@ class DesktopNavigationTest {
                 "Competitor Matching",
                 "Series Validation",
                 "Export Series...",
+                "Android...",
                 "Series Settings"
             ),
             DesktopNavigation.rootItems(DesktopWorkflow.Series).map { it.label }
@@ -393,7 +404,7 @@ class DesktopNavigationTest {
         items.forEach { item ->
             assertEquals("Wrong menu indicator state for ${item.id}", item.action == null, DesktopNavigation.showsMenuIndicator(item))
             assertFalse("Stored labels should not include rendered indicator for ${item.id}", item.label.contains(">"))
-            if (item.children.isNotEmpty() && item.id !in setOf("setup.event-file.android", "setup.tools")) {
+            if (item.children.isNotEmpty() && item.id !in setOf("setup.event-file.android", "series.android", "setup.tools")) {
                 assertFalse("Submenu labels should not use ellipses for ${item.id}", item.label.contains("..."))
             }
         }
@@ -1162,6 +1173,38 @@ class DesktopNavigationTest {
 
         assertEquals("Setup > Race File", DesktopNavigation.breadcrumb(backState))
         assertEquals(eventFileMenuLabels, DesktopNavigation.currentItems(backState).map { it.label })
+    }
+
+    @Test
+    fun androidEventSeriesActionsLiveInRaceSeriesAndroidSubmenu() {
+        val seriesAndroidActions = DesktopNavigation.rootItems(DesktopWorkflow.Series)
+            .first { it.label == "Android..." }
+            .children
+
+        assertEquals(
+            "Send Series To Android",
+            seriesAndroidActions.first { it.action == DesktopNavAction.SendEventSeriesToAndroid }.label
+        )
+        assertEquals(
+            "Receive Series From Android",
+            seriesAndroidActions.first { it.action == DesktopNavAction.ReceiveEventSeriesFromAndroid }.label
+        )
+        assertEquals(
+            "Save Android Series File...",
+            seriesAndroidActions.first { it.action == DesktopNavAction.ExportAndroidEventSeriesPackage }.label
+        )
+    }
+
+    @Test
+    fun androidEventSeriesSubmenuSupportsBackNavigation() {
+        val android = DesktopNavigation.rootItems(DesktopWorkflow.Series)
+            .first { it.label == "Android..." }
+        val androidState = DesktopNavState().switchWorkflow(DesktopWorkflow.Series).enter(android)
+
+        assertEquals("Race Series > Android...", DesktopNavigation.breadcrumb(androidState))
+        assertEquals(listOf("series.android"), androidState.submenuStack)
+        assertEquals(androidEventSeriesMenuLabels, DesktopNavigation.currentItems(androidState).map { it.label })
+        assertTrue(DesktopNavigation.canGoBack(androidState))
     }
 
     @Test

@@ -54,6 +54,7 @@ object DesktopProjectFilePaths {
     const val PDF_EXTENSION = ".pdf"
     const val KML_EXTENSION = ".kml"
     const val TXT_EXTENSION = ".txt"
+    const val ZIP_EXTENSION = ".zip"
 
     /** Returns a path with the standard Radio-Oracle desktop Race File extension. */
     fun withProjectExtension(path: Path): Path =
@@ -184,6 +185,13 @@ object DesktopProjectFilePaths {
         } else {
             path.resolveSibling("${path.fileName}$TXT_EXTENSION")
         }
+
+    fun withZipExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(ZIP_EXTENSION, ignoreCase = true)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$ZIP_EXTENSION")
+        }
 }
 
 object DesktopFileOverwriteConfirmation {
@@ -313,6 +321,13 @@ object DesktopFileDialogs {
             extension = DesktopProjectFilePaths.ANDROID_RACE_BACKUP_JSON_EXTENSION,
             defaultFileName = eventName?.let(DesktopProjectFilePaths::defaultAndroidEventJsonFileName)
         ) { DesktopProjectFilePaths.withAndroidRaceBackupJsonExtension(it) }
+
+    fun chooseExportAndroidEventSeriesPackage(defaultFileName: String): Path? =
+        chooseSaveFile(
+            title = "Save Android Series File",
+            extension = DesktopProjectFilePaths.ZIP_EXTENSION,
+            defaultFileName = defaultFileName
+        ) { DesktopProjectFilePaths.withZipExtension(it) }
 
     fun chooseExportFinalResultsJson(): Path? =
         chooseSaveFile("Export Final Results JSON", DesktopProjectFilePaths.FINAL_RESULTS_JSON_EXTENSION) {

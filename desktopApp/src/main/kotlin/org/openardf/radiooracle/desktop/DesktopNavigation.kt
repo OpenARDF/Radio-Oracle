@@ -131,6 +131,9 @@ enum class DesktopNavAction {
     AddEventToSeries,
     ValidateEventSeries,
     ExportEventSeries,
+    SendEventSeriesToAndroid,
+    ReceiveEventSeriesFromAndroid,
+    ExportAndroidEventSeriesPackage,
     DownloadSiCard,
     StartContinuousSiReadout,
     StopContinuousSiReadout,
@@ -725,6 +728,33 @@ object DesktopNavigation {
                     DesktopSection.SeriesValidation
                 ),
                 action("series.export", "Export Series...", workflow, DesktopNavAction.ExportEventSeries),
+                group(
+                    "series.android",
+                    "Android...",
+                    workflow,
+                    listOf(
+                        action(
+                            "series.android.send",
+                            "Send Series To Android",
+                            workflow,
+                            DesktopNavAction.SendEventSeriesToAndroid
+                        ),
+                        action(
+                            "series.android.receive",
+                            "Receive Series From Android",
+                            workflow,
+                            DesktopNavAction.ReceiveEventSeriesFromAndroid,
+                            requiresEventFile = false
+                        ),
+                        action(
+                            "series.android.export",
+                            "Save Android Series File...",
+                            workflow,
+                            DesktopNavAction.ExportAndroidEventSeriesPackage
+                        )
+                    ),
+                    DesktopSection.SeriesSettings
+                ),
                 item(
                     "series.settings",
                     "Series Settings",
@@ -1497,7 +1527,15 @@ object DesktopNavigation {
         "series.settings" to
             "Use Series Settings to review series metadata.",
         "series.export" to
-            "Use Export Series to copy only the manifest and manifest-listed Race Files to a clean backup folder."
+            "Use Export Series to copy only the manifest and manifest-listed Race Files to a clean backup folder.",
+        "series.android" to
+            "Use Android to share Race Series with Android devices or save an Android-compatible Race Series ZIP.",
+        "series.android.send" to
+            "Use Send Series To Android to share the open Race Series over local Wi-Fi.",
+        "series.android.receive" to
+            "Use Receive Series From Android to accept a Race Series package over local Wi-Fi.",
+        "series.android.export" to
+            "Use Save Android Series File to write an Android-compatible Race Series ZIP package."
     )
 
     private fun eventFileActions(workflow: DesktopWorkflow): List<DesktopNavItem> =

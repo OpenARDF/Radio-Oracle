@@ -2081,6 +2081,25 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportAndroidEventSeriesPackage() {
+            val manifestPath = currentSeriesManifestPath() ?: run {
+                projectStatusText = "Series manifest not found near this Race File."
+                return
+            }
+            runCatching {
+                val packageFile = DesktopEventSeriesPackageFiles.packageForManifest(
+                    store = DesktopEventSeriesFiles,
+                    manifestPath = manifestPath
+                )
+                val targetPath = DesktopFileDialogs.chooseExportAndroidEventSeriesPackage(packageFile.fileName) ?: return
+                Files.write(targetPath, packageFile.bytes)
+                projectStatusText = "Saved Android Race Series file to ${targetPath.fileName} (${packageFile.byteCount} bytes)."
+                recordActivity(projectStatusText)
+            }.onFailure { error ->
+                projectStatusText = "Save Android Race Series file failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
         fun updateCurrentEventSeriesName(name: String): Boolean {
             val trimmedName = name.trim()
             if (trimmedName.isBlank()) {
@@ -5044,8 +5063,9 @@ fun main(args: Array<String>) = application {
                                 DesktopEventFileTransferStopReason.Downloaded ->
                                     eventFileTransferResultDialog = DesktopEventFileTransferResultDialogState.downloaded(
                                         fileName = fileName,
-                                        path = path,
-                                        byteCount = byteCount
+                                        path = transferPath,
+                                        byteCount = byteCount,
+                                        isSeriesTransfer = isSeriesTransfer
                                     )
                                 DesktopEventFileTransferStopReason.Timeout ->
                                     eventFileTransferResultDialog = DesktopEventFileTransferResultDialogState.failure(
@@ -5067,7 +5087,8 @@ fun main(args: Array<String>) = application {
                     selectedAddress = session.address,
                     session = session,
                     qrCode = desktopEventFileTransferQrCode(session.url),
-                    statusText = "Waiting for Android to download ${session.fileName}. The link expires after 10 minutes or one download."
+                    statusText = "Waiting for Android to download ${session.fileName}. The link expires after 10 minutes or one download.",
+                    isSeriesTransfer = isSeriesTransfer
                 )
                 projectStatusText = if (isSeriesTransfer) {
                     "Race Series transfer ready at ${session.url}"
@@ -5349,6 +5370,9 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StopPublicResultsSitePreview -> publicResultSitePreviewUrl != null
                 DesktopNavAction.SendRobis -> projectFile != null && !isSendingLiveResults
                 DesktopNavAction.SendEventFileToAndroid -> projectFile != null
+                DesktopNavAction.SendEventSeriesToAndroid,
+                DesktopNavAction.ExportAndroidEventSeriesPackage -> currentSeriesManifestPath() != null
+                DesktopNavAction.ReceiveEventSeriesFromAndroid -> true
                 DesktopNavAction.DownloadSiCard -> projectFile != null && !isDownloadingSiReadout && !isContinuousSiReadoutActive
                 DesktopNavAction.StartContinuousSiReadout ->
                     projectFile != null && !isDownloadingSiReadout && !isContinuousSiReadoutActive
@@ -5423,6 +5447,10 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ValidateEventSeries,
                 DesktopNavAction.ExportEventSeries ->
                     "Open or create a Race File first."
+                DesktopNavAction.SendEventSeriesToAndroid,
+                DesktopNavAction.ExportAndroidEventSeriesPackage ->
+                    "Open a Race File linked to a Race Series first."
+                DesktopNavAction.ReceiveEventSeriesFromAndroid -> null
                 DesktopNavAction.DownloadSiCard ->
                     when {
                         projectFile == null -> "Open or create a Race File before downloading SI cards."
@@ -5508,6 +5536,9 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportIofStartListXml -> importIofStartListXml()
                 DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
                 DesktopNavAction.SendEventFileToAndroid -> sendEventFileToAndroid()
+                DesktopNavAction.SendEventSeriesToAndroid -> sendEventFileToAndroid()
+                DesktopNavAction.ReceiveEventSeriesFromAndroid -> receiveFileFromAndroid()
+                DesktopNavAction.ExportAndroidEventSeriesPackage -> exportAndroidEventSeriesPackage()
                 DesktopNavAction.ExportCategoriesCsv -> exportCategoriesCsv()
                 DesktopNavAction.ExportIofCourseDataXml -> exportIofCourseDataXml()
                 DesktopNavAction.ExportControlsCsv ->
@@ -9162,7 +9193,8 @@ private data class DesktopEventFileTransferDialogState(
     val selectedAddress: DesktopEventFileTransferAddress,
     val session: DesktopEventFileTransferSession,
     val qrCode: BufferedImage,
-    val statusText: String
+    val statusText: String,
+    val isSeriesTransfer: Boolean = false
 )
 
 private data class DesktopEventFileTransferResultDialogState(
@@ -9172,15 +9204,28 @@ private data class DesktopEventFileTransferResultDialogState(
     val details: List<String>
 ) {
     companion object {
-        fun downloaded(fileName: String, path: Path, byteCount: Long): DesktopEventFileTransferResultDialogState =
+        fun downloaded(
+            fileName: String,
+            path: Path,
+            byteCount: Long,
+            isSeriesTransfer: Boolean = false
+        ): DesktopEventFileTransferResultDialogState =
             DesktopEventFileTransferResultDialogState(
                 title = "Android Download Complete",
-                summary = "Android downloaded the Race File.",
+                summary = if (isSeriesTransfer) {
+                    "Android downloaded the Race Series."
+                } else {
+                    "Android downloaded the Race File."
+                },
                 sourcePath = path,
                 details = listOf(
                     "Downloaded file: $fileName",
                     "Bytes sent: $byteCount",
-                    "Android imports the downloaded Race File into its race list."
+                    if (isSeriesTransfer) {
+                        "Android imports the downloaded Race Series package into its series list."
+                    } else {
+                        "Android imports the downloaded Race File into its race list."
+                    }
                 )
             )
 
@@ -9263,7 +9308,7 @@ private fun EventFileTransferDialog(
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Send Race To Android") },
+        title = { Text(if (state.isSeriesTransfer) "Send Series To Android" else "Send Race To Android") },
         text = {
             Column(
                 modifier = Modifier.widthIn(min = 420.dp, max = 560.dp),
@@ -9272,7 +9317,11 @@ private fun EventFileTransferDialog(
                 Text("Scan this code from Android, or enter the URL manually. Use trusted Wi-Fi or a phone hotspot.")
                 Image(
                     bitmap = state.qrCode.toComposeImageBitmap(),
-                    contentDescription = "Android Race File transfer QR code",
+                    contentDescription = if (state.isSeriesTransfer) {
+                        "Android Race Series transfer QR code"
+                    } else {
+                        "Android Race File transfer QR code"
+                    },
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
                         .width(260.dp)

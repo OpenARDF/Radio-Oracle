@@ -1095,6 +1095,28 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun navSelectReportsAndroidEventSeriesActionsUnderRaceSeries() {
+        val sendResult = runAutomation("nav-select", "Race Series > Android... > Send Series To Android")
+        val receiveResult = runAutomation("nav-select", "Race Series > Android... > Receive Series From Android")
+        val exportResult = runAutomation("nav-select", "Race Series > Android... > Save Android Series File...")
+
+        assertEquals(0, sendResult.exitCode)
+        assertTrue(sendResult.stdout.contains("\"action\":\"SendEventSeriesToAndroid\""))
+        assertTrue(sendResult.stdout.contains("\"breadcrumb\":\"Race Series > Android...\""))
+        assertTrue(sendResult.stdout.contains("\"selectedItemId\":\"series.android\""))
+
+        assertEquals(0, receiveResult.exitCode)
+        assertTrue(receiveResult.stdout.contains("\"action\":\"ReceiveEventSeriesFromAndroid\""))
+        assertTrue(receiveResult.stdout.contains("\"breadcrumb\":\"Race Series > Android...\""))
+        assertTrue(receiveResult.stdout.contains("\"selectedItemId\":\"series.android\""))
+
+        assertEquals(0, exportResult.exitCode)
+        assertTrue(exportResult.stdout.contains("\"action\":\"ExportAndroidEventSeriesPackage\""))
+        assertTrue(exportResult.stdout.contains("\"breadcrumb\":\"Race Series > Android...\""))
+        assertTrue(exportResult.stdout.contains("\"selectedItemId\":\"series.android\""))
+    }
+
+    @Test
     fun navSelectPrefersCurrentMenuItemAfterWorkflowSelection() {
         val result = runAutomation("nav-select", "Results")
 
