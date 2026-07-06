@@ -50,6 +50,7 @@ class EventReadoutDetailsTest {
         assertEquals("00:20:00", rows[0].runTimeText)
         assertEquals("Foxhole 32", rows[0].punchCodesText)
         assertEquals(false, rows[0].hasWarning)
+        assertEquals(null, rows[0].issueExplanation)
 
         assertEquals("unmatched", rows[1].id)
         assertEquals("654321", rows[1].siNumberText)
@@ -67,13 +68,42 @@ class EventReadoutDetailsTest {
                 matchedResultStatus = ResultStatus.OK,
                 matchedStartTimeSeconds = 1_000,
                 matchedFinishTimeSeconds = 500,
-                matchedRunTimeSeconds = -110L * 3_600L - 12L
+                matchedRunTimeSeconds = -110L * 3_600L - 12L,
+                matchedControlCodes = emptyList()
             )
         )
 
         assertEquals("", rows[0].pointsText)
         assertEquals("ERR", rows[0].runTimeText)
         assertEquals(true, rows[0].hasWarning)
+        assertEquals("The finish time is before the start time.", rows[0].issueExplanation)
+    }
+
+    @Test
+    fun explainsFinishBeforeControlReadoutErrors() {
+        val rows = EventReadoutDetails.from(
+            raceData(
+                matchedResultStatus = ResultStatus.ERROR,
+                matchedStartTimeSeconds = 600,
+                matchedFinishTimeSeconds = 650,
+                matchedControlTimeSeconds = listOf(700, 710)
+            )
+        )
+
+        assertEquals("ERR", rows[0].runTimeText)
+        assertEquals("The finish time is before control punch 1. The finish time is before control punch 2.", rows[0].issueExplanation)
+    }
+
+    @Test
+    fun explainsManualErrorStatusWhenTimingDoesNotIdentifyCause() {
+        val rows = EventReadoutDetails.from(
+            raceData(
+                matchedResultStatus = ResultStatus.ERROR
+            )
+        )
+
+        assertEquals("ERR", rows[0].runTimeText)
+        assertEquals("The result status is set to Error manually.", rows[0].issueExplanation)
     }
 
     @Test
@@ -124,7 +154,9 @@ class EventReadoutDetailsTest {
         matchedResultStatus: ResultStatus = ResultStatus.OK,
         matchedStartTimeSeconds: Long = 600,
         matchedFinishTimeSeconds: Long = 1_800,
-        matchedRunTimeSeconds: Long = 1_200
+        matchedRunTimeSeconds: Long = 1_200,
+        matchedControlCodes: List<Int> = listOf(31, 32),
+        matchedControlTimeSeconds: List<Long>? = null
     ): EventRaceData {
         val alias = EventAlias(
             id = "alias",
@@ -168,11 +200,12 @@ class EventReadoutDetailsTest {
                         competitor.id,
                         123456,
                         matchedResultStatus,
-                        listOf(31, 32),
+                        matchedControlCodes,
                         alias,
                         startTimeSeconds = matchedStartTimeSeconds,
                         finishTimeSeconds = matchedFinishTimeSeconds,
-                        runTimeSeconds = matchedRunTimeSeconds
+                        runTimeSeconds = matchedRunTimeSeconds,
+                        controlTimeSeconds = matchedControlTimeSeconds
                     )
                 )
             ),
@@ -200,7 +233,8 @@ class EventReadoutDetailsTest {
         cardName: String? = null,
         startTimeSeconds: Long = 600,
         finishTimeSeconds: Long = 1_800,
-        runTimeSeconds: Long = 1_200
+        runTimeSeconds: Long = 1_200,
+        controlTimeSeconds: List<Long>? = null
     ): EventReadoutData =
         EventReadoutData(
             result = EventResult(
@@ -222,6 +256,7 @@ class EventReadoutDetailsTest {
                 cardName = cardName
             ),
             punches = controlCodes.mapIndexed { index, siCode ->
+                val punchTimeSeconds = controlTimeSeconds?.getOrNull(index) ?: (700L + index)
                 EventAliasPunch(
                     punch = EventPunch(
                         id = "punch-$index",
@@ -229,8 +264,8 @@ class EventReadoutDetailsTest {
                         resultId = id,
                         cardNumber = siNumber,
                         siCode = siCode,
-                        siTimeSeconds = 700L + index,
-                        originalSiTimeSeconds = 700L + index,
+                        siTimeSeconds = punchTimeSeconds,
+                        originalSiTimeSeconds = punchTimeSeconds,
                         punchType = SIRecordType.CONTROL,
                         order = index,
                         punchStatus = PunchStatus.UNKNOWN,

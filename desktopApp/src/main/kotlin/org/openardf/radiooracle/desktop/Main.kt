@@ -193,6 +193,7 @@ import org.openardf.radiooracle.shared.event.StartDrawStartGroupMode
 import org.openardf.radiooracle.shared.event.defaultScored
 import org.openardf.radiooracle.shared.event.defaultTimeLimitMinutes
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
+import org.openardf.radiooracle.shared.event.readoutIssueExplanation
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
@@ -10358,6 +10359,7 @@ private data class DesktopReadoutEditDraft(
     val categoryId: String?,
     val originalCategoryId: String?,
     val isPractice: Boolean,
+    val issueExplanation: String?,
     val updateCompetitorCategory: Boolean = false
 )
 
@@ -11263,7 +11265,8 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId ?: competitor.categoryId,
                 originalCategoryId = competitor.categoryId,
-                isPractice = isPractice
+                isPractice = isPractice,
+                issueExplanation = readoutData.readoutIssueExplanation()
             )
         }
     }
@@ -11285,7 +11288,8 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId,
                 originalCategoryId = null,
-                isPractice = isPractice
+                isPractice = isPractice,
+                issueExplanation = readoutData.readoutIssueExplanation()
             )
         }
     }
@@ -15072,6 +15076,14 @@ private fun ReadoutEditDialog(
                     text = draft.competitorName.ifBlank { "Unmatched readout" },
                     fontWeight = FontWeight.Bold
                 )
+                draft.issueExplanation?.let { explanation ->
+                    Text(
+                        text = "Result explanation: $explanation",
+                        color = DesktopPalette.Error,
+                        fontSize = 13.sp,
+                        modifier = Modifier.width(420.dp)
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LabeledTextField(
                         label = "Start Elapsed",

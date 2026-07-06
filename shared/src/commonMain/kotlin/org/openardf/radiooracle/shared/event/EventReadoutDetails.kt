@@ -24,11 +24,14 @@
 
 package org.openardf.radiooracle.shared.event
 
-import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.domain.toResultStatusCode
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
+import org.openardf.radiooracle.shared.sportident.SportIdentRunTimingStatus
+import org.openardf.radiooracle.shared.sportident.SportIdentTimingIssue
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Shared read-only readout row for matched and unmatched SI-card data. */
@@ -43,7 +46,8 @@ data class EventReadoutDetails(
     val pointsText: String,
     val runTimeText: String,
     val punchCodesText: String,
-    val hasWarning: Boolean
+    val hasWarning: Boolean,
+    val issueExplanation: String?
 ) {
     companion object {
         /** Builds readout display rows for competitor-linked and unmatched readouts. */
@@ -111,7 +115,8 @@ data class EventReadoutDetails(
                             aliasPunch.punch.siCode.toString()
                         }
                     },
-                hasWarning = readoutData.hasReadoutWarning()
+                hasWarning = readoutData.hasReadoutWarning(),
+                issueExplanation = readoutData.readoutIssueExplanation()
             )
         }
     }
@@ -123,7 +128,7 @@ internal fun EventReadoutData.blocksScoreAndRunTimeDisplay(): Boolean =
 internal fun EventReadoutData.hasReadoutWarning(): Boolean =
     blocksScoreAndRunTimeDisplay() ||
         (hasTimingOrPunches() && readoutTiming().issues.isNotEmpty()) ||
-        punches.any { it.punch.punchStatus == org.openardf.radiooracle.shared.domain.PunchStatus.INVALID }
+        punches.any { it.punch.punchStatus == PunchStatus.INVALID }
 
 internal fun EventReadoutData.blockedRunTimeStatusCode(): String =
     if (hasTimingOrPunches() && readoutTiming().blocksResult) {
@@ -131,6 +136,28 @@ internal fun EventReadoutData.blockedRunTimeStatusCode(): String =
     } else {
         result.resultStatus.toResultStatusCode()
     }
+
+fun EventReadoutData.readoutIssueExplanation(): String? {
+    val explanations = buildList {
+        if (hasTimingOrPunches()) {
+            readoutTiming().issues.mapTo(this) { it.toDisplayExplanation() }
+        }
+        val invalidPunchCount = punches.count { it.punch.punchStatus == PunchStatus.INVALID }
+        if (invalidPunchCount > 0) {
+            add(
+                if (invalidPunchCount == 1) {
+                    "One control punch is marked invalid for this course."
+                } else {
+                    "$invalidPunchCount control punches are marked invalid for this course."
+                }
+            )
+        }
+        if (isEmpty() && result.resultStatus == ResultStatus.ERROR) {
+            add("The result status is set to Error manually.")
+        }
+    }
+    return explanations.takeIf { it.isNotEmpty() }?.joinToString(" ")
+}
 
 private fun EventReadoutData.hasTimingOrPunches(): Boolean =
     result.startTimeSeconds != null ||
@@ -145,6 +172,20 @@ private fun EventReadoutData.readoutTiming() =
             .filter { it.punch.punchType == SIRecordType.CONTROL }
             .map { it.punch.siTimeSeconds }
     )
+
+private fun SportIdentTimingIssue.toDisplayExplanation(): String =
+    when (status) {
+        SportIdentRunTimingStatus.VALID -> "The readout timing is valid."
+        SportIdentRunTimingStatus.MISSING_START_OR_FINISH -> "The card is missing a start or finish time."
+        SportIdentRunTimingStatus.FINISH_BEFORE_START -> "The finish time is before the start time."
+        SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START -> "Control punch ${displayControlIndex()} is not after the start time."
+        SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL ->
+            "Control punch ${displayControlIndex()} is not after the previous control punch."
+        SportIdentRunTimingStatus.FINISH_BEFORE_CONTROL -> "The finish time is before control punch ${displayControlIndex()}."
+    }
+
+private fun SportIdentTimingIssue.displayControlIndex(): Int =
+    (controlIndex ?: 0) + 1
 
 /** English result-status labels matching the existing Android default resources. */
 fun ResultStatus.toDisplayLabel(): String =
