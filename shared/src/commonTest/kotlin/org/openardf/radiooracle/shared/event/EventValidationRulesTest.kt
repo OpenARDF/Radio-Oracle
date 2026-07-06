@@ -66,6 +66,20 @@ class EventValidationRulesTest {
     }
 
     @Test
+    fun ignoresSwlWhenCheckingDuplicateCallSigns() {
+        val raceData = raceData(
+            competitors = listOf(
+                competitorData("one", siNumber = 101, callSign = "SWL"),
+                competitorData("two", siNumber = 102, callSign = "swl")
+            )
+        )
+
+        val issues = EventValidationRules.validateRaceData(raceData)
+
+        assertFalse(issues.any { it is EventValidationIssue.DuplicateCallSigns })
+    }
+
+    @Test
     fun allowsDuplicateSiNumbersForRecordedPracticeRepeats() {
         val raceData = raceData(
             race = race().copy(raceLevel = RaceLevel.PRACTICE),

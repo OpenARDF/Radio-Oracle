@@ -36,12 +36,14 @@ class ImportValidationRulesTest {
         assertEquals(setOf("F1"), ImportValidationRules.duplicateAliasNames(listOf("F1", "F2", "F1")))
         assertEquals(setOf(31), ImportValidationRules.duplicateAliasCodes(listOf(31, 32, 31)))
         assertEquals(setOf(123456), ImportValidationRules.duplicateSINumbers(listOf(123456, null, 123456)))
+        assertEquals(setOf("K0ABC"), ImportValidationRules.duplicateCallSigns(listOf("K0ABC", "k0abc", "SWL", "swl")))
     }
 
     @Test
     fun ignoresUniqueValuesAndNullSINumbers() {
         assertTrue(ImportValidationRules.duplicateCategoryNames(listOf("M21", "W21")).isEmpty())
         assertTrue(ImportValidationRules.duplicateSINumbers(listOf(null, null, 123456)).isEmpty())
+        assertTrue(ImportValidationRules.duplicateCallSigns(listOf("", " ", "SWL", "swl")).isEmpty())
     }
 
     @Test

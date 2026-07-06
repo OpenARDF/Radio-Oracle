@@ -43,6 +43,7 @@ import org.openardf.radiooracle.shared.files.IofResultListEntryPreview
 import org.openardf.radiooracle.shared.files.IofResultListPreview
 import org.openardf.radiooracle.shared.files.IofResultSplitPreview
 import org.openardf.radiooracle.shared.files.IofStartListPreview
+import org.openardf.radiooracle.shared.importing.ImportValidationRules
 import org.openardf.radiooracle.shared.files.IofXmlCompetitorMatchIssue
 import org.openardf.radiooracle.shared.files.IofXmlImportMatcher
 import org.openardf.radiooracle.shared.results.CourseEvaluator
@@ -1988,7 +1989,7 @@ object EventProjectEditor {
                 ?: row.bibNumber.trim().takeIf { it.isNotEmpty() }?.let { bibNumber ->
                     competitorData.uniqueCompetitorIndex { it.bibNumber.trim() == bibNumber }
                 }
-                ?: row.callSign.trim().takeIf { it.isNotEmpty() }?.uppercase()?.let { callSign ->
+                ?: ImportValidationRules.normalizedUniqueCallSign(row.callSign)?.let { callSign ->
                     competitorData.uniqueCompetitorIndex { it.callSign.trim().uppercase() == callSign }
                 }
             if (competitorPosition != null) {
@@ -4465,15 +4466,15 @@ object EventProjectEditor {
     private fun CompetitorStartCsvImportRow.historyKey(): String? =
         siNumber?.takeIf { it > 0 }?.let { "si:$it" }
             ?: bibNumber.trim().takeIf { it.isNotEmpty() }?.let { "bib:$it" }
-            ?: callSign.trim().uppercase().takeIf { it.isUniqueCompetitorCallSign() }?.let { "call:$it" }
+            ?: ImportValidationRules.normalizedUniqueCallSign(callSign)?.let { "call:$it" }
 
     private fun EventCompetitor.historyKey(): String? =
         siNumber?.takeIf { it > 0 }?.let { "si:$it" }
             ?: bibNumber.trim().takeIf { it.isNotEmpty() }?.let { "bib:$it" }
-            ?: callSign.trim().uppercase().takeIf { it.isUniqueCompetitorCallSign() }?.let { "call:$it" }
+            ?: ImportValidationRules.normalizedUniqueCallSign(callSign)?.let { "call:$it" }
 
     private fun String.isUniqueCompetitorCallSign(): Boolean =
-        isNotEmpty() && !equals("SWL", ignoreCase = true)
+        ImportValidationRules.normalizedUniqueCallSign(this) != null
 
     private fun normalizedCompetitorCallSign(callSign: String): String =
         callSign.trim().ifBlank { "SWL" }

@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
+import org.openardf.radiooracle.shared.importing.ImportValidationRules
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 data class EventSeriesLinkedEvent(
@@ -342,5 +343,5 @@ object EventSeriesSupport {
         bibNumber.trim().takeIf { it.isNotEmpty() }
 
     private fun EventCompetitor.seriesCallSignKey(): String? =
-        callSign.trim().uppercase().takeIf { it.isNotEmpty() }
+        ImportValidationRules.normalizedUniqueCallSign(callSign)
 }

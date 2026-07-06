@@ -41,6 +41,7 @@ import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 import org.openardf.radiooracle.shared.event.EventValidationIssueSeverity
 import org.openardf.radiooracle.shared.event.EventValidationRules
+import org.openardf.radiooracle.shared.importing.ImportValidationRules
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -710,13 +711,13 @@ object DesktopEventSeriesActions {
             identifiedBalanceHistoryStartRowCount = balanceHistoryStartRows.count {
                 it.siNumber?.takeIf { value -> value > 0 } != null ||
                     it.bibNumber.isNotBlank() ||
-                    it.callSign.isNotBlank()
+                    ImportValidationRules.normalizedUniqueCallSign(it.callSign) != null
             },
             currentCompetitorCount = currentCompetitors.size,
             identifiedCurrentCompetitorCount = currentCompetitors.count {
                 it.siNumber?.takeIf { value -> value > 0 } != null ||
                     it.bibNumber.isNotBlank() ||
-                    it.callSign.isNotBlank()
+                    ImportValidationRules.normalizedUniqueCallSign(it.callSign) != null
             }
         )
     }

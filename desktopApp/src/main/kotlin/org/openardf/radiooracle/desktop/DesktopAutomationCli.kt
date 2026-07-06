@@ -55,6 +55,7 @@ import org.openardf.radiooracle.shared.event.StartDrawSettings
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportProfile
 import org.openardf.radiooracle.shared.files.EventCsvImports
+import org.openardf.radiooracle.shared.importing.ImportValidationRules
 
 fun main(args: Array<String>) {
     exitProcess(DesktopAutomationCli.run(args))
@@ -822,7 +823,7 @@ object DesktopAutomationCli {
     private fun seriesStartFairnessIdentityKey(competitor: EventCompetitor): String? =
         competitor.siNumber?.takeIf { it > 0 }?.let { "si:$it" }
             ?: competitor.bibNumber.trim().takeIf { it.isNotEmpty() }?.let { "bib:${it.uppercase()}" }
-            ?: competitor.callSign.trim().takeIf { it.isNotEmpty() }?.let { "call:${it.uppercase()}" }
+            ?: ImportValidationRules.normalizedUniqueCallSign(competitor.callSign)?.let { "call:$it" }
 
     private fun startThirdForSlot(slotIndex: Int, slotCount: Int): Int =
         if (slotCount <= 0) {

@@ -57,6 +57,19 @@ class EventSeriesSupportTest {
     }
 
     @Test
+    fun treatsSwlAsMissingSeriesCallSignIdentity() {
+        val competitor = competitorData(
+            id = "competitor-1",
+            startNumber = 1,
+            siNumber = null,
+            callSign = "SWL"
+        ).competitorCategory.competitor
+
+        assertTrue(EventSeriesSupport.competitorIdentities(competitor).isEmpty())
+        assertEquals(null, EventSeriesSupport.primaryCompetitorIdentity(competitor))
+    }
+
+    @Test
     fun sortsCompetitorIdentityLabelsBySeriesIdentityPriority() {
         val labels = listOf("Manual override", "Call K0ABC", "Bib 12", "SI 123456")
 
@@ -224,6 +237,30 @@ class EventSeriesSupportTest {
             report.matches.map { it.method }
         )
         assertEquals(listOf("si-target", "bib-target", "call-target"), report.matches.map { it.toCompetitorId })
+    }
+
+    @Test
+    fun doesNotMatchCompetitorsBySwlCallSign() {
+        val series = seriesFile()
+        val from = linkedEvent(
+            "day-1",
+            projectFile(
+                "Day 1",
+                competitors = listOf(competitorData("swl-source", 33, null, callSign = "SWL"))
+            )
+        )
+        val to = linkedEvent(
+            "day-2",
+            projectFile(
+                "Day 2",
+                competitors = listOf(competitorData("swl-target", 77, null, callSign = "swl"))
+            )
+        )
+
+        val report = EventSeriesSupport.matchCompetitors(series, from, to)
+
+        assertTrue(report.matches.isEmpty())
+        assertTrue(report.issues.isEmpty())
     }
 
     @Test

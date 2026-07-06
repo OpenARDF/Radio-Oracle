@@ -44,9 +44,13 @@ object ImportValidationRules {
     fun duplicateBibNumbers(bibNumbers: List<String>): Set<String> =
         duplicateValues(bibNumbers.map { it.trim() }.filter { it.isNotEmpty() })
 
-    /** Returns non-blank call signs that occur more than once, using case-insensitive comparison. */
+    /** Returns normalized real call signs; SWL is a no-callsign marker, not a unique identity. */
+    fun normalizedUniqueCallSign(callSign: String): String? =
+        callSign.trim().uppercase().takeIf { it.isNotEmpty() && it != "SWL" }
+
+    /** Returns non-blank real call signs that occur more than once, using case-insensitive comparison. */
     fun duplicateCallSigns(callSigns: List<String>): Set<String> =
-        duplicateValues(callSigns.map { it.trim().uppercase() }.filter { it.isNotEmpty() })
+        duplicateValues(callSigns.mapNotNull(::normalizedUniqueCallSign))
 
     /** Detects unsupported readout punch combinations, such as multiple starts or finishes. */
     fun validateReadoutPunchTypes(punchTypes: List<SIRecordType>): Set<ReadoutPunchValidationError> {
