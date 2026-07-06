@@ -190,7 +190,7 @@ class EventSeriesFragment : Fragment() {
         val dialog = AlertDialog.Builder(requireContext())
             .setTitle(R.string.event_series_edit)
             .setView(input)
-            .setPositiveButton(R.string.event_series_edit, null)
+            .setPositiveButton(R.string.general_save, null)
             .setNegativeButton(R.string.general_cancel, null)
             .create()
         dialog.setOnShowListener {

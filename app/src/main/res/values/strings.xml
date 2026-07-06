@@ -41,6 +41,7 @@
     <string name="general_required">Required</string>
     <string name="general_results">Results</string>
     <string name="general_run_time">Run Time</string>
+    <string name="general_save">Save</string>
     <string name="general_check_time">Check Time</string>
     <string name="general_si_number">SI Number</string>
     <string name="general_splits">Splits</string>
