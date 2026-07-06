@@ -36,12 +36,10 @@ import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
-import org.openardf.radiooracle.backend.room.enums.PunchStatus
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
-import org.openardf.radiooracle.backend.room.enums.SIRecordType
+import org.openardf.radiooracle.backend.shared.toSharedReadoutDisplayState
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import org.openardf.radiooracle.shared.domain.toResultStatusCode
-import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -158,9 +156,10 @@ class ResultsFragmentRecyclerViewAdapter(
                 val drawnStartTime = competitor.drawnRelativeStartTime
 
                 val readoutData = singleResult.readoutData
+                val displayState = singleResult.toSharedReadoutDisplayState()
                 if (readoutData != null) {
-                    holder.competitorTime.text = if (singleResult.blocksScoreAndRunTimeDisplay()) {
-                        singleResult.blockedRunTimeStatusText()
+                    holder.competitorTime.text = if (displayState?.blocksScoreAndRunTime == true) {
+                        displayState.blockedRunTimeStatusCode
                     } else {
                         TimeProcessor.durationToFormattedString(
                             readoutData.result.runTime,
@@ -186,7 +185,9 @@ class ResultsFragmentRecyclerViewAdapter(
                 }
 
                 //Set points
-                competitorPoints.text = if (singleResult.readoutData?.result?.points != null) {
+                competitorPoints.text = if (displayState?.blocksScoreAndRunTime == true) {
+                    "-"
+                } else if (singleResult.readoutData?.result?.points != null) {
                     singleResult.readoutData?.result?.points.toString()
                 } else {
                     "-"
@@ -204,7 +205,7 @@ class ResultsFragmentRecyclerViewAdapter(
                     holder.itemView.setBackgroundResource(R.color.white)
                 }
 
-                val textColor = if (singleResult.hasWarning()) {
+                val textColor = if (displayState?.hasWarning == true) {
                     ContextCompat.getColor(context, R.color.red_error)
                 } else {
                     ContextCompat.getColor(context, R.color.black)
@@ -213,40 +214,6 @@ class ResultsFragmentRecyclerViewAdapter(
             }
         }
     }
-
-    private fun CompetitorData.hasWarning(): Boolean =
-        blocksScoreAndRunTimeDisplay() ||
-            hasTimingOrPunches() && readoutTiming()?.issues?.isNotEmpty() == true ||
-            readoutData?.punches?.any { it.punch.punchStatus == PunchStatus.INVALID } == true
-
-    private fun CompetitorData.blocksScoreAndRunTimeDisplay(): Boolean =
-        readoutData?.result?.resultStatus == ResultStatus.ERROR ||
-            hasTimingOrPunches() && readoutTiming()?.blocksResult == true
-
-    private fun CompetitorData.blockedRunTimeStatusText(): String =
-        if (hasTimingOrPunches() && readoutTiming()?.blocksResult == true) {
-            ResultStatus.ERROR.toResultStatusCode()
-        } else {
-            readoutData?.result?.resultStatus?.let(dataProcessor::resultStatusToShortString).orEmpty()
-        }
-
-    private fun CompetitorData.hasTimingOrPunches(): Boolean =
-        readoutData?.let { readout ->
-            readout.result.startTime != null ||
-                readout.result.finishTime != null ||
-                readout.punches.isNotEmpty()
-        } == true
-
-    private fun CompetitorData.readoutTiming() =
-        readoutData?.let { readout ->
-            SportIdentReadoutTiming.calculate(
-                startSeconds = readout.result.startTime?.getSeconds(),
-                finishSeconds = readout.result.finishTime?.getSeconds(),
-                controlSeconds = readout.punches
-                    .filter { it.punch.punchType == SIRecordType.CONTROL }
-                    .map { it.punch.siTime.getSeconds() }
-            )
-        }
 
     private fun setCompetitorTextColor(holder: CompetitorViewHolder, color: Int) {
         holder.competitorPlace.setTextColor(color)

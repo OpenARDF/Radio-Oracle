@@ -48,6 +48,7 @@ import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.backend.shared.toEventRaceData
 import org.openardf.radiooracle.backend.shared.toRoomRaceData
+import org.openardf.radiooracle.backend.shared.toSharedReadoutDisplayState
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
@@ -434,6 +435,53 @@ class EventModelMappersTest {
             "42;Kolsky;Pavel;M21;;;OK001;;OK;",
             competitor.toStartCsvString("M21", LocalDateTime.of(2026, 5, 30, 10, 0))
         )
+    }
+
+    @Test
+    fun roomResultDataUsesSharedReadoutDisplayState() {
+        val raceId = uuid("00000000-0000-0000-0000-000000000001")
+        val resultId = uuid("00000000-0000-0000-0000-000000000004")
+        val result = Result(
+            id = resultId,
+            raceId = raceId,
+            competitorId = null,
+            siNumber = 123456,
+            cardType = 10,
+            checkTime = null,
+            startTime = SITime(LocalTime.of(10, 0)),
+            finishTime = SITime(LocalTime.of(9, 59)),
+            readoutTime = LocalDateTime.of(2026, 5, 30, 10, 46),
+            automaticStatus = true,
+            resultStatus = ResultStatus.OK,
+            points = 1,
+            runTime = Duration.ZERO,
+            modified = false,
+            sent = false
+        )
+        val punch = Punch(
+            id = uuid("00000000-0000-0000-0000-000000000005"),
+            raceId = raceId,
+            resultId = resultId,
+            cardNumber = 123456,
+            siCode = 31,
+            siTime = SITime(LocalTime.of(10, 1)),
+            origSiTime = SITime(LocalTime.of(10, 1)),
+            punchType = SIRecordType.CONTROL,
+            order = 1,
+            punchStatus = PunchStatus.UNKNOWN,
+            split = Duration.ZERO
+        )
+
+        val state = ResultData(
+            result = result,
+            punches = listOf(AliasPunch(punch, alias = null)),
+            competitorCategory = null
+        ).toSharedReadoutDisplayState()
+
+        assertEquals(true, state.blocksScoreAndRunTime)
+        assertEquals(true, state.hasWarning)
+        assertEquals("ERR", state.blockedRunTimeStatusCode)
+        assertEquals("Finish time is before control punch 1 and Start SI Time.", state.issueExplanation)
     }
 
     private fun uuid(value: String): UUID = UUID.fromString(value)

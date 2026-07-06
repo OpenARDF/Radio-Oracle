@@ -37,6 +37,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.shared.event.EventAlias
 import org.openardf.radiooracle.shared.event.EventAliasPunch
@@ -178,6 +179,13 @@ fun AliasPunch.toEventAliasPunch(): EventAliasPunch =
 
 /** Converts an Android readout aggregate into the portable shared race model. */
 fun ReadoutData.toEventReadoutData(): EventReadoutData =
+    EventReadoutData(
+        result = result.toEventResult(),
+        punches = punches.map { it.toEventAliasPunch() }
+    )
+
+/** Converts an Android readout plus optional matched competitor/category into the portable shared race model. */
+fun ResultData.toEventReadoutData(): EventReadoutData =
     EventReadoutData(
         result = result.toEventResult(),
         punches = punches.map { it.toEventAliasPunch() }

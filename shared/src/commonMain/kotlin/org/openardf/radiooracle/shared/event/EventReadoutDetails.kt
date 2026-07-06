@@ -122,6 +122,23 @@ data class EventReadoutDetails(
     }
 }
 
+/** Shared status/warning decisions for readout and result displays on every platform. */
+data class EventReadoutDisplayState(
+    val blocksScoreAndRunTime: Boolean,
+    val hasWarning: Boolean,
+    val blockedRunTimeStatusCode: String,
+    val issueExplanation: String?
+)
+
+/** Builds platform-neutral readout display state from the shared event model. */
+fun EventReadoutData.toDisplayState(): EventReadoutDisplayState =
+    EventReadoutDisplayState(
+        blocksScoreAndRunTime = blocksScoreAndRunTimeDisplay(),
+        hasWarning = hasReadoutWarning(),
+        blockedRunTimeStatusCode = blockedRunTimeStatusCode(),
+        issueExplanation = readoutIssueExplanation()
+    )
+
 internal fun EventReadoutData.blocksScoreAndRunTimeDisplay(): Boolean =
     result.resultStatus == ResultStatus.ERROR || (hasTimingOrPunches() && readoutTiming().blocksResult)
 

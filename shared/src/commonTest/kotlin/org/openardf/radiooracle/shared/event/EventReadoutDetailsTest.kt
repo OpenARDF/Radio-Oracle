@@ -80,6 +80,25 @@ class EventReadoutDetailsTest {
     }
 
     @Test
+    fun exposesSharedDisplayStateForPlatformAdapters() {
+        val state = readout(
+            id = "display",
+            competitorId = "competitor",
+            siNumber = 123456,
+            resultStatus = ResultStatus.OK,
+            controlCodes = listOf(31),
+            startTimeSeconds = 1_000,
+            finishTimeSeconds = 500,
+            controlTimeSeconds = listOf(1_100)
+        ).toDisplayState()
+
+        assertEquals(true, state.blocksScoreAndRunTime)
+        assertEquals(true, state.hasWarning)
+        assertEquals("ERR", state.blockedRunTimeStatusCode)
+        assertEquals("Finish time is before control punch 1 and Start SI Time.", state.issueExplanation)
+    }
+
+    @Test
     fun explainsFinishBeforeControlReadoutErrors() {
         val rows = EventReadoutDetails.from(
             raceData(

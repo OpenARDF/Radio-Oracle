@@ -37,11 +37,8 @@ import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
-import org.openardf.radiooracle.backend.room.enums.PunchStatus
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
-import org.openardf.radiooracle.backend.room.enums.SIRecordType
-import org.openardf.radiooracle.shared.domain.toResultStatusCode
-import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
+import org.openardf.radiooracle.backend.shared.toSharedReadoutDisplayState
 
 class ReadoutDataRecyclerViewAdapter(
     private var values: List<ResultData>,
@@ -86,9 +83,10 @@ class ReadoutDataRecyclerViewAdapter(
                 item.competitorCategory?.competitor?.club?.take(13)
             } else "-"
 
+        val displayState = item.toSharedReadoutDisplayState()
         val resultStatusText = dataProcessor.resultStatusToShortString(item.result.resultStatus)
-        holder.runTimeView.text = if (item.blocksScoreAndRunTimeDisplay()) {
-            item.blockedRunTimeStatusText()
+        holder.runTimeView.text = if (displayState.blocksScoreAndRunTime) {
+            displayState.blockedRunTimeStatusCode
         } else {
             "${
                 TimeProcessor.durationToFormattedString(
@@ -133,7 +131,7 @@ class ReadoutDataRecyclerViewAdapter(
         } else {
             holder.itemView.setBackgroundResource(R.color.white)
         }
-        val textColor = if (item.hasWarning()) {
+        val textColor = if (displayState.hasWarning) {
             ContextCompat.getColor(context, R.color.red_error)
         } else {
             ContextCompat.getColor(context, R.color.black)
@@ -144,35 +142,6 @@ class ReadoutDataRecyclerViewAdapter(
             showContextMenu(holder.moreBtn, position, item)
         }
     }
-
-    private fun ResultData.hasWarning(): Boolean =
-        blocksScoreAndRunTimeDisplay() ||
-            hasTimingOrPunches() && readoutTiming().issues.isNotEmpty() ||
-            punches.any { it.punch.punchStatus == PunchStatus.INVALID }
-
-    private fun ResultData.blocksScoreAndRunTimeDisplay(): Boolean =
-        result.resultStatus == ResultStatus.ERROR || hasTimingOrPunches() && readoutTiming().blocksResult
-
-    private fun ResultData.blockedRunTimeStatusText(): String =
-        if (hasTimingOrPunches() && readoutTiming().blocksResult) {
-            ResultStatus.ERROR.toResultStatusCode()
-        } else {
-            dataProcessor.resultStatusToShortString(result.resultStatus)
-        }
-
-    private fun ResultData.hasTimingOrPunches(): Boolean =
-        result.startTime != null ||
-            result.finishTime != null ||
-            punches.isNotEmpty()
-
-    private fun ResultData.readoutTiming() =
-        SportIdentReadoutTiming.calculate(
-            startSeconds = result.startTime?.getSeconds(),
-            finishSeconds = result.finishTime?.getSeconds(),
-            controlSeconds = punches
-                .filter { it.punch.punchType == SIRecordType.CONTROL }
-                .map { it.punch.siTime.getSeconds() }
-        )
 
     private fun showContextMenu(anchor: View, position: Int, item: ResultData) {
         val popupMenu = PopupMenu(context, anchor)
