@@ -2452,12 +2452,22 @@ object EventProjectEditor {
             finishSeconds = finishSecondsValue,
             controlSeconds = controlTimingSeconds
         )
-        val effectiveStatus = when {
+        val runTimeSeconds = runTiming.runTimeSeconds
+        val timeLimitSeconds = requestedCategory?.effectiveTimeLimitSeconds(projectFile.raceData.race)
+            ?: projectFile.raceData.race.timeLimitSeconds
+        val recalculatedStatus = when {
             runTiming.blocksResult -> ResultStatus.ERROR
+            runTimeSeconds > timeLimitSeconds -> ResultStatus.OVER_TIME_LIMIT
+            evaluation != null -> evaluation.resultStatus
+            else -> ResultStatus.NO_RANKING
+        }
+        val shouldRefreshCorrectedError = resultStatus == ResultStatus.ERROR &&
+            originalReadout.hasCorrectableReadoutError()
+        val effectiveStatus = when {
+            shouldRefreshCorrectedError -> recalculatedStatus
             resultStatus == ResultStatus.OK && evaluation != null -> evaluation.resultStatus
             else -> resultStatus
         }
-        val runTimeSeconds = runTiming.runTimeSeconds
         val controlStatuses = (evaluation?.punchStatuses ?: List(controlPunchEntries.size) { PunchStatus.UNKNOWN })
             .withTimingIssues(runTiming)
 
@@ -3371,6 +3381,25 @@ object EventProjectEditor {
                 competitorData = EventResultPlacement.assignPlacesByCategory(raceData.competitorData)
             )
         )
+
+    private fun EventReadoutData.hasCorrectableReadoutError(): Boolean {
+        val hasTimingOrPunches = result.startTimeSeconds != null ||
+            result.finishTimeSeconds != null ||
+            punches.isNotEmpty()
+        val timingIssues = if (hasTimingOrPunches) {
+            SportIdentReadoutTiming.calculate(
+                startSeconds = result.startTimeSeconds,
+                finishSeconds = result.finishTimeSeconds,
+                controlSeconds = punches
+                    .filter { it.punch.punchType == SIRecordType.CONTROL }
+                    .map { it.punch.siTimeSeconds }
+            ).issues
+        } else {
+            emptyList()
+        }
+        return timingIssues.isNotEmpty() ||
+            punches.any { it.punch.punchType == SIRecordType.CONTROL && it.punch.punchStatus == PunchStatus.INVALID }
+    }
 
     private fun removeReadoutForSiNumber(projectFile: EventProjectFile, siNumber: Int): EventProjectFile =
         projectFile.copy(

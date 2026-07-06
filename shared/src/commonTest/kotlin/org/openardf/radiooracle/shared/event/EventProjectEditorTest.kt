@@ -2609,6 +2609,103 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun editingCorrectedErrorReadoutRecalculatesStatusPointsAndRunTime() {
+        val category = category("cat-1", "M21")
+        val invalidReadout = readout("result-1", "comp-1", 1111).let { readoutData ->
+            readoutData.copy(
+                result = readoutData.result.copy(
+                    startTimeSeconds = 43_200,
+                    finishTimeSeconds = 37_800,
+                    runTimeSeconds = 0,
+                    resultStatus = ResultStatus.ERROR,
+                    categoryId = category.id
+                )
+            )
+        }
+        val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
+            categories = listOf(categoryData(category.id, category.name, controlSiCodes = listOf(31, 32))),
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    category = category,
+                    readoutData = invalidReadout
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "10:00",
+            finishSeconds = "30:00",
+            controlPunchesText = "31 @ 15:00\n32 @ 20:00",
+            resultStatus = ResultStatus.ERROR,
+            categoryId = category.id,
+            updateCompetitorCategory = false,
+            punchIdFactory = { index, type -> "edit-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        val row = EventReadoutDetails.from(updated.raceData).single()
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(2, readout.result.points)
+        assertEquals(1_200, readout.result.runTimeSeconds)
+        assertEquals("00:20:00", row.runTimeText)
+        assertEquals("2", row.pointsText)
+        assertEquals(false, row.hasWarning)
+    }
+
+    @Test
+    fun editingManualErrorReadoutPreservesErrorStatus() {
+        val manualErrorReadout = readout("result-1", "comp-1", 1111).let { readoutData ->
+            readoutData.copy(
+                result = readoutData.result.copy(
+                    startTimeSeconds = 36_600,
+                    finishTimeSeconds = 37_800,
+                    runTimeSeconds = 1_200,
+                    resultStatus = ResultStatus.ERROR,
+                    automaticStatus = false
+                )
+            )
+        }
+        val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    readoutData = manualErrorReadout
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "10:00",
+            finishSeconds = "30:00",
+            controlPunchesText = "",
+            resultStatus = ResultStatus.ERROR,
+            categoryId = null,
+            updateCompetitorCategory = false,
+            punchIdFactory = { index, type -> "edit-$index-${type.name}" }
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        val row = EventReadoutDetails.from(updated.raceData).single()
+        assertEquals(ResultStatus.ERROR, readout.result.resultStatus)
+        assertEquals("ERR", row.runTimeText)
+        assertEquals("", row.pointsText)
+        assertEquals(true, row.hasWarning)
+    }
+
+    @Test
     fun editsReadoutTimesThatCrossMidnight() {
         val original = projectFile(
             raceLevel = RaceLevel.REGIONAL,
