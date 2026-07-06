@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.files.AndroidEventSeriesImport
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
 import org.openardf.radiooracle.backend.room.entity.Race
 import java.util.UUID
@@ -55,6 +56,12 @@ class EventSeriesViewModel : ViewModel() {
 
     suspend fun exportEventSeriesPackage(uri: Uri, seriesId: String) {
         dataProcessor.exportEventSeriesPackage(uri, seriesId)
+    }
+
+    suspend fun importAndSaveEventSeriesPackage(uri: Uri): AndroidEventSeriesImport? {
+        val eventSeriesImport = dataProcessor.importEventSeriesPackage(uri) ?: return null
+        dataProcessor.saveEventSeriesImport(eventSeriesImport)
+        return eventSeriesImport
     }
 
     suspend fun availableRacesForSeries(seriesId: String): List<Race> {

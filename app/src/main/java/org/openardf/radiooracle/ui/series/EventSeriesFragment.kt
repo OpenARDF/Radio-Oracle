@@ -66,6 +66,15 @@ class EventSeriesFragment : Fragment() {
     private lateinit var emptyView: TextView
     private var pendingExportSeries: EventSeriesListItem? = null
 
+    private val importSeriesResult = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data ?: return@registerForActivityResult
+            importEventSeriesPackage(uri)
+        }
+    }
+
     private val exportSeriesResult = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -96,6 +105,17 @@ class EventSeriesFragment : Fragment() {
         toolbar.setTitleTextColor(ContextCompat.getColor(requireContext(), R.color.black))
         toolbar.setNavigationIcon(R.drawable.ic_back)
         toolbar.setNavigationOnClickListener { closeSeriesPage() }
+        toolbar.inflateMenu(R.menu.fragment_menu_event_series)
+        toolbar.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.event_series_menu_import -> {
+                    chooseSeriesImportSource()
+                    true
+                }
+
+                else -> false
+            }
+        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -128,6 +148,44 @@ class EventSeriesFragment : Fragment() {
     private fun openSeriesMember(member: EventSeriesMemberListItem) {
         selectedRaceViewModel.setRace(member.localRaceId)
         findNavController().navigate(EventSeriesFragmentDirections.openRaceFromSeries())
+    }
+
+    private fun chooseSeriesImportSource() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        intent.addCategory(Intent.CATEGORY_OPENABLE)
+        intent.type = "*/*"
+        importSeriesResult.launch(intent)
+    }
+
+    private fun importEventSeriesPackage(uri: Uri) {
+        val progressDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_import_title)
+            .setMessage(R.string.event_series_import_progress)
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val eventSeriesImport = withContext(Dispatchers.IO) {
+                    viewModel.importAndSaveEventSeriesPackage(uri)
+                        ?: throw IllegalStateException(getString(R.string.event_series_import_invalid))
+                }
+                progressDialog.dismiss()
+                Toast.makeText(
+                    requireContext(),
+                    getString(
+                        R.string.event_series_import_success,
+                        eventSeriesImport.series.name,
+                        eventSeriesImport.memberImports.size
+                    ),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                progressDialog.dismiss()
+                displayAlert(error.message ?: getString(R.string.race_import_failure))
+            }
+        }
     }
 
     private fun chooseRaceToAdd(item: EventSeriesListItem) {

@@ -96,6 +96,7 @@
     <string name="race_import_success">Race imported successfully</string>
     <string name="race_import_failure">Failed to import race</string>
     <string name="event_series_import_title">Import Race Series</string>
+    <string name="event_series_import_menu">Import Series</string>
     <string name="event_series_import_progress">Importing Race Series...</string>
     <string name="event_series_import_success">Imported series: %1$s (%2$d races)</string>
     <string name="event_series_import_invalid">Invalid Race Series package.</string>
