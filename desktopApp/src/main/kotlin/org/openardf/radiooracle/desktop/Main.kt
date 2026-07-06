@@ -270,6 +270,18 @@ private fun EventRaceData.containsReadoutForSiNumber(siNumber: Int): Boolean =
     competitorData.any { it.readoutData?.result?.siNumber == siNumber } ||
         unmatchedReadoutData.any { it.result.siNumber == siNumber }
 
+internal fun protectedCourseStateCategories(raceData: EventRaceData): List<EventCategoryData> {
+    val activeNames = raceData.categories.mapTo(mutableSetOf()) { categoryData ->
+        categoryData.category.name.protectedCourseStateCategoryMatchText()
+    }
+    return raceData.categories + raceData.courseMappings.filterNot { mapping ->
+        mapping.category.name.protectedCourseStateCategoryMatchText() in activeNames
+    }
+}
+
+private fun String.protectedCourseStateCategoryMatchText(): String =
+    StandardCategoryRules.normalizedCategoryName(this).uppercase()
+
 private enum class DesktopSportIdentAppendOutcome {
     Added,
     PracticeInForestStarted,
@@ -2391,7 +2403,8 @@ fun main(args: Array<String>) = application {
         }
 
         fun syncProtectedCourseState(updatedProject: EventProjectFile, password: String) {
-            protectedIdealOrderByCategoryId = updatedProject.raceData.categories.associate { categoryData ->
+            val courseCategories = protectedCourseStateCategories(updatedProject.raceData)
+            protectedIdealOrderByCategoryId = courseCategories.associate { categoryData ->
                 val encryptedValue = categoryData.category.encryptedIdealOrder
                 categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
                     ""
@@ -2399,7 +2412,7 @@ fun main(args: Array<String>) = application {
                     DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
                 }
             }
-            protectedCourseInfoByCategoryId = updatedProject.raceData.categories.mapNotNull { categoryData ->
+            protectedCourseInfoByCategoryId = courseCategories.mapNotNull { categoryData ->
                 categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
                     categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
                 }
@@ -3116,125 +3129,134 @@ fun main(args: Array<String>) = application {
             selectedDuplicateRouteChoices: Map<String, String>
         ) {
             val formatLabel = controlsRouteImportFormatLabel(review.sourceName)
-            val selectedPreview = review.previewForSelectedMissingMappings(
-                selectedMissingCategoryNames = selectedMissingCategoryNames,
-                createMissingControls = createMissingControls,
-                overwriteImportedSiNumbers = overwriteImportedSiNumbers,
-                selectedDuplicateRouteChoices = selectedDuplicateRouteChoices
-            )
-            val selectedSummary = selectedPreview.summary
-            val selectedProject = selectedPreview.projectFile
-            val isDuplicateElevationRetry = fetchElevations &&
-                selectedSummary.importedCategoryCount == 0 &&
-                selectedSummary.duplicateCategoryCount > 0 &&
-                selectedSummary.hasDuplicateMissingElevations
-            val projectToApply = if (isDuplicateElevationRetry) {
-                projectSession.currentProject ?: selectedProject
-            } else {
-                selectedProject
-            }
-            val projectAfterAssignments = if (applyCategoryAssignments) {
-                DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
-                    projectFile = projectToApply,
-                    updates = selectedSummary.categoryAssignmentUpdates
+            runCatching {
+                val selectedPreview = review.previewForSelectedMissingMappings(
+                    selectedMissingCategoryNames = selectedMissingCategoryNames,
+                    createMissingControls = createMissingControls,
+                    overwriteImportedSiNumbers = overwriteImportedSiNumbers,
+                    selectedDuplicateRouteChoices = selectedDuplicateRouteChoices
                 )
-            } else {
-                projectToApply
-            }
-            val shouldClearStaleCourseMappings = !keepStaleCourseMappings &&
-                selectedSummary.staleCourseMappingCategoryIds.isNotEmpty()
-            val updatedProject = if (shouldClearStaleCourseMappings) {
-                DesktopCourseKmlImporter.clearStaleCourseMappings(
-                    projectFile = projectAfterAssignments,
-                    categoryIds = selectedSummary.staleCourseMappingCategoryIds
-                )
-            } else {
-                projectAfterAssignments
-            }
-            checkpointBeforeImport("controls/route $formatLabel import ${review.sourceName}")
-            projectFile = projectSession.updateCurrentProject { updatedProject }
-            syncProtectedCourseState(updatedProject, review.password)
-            pendingCourseKmlKmzImportReview = null
-            recordActivity("Applied controls/route $formatLabel import ${review.sourceName}.")
-            val retainedImportedSiConflictCount = selectedSummary.controlSiConflictCount
-                .takeIf { !overwriteImportedSiNumbers }
-                ?: 0
-            val controlsOnlyImportWarningLines = controlsOnlyImportWarningLines(updatedProject, selectedSummary)
-            recentImportReport = DesktopImportReport(
-                title = "Controls/route $formatLabel: ${review.sourceName}",
-                lines = withRollbackBackupLine(listOf(
-                    "${selectedSummary.importedCategoryCount} categories received stored route data.",
-                    "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
-                    "${selectedSummary.duplicateRouteAssignments.size} duplicate route assignments resolved.",
-                    "${selectedSummary.controlIdentityUpdateCount} control identities updated.",
-                    "$retainedImportedSiConflictCount imported SI conflicts retained existing Race File numbers.",
-                    "${selectedSummary.controlPublicLabelUpdateCount} control public labels updated.",
-                    "${selectedSummary.changedControlLocationCount} control locations updated.",
-                    "${selectedSummary.staleCourseMappingCategoryNames.size.takeIf { shouldClearStaleCourseMappings } ?: 0} stale course mappings cleared.",
-                    "${selectedSummary.staleCourseMappingCategoryNames.size.takeIf { keepStaleCourseMappings } ?: 0} stale course mappings kept by user override.",
-                    "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
-                    "${selectedSummary.createdCategoryNames.size} course mappings created.",
-                    "${selectedSummary.createdControlNames.size} missing controls created.",
-                    "${selectedSummary.missingCategoryNames.size} category names were missing before review."
-                ) + listOf(updatedProject.resultImpactWarning("Course data changed").trim()).filter { it.isNotBlank() } +
-                    selectedSummary.categoryAssumptions.map { assumption ->
-                        "No category indication was found for route ${assumption.routeName}; assumed ${assumption.categoryName}."
-                    } +
-                    selectedSummary.rejectedRoutes.map { rejected ->
-                        "Skipped route ${rejected.routeName} for ${rejected.categoryName}: ${rejected.reason}"
-                    } +
-                    selectedSummary.eventTypeWarnings +
-                    controlsOnlyImportWarningLines)
-            )
-            if (fetchElevations) {
-                startCourseKmlKmzElevationFetch(review.copy(summary = selectedSummary))
-            } else {
-                projectStatusText = if (selectedSummary.isDuplicateOnly) {
-                    "Duplicate controls/route $formatLabel request: identical file already imported. No route data reloaded."
+                val selectedSummary = selectedPreview.summary
+                val selectedProject = selectedPreview.projectFile
+                val isDuplicateElevationRetry = fetchElevations &&
+                    selectedSummary.importedCategoryCount == 0 &&
+                    selectedSummary.duplicateCategoryCount > 0 &&
+                    selectedSummary.hasDuplicateMissingElevations
+                val projectToApply = if (isDuplicateElevationRetry) {
+                    projectSession.currentProject ?: selectedProject
                 } else {
-                    val duplicateText = selectedSummary.duplicateCategoryCount
-                        .takeIf { it > 0 }
-                        ?.let { " $it duplicate categories skipped." }
-                        .orEmpty()
-                    val locationText = selectedSummary.changedControlLocationCount
-                        .takeIf { it > 0 }
-                        ?.let { " Updated $it control locations." }
-                        .orEmpty()
-                    val staleMappingText = when {
-                        shouldClearStaleCourseMappings ->
-                            " Cleared ${selectedSummary.staleCourseMappingCategoryNames.size} stale course mappings."
-                        keepStaleCourseMappings && selectedSummary.staleCourseMappingCategoryNames.isNotEmpty() ->
-                            " Kept ${selectedSummary.staleCourseMappingCategoryNames.size} stale course mappings by user override."
-                        else -> ""
-                    }
-                    val createdText = selectedSummary.createdCategoryNames
-                        .takeIf { it.isNotEmpty() }
-                        ?.let { " Created ${it.size} course mappings without active competitors." }
-                        .orEmpty()
-                    val createdControlsText = selectedSummary.createdControlNames
-                        .takeIf { it.isNotEmpty() }
-                        ?.let { " Created ${it.size} controls." }
-                        .orEmpty()
-                    val assignedText = if (applyCategoryAssignments) {
-                        selectedSummary.categoryAssignmentUpdates.size
+                    selectedProject
+                }
+                val projectAfterAssignments = if (applyCategoryAssignments) {
+                    DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
+                        projectFile = projectToApply,
+                        updates = selectedSummary.categoryAssignmentUpdates
+                    )
+                } else {
+                    projectToApply
+                }
+                val shouldClearStaleCourseMappings = !keepStaleCourseMappings &&
+                    selectedSummary.staleCourseMappingCategoryIds.isNotEmpty()
+                val updatedProject = if (shouldClearStaleCourseMappings) {
+                    DesktopCourseKmlImporter.clearStaleCourseMappings(
+                        projectFile = projectAfterAssignments,
+                        categoryIds = selectedSummary.staleCourseMappingCategoryIds
+                    )
+                } else {
+                    projectAfterAssignments
+                }
+                checkpointBeforeImport("controls/route $formatLabel import ${review.sourceName}")
+                projectFile = projectSession.updateCurrentProject { updatedProject }
+                syncProtectedCourseState(updatedProject, review.password)
+                pendingCourseKmlKmzImportReview = null
+                recordActivity("Applied controls/route $formatLabel import ${review.sourceName}.")
+                val retainedImportedSiConflictCount = selectedSummary.controlSiConflictCount
+                    .takeIf { !overwriteImportedSiNumbers }
+                    ?: 0
+                val controlsOnlyImportWarningLines = controlsOnlyImportWarningLines(updatedProject, selectedSummary)
+                recentImportReport = DesktopImportReport(
+                    title = "Controls/route $formatLabel: ${review.sourceName}",
+                    lines = withRollbackBackupLine(listOf(
+                        "${selectedSummary.importedCategoryCount} categories received stored route data.",
+                        "${selectedSummary.duplicateCategoryCount} duplicate categories skipped.",
+                        "${selectedSummary.duplicateRouteAssignments.size} duplicate route assignments resolved.",
+                        "${selectedSummary.controlIdentityUpdateCount} control identities updated.",
+                        "$retainedImportedSiConflictCount imported SI conflicts retained existing Race File numbers.",
+                        "${selectedSummary.controlPublicLabelUpdateCount} control public labels updated.",
+                        "${selectedSummary.changedControlLocationCount} control locations updated.",
+                        "${selectedSummary.staleCourseMappingCategoryNames.size.takeIf { shouldClearStaleCourseMappings } ?: 0} stale course mappings cleared.",
+                        "${selectedSummary.staleCourseMappingCategoryNames.size.takeIf { keepStaleCourseMappings } ?: 0} stale course mappings kept by user override.",
+                        "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
+                        "${selectedSummary.createdCategoryNames.size} course mappings created.",
+                        "${selectedSummary.createdControlNames.size} missing controls created.",
+                        "${selectedSummary.missingCategoryNames.size} category names were missing before review."
+                    ) + listOf(updatedProject.resultImpactWarning("Course data changed").trim()).filter { it.isNotBlank() } +
+                        selectedSummary.categoryAssumptions.map { assumption ->
+                            "No category indication was found for route ${assumption.routeName}; assumed ${assumption.categoryName}."
+                        } +
+                        selectedSummary.rejectedRoutes.map { rejected ->
+                            "Skipped route ${rejected.routeName} for ${rejected.categoryName}: ${rejected.reason}"
+                        } +
+                        selectedSummary.eventTypeWarnings +
+                        controlsOnlyImportWarningLines)
+                )
+                if (fetchElevations) {
+                    startCourseKmlKmzElevationFetch(review.copy(summary = selectedSummary))
+                } else {
+                    projectStatusText = if (selectedSummary.isDuplicateOnly) {
+                        "Duplicate controls/route $formatLabel request: identical file already imported. No route data reloaded."
+                    } else {
+                        val duplicateText = selectedSummary.duplicateCategoryCount
                             .takeIf { it > 0 }
-                            ?.let { " Updated assigned controls for $it categories." }
+                            ?.let { " $it duplicate categories skipped." }
                             .orEmpty()
-                    } else {
-                        ""
-                    }
-                    if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
-                        "Updated ${selectedSummary.changedControlLocationCount} control locations.$staleMappingText$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
-                    } else if (
-                        selectedSummary.importedCategoryCount == 0 &&
-                        selectedSummary.assignedCategoryControlCount > 0 &&
-                        applyCategoryAssignments
-                    ) {
-                        "Updated assigned controls for ${selectedSummary.categoryAssignmentUpdates.size} categories.$staleMappingText$duplicateText$createdText$createdControlsText Unsaved changes."
-                    } else {
-                        "Imported controls/route data for ${selectedSummary.importedCategoryCount} categories.$locationText$staleMappingText$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
-                    }
-                } + controlsOnlyImportWarningLines.firstOrNull()?.let { " $it" }.orEmpty()
+                        val locationText = selectedSummary.changedControlLocationCount
+                            .takeIf { it > 0 }
+                            ?.let { " Updated $it control locations." }
+                            .orEmpty()
+                        val staleMappingText = when {
+                            shouldClearStaleCourseMappings ->
+                                " Cleared ${selectedSummary.staleCourseMappingCategoryNames.size} stale course mappings."
+                            keepStaleCourseMappings && selectedSummary.staleCourseMappingCategoryNames.isNotEmpty() ->
+                                " Kept ${selectedSummary.staleCourseMappingCategoryNames.size} stale course mappings by user override."
+                            else -> ""
+                        }
+                        val createdText = selectedSummary.createdCategoryNames
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { " Created ${it.size} course mappings without active competitors." }
+                            .orEmpty()
+                        val createdControlsText = selectedSummary.createdControlNames
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { " Created ${it.size} controls." }
+                            .orEmpty()
+                        val assignedText = if (applyCategoryAssignments) {
+                            selectedSummary.categoryAssignmentUpdates.size
+                                .takeIf { it > 0 }
+                                ?.let { " Updated assigned controls for $it categories." }
+                                .orEmpty()
+                        } else {
+                            ""
+                        }
+                        if (selectedSummary.importedCategoryCount == 0 && selectedSummary.changedControlLocationCount > 0) {
+                            "Updated ${selectedSummary.changedControlLocationCount} control locations.$staleMappingText$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
+                        } else if (
+                            selectedSummary.importedCategoryCount == 0 &&
+                            selectedSummary.assignedCategoryControlCount > 0 &&
+                            applyCategoryAssignments
+                        ) {
+                            "Updated assigned controls for ${selectedSummary.categoryAssignmentUpdates.size} categories.$staleMappingText$duplicateText$createdText$createdControlsText Unsaved changes."
+                        } else {
+                            "Imported controls/route data for ${selectedSummary.importedCategoryCount} categories.$locationText$staleMappingText$assignedText$duplicateText$createdText$createdControlsText Unsaved changes."
+                        }
+                    } + controlsOnlyImportWarningLines.firstOrNull()?.let { " $it" }.orEmpty()
+                }
+            }.onFailure { error ->
+                val message = error.message ?: error::class.simpleName.orEmpty().ifBlank { "unknown error" }
+                DesktopDebugLog.error(
+                    "CourseKml",
+                    "Apply failed for controls/route $formatLabel import ${review.sourceName}: $message\n${error.stackTraceToString()}"
+                )
+                projectStatusText = "Controls/route $formatLabel import failed while applying: $message"
             }
         }
 

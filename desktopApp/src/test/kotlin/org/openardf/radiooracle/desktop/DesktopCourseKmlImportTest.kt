@@ -908,6 +908,61 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun importsOcadVhfOnlyGpxAsCreatedCourseMappingWithMissingControls() {
+        val gpxPath = Files.createTempFile("2027-Scout-Setting-VHF-only.Courses", ".gpx")
+        Files.writeString(gpxPath, sampleOcadVhfOnlyGpx())
+        val project = EventProjectFactory.createEmptyProject(
+            raceId = "race",
+            raceName = "Testing File",
+            startDateTimeIso = "2026-07-05T09:00"
+        )
+
+        val (previewProject, previewSummary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = gpxPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { it.elevationMeters }
+        )
+        val (updatedProject, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = gpxPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { it.elevationMeters },
+            createMissingCategories = true,
+            createMissingControls = true,
+            missingCategoryIdFactory = { name -> "cat-${name.lowercase()}" }
+        )
+
+        assertEquals(1, previewSummary.routeCount)
+        assertEquals(listOf("M21"), previewSummary.missingCategoryNames)
+        assertEquals(listOf("V1", "V2", "V3", "V4", "V5"), previewSummary.missingControlNames)
+        assertEquals(emptyList<String>(), previewProject.raceData.controls.map { it.label })
+
+        assertEquals(listOf("M21"), summary.createdCategoryNames)
+        assertEquals(listOf("V1", "V2", "V3", "V4", "V5"), summary.createdControlNames)
+        assertEquals(1, summary.matchedCategoryCount)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(5, summary.matchedControlPointCount)
+        assertEquals(5, summary.assignedCategoryControlCount)
+        assertEquals("31 32 33 34 35", summary.categoryAssignmentUpdates.single().controlPointsText)
+        assertEquals(emptyList<String>(), updatedProject.raceData.categories.map { it.category.name })
+        assertEquals(listOf("M21"), updatedProject.raceData.courseMappings.map { it.category.name })
+        assertEquals(listOf("1", "2", "3", "4", "5"), updatedProject.raceData.controls.map { it.label })
+        assertEquals(listOf("V1", "V2", "V3", "V4", "V5"), updatedProject.raceData.controls.map { it.publicLabel })
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updatedProject.raceData.courseMappings.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals("V1 V2 V4 V5 V3", protectedCourseInfo.idealOrder)
+        assertEquals(
+            listOf("Start", "V1", "V2", "V4", "V5", "V3", "VMO", "Finish"),
+            protectedCourseInfo.courseObjects.map { it.label }
+        )
+        assertEquals(listOf("M21"), protectedCourseStateCategories(updatedProject.raceData).map { it.category.name })
+    }
+
+    @Test
     fun pointOnlySprintImportPromotesImportedNamesToPublicLabelsNotNotes() {
         val kmlPath = Files.createTempFile("Sprint All controls", ".kml")
         Files.writeString(kmlPath, samplePointOnlySprintAllControlsKml())
@@ -2769,6 +2824,43 @@ class DesktopCourseKmlImportTest {
               <trkpt lat="34.99952284" lon="-106.31194746"><name>FOX3</name></trkpt>
               <trkpt lat="34.99798144" lon="-106.32312509"><name>B</name></trkpt>
               <trkpt lat="34.99743600" lon="-106.32351917"><name>F1</name></trkpt>
+            </trkseg>
+          </trk>
+        </gpx>
+        """.trimIndent().trimStart()
+
+    private fun sampleOcadVhfOnlyGpx(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+        <gpx xmlns="http://www.topografix.com/GPX/1/1"
+        creator="OCAD 2020.8.4.4823" version="1.1"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.topografix.com/GPX/1/1
+        http://www.topografix.com/GPX/1/1/gpx.xsd">
+          <metadata>
+            <link href="http://www.ocad.com"><text>OCAD AG</text></link>
+            <time>2026-06-14T3:39:46 PM</time>
+            <bounds maxlat="35.01010110" maxlon="-106.28063078" minlat="34.99743600" minlon="-106.32351917"/>
+          </metadata>
+          <wpt lat="35.00113526" lon="-106.29762296"><name>S2</name><ele>2296.34</ele><cmt></cmt></wpt>
+          <wpt lat="35.00582704" lon="-106.30440855"><name>V1</name><ele>2277.24</ele><cmt></cmt></wpt>
+          <wpt lat="35.00233493" lon="-106.28221280"><name>V2</name><ele>2237.04</ele><cmt></cmt></wpt>
+          <wpt lat="34.99952284" lon="-106.31194746"><name>V3</name><ele>2313.77</ele><cmt></cmt></wpt>
+          <wpt lat="35.01091486" lon="-106.28653278"><name>V4</name><ele>2245.91</ele><cmt></cmt></wpt>
+          <wpt lat="35.00635377" lon="-106.31124181"><name>V5</name><ele>2307.60</ele><cmt></cmt></wpt>
+          <wpt lat="34.99798144" lon="-106.32312509"><name>VMO</name><ele>2345.26</ele><cmt></cmt></wpt>
+          <wpt lat="34.99743600" lon="-106.32351917"><name>F2</name><ele>2342.65</ele><cmt></cmt></wpt>
+          <trk>
+            <name>VHF-classic M21</name>
+            <trkseg>
+              <trkpt lat="35.00113526" lon="-106.29762296"><name>S2</name><ele>2296.34</ele></trkpt>
+              <trkpt lat="35.00582704" lon="-106.30440855"><name>V1</name><ele>2277.24</ele></trkpt>
+              <trkpt lat="35.00233493" lon="-106.28221280"><name>V2</name><ele>2237.04</ele></trkpt>
+              <trkpt lat="35.01091486" lon="-106.28653278"><name>V4</name><ele>2245.91</ele></trkpt>
+              <trkpt lat="35.00635377" lon="-106.31124181"><name>V5</name><ele>2307.60</ele></trkpt>
+              <trkpt lat="34.99952284" lon="-106.31194746"><name>V3</name><ele>2313.77</ele></trkpt>
+              <trkpt lat="34.99798144" lon="-106.32312509"><name>VMO</name><ele>2345.26</ele></trkpt>
+              <trkpt lat="34.99743600" lon="-106.32351917"><name>F2</name><ele>2342.65</ele></trkpt>
             </trkseg>
           </trk>
         </gpx>
