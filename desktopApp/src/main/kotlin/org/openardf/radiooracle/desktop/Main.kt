@@ -6114,7 +6114,7 @@ fun main(args: Array<String>) = application {
                                 resultId = updatedDraft.resultId,
                                 startSeconds = updatedDraft.startSeconds,
                                 finishSeconds = updatedDraft.finishSeconds,
-                                controlPunchesText = updatedDraft.controlPunchesText,
+                                controlPunchesText = updatedDraft.controlPunches.toControlPunchesText(currentProject.raceData.controls),
                                 resultStatus = updatedDraft.resultStatus,
                                 categoryId = updatedDraft.categoryId,
                                 updateCompetitorCategory = updatedDraft.updateCompetitorCategory,
@@ -10359,13 +10359,20 @@ private data class DesktopReadoutEditDraft(
     val finishSeconds: String,
     val startSiTime: String,
     val finishSiTime: String,
-    val controlPunchesText: String,
+    val controlPunches: List<DesktopReadoutPunchEditDraft>,
     val resultStatus: ResultStatus,
     val categoryId: String?,
     val originalCategoryId: String?,
     val isPractice: Boolean,
     val issueExplanation: String?,
     val updateCompetitorCategory: Boolean = false
+)
+
+private data class DesktopReadoutPunchEditDraft(
+    val rowId: String,
+    val controlId: String?,
+    val siCode: Int,
+    val elapsedTime: String
 )
 
 private data class EventSeriesValidationUiState(
@@ -11268,7 +11275,7 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                 finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds, elapsedBaseSeconds),
                 startSiTime = readoutData.result.startTimeSeconds.toReadoutSiTimeText(),
                 finishSiTime = readoutData.result.finishTimeSeconds.toReadoutSiTimeText(),
-                controlPunchesText = readoutData.controlPunchText(this, elapsedBaseSeconds),
+                controlPunches = readoutData.controlPunchRows(this, elapsedBaseSeconds),
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId ?: competitor.categoryId,
                 originalCategoryId = competitor.categoryId,
@@ -11293,7 +11300,7 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                 finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds, elapsedBaseSeconds),
                 startSiTime = readoutData.result.startTimeSeconds.toReadoutSiTimeText(),
                 finishSiTime = readoutData.result.finishTimeSeconds.toReadoutSiTimeText(),
-                controlPunchesText = readoutData.controlPunchText(this, elapsedBaseSeconds),
+                controlPunches = readoutData.controlPunchRows(this, elapsedBaseSeconds),
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId,
                 originalCategoryId = null,
@@ -11333,20 +11340,32 @@ private fun Long.toSportIdentDaySeconds(): Long {
     return ((this % secondsInDay) + secondsInDay) % secondsInDay
 }
 
-private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchText(
+private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchRows(
     raceData: EventRaceData,
     elapsedBaseSeconds: Long?
-): String =
+): List<DesktopReadoutPunchEditDraft> =
     punches
         .map { aliasPunch -> aliasPunch.punch to aliasPunch.alias?.name }
         .filter { (punch, _) -> punch.punchType == SIRecordType.CONTROL }
-        .joinToString("\n") { (punch, aliasName) ->
+        .mapIndexed { index, (punch, _) ->
             val control = raceData.controls.firstOrNull { it.siCode == punch.siCode }
-            val label = control?.editPunchToken(raceData.controls)
-                ?: aliasName?.takeIf { it.isNotBlank() }
-                ?: punch.siCode.toString()
-            "$label @ ${raceData.elapsedRaceTimeText(punch.siTimeSeconds, elapsedBaseSeconds)}"
+            DesktopReadoutPunchEditDraft(
+                rowId = punch.id.ifBlank { "punch-$index-${punch.siCode}" },
+                controlId = control?.id,
+                siCode = punch.siCode,
+                elapsedTime = raceData.elapsedRaceTimeText(punch.siTimeSeconds, elapsedBaseSeconds)
+            )
         }
+
+private fun List<DesktopReadoutPunchEditDraft>.toControlPunchesText(controls: List<EventControl>): String {
+    val controlsById = controls.associateBy { it.id }
+    val sortedControls = controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
+    return joinToString("\n") { punch ->
+        val control = punch.controlId?.let(controlsById::get)
+        val controlText = control?.editPunchToken(sortedControls) ?: punch.siCode.toString()
+        "$controlText @ ${punch.elapsedTime.trim()}"
+    }
+}
 
 private fun raceStartSecondsOfDay(startDateTimeIso: String): Long? {
     val time = startDateTimeIso.substringAfter('T', missingDelimiterValue = "")
@@ -15049,7 +15068,7 @@ private fun ReadoutEditDialog(
     var finishSeconds by remember(draft.resultId) { mutableStateOf(draft.finishSeconds) }
     var startSiTime by remember(draft.resultId) { mutableStateOf(draft.startSiTime) }
     var finishSiTime by remember(draft.resultId) { mutableStateOf(draft.finishSiTime) }
-    var controlPunchesText by remember(draft.resultId) { mutableStateOf(draft.controlPunchesText) }
+    var controlPunches by remember(draft.resultId) { mutableStateOf(draft.controlPunches) }
     var resultStatus by remember(draft.resultId) { mutableStateOf(draft.resultStatus) }
     var categoryId by remember(draft.resultId) { mutableStateOf(draft.categoryId) }
     var updateCompetitorCategory by remember(draft.resultId) { mutableStateOf(draft.updateCompetitorCategory) }
@@ -15059,16 +15078,11 @@ private fun ReadoutEditDialog(
     val sortedControls = remember(controls) {
         controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
     }
-    val usedPunchControlKeys = remember(controlPunchesText) { controlPunchesText.usedPunchControlKeys() }
-    val availableControls = remember(sortedControls, usedPunchControlKeys) {
-        sortedControls.filter { control ->
-            control.entryKeys().none { it in usedPunchControlKeys }
-        }
-    }
+    val punchValidationMessage = remember(controlPunches) { controlPunches.validationMessage() }
 
-    LaunchedEffect(availableControls, selectedControlId) {
-        if (selectedControlId == null || availableControls.none { it.id == selectedControlId }) {
-            selectedControlId = availableControls.firstOrNull()?.id
+    LaunchedEffect(sortedControls, selectedControlId) {
+        if (selectedControlId == null || sortedControls.none { it.id == selectedControlId }) {
+            selectedControlId = sortedControls.firstOrNull()?.id
         }
     }
 
@@ -15084,7 +15098,7 @@ private fun ReadoutEditDialog(
                 finishSeconds = finishSeconds,
                 startSiTime = startSiTime,
                 finishSiTime = finishSiTime,
-                controlPunchesText = controlPunchesText,
+                controlPunches = controlPunches,
                 resultStatus = resultStatus,
                 categoryId = categoryId,
                 updateCompetitorCategory = updateCompetitorCategory
@@ -15095,8 +15109,8 @@ private fun ReadoutEditDialog(
     Dialog(onDismissRequest = onCancel) {
         Surface(
             modifier = Modifier
-                .width(500.dp)
-                .heightIn(max = 620.dp),
+                .width(640.dp)
+                .heightIn(max = 680.dp),
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colors.surface
         ) {
@@ -15166,44 +15180,79 @@ private fun ReadoutEditDialog(
                                 onCommit = ::saveDraft
                             )
                         }
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("Control Punches", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            if (controlPunches.isEmpty()) {
+                                Text(
+                                    text = "No control punches.",
+                                    color = DesktopPalette.Disconnected,
+                                    fontSize = 12.sp
+                                )
+                            } else {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    FixedTableText("Control", 220.dp, DesktopPalette.Disconnected)
+                                    FixedTableText("Elapsed", 110.dp, DesktopPalette.Disconnected)
+                                    Spacer(Modifier.width(160.dp))
+                                }
+                            }
+                            controlPunches.forEachIndexed { index, punch ->
+                                ReadoutPunchEditRow(
+                                    punch = punch,
+                                    controls = sortedControls,
+                                    canMoveUp = index > 0,
+                                    canMoveDown = index < controlPunches.lastIndex,
+                                    onControlSelected = { controlId ->
+                                        val control = sortedControls.firstOrNull { it.id == controlId }
+                                        controlPunches = controlPunches.map { row ->
+                                            if (row.rowId == punch.rowId && control != null) {
+                                                row.copy(controlId = control.id, siCode = control.siCode)
+                                            } else {
+                                                row
+                                            }
+                                        }
+                                    },
+                                    onElapsedTimeChanged = { elapsedTime ->
+                                        controlPunches = controlPunches.map { row ->
+                                            if (row.rowId == punch.rowId) row.copy(elapsedTime = elapsedTime) else row
+                                        }
+                                    },
+                                    onMoveUp = {
+                                        controlPunches = controlPunches.moved(index, index - 1)
+                                    },
+                                    onMoveDown = {
+                                        controlPunches = controlPunches.moved(index, index + 1)
+                                    },
+                                    onDelete = {
+                                        controlPunches = controlPunches.filterNot { row -> row.rowId == punch.rowId }
+                                    },
+                                    onCommit = ::saveDraft
+                                )
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 ReadoutControlPicker(
                                     selectedControlId = selectedControlId,
-                                    controls = availableControls,
+                                    controls = sortedControls,
                                     onControlSelected = { selectedControlId = it },
                                     modifier = Modifier.width(260.dp)
                                 )
                                 Button(
                                     onClick = {
-                                        val control = availableControls.firstOrNull { it.id == selectedControlId } ?: return@Button
-                                        val punchTime = startSeconds.ifBlank { "00:00" }
-                                        controlPunchesText = appendReadoutPunchLine(
-                                            controlPunchesText,
-                                            "${control.editPunchToken(sortedControls)} @ $punchTime"
+                                        val control = sortedControls.firstOrNull { it.id == selectedControlId } ?: return@Button
+                                        controlPunches = controlPunches + DesktopReadoutPunchEditDraft(
+                                            rowId = "new-punch-${UUID.randomUUID()}",
+                                            controlId = control.id,
+                                            siCode = control.siCode,
+                                            elapsedTime = defaultNewPunchElapsedTime(startSeconds)
                                         )
-                                        selectedControlId = availableControls.firstOrNull { it.id != control.id }?.id
                                     },
                                     enabled = selectedControlId != null
                                 ) {
                                     ButtonLabel("Add Punch")
                                 }
                             }
-                            TextField(
-                                value = controlPunchesText,
-                                onValueChange = { controlPunchesText = it },
-                                singleLine = false,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(88.dp)
-                                    .commitOnEnter(::saveDraft)
-                            )
-                            Text(
-                                text = "Use one punch per line, such as Fox 1 @ 15:00. The picker inserts valid labels; typed SI codes, public labels, and control labels are also accepted.",
-                                color = DesktopPalette.Disconnected,
-                                fontSize = 12.sp
-                            )
+                            punchValidationMessage?.let { message ->
+                                Text(text = message, color = DesktopPalette.Error, fontSize = 12.sp)
+                            }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             ResultStatusPicker(
@@ -15241,7 +15290,7 @@ private fun ReadoutEditDialog(
                         Text("Cancel")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = ::saveDraft) {
+                    Button(onClick = ::saveDraft, enabled = punchValidationMessage == null) {
                         Text("Save")
                     }
                 }
@@ -15251,15 +15300,57 @@ private fun ReadoutEditDialog(
 }
 
 @Composable
+private fun ReadoutPunchEditRow(
+    punch: DesktopReadoutPunchEditDraft,
+    controls: List<EventControl>,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onControlSelected: (String?) -> Unit,
+    onElapsedTimeChanged: (String) -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onDelete: () -> Unit,
+    onCommit: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        ReadoutControlPicker(
+            selectedControlId = punch.controlId,
+            controls = controls,
+            onControlSelected = onControlSelected,
+            modifier = Modifier.width(220.dp),
+            emptySelectionText = "SI ${punch.siCode}"
+        )
+        TextField(
+            value = punch.elapsedTime,
+            onValueChange = onElapsedTimeChanged,
+            singleLine = true,
+            modifier = Modifier
+                .width(110.dp)
+                .commitOnEnter(onCommit)
+        )
+        Button(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.width(48.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
+            Text("Up", fontSize = 12.sp)
+        }
+        Button(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.width(56.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
+            Text("Down", fontSize = 12.sp)
+        }
+        Button(onClick = onDelete, modifier = Modifier.width(68.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
+            Text("Delete", fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
 private fun ReadoutControlPicker(
     selectedControlId: String?,
     controls: List<EventControl>,
     onControlSelected: (String?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    emptySelectionText: String = "No controls available"
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedControl = controls.firstOrNull { it.id == selectedControlId }
-    val selectedText = selectedControl?.publicDisplayLabel() ?: "No controls available"
+    val selectedText = selectedControl?.publicDisplayLabel() ?: emptySelectionText
 
     Box(modifier = modifier) {
         Button(
@@ -20463,30 +20554,43 @@ private fun appendPublicControlLabel(controlPointsText: String, publicLabel: Str
     return if (existingText.isEmpty()) token else "$existingText $token"
 }
 
-private fun appendReadoutPunchLine(controlPunchesText: String, punchLine: String): String {
-    val existingText = controlPunchesText.trim()
-    return if (existingText.isEmpty()) punchLine else "$existingText\n$punchLine"
+private fun defaultNewPunchElapsedTime(startSeconds: String): String =
+    startSeconds.trim().takeIf { it.toReadoutElapsedSecondsOrNull() != null } ?: "00:00"
+
+private fun List<DesktopReadoutPunchEditDraft>.validationMessage(): String? =
+    mapIndexedNotNull { index, punch ->
+        val label = "Punch ${index + 1}"
+        when {
+            punch.elapsedTime.isBlank() -> "$label needs an elapsed time."
+            punch.elapsedTime.toReadoutElapsedSecondsOrNull() == null -> "$label time must use mm:ss or hh:mm:ss under 24 hours."
+            else -> null
+        }
+    }.firstOrNull()
+
+private fun String.toReadoutElapsedSecondsOrNull(): Long? {
+    val parts = trim().split(":")
+    if (parts.size != 2 && parts.size != 3) {
+        return null
+    }
+    val hours = if (parts.size == 3) parts[0].toLongOrNull() ?: return null else 0L
+    val minutes = parts[if (parts.size == 3) 1 else 0].toLongOrNull() ?: return null
+    val seconds = parts[if (parts.size == 3) 2 else 1].toLongOrNull() ?: return null
+    if (hours < 0 || minutes !in 0..59 || seconds !in 0..59) {
+        return null
+    }
+    val totalSeconds = hours * 3_600 + minutes * 60 + seconds
+    return totalSeconds.takeIf { it in 0 until SportIdentCodes.SECONDS_DAY }
 }
 
-private fun String.usedPunchControlKeys(): Set<String> =
-    lines()
-        .flatMap { line -> line.split(";") }
-        .flatMap { entry ->
-            val controlText = entry.substringBefore("@").trim()
-            val numericTokens = controlText.split(Regex("\\s+")).filter { it.isNotBlank() }
-            if (
-                "@" !in entry &&
-                numericTokens.size > 1 &&
-                numericTokens.all { it.toIntOrNull() != null }
-            ) {
-                numericTokens
-            } else {
-                listOf(controlText)
-            }
-        }
-        .map { it.normalizedReadoutControlToken() }
-        .filter { it.isNotEmpty() }
-        .toSet()
+private fun <T> List<T>.moved(fromIndex: Int, toIndex: Int): List<T> {
+    if (fromIndex !in indices || toIndex !in indices || fromIndex == toIndex) {
+        return this
+    }
+    val mutableRows = toMutableList()
+    val row = mutableRows.removeAt(fromIndex)
+    mutableRows.add(toIndex, row)
+    return mutableRows
+}
 
 private fun EventControl.editPunchToken(allControls: List<EventControl>): String {
     val publicLabel = publicDisplayLabel()
