@@ -55,10 +55,11 @@ internal class DesktopSportIdentFrameStream(
             trimBufferedNoise()
 
             val raw = port.read(maxReadBytes)
-            if (raw.isNotEmpty()) {
-                lastRawRead = raw
-                buffered += raw
+            if (raw.isEmpty()) {
+                return nextBufferedFrame(requireValidCrc)
             }
+            lastRawRead = raw
+            buffered += raw
         }
         return nextBufferedFrame(requireValidCrc)
     }

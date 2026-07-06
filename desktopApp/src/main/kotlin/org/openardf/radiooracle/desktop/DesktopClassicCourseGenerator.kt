@@ -84,6 +84,7 @@ data class ClassicCourseGeneratorRow(
     val climbPercent: Double? = climbMeters
         ?.takeIf { horizontalLengthMeters > 0.0 }
         ?.let { it / horizontalLengthMeters * 100.0 }
+    val orderKey: String = orderLabels.joinToString("\u0000")
 }
 
 internal fun ClassicCourseGeneratorRow.routeGeneratorParentheticalText(): String =
@@ -540,7 +541,7 @@ object DesktopClassicCourseGenerator {
         }.sortedWith(
             compareBy<ClassicCourseGeneratorRow> { it.foxCount }
                 .thenBy { it.effectiveLengthMeters }
-                .thenBy { it.orderLabels.joinToString("\u0000") }
+                .thenBy { it.orderKey }
         )
 
     private fun sprintRow(
@@ -652,7 +653,7 @@ object DesktopClassicCourseGenerator {
                 }
                 .sortedWith(
                     compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
-                        .thenBy { it.orderLabels.joinToString("\u0000") }
+                        .thenBy { it.orderKey }
                 )
         }
 
@@ -690,7 +691,7 @@ object DesktopClassicCourseGenerator {
             }
             .minWith(
                 compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
-                    .thenBy { it.orderLabels.joinToString("\u0000") }
+                    .thenBy { it.orderKey }
             )
 
     private fun exactSubsetRows(
@@ -777,7 +778,7 @@ object DesktopClassicCourseGenerator {
             }
             .sortedWith(
                 compareBy<ClassicCourseGeneratorRow> { it.effectiveLengthMeters }
-                    .thenBy { it.orderLabels.joinToString("\u0000") }
+                    .thenBy { it.orderKey }
             )
     }
 
@@ -982,7 +983,7 @@ object DesktopClassicCourseGenerator {
         return scoredSets
             .distinctBy { score ->
                 score.rows
-                    .map { it.orderLabels.joinToString(" -> ") }
+                    .map { it.orderKey }
                     .sorted()
                     .joinToString("\u0000")
             }
@@ -999,7 +1000,7 @@ object DesktopClassicCourseGenerator {
                     rows = score.rows.sortedWith(
                         compareByDescending<ClassicCourseGeneratorRow> { it.foxCount }
                             .thenBy { it.effectiveLengthMeters }
-                            .thenBy { it.orderLabels.joinToString("\u0000") }
+                            .thenBy { it.orderKey }
                     )
                 )
             }
@@ -1052,7 +1053,7 @@ object DesktopClassicCourseGenerator {
         }
         val selected = linkedMapOf<String, RecommendationCandidateRow>()
         fun add(candidate: RecommendationCandidateRow) {
-            val key = candidate.row.orderLabels.joinToString("\u0000")
+            val key = candidate.row.orderKey
             selected.putIfAbsent(key, candidate)
         }
         fun addIfRoom(candidate: RecommendationCandidateRow) {
@@ -1117,7 +1118,7 @@ object DesktopClassicCourseGenerator {
         compareByDescending<RecommendationCandidateRow> { it.row.foxCount }
             .thenByDescending { it.categoryMask.countOneBits() }
             .thenBy { it.row.effectiveLengthMeters }
-            .thenBy { it.row.orderLabels.joinToString("\u0000") }
+            .thenBy { it.row.orderKey }
 
     private fun recommendedSetComparator(): Comparator<RecommendedCourseSetScore> =
         compareByDescending<RecommendedCourseSetScore> { it.categoryFoxMinimum }
@@ -1125,7 +1126,7 @@ object DesktopClassicCourseGenerator {
             .thenByDescending { it.uniqueFirstFoxCount }
             .thenByDescending { it.rows.size }
             .thenBy { it.totalEffectiveLengthMeters }
-            .thenBy { it.rows.joinToString("\u0000") { row -> row.orderLabels.joinToString(" -> ") } }
+            .thenBy { it.orderKey }
 
     private fun requirementWarnings(
         classified: ClassifiedClassicCoursePoints,
@@ -1518,7 +1519,9 @@ object DesktopClassicCourseGenerator {
         val categoryFoxMinimum: Int,
         val categoryFoxTotal: Int,
         val totalEffectiveLengthMeters: Double
-    )
+    ) {
+        val orderKey: String = rows.joinToString("\u0000") { it.orderKey }
+    }
 
     private data class PdfLine(
         val text: String,

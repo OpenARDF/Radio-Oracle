@@ -136,4 +136,21 @@ class DesktopCourseSharedRulesTest {
         assertEquals(4.0, DesktopCourseRouteMetricsCalculator.climbMetersOrNull(sustainedClimbRoute) ?: -1.0, 0.001)
         assertEquals(5.1, DesktopCourseRouteMetricsCalculator.rawPositiveClimbMetersOrNull(sustainedClimbRoute) ?: -1.0, 0.001)
     }
+
+    @Test
+    fun routeMetricsHandleDenseElevationProfiles() {
+        val denseRoute = (0 until 5_000).map { index ->
+            CourseGeoPoint(
+                latitude = 35.0,
+                longitude = -80.0 + index * 0.00001,
+                elevationMeters = 100.0 + (index % 20)
+            )
+        }
+
+        val metrics = DesktopCourseRouteMetricsCalculator.metrics(denseRoute)
+
+        assertTrue(metrics.horizontalLengthMeters > 0.0)
+        assertTrue((metrics.climbMeters ?: -1.0) >= 0.0)
+        assertTrue((metrics.effectiveLengthMeters ?: -1.0) >= metrics.horizontalLengthMeters)
+    }
 }

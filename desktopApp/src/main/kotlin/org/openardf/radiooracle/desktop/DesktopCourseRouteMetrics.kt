@@ -116,15 +116,32 @@ object DesktopCourseRouteMetricsCalculator {
             return route.map { requireNotNull(it.elevationMeters) }
         }
         val radiusMeters = smoothingWindowMeters / 2.0
+        val sortedWindowElevations = mutableListOf<Double>()
+        var windowStartIndex = 0
+        var windowEndExclusive = 0
         return route.indices.map { index ->
             val center = distances[index]
-            val samples = route.indices
-                .asSequence()
-                .filter { sampleIndex -> kotlin.math.abs(distances[sampleIndex] - center) <= radiusMeters }
-                .map { sampleIndex -> requireNotNull(route[sampleIndex].elevationMeters) }
-                .sorted()
-                .toList()
-            median(samples)
+            while (windowEndExclusive < route.size && distances[windowEndExclusive] - center <= radiusMeters) {
+                sortedWindowElevations.insertSorted(requireNotNull(route[windowEndExclusive].elevationMeters))
+                windowEndExclusive += 1
+            }
+            while (windowStartIndex < route.size && center - distances[windowStartIndex] > radiusMeters) {
+                sortedWindowElevations.removeSorted(requireNotNull(route[windowStartIndex].elevationMeters))
+                windowStartIndex += 1
+            }
+            median(sortedWindowElevations)
+        }
+    }
+
+    private fun MutableList<Double>.insertSorted(value: Double) {
+        val insertionPoint = binarySearch(value).let { if (it >= 0) it else -it - 1 }
+        add(insertionPoint, value)
+    }
+
+    private fun MutableList<Double>.removeSorted(value: Double) {
+        val matchIndex = binarySearch(value)
+        if (matchIndex >= 0) {
+            removeAt(matchIndex)
         }
     }
 

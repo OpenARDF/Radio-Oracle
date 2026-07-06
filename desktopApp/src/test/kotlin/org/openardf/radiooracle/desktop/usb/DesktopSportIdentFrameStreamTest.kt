@@ -27,6 +27,7 @@ package org.openardf.radiooracle.desktop.usb
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentUsbDevice
@@ -69,6 +70,14 @@ class DesktopSportIdentFrameStreamTest {
         assertEquals(SportIdentProtocol.PROBE_COMMAND, firstFrame!!.command)
         assertEquals(SportIdentProtocol.GET_SYSTEM_INFO, secondFrame!!.command)
         assertArrayEquals(byteArrayOf(0x00, 0x07), secondFrame.data)
+    }
+
+    @Test
+    fun returnsNullAfterEmptySerialRead() {
+        val port = ChunkedPort(emptyList())
+        val stream = DesktopSportIdentFrameStream(port, nowMillis = { 0L })
+
+        assertNull(stream.nextFrame(deadlineMillis = 1_000))
     }
 
     private class ChunkedPort(chunks: List<ByteArray>) : DesktopSerialPort {
