@@ -291,21 +291,22 @@ object CourseEvaluator {
                         !control.isSprintSpectator &&
                         !control.isSprintBeacon
                 }
+                // When fast-loop labels are available, they are the reliable loop boundary even if import order differs.
                 val hasFastLabels = controls.any { it.value.hasSprintFastLabel }
 
                 val slowControls = controls.filter { (index, control) ->
                     !control.hasSprintFastLabel &&
                         when {
-                            spectatorIndex >= 0 -> index < spectatorIndex
                             hasFastLabels -> true
+                            spectatorIndex >= 0 -> index < spectatorIndex
                             else -> !control.isSprintFastFoxByCode()
                         }
                 }.map { it.value }
                 val fastControls = controls.filter { (index, control) ->
                     control.hasSprintFastLabel ||
                         when {
-                            spectatorIndex >= 0 -> index > spectatorIndex
                             hasFastLabels -> false
+                            spectatorIndex >= 0 -> index > spectatorIndex
                             else -> control.isSprintFastFoxByCode()
                         }
                 }.map { it.value }

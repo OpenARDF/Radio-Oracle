@@ -155,10 +155,12 @@ import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
+import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventCompetitorDetails
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlDetails
+import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventAssignedControlWarning
 import org.openardf.radiooracle.shared.event.EventAssignedControlWarnings
 import org.openardf.radiooracle.shared.event.EVENT_FILE_TRANSFER_CONTENT_TYPE
@@ -171,8 +173,10 @@ import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventRaceDetails
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventReadoutDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
+import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
 import org.openardf.radiooracle.shared.event.EventSeriesSupport
@@ -206,6 +210,7 @@ import org.openardf.radiooracle.shared.files.IofXmlImports
 import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
 import org.openardf.radiooracle.shared.files.IofXmlUnsupportedItem
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -432,18 +437,29 @@ private val ResultTableColumns = listOf(
     FixedTableColumn("Edit", 104.dp)
 )
 
-private val ReadoutTableColumns = listOf(
+private val ReadoutBaseTableColumns = listOf(
     FixedTableColumn("SI no.", 112.dp),
     FixedTableColumn("Competitor", 240.dp),
     FixedTableColumn("Status", 136.dp),
     FixedTableColumn("Points", 80.dp),
     FixedTableColumn("Runtime", 104.dp),
-    FixedTableColumn("Punches", 260.dp),
+    FixedTableColumn("Punches", 260.dp)
+)
+
+private val ReadoutAssignmentTableColumns = listOf(
     FixedTableColumn("Assign to", 240.dp),
-    FixedTableColumn("", 104.dp),
+    FixedTableColumn("", 104.dp)
+)
+
+private val ReadoutActionTableColumns = listOf(
     FixedTableColumn("Edit", 104.dp),
     FixedTableColumn("", 104.dp)
 )
+
+private fun readoutTableColumns(showAssignment: Boolean): List<FixedTableColumn> =
+    ReadoutBaseTableColumns +
+        (if (showAssignment) ReadoutAssignmentTableColumns else emptyList()) +
+        ReadoutActionTableColumns
 
 private val StartListTableColumns = listOf(
     FixedTableColumn("Start", 72.dp),
@@ -6120,16 +6136,22 @@ fun main(args: Array<String>) = application {
                                 updateCompetitorCategory = updatedDraft.updateCompetitorCategory,
                                 punchIdFactory = { index, type -> "edited-punch-${UUID.randomUUID()}-$index-${type.name}" },
                                 startSiTime = updatedDraft.startSiTime,
-                                finishSiTime = updatedDraft.finishSiTime
+                                finishSiTime = updatedDraft.finishSiTime,
+                                recalculateStatus = !updatedDraft.resultStatusEdited
                             )
                         }
-                        hasUnsavedChanges = projectSession.hasUnsavedChanges
+                        syncProjectState()
                         pendingReadoutEdit = null
-                        projectStatusText = "Result edit applied."
+                        projectStatusText = if (updatedDraft.resultStatusEdited) {
+                            "Result edit applied with manual status."
+                        } else {
+                            "Result edit applied and recalculated."
+                        }
                         DesktopDebugLog.info(
                             "Results",
                             "Edited result ${updatedDraft.resultId}; category=${updatedDraft.categoryId ?: "none"}; " +
-                                "updateCompetitorCategory=${updatedDraft.updateCompetitorCategory}"
+                                "updateCompetitorCategory=${updatedDraft.updateCompetitorCategory} " +
+                                "recalculateStatus=${!updatedDraft.resultStatusEdited}"
                         )
                     }.onFailure { error ->
                         projectStatusText = "Result edit failed: ${error.message ?: error::class.simpleName}"
@@ -6139,7 +6161,8 @@ fun main(args: Array<String>) = application {
                                 "start=${updatedDraft.startSeconds.ifBlank { "blank" }} " +
                                 "finish=${updatedDraft.finishSeconds.ifBlank { "blank" }} " +
                                 "status=${updatedDraft.resultStatus.name} category=${updatedDraft.categoryId ?: "none"} " +
-                                "updateCompetitorCategory=${updatedDraft.updateCompetitorCategory}"
+                                "updateCompetitorCategory=${updatedDraft.updateCompetitorCategory} " +
+                                "recalculateStatus=${!updatedDraft.resultStatusEdited}"
                         )
                     }
                 },
@@ -10366,7 +10389,8 @@ private data class DesktopReadoutEditDraft(
     val originalCategoryId: String?,
     val isPractice: Boolean,
     val issueExplanation: String?,
-    val updateCompetitorCategory: Boolean = false
+    val updateCompetitorCategory: Boolean = false,
+    val resultStatusEdited: Boolean = false
 )
 
 private data class DesktopReadoutPunchEditDraft(
@@ -10375,7 +10399,8 @@ private data class DesktopReadoutPunchEditDraft(
     val siCode: Int,
     val controlText: String,
     val elapsedTime: String,
-    val siTime: String
+    val siTime: String,
+    val punchStatus: PunchStatus
 )
 
 private enum class DesktopReadoutPunchTimeMode(val columnLabel: String) {
@@ -11367,7 +11392,8 @@ private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchR
                     ?: aliasName?.takeIf { it.isNotBlank() }
                     ?: punch.siCode.toString(),
                 elapsedTime = raceData.elapsedRaceTimeText(punch.siTimeSeconds, elapsedBaseSeconds),
-                siTime = punch.siTimeSeconds.toReadoutSiTimeText()
+                siTime = punch.siTimeSeconds.toReadoutSiTimeText(),
+                punchStatus = punch.punchStatus
             )
         }
 
@@ -14626,7 +14652,9 @@ private fun ReadoutDetailsPanel(
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean
 ) {
     val horizontalScrollState = rememberScrollState()
-    val tableWidth = fixedTableWidth(ReadoutTableColumns)
+    val showAssignmentColumns = readouts.any { !it.matched }
+    val tableColumns = readoutTableColumns(showAssignmentColumns)
+    val tableWidth = fixedTableWidth(tableColumns)
     var selectedCompetitorId by remember { mutableStateOf<String?>(null) }
     var siNumberDraft by remember { mutableStateOf("") }
     var startSecondsDraft by remember { mutableStateOf("") }
@@ -14707,6 +14735,8 @@ private fun ReadoutDetailsPanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ManualReadoutAddRow(
+                        tableColumns = tableColumns,
+                        showAssignmentColumns = showAssignmentColumns,
                         competitors = competitorsWithoutReadouts,
                         selectedCompetitorId = selectedCompetitorId,
                         onCompetitorSelected = { selectedCompetitorId = it },
@@ -14726,7 +14756,7 @@ private fun ReadoutDetailsPanel(
                             }
                         }
                     )
-                    FixedDetailHeaderRow(ReadoutTableColumns)
+                    FixedDetailHeaderRow(tableColumns)
                 }
             }
         }
@@ -14752,6 +14782,8 @@ private fun ReadoutDetailsPanel(
                         ReadoutDeleteButton(readout, onRemoveReadout)
                         Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                             ReadoutDetailRow(
+                                tableColumns = tableColumns,
+                                showAssignmentColumns = showAssignmentColumns,
                                 readout = readout,
                                 competitors = competitorsWithoutReadouts,
                                 onUpdateReadoutStatus = onUpdateReadoutStatus,
@@ -14826,6 +14858,8 @@ private fun ManualReadoutAddButton(
 /** Shows a compact manual readout entry row for desktop beta testing. */
 @Composable
 private fun ManualReadoutAddRow(
+    tableColumns: List<FixedTableColumn>,
+    showAssignmentColumns: Boolean,
     competitors: List<EventCompetitorDetails>,
     selectedCompetitorId: String?,
     onCompetitorSelected: (String?) -> Unit,
@@ -14842,7 +14876,7 @@ private fun ManualReadoutAddRow(
     onCommit: () -> Unit
 ) {
     Row(
-        modifier = Modifier.width(fixedTableWidth(ReadoutTableColumns)),
+        modifier = Modifier.width(fixedTableWidth(tableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -14850,7 +14884,7 @@ private fun ManualReadoutAddRow(
             value = siNumberDraft,
             onValueChange = onSiNumberChange,
             modifier = Modifier
-                .width(ReadoutTableColumns[0].width)
+                .width(ReadoutBaseTableColumns[0].width)
                 .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("SI") }
@@ -14859,18 +14893,18 @@ private fun ManualReadoutAddRow(
             selectedCompetitorId = selectedCompetitorId,
             competitors = competitors,
             onCompetitorSelected = onCompetitorSelected,
-            modifier = Modifier.width(ReadoutTableColumns[1].width)
+            modifier = Modifier.width(ReadoutBaseTableColumns[1].width)
         )
         ResultStatusPicker(
             selectedStatus = selectedStatus,
             onStatusSelected = onStatusSelected,
-            modifier = Modifier.width(ReadoutTableColumns[2].width)
+            modifier = Modifier.width(ReadoutBaseTableColumns[2].width)
         )
         TextField(
             value = startSecondsDraft,
             onValueChange = onStartSecondsChange,
             modifier = Modifier
-                .width(ReadoutTableColumns[3].width)
+                .width(ReadoutBaseTableColumns[3].width)
                 .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Start S") }
@@ -14879,7 +14913,7 @@ private fun ManualReadoutAddRow(
             value = finishSecondsDraft,
             onValueChange = onFinishSecondsChange,
             modifier = Modifier
-                .width(ReadoutTableColumns[4].width)
+                .width(ReadoutBaseTableColumns[4].width)
                 .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Finish S") }
@@ -14888,21 +14922,27 @@ private fun ManualReadoutAddRow(
             value = controlCodesDraft,
             onValueChange = onControlCodesChange,
             modifier = Modifier
-                .width(ReadoutTableColumns[5].width)
+                .width(ReadoutBaseTableColumns[5].width)
                 .commitOnEnter(onCommit),
             singleLine = true,
             label = { Text("Controls") }
         )
-        Spacer(modifier = Modifier.width(ReadoutTableColumns[6].width))
-        Spacer(modifier = Modifier.width(ReadoutTableColumns[7].width))
-        Spacer(modifier = Modifier.width(ReadoutTableColumns[8].width))
-        Spacer(modifier = Modifier.width(ReadoutTableColumns[9].width))
+        if (showAssignmentColumns) {
+            ReadoutAssignmentTableColumns.forEach { column ->
+                Spacer(modifier = Modifier.width(column.width))
+            }
+        }
+        ReadoutActionTableColumns.forEach { column ->
+            Spacer(modifier = Modifier.width(column.width))
+        }
     }
 }
 
 /** Shows one readout row with deletion routed through shared Race File editing rules. */
 @Composable
 private fun ReadoutDetailRow(
+    tableColumns: List<FixedTableColumn>,
+    showAssignmentColumns: Boolean,
     readout: EventReadoutDetails,
     competitors: List<EventCompetitorDetails>,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
@@ -14914,12 +14954,12 @@ private fun ReadoutDetailRow(
     val textColor = if (readout.hasWarning) DesktopPalette.Error else DesktopPalette.Black
 
     Row(
-        modifier = Modifier.width(fixedTableWidth(ReadoutTableColumns)),
+        modifier = Modifier.width(fixedTableWidth(tableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FixedTableText(readout.siNumberText, ReadoutTableColumns[0].width, color = textColor)
-        FixedTableText(readout.competitorName, ReadoutTableColumns[1].width, color = textColor)
+        FixedTableText(readout.siNumberText, ReadoutBaseTableColumns[0].width, color = textColor)
+        FixedTableText(readout.competitorName, ReadoutBaseTableColumns[1].width, color = textColor)
         ResultStatusPicker(
             selectedStatus = readout.resultStatus,
             onStatusSelected = { status ->
@@ -14927,42 +14967,44 @@ private fun ReadoutDetailRow(
                     onUpdateReadoutStatus(readout.id, status)
                 }
             },
-            modifier = Modifier.width(ReadoutTableColumns[2].width)
+            modifier = Modifier.width(ReadoutBaseTableColumns[2].width)
         )
-        FixedTableText(readout.pointsText, ReadoutTableColumns[3].width, color = textColor)
-        FixedTableText(readout.runTimeText, ReadoutTableColumns[4].width, color = textColor)
-        FixedTableText(readout.punchCodesText, ReadoutTableColumns[5].width, color = textColor)
-        if (readout.matched) {
-            FixedTableText("", ReadoutTableColumns[6].width)
-            Spacer(modifier = Modifier.width(ReadoutTableColumns[7].width))
-        } else {
-            CompetitorPicker(
-                selectedCompetitorId = selectedCompetitorId,
-                competitors = competitors,
-                onCompetitorSelected = { selectedCompetitorId = it },
-                modifier = Modifier.width(ReadoutTableColumns[6].width)
-            )
-            Button(
-                onClick = {
-                    selectedCompetitorId?.let { competitorId ->
-                        onAssignUnmatchedReadout(readout.id, competitorId)
-                    }
-                },
-                modifier = Modifier.width(ReadoutTableColumns[7].width),
-                enabled = selectedCompetitorId != null
-            ) {
-                ButtonLabel("Assign")
+        FixedTableText(readout.pointsText, ReadoutBaseTableColumns[3].width, color = textColor)
+        FixedTableText(readout.runTimeText, ReadoutBaseTableColumns[4].width, color = textColor)
+        FixedTableText(readout.punchCodesText, ReadoutBaseTableColumns[5].width, color = textColor)
+        if (showAssignmentColumns) {
+            if (readout.matched) {
+                FixedTableText("", ReadoutAssignmentTableColumns[0].width)
+                Spacer(modifier = Modifier.width(ReadoutAssignmentTableColumns[1].width))
+            } else {
+                CompetitorPicker(
+                    selectedCompetitorId = selectedCompetitorId,
+                    competitors = competitors,
+                    onCompetitorSelected = { selectedCompetitorId = it },
+                    modifier = Modifier.width(ReadoutAssignmentTableColumns[0].width)
+                )
+                Button(
+                    onClick = {
+                        selectedCompetitorId?.let { competitorId ->
+                            onAssignUnmatchedReadout(readout.id, competitorId)
+                        }
+                    },
+                    modifier = Modifier.width(ReadoutAssignmentTableColumns[1].width),
+                    enabled = selectedCompetitorId != null
+                ) {
+                    ButtonLabel("Assign")
+                }
             }
         }
         Button(
             onClick = { onEditReadout(readout.id) },
-            modifier = Modifier.width(ReadoutTableColumns[8].width)
+            modifier = Modifier.width(ReadoutActionTableColumns[0].width)
         ) {
             ButtonLabel("Edit")
         }
         Button(
             onClick = onPreviewFinishTicket,
-            modifier = Modifier.width(ReadoutTableColumns[9].width)
+            modifier = Modifier.width(ReadoutActionTableColumns[1].width)
         ) {
             ButtonLabel("Ticket")
         }
@@ -15084,20 +15126,19 @@ private fun ReadoutEditDialog(
     var finishSiTime by remember(draft.resultId) { mutableStateOf(draft.finishSiTime) }
     var controlPunches by remember(draft.resultId) { mutableStateOf(draft.controlPunches) }
     var resultStatus by remember(draft.resultId) { mutableStateOf(draft.resultStatus) }
+    var resultStatusEdited by remember(draft.resultId) { mutableStateOf(draft.resultStatusEdited) }
     var categoryId by remember(draft.resultId) { mutableStateOf(draft.categoryId) }
     var updateCompetitorCategory by remember(draft.resultId) { mutableStateOf(draft.updateCompetitorCategory) }
     var selectedControlId by remember(draft.resultId, controls) { mutableStateOf(controls.firstOrNull()?.id) }
     var punchTimeMode by remember(draft.resultId) { mutableStateOf(DesktopReadoutPunchTimeMode.ELAPSED) }
     val dialogScrollState = rememberScrollState()
-    // This copies the current result category to the competitor, including result categories set before opening the modal.
-    val canUpdateCompetitorCategory = draft.matched
+    val competitorCategoryChanged = draft.matched && categoryId != draft.originalCategoryId
     val sortedControls = remember(controls) {
         controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
     }
     val addableControls = remember(sortedControls, controlPunches) {
-        val usedControlIds = controlPunches.mapNotNull { it.controlId }.toSet()
-        val usedSiCodes = controlPunches.map { it.siCode }.toSet()
-        sortedControls.filter { control -> control.id !in usedControlIds && control.siCode !in usedSiCodes }
+        val usedKeys = controlPunches.flatMapTo(mutableSetOf()) { it.controlIdentityKeys() }
+        sortedControls.filter { control -> control.controlIdentityKeys().none { it in usedKeys } }
     }
     val timeValidationMessage = remember(startSeconds, finishSeconds, startSiTime, finishSiTime, draft.isPractice) {
         readoutTimeValidationMessage(
@@ -15110,6 +15151,29 @@ private fun ReadoutEditDialog(
     }
     val punchValidationMessage = remember(controlPunches, punchTimeMode) { controlPunches.validationMessage(punchTimeMode) }
     val validationMessage = timeValidationMessage ?: punchValidationMessage
+    val liveIssueExplanation = remember(
+        draft.resultId,
+        draft.elapsedBaseSeconds,
+        draft.issueExplanation,
+        startSeconds,
+        finishSeconds,
+        startSiTime,
+        finishSiTime,
+        controlPunches,
+        resultStatus
+    ) {
+        readoutEditIssueExplanation(
+            resultId = draft.resultId,
+            elapsedBaseSeconds = draft.elapsedBaseSeconds,
+            originalIssueExplanation = draft.issueExplanation,
+            startElapsed = startSeconds,
+            finishElapsed = finishSeconds,
+            startSiTime = startSiTime,
+            finishSiTime = finishSiTime,
+            controlPunches = controlPunches,
+            resultStatus = resultStatus
+        )
+    }
 
     LaunchedEffect(addableControls, selectedControlId) {
         if (selectedControlId == null || addableControls.none { it.id == selectedControlId }) {
@@ -15117,8 +15181,8 @@ private fun ReadoutEditDialog(
         }
     }
 
-    LaunchedEffect(canUpdateCompetitorCategory) {
-        if (!canUpdateCompetitorCategory) {
+    LaunchedEffect(competitorCategoryChanged) {
+        if (!competitorCategoryChanged) {
             updateCompetitorCategory = false
         }
     }
@@ -15131,6 +15195,7 @@ private fun ReadoutEditDialog(
                 finishSiTime = finishSiTime,
                 controlPunches = controlPunches,
                 resultStatus = resultStatus,
+                resultStatusEdited = resultStatusEdited,
                 categoryId = categoryId,
                 updateCompetitorCategory = updateCompetitorCategory
             )
@@ -15166,7 +15231,7 @@ private fun ReadoutEditDialog(
                             text = draft.competitorName.ifBlank { "Unmatched readout" },
                             fontWeight = FontWeight.Bold
                         )
-                        draft.issueExplanation?.let { explanation ->
+                        liveIssueExplanation?.let { explanation ->
                             Text(
                                 text = "Result explanation: $explanation",
                                 color = DesktopPalette.Error,
@@ -15260,7 +15325,8 @@ private fun ReadoutEditDialog(
                                                 row.copy(
                                                     controlId = control.id,
                                                     siCode = control.siCode,
-                                                    controlText = control.editPunchToken(sortedControls)
+                                                    controlText = control.editPunchToken(sortedControls),
+                                                    punchStatus = PunchStatus.UNKNOWN
                                                 )
                                             } else {
                                                 row
@@ -15309,7 +15375,8 @@ private fun ReadoutEditDialog(
                                             siCode = control.siCode,
                                             controlText = control.editPunchToken(sortedControls),
                                             elapsedTime = elapsedTime,
-                                            siTime = elapsedTime.toReadoutSiTimeText(draft.elapsedBaseSeconds) ?: "00:00:00"
+                                            siTime = elapsedTime.toReadoutSiTimeText(draft.elapsedBaseSeconds) ?: "00:00:00",
+                                            punchStatus = PunchStatus.UNKNOWN
                                         )
                                     },
                                     enabled = selectedControlId != null && addableControls.isNotEmpty()
@@ -15322,19 +15389,28 @@ private fun ReadoutEditDialog(
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            ResultStatusPicker(
-                                selectedStatus = resultStatus,
-                                onStatusSelected = { resultStatus = it },
-                                modifier = Modifier.width(160.dp)
-                            )
-                            CategoryPicker(
-                                selectedCategoryId = categoryId,
-                                categories = categories,
-                                onCategorySelected = { categoryId = it },
-                                modifier = Modifier.width(220.dp)
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Status", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                ResultStatusPicker(
+                                    selectedStatus = resultStatus,
+                                    onStatusSelected = {
+                                        resultStatus = it
+                                        resultStatusEdited = true
+                                    },
+                                    modifier = Modifier.width(160.dp)
+                                )
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Result Category", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                CategoryPicker(
+                                    selectedCategoryId = categoryId,
+                                    categories = categories,
+                                    onCategorySelected = { categoryId = it },
+                                    modifier = Modifier.width(220.dp)
+                                )
+                            }
                         }
-                        if (draft.matched) {
+                        if (competitorCategoryChanged) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.clickable {
@@ -15344,11 +15420,11 @@ private fun ReadoutEditDialog(
                                 Checkbox(
                                     checked = updateCompetitorCategory,
                                     onCheckedChange = { updateCompetitorCategory = it },
-                                    enabled = canUpdateCompetitorCategory
+                                    enabled = true
                                 )
                                 Text(
                                     "Also change competitor category",
-                                    color = if (canUpdateCompetitorCategory) DesktopPalette.Black else DesktopPalette.Disconnected
+                                    color = DesktopPalette.Black
                                 )
                             }
                         }
@@ -20660,6 +20736,70 @@ private fun readoutTimeValidationMessage(
     return null
 }
 
+private fun readoutEditIssueExplanation(
+    resultId: String,
+    elapsedBaseSeconds: Long?,
+    originalIssueExplanation: String?,
+    startElapsed: String,
+    finishElapsed: String,
+    startSiTime: String,
+    finishSiTime: String,
+    controlPunches: List<DesktopReadoutPunchEditDraft>,
+    resultStatus: ResultStatus
+): String? {
+    val startSeconds = startSiTime.toReadoutElapsedSecondsOrNull()
+        ?: startElapsed.toReadoutDaySecondsOrNull(elapsedBaseSeconds)
+    val finishSeconds = finishSiTime.toReadoutElapsedSecondsOrNull()
+        ?: finishElapsed.toReadoutDaySecondsOrNull(elapsedBaseSeconds)
+    val punches = controlPunches.mapIndexed { index, punch ->
+        val siTimeSeconds = punch.siTime.toReadoutElapsedSecondsOrNull() ?: return null
+        EventAliasPunch(
+            punch = EventPunch(
+                id = punch.rowId,
+                raceId = "",
+                resultId = resultId,
+                cardNumber = null,
+                siCode = punch.siCode,
+                siTimeSeconds = siTimeSeconds,
+                originalSiTimeSeconds = siTimeSeconds,
+                punchType = SIRecordType.CONTROL,
+                order = index,
+                punchStatus = punch.punchStatus,
+                splitSeconds = 0
+            ),
+            alias = null
+        )
+    }
+    val statusForExplanation = if (
+        resultStatus == ResultStatus.ERROR &&
+        originalIssueExplanation != "The result status is set to Error manually."
+    ) {
+        ResultStatus.OK
+    } else {
+        resultStatus
+    }
+    return EventReadoutData(
+        result = EventResult(
+            id = resultId,
+            raceId = "",
+            competitorId = null,
+            siNumber = null,
+            cardType = 0.toByte(),
+            checkTimeSeconds = null,
+            startTimeSeconds = startSeconds,
+            finishTimeSeconds = finishSeconds,
+            readoutDateTimeIso = "",
+            automaticStatus = false,
+            resultStatus = statusForExplanation,
+            points = 0,
+            runTimeSeconds = 0,
+            modified = true,
+            sent = false
+        ),
+        punches = punches
+    ).readoutIssueExplanation()
+}
+
 private fun String.isInvalidOptionalReadoutTime(): Boolean =
     isNotBlank() && toReadoutElapsedSecondsOrNull() == null
 
@@ -20733,6 +20873,10 @@ private fun String.toReadoutElapsedText(elapsedBaseSeconds: Long?): String? =
         }
         ?.toReadoutElapsedText()
 
+private fun String.toReadoutDaySecondsOrNull(elapsedBaseSeconds: Long?): Long? =
+    toReadoutElapsedSecondsOrNull()
+        ?.let { elapsedSeconds -> ((elapsedBaseSeconds ?: 0L) + elapsedSeconds).toSportIdentDaySeconds() }
+
 private fun String.toReadoutElapsedSecondsOrNull(): Long? {
     val parts = trim().split(":")
     if (parts.size != 2 && parts.size != 3) {
@@ -20768,6 +20912,23 @@ private fun EventControl.editPunchToken(allControls: List<EventControl>): String
         .size > 1
     return if (isAmbiguous) siCode.toString() else publicLabel
 }
+
+private fun DesktopReadoutPunchEditDraft.controlIdentityKeys(): Set<String> =
+    buildSet {
+        controlId?.let { add("id:$it") }
+        add("si:$siCode")
+        controlText
+            .takeIf { it.isNotBlank() }
+            ?.normalizedReadoutControlToken()
+            ?.let { add("token:$it") }
+    }
+
+private fun EventControl.controlIdentityKeys(): Set<String> =
+    buildSet {
+        add("id:$id")
+        add("si:$siCode")
+        entryKeys().forEach { add("token:$it") }
+    }
 
 private fun EventControl.entryKeys(): Set<String> =
     buildSet {

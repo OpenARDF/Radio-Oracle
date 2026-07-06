@@ -2660,6 +2660,156 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun editingCorrectedCourseReadoutRecalculatesUnchangedStatus() {
+        val category = category("cat-1", "M21")
+        val originalReadout = readout("result-1", "comp-1", 1111).let { readoutData ->
+            readoutData.copy(
+                result = readoutData.result.copy(
+                    startTimeSeconds = 36_600,
+                    finishTimeSeconds = 37_800,
+                    runTimeSeconds = 1_200,
+                    resultStatus = ResultStatus.MISPUNCHED,
+                    points = 1,
+                    categoryId = category.id
+                )
+            )
+        }
+        val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
+            categories = listOf(categoryData(category.id, category.name, controlSiCodes = listOf(31, 32))),
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    category = category,
+                    readoutData = originalReadout
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "10:00",
+            finishSeconds = "30:00",
+            controlPunchesText = "31 @ 15:00\n32 @ 20:00",
+            resultStatus = ResultStatus.MISPUNCHED,
+            categoryId = category.id,
+            updateCompetitorCategory = false,
+            punchIdFactory = { index, type -> "edit-$index-${type.name}" },
+            recalculateStatus = true
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        val row = EventReadoutDetails.from(updated.raceData).single()
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(2, readout.result.points)
+        assertEquals(1_200, readout.result.runTimeSeconds)
+        assertEquals("00:20:00", row.runTimeText)
+        assertEquals("2", row.pointsText)
+        assertEquals(false, row.hasWarning)
+    }
+
+    @Test
+    fun editingSprintReadoutResolvesNumericLabelsAndRecalculatesPoints() {
+        val category = category("cat-sprint", "M21")
+        val controls = listOf(
+            EventControl("control-s", "race", "S", 137, ControlPointType.SEPARATOR, scored = false, publicLabel = "S"),
+            EventControl("control-1", "race", "1", 161, ControlPointType.CONTROL, publicLabel = "1"),
+            EventControl("control-f1", "race", "F1", 171, ControlPointType.CONTROL, publicLabel = "1F"),
+            EventControl("control-2", "race", "2", 162, ControlPointType.CONTROL, publicLabel = "2"),
+            EventControl("control-f2", "race", "F2", 172, ControlPointType.CONTROL, publicLabel = "2F"),
+            EventControl("control-3", "race", "3", 163, ControlPointType.CONTROL, publicLabel = "3"),
+            EventControl("control-f3", "race", "F3", 173, ControlPointType.CONTROL, publicLabel = "3F"),
+            EventControl("control-4", "race", "4", 164, ControlPointType.CONTROL, publicLabel = "4"),
+            EventControl("control-f4", "race", "F4", 174, ControlPointType.CONTROL, publicLabel = "4F"),
+            EventControl("control-5", "race", "5", 165, ControlPointType.CONTROL, publicLabel = "5"),
+            EventControl("control-f5", "race", "F5", 175, ControlPointType.CONTROL, publicLabel = "5F"),
+            EventControl("control-b", "race", "M", 136, ControlPointType.BEACON, scored = false, publicLabel = "B")
+        )
+        val sprintCategoryData = EventCategoryData(
+            category = category,
+            controlPoints = controls.mapIndexed { index, control ->
+                EventControlPoint(
+                    id = "cat-sprint-control-$index",
+                    categoryId = category.id,
+                    siCode = control.siCode,
+                    type = control.type,
+                    order = index + 1,
+                    controlId = control.id
+                )
+            },
+            competitors = emptyList()
+        )
+        val originalReadout = readout("result-1", "comp-1", 1111).let { readoutData ->
+            readoutData.copy(
+                result = readoutData.result.copy(
+                    startTimeSeconds = 36_600,
+                    finishTimeSeconds = 37_188,
+                    runTimeSeconds = 588,
+                    resultStatus = ResultStatus.DID_NOT_FINISH,
+                    points = 2,
+                    categoryId = category.id
+                )
+            )
+        }
+        val original = projectFile(
+            raceType = RaceType.SPRINT,
+            raceLevel = RaceLevel.REGIONAL,
+            categories = listOf(sprintCategoryData),
+            controls = controls,
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    category = category,
+                    readoutData = originalReadout
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "10:10",
+            finishSeconds = "19:58",
+            controlPunchesText = "1 @ 12:37\n2 @ 12:38\n5 @ 12:43\nS @ 14:54\n2F @ 15:13\n3F @ 15:14\n2F @ 15:31\nB @ 15:32",
+            resultStatus = ResultStatus.DID_NOT_FINISH,
+            categoryId = category.id,
+            updateCompetitorCategory = false,
+            punchIdFactory = { index, type -> "edit-$index-${type.name}" },
+            recalculateStatus = true
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        val controlPunches = readout.punches.filter { it.punch.punchType == SIRecordType.CONTROL }
+        val row = EventReadoutDetails.from(updated.raceData).single()
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(5, readout.result.points)
+        assertEquals(588, readout.result.runTimeSeconds)
+        assertEquals(listOf(161, 162, 165, 137, 172, 173, 172, 136), controlPunches.map { it.punch.siCode })
+        assertEquals(
+            listOf(
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.DUPLICATE,
+                PunchStatus.VALID
+            ),
+            controlPunches.map { it.punch.punchStatus }
+        )
+        assertEquals("5", row.pointsText)
+        assertEquals(false, row.hasWarning)
+    }
+
+    @Test
     fun editingManualErrorReadoutPreservesErrorStatus() {
         val manualErrorReadout = readout("result-1", "comp-1", 1111).let { readoutData ->
             readoutData.copy(

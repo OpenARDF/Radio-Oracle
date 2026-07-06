@@ -225,6 +225,44 @@ class CourseEvaluatorTest {
     }
 
     @Test
+    fun sprintUsesFastLabelsWhenSpectatorIsFirstInCourseControls() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.SPRINT,
+            punches = punches(161, 162, 165, 137, 172, 173, 172, 136),
+            controlPoints = listOf(
+                EvaluationControlPoint(137, ControlPointType.SEPARATOR, scored = false, label = "S"),
+                EvaluationControlPoint(161, ControlPointType.CONTROL, label = "1"),
+                EvaluationControlPoint(171, ControlPointType.CONTROL, label = "1F"),
+                EvaluationControlPoint(162, ControlPointType.CONTROL, label = "2"),
+                EvaluationControlPoint(172, ControlPointType.CONTROL, label = "2F"),
+                EvaluationControlPoint(163, ControlPointType.CONTROL, label = "3"),
+                EvaluationControlPoint(173, ControlPointType.CONTROL, label = "3F"),
+                EvaluationControlPoint(164, ControlPointType.CONTROL, label = "4"),
+                EvaluationControlPoint(174, ControlPointType.CONTROL, label = "4F"),
+                EvaluationControlPoint(165, ControlPointType.CONTROL, label = "5"),
+                EvaluationControlPoint(175, ControlPointType.CONTROL, label = "5F"),
+                EvaluationControlPoint(136, ControlPointType.BEACON, scored = false, label = "B")
+            )
+        )
+
+        assertEquals(5, evaluation.points)
+        assertEquals(ResultStatus.OK, evaluation.resultStatus)
+        assertEquals(
+            listOf(
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.VALID,
+                PunchStatus.DUPLICATE,
+                PunchStatus.VALID
+            ),
+            evaluation.punchStatuses
+        )
+    }
+
+    @Test
     fun sprintMissingSpectatorIsDnfAndFastPunchesDoNotScore() {
         val evaluation = CourseEvaluator.evaluate(
             RaceType.SPRINT,

@@ -2403,7 +2403,8 @@ object EventProjectEditor {
         updateCompetitorCategory: Boolean,
         punchIdFactory: (Int, SIRecordType) -> String,
         startSiTime: String? = null,
-        finishSiTime: String? = null
+        finishSiTime: String? = null,
+        recalculateStatus: Boolean = false
     ): EventProjectFile {
         val originalReadout = projectFile.raceData.competitorData
             .mapNotNull { it.readoutData }
@@ -2464,6 +2465,8 @@ object EventProjectEditor {
         val shouldRefreshCorrectedError = resultStatus == ResultStatus.ERROR &&
             originalReadout.hasCorrectableReadoutError()
         val effectiveStatus = when {
+            runTiming.blocksResult -> ResultStatus.ERROR
+            recalculateStatus -> recalculatedStatus
             shouldRefreshCorrectedError -> recalculatedStatus
             resultStatus == ResultStatus.OK && evaluation != null -> evaluation.resultStatus
             else -> resultStatus
@@ -3658,15 +3661,8 @@ object EventProjectEditor {
         controls: List<EventControl>,
         aliases: List<EventAlias>
     ): Int {
-        val directCode = controlText.toIntOrNull()
-        if (directCode != null) {
-            require(SportIdentCodes.isSICodeValid(directCode)) {
-                "Control code is outside the supported SPORTident station range: $directCode"
-            }
-            return directCode
-        }
-
         val normalizedText = controlText.normalizedControlToken()
+        // Numeric public labels such as Sprint "1" must resolve to the event control before raw SI-code fallback.
         val matches = (
             controls.flatMap { control ->
                 listOfNotNull(
@@ -3679,13 +3675,22 @@ object EventProjectEditor {
             .filter { (label, _) -> label == normalizedText }
             .map { (_, siCode) -> siCode }
             .distinct()
-        require(matches.isNotEmpty()) {
-            "Control punch label was not found: $controlText"
+        if (matches.isNotEmpty()) {
+            require(matches.size == 1) {
+                "Control punch label is ambiguous: $controlText"
+            }
+            return matches.single()
         }
-        require(matches.size == 1) {
-            "Control punch label is ambiguous: $controlText"
+
+        val directCode = controlText.toIntOrNull()
+        if (directCode != null) {
+            require(SportIdentCodes.isSICodeValid(directCode)) {
+                "Control code is outside the supported SPORTident station range: $directCode"
+            }
+            return directCode
         }
-        return matches.single()
+
+        throw IllegalArgumentException("Control punch label was not found: $controlText")
     }
 
     private fun String.normalizedControlToken(): String =
