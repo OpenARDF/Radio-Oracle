@@ -513,7 +513,8 @@ object ResultsProcessor {
             punches,
             manualStatus,
             race,
-            dataProcessor
+            dataProcessor,
+            repairEditedDayWeek = modified
         )
         DebugLog.info(
             "Results",
@@ -532,7 +533,8 @@ object ResultsProcessor {
         punches: ArrayList<Punch>,
         manualStatus: ResultStatus?,
         race: Race,
-        dataProcessor: DataProcessor
+        dataProcessor: DataProcessor,
+        repairEditedDayWeek: Boolean = false
     ) {
         // If no start time is found in the SI card or edit, try to get it from the competitor.
         if (result.startTime == null) {
@@ -544,7 +546,11 @@ object ResultsProcessor {
         } else {
             clearEvaluation(punches, result)
         }
-        repairStaleDayWeekFields(result, punches)
+        // Only editor saves should infer stale SI day/week fields. Fresh SI readouts must keep raw timing
+        // so Android and desktop report rollover-looking finish times the same way.
+        if (repairEditedDayWeek) {
+            repairStaleDayWeekFields(result, punches)
+        }
         val runTiming = calculateReadoutRunTiming(
             result.startTime,
             result.finishTime,

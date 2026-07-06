@@ -307,6 +307,59 @@ class ResultsEvaluationUnitTests {
     }
 
     @Test
+    fun freshReadoutDoesNotRepairFinishRolloverBeforeTimingValidation() = runTest {
+        val raceId = UUID.randomUUID()
+        val dataProcessor = mock<DataProcessor>()
+        val race = Race(
+            id = raceId,
+            name = "Sprint Practice",
+            apiKey = "",
+            startDateTime = LocalDateTime.of(2026, 7, 6, 0, 0),
+            raceType = RaceType.SPRINT,
+            raceLevel = RaceLevel.PRACTICE,
+            raceBand = RaceBand.M80,
+            timeLimit = Duration.ofHours(2)
+        )
+        val result = Result(
+            id = UUID.randomUUID(),
+            raceId = raceId,
+            competitorId = null,
+            siNumber = 2005010,
+            cardType = SIConstants.SI_CARD8_9_SIAC,
+            checkTime = null,
+            startTime = SITime(LocalTime.of(14, 2, 23), 4, 0),
+            finishTime = SITime(LocalTime.of(0, 2, 11), 0, 0),
+            automaticStatus = true,
+            resultStatus = ResultStatus.NO_RANKING,
+            points = 0,
+            runTime = Duration.ZERO,
+            modified = false,
+            sent = false
+        )
+        val punches = arrayListOf(
+            Punch(
+                UUID.randomUUID(),
+                raceId,
+                result.id,
+                result.siNumber,
+                136,
+                SITime(LocalTime.of(14, 7, 55), 4, 0),
+                SITime(LocalTime.of(14, 7, 55), 4, 0),
+                SIRecordType.CONTROL,
+                0,
+                PunchStatus.UNKNOWN,
+                Duration.ZERO
+            )
+        )
+
+        ResultsProcessor.calculateResult(result, null, punches, null, race, dataProcessor)
+
+        assertEquals(SITime(LocalTime.of(0, 2, 11), 0, 0).getSeconds(), result.finishTime?.getSeconds())
+        assertEquals(ResultStatus.ERROR, result.resultStatus)
+        assertEquals(Duration.ZERO, result.runTime)
+    }
+
+    @Test
     fun manualRecalculationRepairsStaleFinishDayWeekBeforeApplyingOkStatus() = runTest {
         val raceId = UUID.randomUUID()
         val dataProcessor = mock<DataProcessor>()
@@ -358,7 +411,8 @@ class ResultsEvaluationUnitTests {
             punches = punches,
             manualStatus = ResultStatus.OK,
             race = race,
-            dataProcessor = dataProcessor
+            dataProcessor = dataProcessor,
+            repairEditedDayWeek = true
         )
 
         assertEquals(4 * 24 * 60 * 60L + 14 * 60 * 60L + 10 * 60L, result.finishTime?.getSeconds())
