@@ -64,6 +64,12 @@ class EventSeriesViewModel : ViewModel() {
         return eventSeriesImport
     }
 
+    suspend fun importAndSaveEventSeriesPackage(bytes: ByteArray): AndroidEventSeriesImport? {
+        val eventSeriesImport = dataProcessor.importEventSeriesPackage(bytes) ?: return null
+        dataProcessor.saveEventSeriesImport(eventSeriesImport)
+        return eventSeriesImport
+    }
+
     suspend fun availableRacesForSeries(seriesId: String): List<Race> {
         dataProcessor.getEventSeries(seriesId) ?: throw IllegalArgumentException("Race Series not found: $seriesId")
         val groupedRaceIds = dataProcessor.getEventSeries()

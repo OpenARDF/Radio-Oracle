@@ -1002,6 +1002,8 @@ class DesktopAutomationCliTest {
         assertTrue(result.stdout.contains("\"path\":\"Race Series > Races\""))
         assertTrue(result.stdout.contains("\"path\":\"Race Series > Races > Add Race To Series...\""))
         assertTrue(result.stdout.contains("\"action\":\"AddEventToSeries\""))
+        assertTrue(result.stdout.contains("\"path\":\"Race Series > Export Series...\""))
+        assertTrue(result.stdout.contains("\"action\":\"ExportEventSeries\""))
         assertFalse(result.stdout.contains("Open Series Event"))
         assertFalse(result.stdout.contains("Race Series > Series Validation > Validate Series"))
     }

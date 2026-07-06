@@ -149,8 +149,12 @@ class DesktopNavigationTest {
             roots.first { it.label == "Series Validation" }.children.map { it.label }
         )
         assertEquals(
-            listOf("Export Series..."),
+            emptyList<String>(),
             roots.first { it.label == "Series Settings" }.children.map { it.label }
+        )
+        assertEquals(
+            DesktopNavAction.ExportEventSeries,
+            roots.first { it.label == "Export Series..." }.action
         )
     }
 
@@ -190,11 +194,18 @@ class DesktopNavigationTest {
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
-            listOf("Readouts", "SI Readout", "In Forest", "Unmatched Readouts", "Finish Tickets"),
+            listOf("Readouts", "SI Settings", "In Forest", "Finish Tickets"),
             DesktopNavigation.rootItems(DesktopWorkflow.RaceOps).map { it.label }
         )
         assertEquals(
-            listOf("Races", "Start Fairness", "Competitor Matching", "Series Validation", "Series Settings"),
+            listOf(
+                "Races",
+                "Start Fairness",
+                "Competitor Matching",
+                "Series Validation",
+                "Export Series...",
+                "Series Settings"
+            ),
             DesktopNavigation.rootItems(DesktopWorkflow.Series).map { it.label }
         )
         assertEquals(
@@ -413,7 +424,6 @@ class DesktopNavigationTest {
         val cases = listOf(
             DesktopWorkflow.RaceOps to "Readouts",
             DesktopWorkflow.RaceOps to "In Forest",
-            DesktopWorkflow.RaceOps to "Unmatched Readouts",
             DesktopWorkflow.RaceOps to "Finish Tickets"
         )
 

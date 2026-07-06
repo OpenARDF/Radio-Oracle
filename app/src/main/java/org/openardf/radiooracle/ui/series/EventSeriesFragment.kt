@@ -48,10 +48,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.files.EventFileTransferDownloader
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
@@ -113,6 +117,11 @@ class EventSeriesFragment : Fragment() {
                     true
                 }
 
+                R.id.event_series_menu_receive_desktop -> {
+                    showReceiveFromDesktopDialog()
+                    true
+                }
+
                 else -> false
             }
         }
@@ -169,6 +178,94 @@ class EventSeriesFragment : Fragment() {
             try {
                 val eventSeriesImport = withContext(Dispatchers.IO) {
                     viewModel.importAndSaveEventSeriesPackage(uri)
+                        ?: throw IllegalStateException(getString(R.string.event_series_import_invalid))
+                }
+                progressDialog.dismiss()
+                Toast.makeText(
+                    requireContext(),
+                    getString(
+                        R.string.event_series_import_success,
+                        eventSeriesImport.series.name,
+                        eventSeriesImport.memberImports.size
+                    ),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (error: Exception) {
+                progressDialog.dismiss()
+                displayAlert(error.message ?: getString(R.string.race_import_failure))
+            }
+        }
+    }
+
+    private fun showReceiveFromDesktopDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_receive_desktop)
+            .setMessage(R.string.event_file_receive_message)
+            .setPositiveButton(R.string.event_file_receive_scan_qr) { _, _ ->
+                scanDesktopTransferQr()
+            }
+            .setNeutralButton(R.string.event_file_receive_enter_url) { _, _ ->
+                showManualDesktopTransferUrlDialog()
+            }
+            .setNegativeButton(R.string.general_cancel, null)
+            .show()
+    }
+
+    private fun showManualDesktopTransferUrlDialog() {
+        val input = EditText(requireContext()).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            hint = getString(R.string.event_file_receive_url_hint)
+            setSingleLine(true)
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_receive_desktop)
+            .setMessage(R.string.event_file_receive_message)
+            .setView(input)
+            .setPositiveButton(R.string.event_series_import_menu) { _, _ ->
+                importSeriesFromDesktopUrl(input.text.toString())
+            }
+            .setNegativeButton(R.string.general_cancel, null)
+            .show()
+    }
+
+    private fun scanDesktopTransferQr() {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        val scanner = GmsBarcodeScanning.getClient(requireActivity(), options)
+        scanner.startScan()
+            .addOnSuccessListener { barcode ->
+                val url = barcode.rawValue
+                if (url.isNullOrBlank()) {
+                    displayAlert("The QR code did not contain a desktop transfer URL.")
+                } else {
+                    importSeriesFromDesktopUrl(url)
+                }
+            }
+            .addOnFailureListener { error ->
+                displayAlert(error.message ?: "QR scan failed. Enter the transfer URL manually.")
+            }
+    }
+
+    private fun importSeriesFromDesktopUrl(rawUrl: String) {
+        val progressDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.event_series_receive_desktop)
+            .setMessage(R.string.event_series_receive_progress)
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val download = withContext(Dispatchers.IO) {
+                    EventFileTransferDownloader().download(rawUrl)
+                }
+                if (!download.isZip) {
+                    throw IllegalStateException(getString(R.string.event_series_import_invalid))
+                }
+                val eventSeriesImport = withContext(Dispatchers.IO) {
+                    viewModel.importAndSaveEventSeriesPackage(download.bytes)
                         ?: throw IllegalStateException(getString(R.string.event_series_import_invalid))
                 }
                 progressDialog.dismiss()

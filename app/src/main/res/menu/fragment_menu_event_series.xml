@@ -6,4 +6,10 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:title="@string/event_series_import_menu" />
+
+    <item
+        android:id="@+id/event_series_menu_receive_desktop"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:title="@string/event_series_receive_desktop" />
 </menu>

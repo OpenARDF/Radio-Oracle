@@ -724,13 +724,11 @@ object DesktopNavigation {
                     workflow,
                     DesktopSection.SeriesValidation
                 ),
-                group(
+                action("series.export", "Export Series...", workflow, DesktopNavAction.ExportEventSeries),
+                item(
                     "series.settings",
                     "Series Settings",
                     workflow,
-                    listOf(
-                        action("series.settings.export", "Export Series...", workflow, DesktopNavAction.ExportEventSeries)
-                    ),
                     DesktopSection.SeriesSettings
                 )
             )
@@ -1497,8 +1495,8 @@ object DesktopNavigation {
         "series.validation" to
             "Use Series Validation to check manifest membership, required Race Files, backlinks, and cross-race consistency.",
         "series.settings" to
-            "Use Series Settings to review series metadata and export a clean backup package.",
-        "series.settings.export" to
+            "Use Series Settings to review series metadata.",
+        "series.export" to
             "Use Export Series to copy only the manifest and manifest-listed Race Files to a clean backup folder."
     )
 

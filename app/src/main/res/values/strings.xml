@@ -104,6 +104,8 @@
     <string name="event_series_export_progress">Exporting Race Series...</string>
     <string name="event_series_export_success">Race Series exported successfully</string>
     <string name="event_series_send_desktop">Send Race Series To Desktop</string>
+    <string name="event_series_receive_desktop">Get Race Series From Desktop</string>
+    <string name="event_series_receive_progress">Receiving Race Series...</string>
     <string name="event_series_open_member">Open %1$s</string>
     <string name="event_series_add_event">Add To Series</string>
     <string name="event_series_add_race">Add Race</string>
