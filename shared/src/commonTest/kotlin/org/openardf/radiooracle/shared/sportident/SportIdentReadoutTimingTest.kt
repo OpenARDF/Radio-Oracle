@@ -148,6 +148,33 @@ class SportIdentReadoutTimingTest {
     }
 
     @Test
+    fun doesNotRepairFinishClockTimeBeforeStart() {
+        val start = SportIdentTime(14, 2, 23, 4, 0).getSeconds()
+        val controls = listOf(
+            SportIdentTime(14, 5, 0, 4, 0).getSeconds(),
+            SportIdentTime(14, 10, 0, 4, 0).getSeconds()
+        )
+        val finishBeforeStart = SportIdentTime(0, 2, 11, 0, 0).getSeconds()
+
+        val repaired = SportIdentReadoutTimingRepair.normalizeEditedTimes(
+            startSeconds = start,
+            controlSeconds = controls,
+            finishSeconds = finishBeforeStart
+        )
+
+        assertFalse(repaired.changedFrom(controls, finishBeforeStart))
+
+        val timing = SportIdentReadoutTiming.calculate(
+            startSeconds = start,
+            finishSeconds = repaired.finishSeconds,
+            controlSeconds = repaired.controlSeconds
+        )
+        assertEquals(SportIdentRunTimingStatus.FINISH_BEFORE_CONTROL, timing.status)
+        assertTrue(timing.blocksResult)
+        assertEquals(0L, timing.runTimeSeconds)
+    }
+
+    @Test
     fun doesNotRepairShortControlRegression() {
         val start = SportIdentTime(10, 0, 0, 4, 0).getSeconds()
         val controls = listOf(

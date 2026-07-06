@@ -21,4 +21,6 @@
     <color name="series_navigation_background">#FFD59E</color>
     <color name="control_role_fox_background">#CDEFD1</color>
     <color name="control_role_special_background">#D8E9FF</color>
+    <color name="readout_progress_fill">#FFE6A3</color>
+    <color name="readout_progress_track">#EFFBEF</color>
 </resources>

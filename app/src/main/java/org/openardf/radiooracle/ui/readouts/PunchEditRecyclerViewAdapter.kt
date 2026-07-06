@@ -96,14 +96,14 @@ class PunchEditRecyclerViewAdapter(
                 holder.code.setText("S")
                 holder.code.isEnabled = false
                 holder.addBtn.visibility = View.VISIBLE
-                holder.deleteBtn.visibility = View.GONE
+                holder.deleteBtn.visibility = View.INVISIBLE
             }
 
             SIRecordType.FINISH -> {
                 holder.code.setText("F")
                 holder.code.isEnabled = false
-                holder.addBtn.visibility = View.GONE
-                holder.deleteBtn.visibility = View.GONE
+                holder.addBtn.visibility = View.INVISIBLE
+                holder.deleteBtn.visibility = View.INVISIBLE
             }
 
             SIRecordType.CONTROL -> {

@@ -41,7 +41,9 @@
                     style="@android:style/Widget.ProgressBar.Horizontal"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:max="100" />
+                    android:max="100"
+                    android:progressBackgroundTint="@color/readout_progress_track"
+                    android:progressTint="@color/readout_progress_fill" />
 
                 <TextView
                     android:id="@+id/readouts_started_text"
@@ -72,7 +74,9 @@
                     style="@android:style/Widget.ProgressBar.Horizontal"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:max="100" />
+                    android:max="100"
+                    android:progressBackgroundTint="@color/readout_progress_track"
+                    android:progressTint="@color/readout_progress_fill" />
 
                 <TextView
                     android:id="@+id/readouts_finished_text"
@@ -104,7 +108,9 @@
                     style="@android:style/Widget.ProgressBar.Horizontal"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:max="100" />
+                    android:max="100"
+                    android:progressBackgroundTint="@color/readout_progress_track"
+                    android:progressTint="@color/readout_progress_fill" />
 
                 <TextView
                     android:id="@+id/readouts_limit_text"

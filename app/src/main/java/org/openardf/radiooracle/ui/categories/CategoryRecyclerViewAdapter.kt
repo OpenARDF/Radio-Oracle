@@ -80,10 +80,10 @@ class CategoryRecyclerViewAdapter(
         holder.type.text = dataProcessor.raceTypeToString(currentRaceType())
 
         holder.band.text = dataProcessor.raceBandToString(currentRaceBand())
-        holder.gender.text = dataProcessor.genderToString(item.category.isMan)
+        holder.gender.text = categoryGenderAgeText(item)
         holder.siCodes.text = getDisplayControlPoints(item, currentRaceType())
 
-        holder.maxAge.text = item.category.maxAge?.toString().orEmpty()
+        holder.maxAge.visibility = View.GONE
 
         holder.itemView.setOnClickListener {
             onMoreClicked(0, position, item)
@@ -185,6 +185,29 @@ class CategoryRecyclerViewAdapter(
     private fun currentRaceBand(): RaceBand =
         selectedRaceViewModel.getCurrentRace()?.raceBand ?: RaceBand.M80
 
+    private fun categoryGenderAgeText(item: CategoryData): String {
+        val gender = dataProcessor.genderToString(item.category.isMan)
+        val age = displayCategoryAge(item)
+        return if (age == null) {
+            gender
+        } else {
+            "$gender $age"
+        }
+    }
+
+    private fun displayCategoryAge(item: CategoryData): Int? {
+        val nameAge = categoryNameAge(item.category.name)
+        val maxAge = item.category.maxAge
+        return when {
+            maxAge == null -> nameAge
+            maxAge >= OPEN_ENDED_CATEGORY_MAX_AGE && nameAge != null -> nameAge
+            else -> maxAge
+        }
+    }
+
+    private fun categoryNameAge(name: String): Int? =
+        CATEGORY_NAME_AGE_PATTERN.find(name.trim())?.groupValues?.get(1)?.toIntOrNull()
+
     private fun categoryBackgroundColor(isMan: Boolean): Int {
         val colorRes = if (isMan) {
             R.color.category_men_background
@@ -192,6 +215,11 @@ class CategoryRecyclerViewAdapter(
             R.color.category_women_background
         }
         return ContextCompat.getColor(context, colorRes)
+    }
+
+    private companion object {
+        const val OPEN_ENDED_CATEGORY_MAX_AGE = 200
+        val CATEGORY_NAME_AGE_PATTERN = Regex("^[A-Za-z]\\s*-?\\s*(\\d{1,3})")
     }
 
     inner class CategoryViewHolder(view: View) : RecyclerView.ViewHolder(view) {

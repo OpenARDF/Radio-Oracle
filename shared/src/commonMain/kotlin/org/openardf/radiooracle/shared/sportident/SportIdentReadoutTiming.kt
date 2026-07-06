@@ -127,12 +127,26 @@ object SportIdentReadoutTimingRepair {
         if (minimumSeconds - valueSeconds <= ROLLOVER_REPAIR_THRESHOLD_SECONDS) {
             return valueSeconds
         }
+        if (!sameDayClockCanFollowMinimum(valueSeconds, targetSeconds)) {
+            return valueSeconds
+        }
 
         var repairedSeconds = valueSeconds
         while (repairedSeconds < targetSeconds) {
             repairedSeconds += SportIdentCodes.SECONDS_DAY
         }
         return repairedSeconds
+    }
+
+    private fun sameDayClockCanFollowMinimum(valueSeconds: Long, targetSeconds: Long): Boolean {
+        val valueDaySecond = valueSeconds.floorMod(SportIdentCodes.SECONDS_DAY)
+        val targetDaySecond = targetSeconds.floorMod(SportIdentCodes.SECONDS_DAY)
+        return valueDaySecond >= targetDaySecond
+    }
+
+    private fun Long.floorMod(divisor: Long): Long {
+        val remainder = this % divisor
+        return if (remainder < 0) remainder + divisor else remainder
     }
 }
 
