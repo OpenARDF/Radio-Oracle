@@ -270,6 +270,13 @@ private fun EventRaceData.containsReadoutForSiNumber(siNumber: Int): Boolean =
     competitorData.any { it.readoutData?.result?.siNumber == siNumber } ||
         unmatchedReadoutData.any { it.result.siNumber == siNumber }
 
+/**
+ * Returns every category-like container that can hold protected course data.
+ *
+ * Active categories drive competitor operations. Inactive course mappings exist only because a
+ * route import can arrive before start-list/category data; Course Analyzer still needs to see
+ * those imported routes, while active categories with the same normalized name remain authoritative.
+ */
 internal fun protectedCourseStateCategories(raceData: EventRaceData): List<EventCategoryData> {
     val activeNames = raceData.categories.mapTo(mutableSetOf()) { categoryData ->
         categoryData.category.name.protectedCourseStateCategoryMatchText()
@@ -279,8 +286,43 @@ internal fun protectedCourseStateCategories(raceData: EventRaceData): List<Event
     }
 }
 
+/** Normalizes names for matching active categories to their inactive course-mapping counterparts. */
 private fun String.protectedCourseStateCategoryMatchText(): String =
     StandardCategoryRules.normalizedCategoryName(this).uppercase()
+
+internal data class DesktopProtectedCourseState(
+    val protectedIdealOrderByCategoryId: Map<String, String>,
+    val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+)
+
+/**
+ * Testable decryption hook for the protected route state that the desktop UI keeps in memory.
+ *
+ * This is intentionally shared by normal imports and duplicate-import refreshes: an identical
+ * import does not rewrite the Race File, but it may be the first time in this session that the
+ * user supplied the password needed to make already-stored routes visible to Course Analyzer.
+ */
+internal fun decryptedProtectedCourseState(
+    projectFile: EventProjectFile,
+    password: String
+): DesktopProtectedCourseState {
+    val courseCategories = protectedCourseStateCategories(projectFile.raceData)
+    return DesktopProtectedCourseState(
+        protectedIdealOrderByCategoryId = courseCategories.associate { categoryData ->
+            val encryptedValue = categoryData.category.encryptedIdealOrder
+            categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
+                ""
+            } else {
+                DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
+            }
+        },
+        protectedCourseInfoByCategoryId = courseCategories.mapNotNull { categoryData ->
+            categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
+                categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
+            }
+        }.toMap()
+    )
+}
 
 private enum class DesktopSportIdentAppendOutcome {
     Added,
@@ -2403,20 +2445,9 @@ fun main(args: Array<String>) = application {
         }
 
         fun syncProtectedCourseState(updatedProject: EventProjectFile, password: String) {
-            val courseCategories = protectedCourseStateCategories(updatedProject.raceData)
-            protectedIdealOrderByCategoryId = courseCategories.associate { categoryData ->
-                val encryptedValue = categoryData.category.encryptedIdealOrder
-                categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
-                    ""
-                } else {
-                    DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
-                }
-            }
-            protectedCourseInfoByCategoryId = courseCategories.mapNotNull { categoryData ->
-                categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
-                    categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
-                }
-            }.toMap()
+            val protectedState = decryptedProtectedCourseState(updatedProject, password)
+            protectedIdealOrderByCategoryId = protectedState.protectedIdealOrderByCategoryId
+            protectedCourseInfoByCategoryId = protectedState.protectedCourseInfoByCategoryId
             hasUnsavedChanges = projectSession.hasUnsavedChanges
         }
 
@@ -3419,6 +3450,9 @@ fun main(args: Array<String>) = application {
                     } else if (summary.isDuplicateOnly && !summary.hasDuplicateMissingElevations) {
                         pendingCourseKmlKmzImportReview = null
                         pendingCourseKmlKmzCategoryMapping = null
+                        // Identical imports skip the apply dialog, but the freshly-entered password
+                        // still has to unlock the stored routes for Course Analyzer in this session.
+                        syncProtectedCourseState(updatedProject, password)
                         val duplicateMessage =
                             "Duplicate controls/route $formatLabel request: identical file already imported and all elevations are available."
                         pendingCourseKmlKmzImportWarning = PendingCourseKmlKmzImportWarning(
@@ -10213,7 +10247,7 @@ internal fun retainedCourseAnalysisCourseInfo(
     currentCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     previousRetainedCourseInfoByCategoryId: Map<String, RetainedCourseAnalysisCourseInfo>
 ): Map<String, RetainedCourseAnalysisCourseInfo> {
-    val currentCategoriesById = projectFile.raceData.categories.associateBy { it.category.id }
+    val currentCategoriesById = protectedCourseStateCategories(projectFile.raceData).associateBy { it.category.id }
     val retained = previousRetainedCourseInfoByCategoryId
         .filter { (categoryId, retainedInfo) ->
             currentCategoriesById[categoryId]
@@ -10222,7 +10256,7 @@ internal fun retainedCourseAnalysisCourseInfo(
                 ?.takeIf { it.isNotBlank() } == retainedInfo.encryptedCourseInfo
         }
         .toMutableMap()
-    projectFile.raceData.categories.forEach { categoryData ->
+    protectedCourseStateCategories(projectFile.raceData).forEach { categoryData ->
         val encryptedCourseInfo = categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }
             ?: return@forEach
         val courseInfo = currentCourseInfoByCategoryId[categoryData.category.id]
@@ -10241,7 +10275,7 @@ internal fun effectiveCourseAnalysisCourseInfoByCategoryId(
     currentCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     retainedCourseInfoByCategoryId: Map<String, RetainedCourseAnalysisCourseInfo>
 ): Map<String, ProtectedCourseInfo> =
-    projectFile.raceData.categories.mapNotNull { categoryData ->
+    protectedCourseStateCategories(projectFile.raceData).mapNotNull { categoryData ->
         val categoryId = categoryData.category.id
         currentCourseInfoByCategoryId[categoryId]
             ?.takeIf { it.route.size >= 2 }
@@ -10255,6 +10289,23 @@ internal fun effectiveCourseAnalysisCourseInfoByCategoryId(
             ?: return@mapNotNull null
         categoryId to retainedCourseInfo
     }.toMap()
+
+/**
+ * Testable source of truth for the Course Analyzer picker.
+ *
+ * The picker should include active categories and inactive imported course mappings when they have
+ * route geometry available. This keeps duplicate GPX/KML imports useful: the second import may only
+ * unlock already-stored route data, but the analyzer still needs a selectable category afterward.
+ */
+internal fun courseAnalysisRouteCategories(
+    projectFile: EventProjectFile,
+    analysisCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+): List<EventCategoryData> =
+    protectedCourseStateCategories(projectFile.raceData)
+        .filter { categoryData ->
+            analysisCourseInfoByCategoryId[categoryData.category.id]?.route.orEmpty().size >= 2
+        }
+        .sortedWith(EventCategorySort.byDisplayName)
 
 private data class CourseAnalysisElevationPreparationResult(
     val projectFile: EventProjectFile,
@@ -17325,7 +17376,8 @@ private fun CourseAnalysisPanel(
         return
     }
 
-    val courseInfoRetentionKey = projectFile.raceData.categories.map { categoryData ->
+    val courseInfoCategories = protectedCourseStateCategories(projectFile.raceData)
+    val courseInfoRetentionKey = courseInfoCategories.map { categoryData ->
         categoryData.category.id to categoryData.category.encryptedCourseInfo.orEmpty()
     }
     var retainedCourseInfoByCategoryId by remember(projectFile.raceData.race.id) {
@@ -17349,11 +17401,10 @@ private fun CourseAnalysisPanel(
         currentCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
         retainedCourseInfoByCategoryId = retainedCourseInfoByCategoryId
     )
-    val categories = projectFile.raceData.categories
-        .filter { categoryData ->
-            analysisCourseInfoByCategoryId[categoryData.category.id]?.route.orEmpty().size >= 2
-        }
-        .sortedWith(EventCategorySort.byDisplayName)
+    val categories = courseAnalysisRouteCategories(
+        projectFile = projectFile,
+        analysisCourseInfoByCategoryId = analysisCourseInfoByCategoryId
+    )
     var selectedCategoryId by remember(projectFile.raceData.race.id, categories.map { it.category.id }) {
         mutableStateOf(categories.firstOrNull()?.category?.id)
     }

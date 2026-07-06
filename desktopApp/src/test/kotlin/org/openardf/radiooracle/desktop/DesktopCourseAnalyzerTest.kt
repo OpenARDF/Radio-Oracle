@@ -98,6 +98,30 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun analysisIsAvailableForInactiveImportedCourseMapping() {
+        val protectedInfo = protectedInfo(foxCount = 3)
+        val projectFile = inactiveCourseMappingProjectFile(foxCount = 3)
+
+        val reason = DesktopCourseAnalyzer.analysisUnavailableReason(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = null
+        )
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = null
+        )
+
+        assertNull(reason)
+        assertEquals("M21", summary.categoryName)
+        assertEquals(listOf("S", "31", "32", "33", "B", "F"), summary.providedIdealOrder)
+        assertNotNull(summary.providedRouteSection)
+    }
+
+    @Test
     fun analysisIsAvailableWhenOnlyCalculatedRouteSectionCanBeBuilt() {
         val protectedInfo = protectedInfo(foxCount = 3).copy(idealOrder = "")
 
@@ -2130,6 +2154,16 @@ class DesktopCourseAnalyzerTest {
                 competitorData = emptyList(),
                 unmatchedReadoutData = emptyList(),
                 controls = controls
+            )
+        )
+    }
+
+    private fun inactiveCourseMappingProjectFile(foxCount: Int): EventProjectFile {
+        val projectFile = projectFile(foxCount = foxCount, assignControls = false)
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = emptyList(),
+                courseMappings = projectFile.raceData.categories
             )
         )
     }

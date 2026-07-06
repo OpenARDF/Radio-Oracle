@@ -385,7 +385,9 @@ object DesktopCourseAnalyzer {
         if (categoryId == null) {
             return "Import controls/route KML/KMZ or GPX data for a category before running analysis."
         }
-        val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
+        // Imported route-only course mappings are valid analyzer targets even before start-list
+        // import creates active competitor categories.
+        val categoryData = protectedCourseStateCategories(projectFile.raceData).firstOrNull { it.category.id == categoryId }
             ?: return "Select a category before running analysis."
         val courseInfo = protectedCourseInfo?.withFiniteCourseGeometry()
         if (courseInfo == null || courseInfo.route.size < 2) {
@@ -462,7 +464,8 @@ object DesktopCourseAnalyzer {
     ): DesktopCourseAnalysisSummary {
         val rawProtectedCourseInfo = protectedCourseInfo
         val courseInfo = rawProtectedCourseInfo?.withFiniteCourseGeometry()
-        val categoryData = projectFile.raceData.categories.first { it.category.id == categoryId }
+        // Analyze the same active-or-inactive category set shown by the Course Analyzer picker.
+        val categoryData = protectedCourseStateCategories(projectFile.raceData).first { it.category.id == categoryId }
         val category = categoryData.category
         val raceType = category.effectiveRaceType(projectFile.raceData.race)
         val includeWaitAnalysis = raceType.includesClassicWaitAnalysis()
@@ -1130,7 +1133,9 @@ object DesktopCourseAnalyzer {
 
     @Suppress("DEPRECATION")
     private fun assignedControls(projectFile: EventProjectFile, categoryId: String): List<EventControl> {
-        val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId } ?: return emptyList()
+        // Inactive course mappings usually have no public assigned controls; their imported
+        // ProtectedCourseInfo control records still provide enough data for saved-route analysis.
+        val categoryData = protectedCourseStateCategories(projectFile.raceData).firstOrNull { it.category.id == categoryId } ?: return emptyList()
         val controlsById = projectFile.raceData.controls.associateBy { it.id }
         val categoryControlPoints = if (categoryData.controlPoints.isNotEmpty()) {
             categoryData.controlPoints
@@ -2660,13 +2665,13 @@ object DesktopCourseAnalyzer {
     }
 
     private fun sameCourseCategoryNames(projectFile: EventProjectFile, categoryId: String): List<String> {
-        val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
+        val categoryData = protectedCourseStateCategories(projectFile.raceData).firstOrNull { it.category.id == categoryId }
             ?: return emptyList()
         val targetControlIds = assignedControlIds(categoryData)
         if (targetControlIds.isEmpty()) {
             return listOf(categoryData.category.name)
         }
-        return projectFile.raceData.categories
+        return protectedCourseStateCategories(projectFile.raceData)
             .filter { assignedControlIds(it) == targetControlIds }
             .sortedBy { it.category.order }
             .map { it.category.name }

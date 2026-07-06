@@ -64,6 +64,35 @@ class CourseAnalysisCourseInfoRetentionTest {
     }
 
     @Test
+    fun retainsInactiveCourseMappingRouteBearingCourseInfo() {
+        val courseInfo = protectedCourseInfo("imported.gpx")
+        val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(courseInfo, "password")
+        val projectFile = inactiveCourseMappingProjectFile(encryptedCourseInfo)
+        val decryptedState = decryptedProtectedCourseState(projectFile, "password")
+
+        val retained = retainedCourseAnalysisCourseInfo(
+            projectFile = projectFile,
+            currentCourseInfoByCategoryId = decryptedState.protectedCourseInfoByCategoryId,
+            previousRetainedCourseInfoByCategoryId = emptyMap()
+        )
+        val effective = effectiveCourseAnalysisCourseInfoByCategoryId(
+            projectFile = projectFile,
+            currentCourseInfoByCategoryId = emptyMap(),
+            retainedCourseInfoByCategoryId = retained
+        )
+        val pickerCategories = courseAnalysisRouteCategories(
+            projectFile = projectFile,
+            analysisCourseInfoByCategoryId = effective
+        )
+
+        assertEquals(courseInfo, decryptedState.protectedCourseInfoByCategoryId.getValue(CategoryId))
+        assertTrue(CategoryId in retained)
+        assertEquals(setOf(CategoryId), effective.keys)
+        assertEquals(courseInfo, effective.getValue(CategoryId))
+        assertEquals(listOf(CategoryId), pickerCategories.map { it.category.id })
+    }
+
+    @Test
     fun doesNotReuseRetainedCourseInfoAfterEncryptedPayloadChanges() {
         val oldCourseInfo = protectedCourseInfo("old.kml")
         val oldEncryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(oldCourseInfo, "password")
@@ -153,6 +182,16 @@ class CourseAnalysisCourseInfoRetentionTest {
                 competitorData = emptyList(),
                 unmatchedReadoutData = emptyList(),
                 controls = emptyList()
+            )
+        )
+    }
+
+    private fun inactiveCourseMappingProjectFile(encryptedCourseInfo: String?): EventProjectFile {
+        val projectFile = projectFile(encryptedCourseInfo)
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = emptyList(),
+                courseMappings = projectFile.raceData.categories
             )
         )
     }
