@@ -47,7 +47,8 @@ import java.time.LocalTime
 import java.util.UUID
 
 class PunchEditRecyclerViewAdapter(
-    var values: ArrayList<PunchEditItemWrapper>
+    var values: ArrayList<PunchEditItemWrapper>,
+    private val onPunchesChanged: (() -> Unit)? = null
 ) :
     RecyclerView.Adapter<PunchEditRecyclerViewAdapter.PunchViewHolder>() {
 
@@ -152,11 +153,13 @@ class PunchEditRecyclerViewAdapter(
             )
         )
         notifyItemInserted(position + 1)
+        onPunchesChanged?.invoke()
     }
 
     private fun deletePunch(position: Int) {
         values.removeAt(position)
         notifyItemRemoved(position)
+        onPunchesChanged?.invoke()
     }
 
     //Text watchers
@@ -164,6 +167,7 @@ class PunchEditRecyclerViewAdapter(
         if (position == RecyclerView.NO_POSITION) return true
         if (values[position].matchesDisplayCodeText(text)) {
             values[position].isCodeValid = true
+            onPunchesChanged?.invoke()
             return true
         }
         try {
@@ -172,12 +176,15 @@ class PunchEditRecyclerViewAdapter(
                 values[position].punch.siCode = code
                 values[position].aliasName = null
                 values[position].isCodeValid = true
+                onPunchesChanged?.invoke()
             } else {
                 values[position].isCodeValid = false
+                onPunchesChanged?.invoke()
                 return false
             }
         } catch (e: Exception) {
             values[position].isCodeValid = false
+            onPunchesChanged?.invoke()
             return false
         }
         return true
@@ -191,8 +198,10 @@ class PunchEditRecyclerViewAdapter(
             val time = LocalTime.parse(text)
             values[position].punch.siTime.setTime(time)
             values[position].isTimeValid = true
+            onPunchesChanged?.invoke()
         } catch (e: Exception) {
             values[position].isTimeValid = false
+            onPunchesChanged?.invoke()
             return false
         }
         return true
@@ -205,9 +214,11 @@ class PunchEditRecyclerViewAdapter(
             if (day in 0..7) {
                 values[position].punch.siTime.setDayOfWeek(day)
                 values[position].isDayValid = true
+                onPunchesChanged?.invoke()
             }
         } catch (e: Exception) {
             values[position].isDayValid = false
+            onPunchesChanged?.invoke()
             return false
         }
         return true
@@ -220,9 +231,11 @@ class PunchEditRecyclerViewAdapter(
             if (week in 0..3) {
                 values[position].punch.siTime.setWeek(week)
                 values[position].isWeekValid = true
+                onPunchesChanged?.invoke()
             }
         } catch (e: Exception) {
             values[position].isWeekValid = false
+            onPunchesChanged?.invoke()
             return false
         }
         return true

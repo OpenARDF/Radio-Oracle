@@ -72,6 +72,14 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp" />
 
+        <TextView
+            android:id="@+id/readout_dialog_issue_explanation"
+            style="@style/error_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:visibility="gone" />
+
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/readout_dialog_edit_switch"
             android:layout_width="wrap_content"

@@ -267,13 +267,8 @@ class ResultsFragmentRecyclerViewAdapter(
     }
 
     fun expandAllItems() {
-        var index = 0
-        while (index < values.size) {
-            if (values[index].isExpanded) {
-                expandParentRow(index)
-            }
-            index++
-        }
+        values.expandAllResultParentRows()
+        notifyDataSetChanged()
     }
 
     override fun getItemViewType(position: Int): Int = values[position].isChild
@@ -295,4 +290,45 @@ class ResultsFragmentRecyclerViewAdapter(
 
         var timerJob: Job? = null
     }
+}
+
+internal fun MutableList<ResultWrapper>.expandAllResultParentRows() {
+    var index = 0
+    while (index < size) {
+        val row = this[index]
+        if (row.isChild != 0) {
+            index++
+            continue
+        }
+
+        val existingChildRows = followingChildRowCount(index)
+        if (row.competitorData.isNotEmpty() && existingChildRows < row.competitorData.size) {
+            row.isExpanded = true
+            row.competitorData
+                .drop(existingChildRows)
+                .forEachIndexed { childOffset, competitorData ->
+                    val childRow = ResultWrapper(
+                        isChild = 1,
+                        childPosition = existingChildRows + childOffset,
+                        finished = 0
+                    )
+                    childRow.competitorData.add(competitorData)
+                    add(index + existingChildRows + childOffset + 1, childRow)
+                }
+            index += row.competitorData.size + 1
+        } else {
+            row.isExpanded = row.competitorData.isNotEmpty() || row.isExpanded
+            index += existingChildRows + 1
+        }
+    }
+}
+
+private fun List<ResultWrapper>.followingChildRowCount(parentIndex: Int): Int {
+    var count = 0
+    var index = parentIndex + 1
+    while (index < size && this[index].isChild != 0) {
+        count++
+        index++
+    }
+    return count
 }

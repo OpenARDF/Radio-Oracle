@@ -45,11 +45,16 @@ import com.google.android.material.textfield.TextInputLayout
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
+import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.Result
+import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
+import org.openardf.radiooracle.backend.shared.toSharedReadoutDisplayState
+import org.openardf.radiooracle.backend.sportident.SITime
 import org.openardf.radiooracle.backend.wrappers.PunchEditItemWrapper
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import kotlinx.coroutines.runBlocking
@@ -81,6 +86,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
     private lateinit var categoryPickerLayout: TextInputLayout
     private lateinit var raceStatusPicker: MaterialAutoCompleteTextView
     private val statusArr = ArrayList<String>()
+    private lateinit var issueExplanationView: TextView
     private lateinit var editSwitch: SwitchMaterial
     private lateinit var punchEditRecyclerView: RecyclerView
     private lateinit var okButton: Button
@@ -125,6 +131,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
         categoryPicker = view.findViewById(R.id.readout_dialog_category)
         categoryPickerLayout = view.findViewById(R.id.readout_dialog_category_layout)
         raceStatusPicker = view.findViewById(R.id.readout_dialog_status)
+        issueExplanationView = view.findViewById(R.id.readout_dialog_issue_explanation)
         editSwitch = view.findViewById(R.id.readout_dialog_edit_switch)
         punchEditRecyclerView = view.findViewById(R.id.readout_dialog_punch_recycler_view)
         okButton = view.findViewById(R.id.readout_dialog_ok)
@@ -252,7 +259,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
         )
 
         punchEditRecyclerView.adapter =
-            PunchEditRecyclerViewAdapter(punchWrappers)
+            PunchEditRecyclerViewAdapter(punchWrappers) { updateIssueExplanation() }
 
         //Populate the status options
         for (status in ResultStatus.entries) {
@@ -268,6 +275,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
             )
 
         raceStatusPicker.setAdapter(statusAdapter)
+        updateIssueExplanation()
     }
 
     private fun setCategoryPicker() {
@@ -304,6 +312,11 @@ class ReadoutEditDialogFragment : DialogFragment() {
             AdapterView.OnItemClickListener { parent, view, position, id ->
                 competitor?.categoryId = getCategoryFromPicker()
 
+            }
+
+        raceStatusPicker.onItemClickListener =
+            AdapterView.OnItemClickListener { _, _, _, _ ->
+                updateIssueExplanation()
             }
 
         editSwitch.setOnCheckedChangeListener { p0, checked ->
@@ -380,6 +393,59 @@ class ReadoutEditDialogFragment : DialogFragment() {
 
         return valid
     }
+
+    private fun updateIssueExplanation() {
+        val issueExplanation = editableResultData()?.toSharedReadoutDisplayState()?.issueExplanation
+        issueExplanationView.text = issueExplanation.orEmpty()
+        issueExplanationView.visibility = if (issueExplanation.isNullOrBlank()) {
+            View.GONE
+        } else {
+            View.VISIBLE
+        }
+    }
+
+    private fun editableResultData(): ResultData? {
+        if (args.create) {
+            return null
+        }
+        val adapter = punchEditRecyclerView.adapter as? PunchEditRecyclerViewAdapter ?: return args.resultData
+        if (!adapter.isValid()) {
+            return null
+        }
+        val editablePunches = adapter.values.map { it.punch }
+        val editableResult = result.copy(
+            startTime = editablePunches.firstOrNull { it.punchType == SIRecordType.START }?.siTime?.let(::SITime),
+            finishTime = editablePunches.firstOrNull { it.punchType == SIRecordType.FINISH }?.siTime?.let(::SITime),
+            resultStatus = previewResultStatus()
+        )
+        editableResult.place = result.place
+        val controlPunches = editablePunches
+            .filter { it.punchType == SIRecordType.CONTROL }
+            .map { punch -> AliasPunch(punch.copyForPreview(), alias = null) }
+        return ResultData(
+            result = editableResult,
+            punches = controlPunches,
+            competitorCategory = args.resultData?.competitorCategory
+        )
+    }
+
+    private fun previewResultStatus(): ResultStatus {
+        val manualStatus = getResultStatusFromPicker()
+        if (manualStatus != null) {
+            return manualStatus
+        }
+        return if (result.automaticStatus) {
+            ResultStatus.OK
+        } else {
+            result.resultStatus
+        }
+    }
+
+    private fun Punch.copyForPreview(): Punch =
+        copy(
+            siTime = SITime(siTime),
+            origSiTime = SITime(origSiTime)
+        )
 
     private fun getCompetitorFromPicker(): Competitor? {
         val compText = competitorPicker.text.toString()
