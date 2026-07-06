@@ -2433,6 +2433,44 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun editReadoutUsesSiTimesWhenProvided() {
+        val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    category = null,
+                    readoutData = readout("result-1", "comp-1", 1111)
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "00:01",
+            finishSeconds = "00:02",
+            controlPunchesText = "",
+            resultStatus = ResultStatus.OK,
+            categoryId = null,
+            updateCompetitorCategory = false,
+            punchIdFactory = { index, type -> "edit-$index-${type.name}" },
+            startSiTime = "09:00:00",
+            finishSiTime = "09:20:00"
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        assertEquals(32_400, readout.result.startTimeSeconds)
+        assertEquals(33_600, readout.result.finishTimeSeconds)
+        assertEquals(1_200, readout.result.runTimeSeconds)
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(listOf(32_400L, 33_600L), readout.punches.map { it.punch.siTimeSeconds })
+    }
+
+    @Test
     fun editsMatchedReadoutCategoryWithoutChangingCompetitorCategory() {
         val shortCategory = category("cat-short", "M21")
         val longCategory = category("cat-long", "M40")

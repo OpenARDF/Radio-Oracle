@@ -76,7 +76,7 @@ class EventReadoutDetailsTest {
         assertEquals("", rows[0].pointsText)
         assertEquals("ERR", rows[0].runTimeText)
         assertEquals(true, rows[0].hasWarning)
-        assertEquals("The finish time is before the start time.", rows[0].issueExplanation)
+        assertEquals("Finish time is before Start SI Time.", rows[0].issueExplanation)
     }
 
     @Test
@@ -91,7 +91,37 @@ class EventReadoutDetailsTest {
         )
 
         assertEquals("ERR", rows[0].runTimeText)
-        assertEquals("The finish time is before control punch 1. The finish time is before control punch 2.", rows[0].issueExplanation)
+        assertEquals(
+            "Finish time is before control punches 1 and 2.",
+            rows[0].issueExplanation
+        )
+    }
+
+    @Test
+    fun groupsFinishBeforeControlAndStartReadoutErrors() {
+        val rows = EventReadoutDetails.from(
+            raceData(
+                matchedResultStatus = ResultStatus.ERROR,
+                matchedStartTimeSeconds = 1_000,
+                matchedFinishTimeSeconds = 500,
+                matchedControlCodes = (31..39).toList(),
+                matchedControlTimeSeconds = (0 until 9).map { 1_001L + it }
+            )
+        )
+
+        assertEquals("Finish time is before control punches 1-9 and Start SI Time.", rows[0].issueExplanation)
+    }
+
+    @Test
+    fun identifiesInvalidCourseControlPunches() {
+        val rows = EventReadoutDetails.from(
+            raceData(
+                matchedControlCodes = listOf(31, 32, 33),
+                matchedControlStatuses = listOf(PunchStatus.VALID, PunchStatus.INVALID, PunchStatus.VALID)
+            )
+        )
+
+        assertEquals("Control punch 2 is marked invalid for this course.", rows[0].issueExplanation)
     }
 
     @Test
@@ -156,7 +186,8 @@ class EventReadoutDetailsTest {
         matchedFinishTimeSeconds: Long = 1_800,
         matchedRunTimeSeconds: Long = 1_200,
         matchedControlCodes: List<Int> = listOf(31, 32),
-        matchedControlTimeSeconds: List<Long>? = null
+        matchedControlTimeSeconds: List<Long>? = null,
+        matchedControlStatuses: List<PunchStatus>? = null
     ): EventRaceData {
         val alias = EventAlias(
             id = "alias",
@@ -205,7 +236,8 @@ class EventReadoutDetailsTest {
                         startTimeSeconds = matchedStartTimeSeconds,
                         finishTimeSeconds = matchedFinishTimeSeconds,
                         runTimeSeconds = matchedRunTimeSeconds,
-                        controlTimeSeconds = matchedControlTimeSeconds
+                        controlTimeSeconds = matchedControlTimeSeconds,
+                        controlStatuses = matchedControlStatuses
                     )
                 )
             ),
@@ -234,7 +266,8 @@ class EventReadoutDetailsTest {
         startTimeSeconds: Long = 600,
         finishTimeSeconds: Long = 1_800,
         runTimeSeconds: Long = 1_200,
-        controlTimeSeconds: List<Long>? = null
+        controlTimeSeconds: List<Long>? = null,
+        controlStatuses: List<PunchStatus>? = null
     ): EventReadoutData =
         EventReadoutData(
             result = EventResult(
@@ -268,7 +301,7 @@ class EventReadoutDetailsTest {
                         originalSiTimeSeconds = punchTimeSeconds,
                         punchType = SIRecordType.CONTROL,
                         order = index,
-                        punchStatus = PunchStatus.UNKNOWN,
+                        punchStatus = controlStatuses?.getOrNull(index) ?: PunchStatus.UNKNOWN,
                         splitSeconds = 0
                     ),
                     alias = alias?.takeIf { it.siCode == siCode }

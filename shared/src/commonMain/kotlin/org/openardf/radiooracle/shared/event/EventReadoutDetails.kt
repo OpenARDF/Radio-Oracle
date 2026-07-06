@@ -140,17 +140,15 @@ internal fun EventReadoutData.blockedRunTimeStatusCode(): String =
 fun EventReadoutData.readoutIssueExplanation(): String? {
     val explanations = buildList {
         if (hasTimingOrPunches()) {
-            readoutTiming().issues.mapTo(this) { it.toDisplayExplanation() }
+            addAll(readoutTiming().issues.toDisplayExplanations())
         }
-        val invalidPunchCount = punches.count { it.punch.punchStatus == PunchStatus.INVALID }
-        if (invalidPunchCount > 0) {
-            add(
-                if (invalidPunchCount == 1) {
-                    "One control punch is marked invalid for this course."
-                } else {
-                    "$invalidPunchCount control punches are marked invalid for this course."
-                }
-            )
+        val invalidControlIndices = punches
+            .filter { it.punch.punchType == SIRecordType.CONTROL }
+            .mapIndexedNotNull { index, aliasPunch ->
+                if (aliasPunch.punch.punchStatus == PunchStatus.INVALID) index + 1 else null
+            }
+        if (invalidControlIndices.isNotEmpty()) {
+            add(invalidControlIndices.toInvalidControlExplanation())
         }
         if (isEmpty() && result.resultStatus == ResultStatus.ERROR) {
             add("The result status is set to Error manually.")
@@ -168,24 +166,106 @@ private fun EventReadoutData.readoutTiming() =
     SportIdentReadoutTiming.calculate(
         startSeconds = result.startTimeSeconds,
         finishSeconds = result.finishTimeSeconds,
-        controlSeconds = punches
-            .filter { it.punch.punchType == SIRecordType.CONTROL }
-            .map { it.punch.siTimeSeconds }
+        controlSeconds = controlPunchSeconds()
     )
 
-private fun SportIdentTimingIssue.toDisplayExplanation(): String =
-    when (status) {
-        SportIdentRunTimingStatus.VALID -> "The readout timing is valid."
-        SportIdentRunTimingStatus.MISSING_START_OR_FINISH -> "The card is missing a start or finish time."
-        SportIdentRunTimingStatus.FINISH_BEFORE_START -> "The finish time is before the start time."
-        SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START -> "Control punch ${displayControlIndex()} is not after the start time."
-        SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL ->
-            "Control punch ${displayControlIndex()} is not after the previous control punch."
-        SportIdentRunTimingStatus.FINISH_BEFORE_CONTROL -> "The finish time is before control punch ${displayControlIndex()}."
+private fun EventReadoutData.controlPunchSeconds(): List<Long> =
+    punches
+        .filter { it.punch.punchType == SIRecordType.CONTROL }
+        .map { it.punch.siTimeSeconds }
+
+private fun List<SportIdentTimingIssue>.toDisplayExplanations(): List<String> =
+    buildList {
+        if (this@toDisplayExplanations.any { it.status == SportIdentRunTimingStatus.MISSING_START_OR_FINISH }) {
+            add("The card is missing a start or finish time.")
+        }
+
+        val finishBeforeControlIndices = controlIndicesFor(SportIdentRunTimingStatus.FINISH_BEFORE_CONTROL)
+        val finishTargets = buildList {
+            if (finishBeforeControlIndices.isNotEmpty()) {
+                add(finishBeforeControlIndices.toControlPunchText())
+            }
+            if (this@toDisplayExplanations.any { it.status == SportIdentRunTimingStatus.FINISH_BEFORE_START }) {
+                add("Start SI Time")
+            }
+        }
+        if (finishTargets.isNotEmpty()) {
+            add("Finish time is before ${finishTargets.toSentenceList()}.")
+        }
+
+        val controlsNotAfterStart = controlIndicesFor(SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START)
+        if (controlsNotAfterStart.isNotEmpty()) {
+            val verb = if (controlsNotAfterStart.size == 1) "is" else "are"
+            add("${controlsNotAfterStart.toControlPunchText().capitalizeFirst()} $verb not after Start SI Time.")
+        }
+
+        val controlsNotAfterPrevious = controlIndicesFor(SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL)
+        if (controlsNotAfterPrevious.isNotEmpty()) {
+            val verb = if (controlsNotAfterPrevious.size == 1) "is" else "are"
+            add("${controlsNotAfterPrevious.toControlPunchText().capitalizeFirst()} $verb not after the previous control punch.")
+        }
     }
 
-private fun SportIdentTimingIssue.displayControlIndex(): Int =
-    (controlIndex ?: 0) + 1
+private fun List<SportIdentTimingIssue>.controlIndicesFor(status: SportIdentRunTimingStatus): List<Int> =
+    filter { it.status == status }
+        .mapNotNull { it.controlIndex }
+        .map { it + 1 }
+        .distinct()
+        .sorted()
+
+private fun List<Int>.toInvalidControlExplanation(): String {
+    val controlPunchText = toControlPunchText().capitalizeFirst()
+    val verb = if (size == 1) "is" else "are"
+    return "$controlPunchText $verb marked invalid for this course."
+}
+
+private fun List<Int>.toControlPunchText(): String {
+    val noun = if (size == 1) "control punch" else "control punches"
+    return "$noun ${toCompactIndexText()}"
+}
+
+private fun List<Int>.toCompactIndexText(): String {
+    val sortedIndices = distinct().sorted()
+    val segments = mutableListOf<String>()
+    var rangeStart: Int? = null
+    var previous: Int? = null
+    sortedIndices.forEach { index ->
+        val currentRangeStart = rangeStart
+        val currentPrevious = previous
+        if (currentRangeStart == null) {
+            rangeStart = index
+        } else if (currentPrevious != null && index != currentPrevious + 1) {
+            segments += compactRangeSegments(currentRangeStart, currentPrevious)
+            rangeStart = index
+        }
+        previous = index
+    }
+    val finalRangeStart = rangeStart
+    val finalPrevious = previous
+    if (finalRangeStart != null && finalPrevious != null) {
+        segments += compactRangeSegments(finalRangeStart, finalPrevious)
+    }
+    return segments.toSentenceList()
+}
+
+private fun compactRangeSegments(start: Int, end: Int): List<String> =
+    when {
+        start == end -> listOf(start.toString())
+        // "1 and 2" reads better than a range, while longer consecutive groups stay compact.
+        end == start + 1 -> listOf(start.toString(), end.toString())
+        else -> listOf("$start-$end")
+    }
+
+private fun List<String>.toSentenceList(): String =
+    when (size) {
+        0 -> ""
+        1 -> first()
+        2 -> joinToString(" and ")
+        else -> dropLast(1).joinToString(", ") + ", and " + last()
+    }
+
+private fun String.capitalizeFirst(): String =
+    replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 
 /** English result-status labels matching the existing Android default resources. */
 fun ResultStatus.toDisplayLabel(): String =

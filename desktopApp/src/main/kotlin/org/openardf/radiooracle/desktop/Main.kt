@@ -213,6 +213,7 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.printing.FinishTicketRenderer
 import org.openardf.radiooracle.shared.results.EventResultSending
+import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.time.DurationFormatter
 import org.jetbrains.skia.Image as SkiaImage
@@ -6117,7 +6118,9 @@ fun main(args: Array<String>) = application {
                                 resultStatus = updatedDraft.resultStatus,
                                 categoryId = updatedDraft.categoryId,
                                 updateCompetitorCategory = updatedDraft.updateCompetitorCategory,
-                                punchIdFactory = { index, type -> "edited-punch-${UUID.randomUUID()}-$index-${type.name}" }
+                                punchIdFactory = { index, type -> "edited-punch-${UUID.randomUUID()}-$index-${type.name}" },
+                                startSiTime = updatedDraft.startSiTime,
+                                finishSiTime = updatedDraft.finishSiTime
                             )
                         }
                         hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -10354,6 +10357,8 @@ private data class DesktopReadoutEditDraft(
     val matched: Boolean,
     val startSeconds: String,
     val finishSeconds: String,
+    val startSiTime: String,
+    val finishSiTime: String,
     val controlPunchesText: String,
     val resultStatus: ResultStatus,
     val categoryId: String?,
@@ -11261,6 +11266,8 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                     elapsedRaceTimeText(readoutData.result.startTimeSeconds)
                 },
                 finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds, elapsedBaseSeconds),
+                startSiTime = readoutData.result.startTimeSeconds.toReadoutSiTimeText(),
+                finishSiTime = readoutData.result.finishTimeSeconds.toReadoutSiTimeText(),
                 controlPunchesText = readoutData.controlPunchText(this, elapsedBaseSeconds),
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId ?: competitor.categoryId,
@@ -11284,6 +11291,8 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
                     elapsedRaceTimeText(readoutData.result.startTimeSeconds)
                 },
                 finishSeconds = elapsedRaceTimeText(readoutData.result.finishTimeSeconds, elapsedBaseSeconds),
+                startSiTime = readoutData.result.startTimeSeconds.toReadoutSiTimeText(),
+                finishSiTime = readoutData.result.finishTimeSeconds.toReadoutSiTimeText(),
                 controlPunchesText = readoutData.controlPunchText(this, elapsedBaseSeconds),
                 resultStatus = readoutData.result.resultStatus,
                 categoryId = readoutData.result.categoryId,
@@ -11304,14 +11313,25 @@ private fun EventRaceData.elapsedRaceTimeText(
         val elapsedSeconds = if (elapsedBaseSeconds == null) {
             seconds
         } else {
-            val secondsInDay = 24 * 60 * 60
-            ((seconds - elapsedBaseSeconds) % secondsInDay + secondsInDay) % secondsInDay
+            (seconds - elapsedBaseSeconds).toSportIdentDaySeconds()
         }
         elapsedSeconds.toReadoutElapsedText()
     }.orEmpty()
 
 private fun Long.toReadoutElapsedText(): String =
     DurationFormatter.secondsToFormattedString(this, useMinutes = this < 3_600)
+
+private fun Long?.toReadoutSiTimeText(): String =
+    this?.let { seconds ->
+        val daySeconds = seconds.toSportIdentDaySeconds()
+        DurationFormatter.secondsToFormattedString(daySeconds, useMinutes = false)
+    }.orEmpty()
+
+// SPORTident readouts store clock times as seconds within the station day.
+private fun Long.toSportIdentDaySeconds(): Long {
+    val secondsInDay = SportIdentCodes.SECONDS_DAY
+    return ((this % secondsInDay) + secondsInDay) % secondsInDay
+}
 
 private fun org.openardf.radiooracle.shared.event.EventReadoutData.controlPunchText(
     raceData: EventRaceData,
@@ -15027,11 +15047,14 @@ private fun ReadoutEditDialog(
 ) {
     var startSeconds by remember(draft.resultId) { mutableStateOf(draft.startSeconds) }
     var finishSeconds by remember(draft.resultId) { mutableStateOf(draft.finishSeconds) }
+    var startSiTime by remember(draft.resultId) { mutableStateOf(draft.startSiTime) }
+    var finishSiTime by remember(draft.resultId) { mutableStateOf(draft.finishSiTime) }
     var controlPunchesText by remember(draft.resultId) { mutableStateOf(draft.controlPunchesText) }
     var resultStatus by remember(draft.resultId) { mutableStateOf(draft.resultStatus) }
     var categoryId by remember(draft.resultId) { mutableStateOf(draft.categoryId) }
     var updateCompetitorCategory by remember(draft.resultId) { mutableStateOf(draft.updateCompetitorCategory) }
     var selectedControlId by remember(draft.resultId, controls) { mutableStateOf(controls.firstOrNull()?.id) }
+    val dialogScrollState = rememberScrollState()
     val categoryChanged = draft.matched && categoryId != draft.originalCategoryId
     val sortedControls = remember(controls) {
         controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
@@ -15059,6 +15082,8 @@ private fun ReadoutEditDialog(
             draft.copy(
                 startSeconds = startSeconds,
                 finishSeconds = finishSeconds,
+                startSiTime = startSiTime,
+                finishSiTime = finishSiTime,
                 controlPunchesText = controlPunchesText,
                 resultStatus = resultStatus,
                 categoryId = categoryId,
@@ -15067,124 +15092,162 @@ private fun ReadoutEditDialog(
         )
     }
 
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("Edit Result") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = draft.competitorName.ifBlank { "Unmatched readout" },
-                    fontWeight = FontWeight.Bold
-                )
-                draft.issueExplanation?.let { explanation ->
-                    Text(
-                        text = "Result explanation: $explanation",
-                        color = DesktopPalette.Error,
-                        fontSize = 13.sp,
-                        modifier = Modifier.width(420.dp)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LabeledTextField(
-                        label = "Start Elapsed",
-                        value = startSeconds,
-                        onValueChange = {
-                            if (!draft.isPractice) {
-                                startSeconds = it
-                            }
-                        },
-                        modifier = Modifier.width(160.dp),
-                        enabled = !draft.isPractice,
-                        onCommit = ::saveDraft
-                    )
-                    LabeledTextField(
-                        label = "Finish Elapsed",
-                        value = finishSeconds,
-                        onValueChange = { finishSeconds = it },
-                        modifier = Modifier.width(160.dp),
-                        onCommit = ::saveDraft
-                    )
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Control Punches", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ReadoutControlPicker(
-                            selectedControlId = selectedControlId,
-                            controls = availableControls,
-                            onControlSelected = { selectedControlId = it },
-                            modifier = Modifier.width(260.dp)
+    Dialog(onDismissRequest = onCancel) {
+        Surface(
+            modifier = Modifier
+                .width(500.dp)
+                .heightIn(max = 620.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colors.surface
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("Edit Result", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .fillMaxWidth()
+                        .clipToBounds()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(dialogScrollState),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = draft.competitorName.ifBlank { "Unmatched readout" },
+                            fontWeight = FontWeight.Bold
                         )
-                        Button(
-                            onClick = {
-                                val control = availableControls.firstOrNull { it.id == selectedControlId } ?: return@Button
-                                val punchTime = startSeconds.ifBlank { "00:00" }
-                                controlPunchesText = appendReadoutPunchLine(
-                                    controlPunchesText,
-                                    "${control.editPunchToken(sortedControls)} @ $punchTime"
+                        draft.issueExplanation?.let { explanation ->
+                            Text(
+                                text = "Result explanation: $explanation",
+                                color = DesktopPalette.Error,
+                                fontSize = 13.sp,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LabeledTextField(
+                                label = "Start SI Time",
+                                value = startSiTime,
+                                onValueChange = { startSiTime = it },
+                                modifier = Modifier.width(160.dp),
+                                onCommit = ::saveDraft
+                            )
+                            LabeledTextField(
+                                label = "Finish SI Time",
+                                value = finishSiTime,
+                                onValueChange = { finishSiTime = it },
+                                modifier = Modifier.width(160.dp),
+                                onCommit = ::saveDraft
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LabeledTextField(
+                                label = "Start Elapsed",
+                                value = startSeconds,
+                                onValueChange = {
+                                    if (!draft.isPractice) {
+                                        startSeconds = it
+                                    }
+                                },
+                                modifier = Modifier.width(160.dp),
+                                enabled = !draft.isPractice,
+                                onCommit = ::saveDraft
+                            )
+                            LabeledTextField(
+                                label = "Finish Elapsed",
+                                value = finishSeconds,
+                                onValueChange = { finishSeconds = it },
+                                modifier = Modifier.width(160.dp),
+                                onCommit = ::saveDraft
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Control Punches", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                ReadoutControlPicker(
+                                    selectedControlId = selectedControlId,
+                                    controls = availableControls,
+                                    onControlSelected = { selectedControlId = it },
+                                    modifier = Modifier.width(260.dp)
                                 )
-                                selectedControlId = availableControls.firstOrNull { it.id != control.id }?.id
-                            },
-                            enabled = selectedControlId != null
-                        ) {
-                            ButtonLabel("Add Punch")
+                                Button(
+                                    onClick = {
+                                        val control = availableControls.firstOrNull { it.id == selectedControlId } ?: return@Button
+                                        val punchTime = startSeconds.ifBlank { "00:00" }
+                                        controlPunchesText = appendReadoutPunchLine(
+                                            controlPunchesText,
+                                            "${control.editPunchToken(sortedControls)} @ $punchTime"
+                                        )
+                                        selectedControlId = availableControls.firstOrNull { it.id != control.id }?.id
+                                    },
+                                    enabled = selectedControlId != null
+                                ) {
+                                    ButtonLabel("Add Punch")
+                                }
+                            }
+                            TextField(
+                                value = controlPunchesText,
+                                onValueChange = { controlPunchesText = it },
+                                singleLine = false,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(88.dp)
+                                    .commitOnEnter(::saveDraft)
+                            )
+                            Text(
+                                text = "Use one punch per line, such as Fox 1 @ 15:00. The picker inserts valid labels; typed SI codes, public labels, and control labels are also accepted.",
+                                color = DesktopPalette.Disconnected,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ResultStatusPicker(
+                                selectedStatus = resultStatus,
+                                onStatusSelected = { resultStatus = it },
+                                modifier = Modifier.width(160.dp)
+                            )
+                            CategoryPicker(
+                                selectedCategoryId = categoryId,
+                                categories = categories,
+                                onCategorySelected = { categoryId = it },
+                                modifier = Modifier.width(220.dp)
+                            )
+                        }
+                        if (draft.matched) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = categoryChanged && updateCompetitorCategory,
+                                    onCheckedChange = { updateCompetitorCategory = it },
+                                    enabled = categoryChanged
+                                )
+                                Text(
+                                    "Also change competitor category",
+                                    color = if (categoryChanged) DesktopPalette.Black else DesktopPalette.Disconnected
+                                )
+                            }
                         }
                     }
-                    TextField(
-                        value = controlPunchesText,
-                        onValueChange = { controlPunchesText = it },
-                        singleLine = false,
-                        modifier = Modifier
-                            .width(420.dp)
-                            .height(88.dp)
-                            .commitOnEnter(::saveDraft)
-                    )
-                    Text(
-                        text = "Use one punch per line, such as Fox 1 @ 15:00. The picker inserts valid labels; typed SI codes, public labels, and control labels are also accepted.",
-                        color = DesktopPalette.Disconnected,
-                        fontSize = 12.sp
-                    )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ResultStatusPicker(
-                        selectedStatus = resultStatus,
-                        onStatusSelected = { resultStatus = it },
-                        modifier = Modifier.width(160.dp)
-                    )
-                    CategoryPicker(
-                        selectedCategoryId = categoryId,
-                        categories = categories,
-                        onCategorySelected = { categoryId = it },
-                        modifier = Modifier.width(220.dp)
-                    )
-                }
-                if (draft.matched) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = categoryChanged && updateCompetitorCategory,
-                            onCheckedChange = { updateCompetitorCategory = it },
-                            enabled = categoryChanged
-                        )
-                        Text(
-                            "Also change competitor category",
-                            color = if (categoryChanged) DesktopPalette.Black else DesktopPalette.Disconnected
-                        )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(onClick = onCancel) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = ::saveDraft) {
+                        Text("Save")
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = ::saveDraft
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            Button(onClick = onCancel) {
-                Text("Cancel")
-            }
         }
-    )
+    }
 }
 
 @Composable

@@ -2401,7 +2401,9 @@ object EventProjectEditor {
         resultStatus: ResultStatus,
         categoryId: String?,
         updateCompetitorCategory: Boolean,
-        punchIdFactory: (Int, SIRecordType) -> String
+        punchIdFactory: (Int, SIRecordType) -> String,
+        startSiTime: String? = null,
+        finishSiTime: String? = null
     ): EventProjectFile {
         val originalReadout = projectFile.raceData.competitorData
             .mapNotNull { it.readoutData }
@@ -2419,8 +2421,11 @@ object EventProjectEditor {
         require(startElapsedSeconds == null || finishElapsedSeconds == null || finishElapsedSeconds >= startElapsedSeconds) {
             "Finish time cannot be earlier than start time."
         }
-        val startSecondsValue = startElapsedSeconds?.toDaySeconds(elapsedBaseSeconds, "Start time")
-        val finishSecondsValue = finishElapsedSeconds?.toDaySeconds(elapsedBaseSeconds, "Finish time")
+        // Raw SI clock times are authoritative when the editor exposes them; elapsed fields remain the legacy fallback.
+        val startSecondsValue = parseOptionalSiClockSeconds(startSiTime, "Start SI time")
+            ?: startElapsedSeconds?.toDaySeconds(elapsedBaseSeconds, "Start time")
+        val finishSecondsValue = parseOptionalSiClockSeconds(finishSiTime, "Finish SI time")
+            ?: finishElapsedSeconds?.toDaySeconds(elapsedBaseSeconds, "Finish time")
         val requestedCategoryId = categoryId?.trim()?.takeIf { it.isNotEmpty() }
         val requestedCategory = requestedCategoryId?.let { id ->
             projectFile.raceData.categories.firstOrNull { it.category.id == id }?.category
@@ -2441,16 +2446,20 @@ object EventProjectEditor {
                 )
             }
         }
-        val effectiveStatus = if (resultStatus == ResultStatus.OK && evaluation != null) {
-            evaluation.resultStatus
-        } else {
-            resultStatus
+        val controlTimingSeconds = controlPunchEntries.map { it.siTimeSeconds ?: startSecondsValue ?: 0L }
+        val runTiming = SportIdentReadoutTiming.calculate(
+            startSeconds = startSecondsValue,
+            finishSeconds = finishSecondsValue,
+            controlSeconds = controlTimingSeconds
+        )
+        val effectiveStatus = when {
+            runTiming.blocksResult -> ResultStatus.ERROR
+            resultStatus == ResultStatus.OK && evaluation != null -> evaluation.resultStatus
+            else -> resultStatus
         }
-        val runTimeSeconds = if (startElapsedSeconds != null && finishElapsedSeconds != null) {
-            finishElapsedSeconds - startElapsedSeconds
-        } else {
-            0
-        }
+        val runTimeSeconds = runTiming.runTimeSeconds
+        val controlStatuses = (evaluation?.punchStatuses ?: List(controlPunchEntries.size) { PunchStatus.UNKNOWN })
+            .withTimingIssues(runTiming)
 
         var foundReadout = false
         var matchedCompetitorId: String? = null
@@ -2464,7 +2473,7 @@ object EventProjectEditor {
                 startSeconds = startSecondsValue,
                 finishSeconds = finishSecondsValue,
                 controlPunches = controlPunchEntries,
-                controlStatuses = evaluation?.punchStatuses,
+                controlStatuses = controlStatuses,
                 aliases = projectFile.raceData.aliases,
                 punchIdFactory = punchIdFactory
             )
@@ -3682,6 +3691,18 @@ object EventProjectEditor {
             "$fieldName is invalid. Use mm:ss or hh:mm:ss."
         }
         return hours * 3_600 + minutes * 60 + seconds
+    }
+
+    private fun parseOptionalSiClockSeconds(value: String?, fieldName: String): Long? {
+        val trimmedValue = value?.trim().orEmpty()
+        if (trimmedValue.isEmpty()) {
+            return null
+        }
+        val seconds = parseRequiredElapsedSeconds(trimmedValue, fieldName)
+        require(seconds in 0 until SportIdentCodes.SECONDS_DAY) {
+            "$fieldName is invalid. Use hh:mm:ss from 00:00:00 through 23:59:59."
+        }
+        return seconds
     }
 
     private fun Long.toDaySeconds(raceStartSeconds: Long?, fieldName: String): Long {
