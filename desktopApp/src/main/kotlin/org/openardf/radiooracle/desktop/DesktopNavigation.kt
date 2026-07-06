@@ -677,7 +677,7 @@ object DesktopNavigation {
                 item("race.readouts", "Readouts", workflow, DesktopSection.Readouts),
                 group(
                     "race.si-readout",
-                    "SI Readout",
+                    "SI Settings",
                     workflow,
                     listOf(
                         action("race.download-si", "Download SI Card", workflow, DesktopNavAction.DownloadSiCard),
@@ -1358,7 +1358,7 @@ object DesktopNavigation {
         "race.readouts" to
             "Use Readouts to download, review, match, edit, remove, print, and manually add SI-card readouts during race operations.",
         "race.si-readout" to
-            "Use SI Readout to download one SI card or run continuous card downloads while competitors finish.",
+            "Use SI Settings to download one SI card or run continuous card downloads while competitors finish.",
         "race.download-si" to
             "Use Download SI Card to read one SI card from an attached READOUT or SI MASTER station.",
         "race.start-continuous" to
