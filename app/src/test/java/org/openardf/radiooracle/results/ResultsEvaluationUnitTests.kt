@@ -28,6 +28,7 @@ import kotlinx.coroutines.test.runTest
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.room.entity.Alias
+import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
 import org.openardf.radiooracle.backend.room.entity.Punch
@@ -87,6 +88,95 @@ class ResultsEvaluationUnitTests {
         assertEquals(false, timing.blocksResult)
         assertEquals(SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL, timing.status)
         assertEquals(30L * 60L, timing.runTimeSeconds)
+    }
+
+    @Test
+    fun timingWarningsDoNotOverwriteCourseValidPunchStatus() = runTest {
+        val raceId = UUID.randomUUID()
+        val categoryId = UUID.randomUUID()
+        val resultId = UUID.randomUUID()
+        val dataProcessor = mock<DataProcessor>()
+        val race = Race(
+            id = raceId,
+            name = "Classic Practice",
+            apiKey = "",
+            startDateTime = LocalDateTime.of(2026, 7, 6, 0, 0),
+            raceType = RaceType.CLASSIC,
+            raceLevel = RaceLevel.PRACTICE,
+            raceBand = RaceBand.M80,
+            timeLimit = Duration.ofHours(2)
+        )
+        val category = Category(
+            id = categoryId,
+            raceId = raceId,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            length = 0,
+            climb = 0,
+            order = 0,
+            controlPointsString = "31 32"
+        )
+        val result = Result(
+            id = resultId,
+            raceId = raceId,
+            competitorId = null,
+            siNumber = 123456,
+            cardType = SIConstants.SI_CARD8_9_SIAC,
+            checkTime = null,
+            startTime = SITime(LocalTime.of(10, 0)),
+            finishTime = SITime(LocalTime.of(10, 30)),
+            automaticStatus = true,
+            resultStatus = ResultStatus.OK,
+            points = 0,
+            runTime = Duration.ZERO,
+            modified = false,
+            sent = false
+        )
+        val punches = arrayListOf(
+            Punch(
+                UUID.randomUUID(),
+                raceId,
+                resultId,
+                result.siNumber,
+                31,
+                SITime(LocalTime.of(10, 12)),
+                SITime(LocalTime.of(10, 12)),
+                SIRecordType.CONTROL,
+                0,
+                PunchStatus.UNKNOWN,
+                Duration.ZERO
+            ),
+            Punch(
+                UUID.randomUUID(),
+                raceId,
+                resultId,
+                result.siNumber,
+                32,
+                SITime(LocalTime.of(10, 11, 59)),
+                SITime(LocalTime.of(10, 11, 59)),
+                SIRecordType.CONTROL,
+                1,
+                PunchStatus.UNKNOWN,
+                Duration.ZERO
+            )
+        )
+        whenever(dataProcessor.getControlPointsByCategory(categoryId)).thenReturn(
+            listOf(
+                ControlPoint(UUID.randomUUID(), categoryId, 31, ControlPointType.CONTROL, 1),
+                ControlPoint(UUID.randomUUID(), categoryId, 32, ControlPointType.CONTROL, 2)
+            )
+        )
+        whenever(dataProcessor.getControlPointAliasesByCategory(categoryId)).thenReturn(emptyList())
+
+        ResultsProcessor.calculateResult(result, category, punches, null, race, dataProcessor)
+
+        assertEquals(ResultStatus.OK, result.resultStatus)
+        assertEquals(2, result.points)
+        assertEquals(
+            listOf(PunchStatus.VALID, PunchStatus.VALID),
+            punches.filter { it.punchType == SIRecordType.CONTROL }.map { it.punchStatus }
+        )
     }
 
     @Test

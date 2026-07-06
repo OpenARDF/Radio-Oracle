@@ -49,15 +49,7 @@ object EventToolbarSupport {
         toolbar.setBackgroundColor(
             ContextCompat.getColor(fragment.requireContext(), R.color.event_toolbar_background)
         )
-        val onToolbarColor = ContextCompat.getColor(fragment.requireContext(), R.color.white)
-        toolbar.setTitleTextColor(onToolbarColor)
-        toolbar.setSubtitleTextColor(onToolbarColor)
-        toolbar.overflowIcon = toolbar.overflowIcon?.let { icon ->
-            DrawableCompat.wrap(icon.mutate()).apply {
-                DrawableCompat.setTint(this, onToolbarColor)
-            }
-        }
-        tintMenuIcons(toolbar.menu, onToolbarColor)
+        applyOnPrimaryContentColor(fragment, toolbar)
         toolbar.setOnClickListener {
             showSeriesEventDropdown(fragment, toolbar, selectedRaceViewModel)
         }
@@ -75,6 +67,20 @@ object EventToolbarSupport {
                 }
             }
         }
+    }
+
+    /** Applies the app's white-on-primary toolbar content colors to titles and toolbar icons. */
+    fun applyOnPrimaryContentColor(fragment: Fragment, toolbar: Toolbar) {
+        val onToolbarColor = ContextCompat.getColor(fragment.requireContext(), R.color.white)
+        toolbar.setTitleTextColor(onToolbarColor)
+        toolbar.setSubtitleTextColor(onToolbarColor)
+        toolbar.navigationIcon = toolbar.navigationIcon?.let { icon ->
+            tintIcon(icon, onToolbarColor)
+        }
+        toolbar.overflowIcon = toolbar.overflowIcon?.let { icon ->
+            tintIcon(icon, onToolbarColor)
+        }
+        tintMenuIcons(toolbar.menu, onToolbarColor)
     }
 
     private fun updateDropdownEnabledState(
@@ -113,12 +119,15 @@ object EventToolbarSupport {
         for (index in 0 until menu.size()) {
             val item = menu.getItem(index)
             item.icon = item.icon?.let { icon ->
-                DrawableCompat.wrap(icon.mutate()).apply {
-                    DrawableCompat.setTint(this, color)
-                }
+                tintIcon(icon, color)
             }
         }
     }
+
+    private fun tintIcon(icon: android.graphics.drawable.Drawable, color: Int) =
+        DrawableCompat.wrap(icon.mutate()).apply {
+            DrawableCompat.setTint(this, color)
+        }
 
     private fun selectableSeriesMembers(selectedRaceViewModel: SelectedRaceViewModel): List<EventSeriesMember> {
         val currentRaceId = selectedRaceViewModel.getCurrentRace()?.id ?: return emptyList()

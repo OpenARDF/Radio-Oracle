@@ -156,13 +156,25 @@ internal fun EventReadoutData.blockedRunTimeStatusCode(): String =
 
 fun EventReadoutData.readoutIssueExplanation(): String? {
     val explanations = buildList {
-        if (hasTimingOrPunches()) {
-            addAll(readoutTiming().issues.toDisplayExplanations())
+        val timingIssues = if (hasTimingOrPunches()) {
+            readoutTiming().issues
+        } else {
+            emptyList()
         }
+        if (hasTimingOrPunches()) {
+            addAll(timingIssues.toDisplayExplanations())
+        }
+        val timingInvalidControlIndices = timingIssues.timingInvalidControlIndices()
         val invalidControlIndices = punches
             .filter { it.punch.punchType == SIRecordType.CONTROL }
             .mapIndexedNotNull { index, aliasPunch ->
-                if (aliasPunch.punch.punchStatus == PunchStatus.INVALID) index + 1 else null
+                if (aliasPunch.punch.punchStatus == PunchStatus.INVALID &&
+                    index + 1 !in timingInvalidControlIndices
+                ) {
+                    index + 1
+                } else {
+                    null
+                }
             }
         if (invalidControlIndices.isNotEmpty()) {
             add(invalidControlIndices.toInvalidControlExplanation())
@@ -229,6 +241,15 @@ private fun List<SportIdentTimingIssue>.controlIndicesFor(status: SportIdentRunT
         .map { it + 1 }
         .distinct()
         .sorted()
+
+private fun List<SportIdentTimingIssue>.timingInvalidControlIndices(): Set<Int> =
+    filter { issue ->
+        issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START ||
+            issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL
+    }
+        .mapNotNull { it.controlIndex }
+        .map { it + 1 }
+        .toSet()
 
 private fun List<Int>.toInvalidControlExplanation(): String {
     val controlPunchText = toControlPunchText().capitalizeFirst()

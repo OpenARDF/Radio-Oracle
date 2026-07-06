@@ -67,8 +67,6 @@ import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTimingRepair
-import org.openardf.radiooracle.shared.sportident.SportIdentRunTiming
-import org.openardf.radiooracle.shared.sportident.SportIdentRunTimingStatus
 import java.time.Duration
 import java.time.LocalTime
 import java.util.UUID
@@ -552,7 +550,6 @@ object ResultsProcessor {
             result.finishTime,
             punches.map { it.siTime }
         )
-        applyTimingIssues(punches, runTiming)
 
         // Add back start and finish
         if (result.startTime != null) {
@@ -829,19 +826,6 @@ object ResultsProcessor {
             punch.punchStatus = PunchStatus.UNKNOWN
         }
         result.resultStatus = ResultStatus.NO_RANKING
-    }
-
-    private fun applyTimingIssues(punches: ArrayList<Punch>, timing: SportIdentRunTiming) {
-        val timingInvalidControlIndices = timing.issues
-            .filter { issue ->
-                issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_START ||
-                    issue.status == SportIdentRunTimingStatus.CONTROL_NOT_AFTER_PREVIOUS_CONTROL
-            }
-            .mapNotNull { it.controlIndex }
-            .toSet()
-        timingInvalidControlIndices.forEach { controlIndex ->
-            punches.getOrNull(controlIndex)?.punchStatus = PunchStatus.INVALID
-        }
     }
 
     /**

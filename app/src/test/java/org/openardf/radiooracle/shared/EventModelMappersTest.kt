@@ -484,6 +484,58 @@ class EventModelMappersTest {
         assertEquals("Finish time is before control punch 1 and Start SI Time.", state.issueExplanation)
     }
 
+    @Test
+    fun roomResultDataKeepsFullFinishBeforeControlsExplanation() {
+        val raceId = uuid("00000000-0000-0000-0000-000000000001")
+        val resultId = uuid("00000000-0000-0000-0000-000000000004")
+        val result = Result(
+            id = resultId,
+            raceId = raceId,
+            competitorId = null,
+            siNumber = 123456,
+            cardType = 10,
+            checkTime = null,
+            startTime = SITime(LocalTime.of(10, 0)),
+            finishTime = SITime(LocalTime.of(9, 59)),
+            readoutTime = LocalDateTime.of(2026, 5, 30, 10, 46),
+            automaticStatus = true,
+            resultStatus = ResultStatus.OK,
+            points = 9,
+            runTime = Duration.ZERO,
+            modified = false,
+            sent = false
+        )
+        val punches = (1..9).map { order ->
+            AliasPunch(
+                Punch(
+                    id = uuid("00000000-0000-0000-0000-00000000010$order"),
+                    raceId = raceId,
+                    resultId = resultId,
+                    cardNumber = 123456,
+                    siCode = 30 + order,
+                    siTime = SITime(LocalTime.of(10, order)),
+                    origSiTime = SITime(LocalTime.of(10, order)),
+                    punchType = SIRecordType.CONTROL,
+                    order = order,
+                    punchStatus = PunchStatus.UNKNOWN,
+                    split = Duration.ZERO
+                ),
+                alias = null
+            )
+        }.reversed()
+
+        val state = ResultData(
+            result = result,
+            punches = punches,
+            competitorCategory = null
+        ).toSharedReadoutDisplayState()
+
+        assertEquals(
+            "Finish time is before control punches 1-9 and Start SI Time.",
+            state.issueExplanation
+        )
+    }
+
     private fun uuid(value: String): UUID = UUID.fromString(value)
 
     private fun sprintControlPoint(

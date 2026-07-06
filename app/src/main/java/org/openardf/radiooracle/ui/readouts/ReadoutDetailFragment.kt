@@ -51,6 +51,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.backend.shared.toSharedReadoutDisplayState
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
+import org.openardf.radiooracle.ui.EventToolbarSupport
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.categories.CategoryEditDialogFragment
 import kotlinx.coroutines.Dispatchers
@@ -112,6 +113,7 @@ class ReadoutDetailFragment : Fragment() {
         readoutDetailToolbar.subtitle =
             args.resultData.result.siNumber?.toString()
         readoutDetailToolbar.inflateMenu(R.menu.fragment_menu_readout_detail)
+        EventToolbarSupport.applyOnPrimaryContentColor(this, readoutDetailToolbar)
 
         readoutDetailToolbar.setNavigationOnClickListener {
             requireActivity().onBackPressedDispatcher.onBackPressed()

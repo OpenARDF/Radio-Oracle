@@ -144,6 +144,19 @@ class EventReadoutDetailsTest {
     }
 
     @Test
+    fun timingInvalidPunchesDoNotRepeatCourseInvalidExplanation() {
+        val rows = EventReadoutDetails.from(
+            raceData(
+                matchedControlCodes = listOf(31, 32),
+                matchedControlTimeSeconds = listOf(1_100, 1_099),
+                matchedControlStatuses = listOf(PunchStatus.VALID, PunchStatus.INVALID)
+            )
+        )
+
+        assertEquals("Control punch 2 is not after the previous control punch.", rows[0].issueExplanation)
+    }
+
+    @Test
     fun explainsManualErrorStatusWhenTimingDoesNotIdentifyCause() {
         val rows = EventReadoutDetails.from(
             raceData(

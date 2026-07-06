@@ -181,14 +181,20 @@ fun AliasPunch.toEventAliasPunch(): EventAliasPunch =
 fun ReadoutData.toEventReadoutData(): EventReadoutData =
     EventReadoutData(
         result = result.toEventResult(),
-        punches = punches.map { it.toEventAliasPunch() }
+        // Room relations do not guarantee list order, while shared result issue text reports punch numbers by recorded order.
+        punches = punches
+            .sortedBy { it.punch.order }
+            .map { it.toEventAliasPunch() }
     )
 
 /** Converts an Android readout plus optional matched competitor/category into the portable shared race model. */
 fun ResultData.toEventReadoutData(): EventReadoutData =
     EventReadoutData(
         result = result.toEventResult(),
-        punches = punches.map { it.toEventAliasPunch() }
+        // Room relations do not guarantee list order, while shared result issue text reports punch numbers by recorded order.
+        punches = punches
+            .sortedBy { it.punch.order }
+            .map { it.toEventAliasPunch() }
     )
 
 /** Converts an Android category aggregate into the portable shared race model. */
