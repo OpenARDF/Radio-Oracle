@@ -2713,6 +2713,58 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun editingReadoutKeepsExplicitOkManualStatus() {
+        val category = category("cat-1", "M21")
+        val originalReadout = readout("result-1", "comp-1", 1111).let { readoutData ->
+            readoutData.copy(
+                result = readoutData.result.copy(
+                    startTimeSeconds = 36_600,
+                    finishTimeSeconds = 37_800,
+                    runTimeSeconds = 1_200,
+                    resultStatus = ResultStatus.MISPUNCHED,
+                    points = 1,
+                    categoryId = category.id
+                )
+            )
+        }
+        val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
+            categories = listOf(categoryData(category.id, category.name, controlSiCodes = listOf(31, 32))),
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    siNumber = 1111,
+                    category = category,
+                    readoutData = originalReadout
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.updateReadoutEdit(
+            projectFile = original,
+            resultId = "result-1",
+            startSeconds = "10:00",
+            finishSeconds = "30:00",
+            controlPunchesText = "31 @ 15:00",
+            resultStatus = ResultStatus.OK,
+            categoryId = category.id,
+            updateCompetitorCategory = false,
+            punchIdFactory = { index, type -> "edit-$index-${type.name}" },
+            recalculateStatus = false
+        )
+
+        val readout = updated.raceData.competitorData.single().readoutData!!
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
+        assertEquals(false, readout.result.automaticStatus)
+        assertEquals(1, readout.result.points)
+        assertEquals(1_200, readout.result.runTimeSeconds)
+        assertEquals(true, readout.result.modified)
+        assertEquals(false, readout.result.sent)
+    }
+
+    @Test
     fun editingSprintReadoutResolvesNumericLabelsAndRecalculatesPoints() {
         val category = category("cat-sprint", "M21")
         val controls = listOf(

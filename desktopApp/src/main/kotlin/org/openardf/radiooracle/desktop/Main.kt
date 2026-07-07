@@ -6179,24 +6179,13 @@ fun main(args: Array<String>) = application {
                 controls = projectFile?.raceData?.controls ?: emptyList(),
                 onSave = { updatedDraft ->
                     runCatching {
+                        var editResult: DesktopReadoutEditSaveResult? = null
                         projectFile = projectSession.updateCurrentProject { currentProject ->
-                            EventProjectEditor.updateReadoutEdit(
-                                projectFile = currentProject,
-                                resultId = updatedDraft.resultId,
-                                startSeconds = updatedDraft.startSeconds,
-                                finishSeconds = updatedDraft.finishSeconds,
-                                controlPunchesText = updatedDraft.controlPunches.toControlPunchesText(currentProject.raceData.controls),
-                                resultStatus = updatedDraft.resultStatus,
-                                categoryId = updatedDraft.categoryId,
-                                updateCompetitorCategory = updatedDraft.updateCompetitorCategory,
-                                punchIdFactory = { index, type -> "edited-punch-${UUID.randomUUID()}-$index-${type.name}" },
-                                startSiTime = updatedDraft.startSiTime,
-                                finishSiTime = updatedDraft.finishSiTime,
-                                recalculateStatus = !updatedDraft.resultStatusEdited
-                            )
+                            saveDesktopReadoutEdit(currentProject, updatedDraft).also { editResult = it }.projectFile
                         }
                         syncProjectState()
                         pendingReadoutEdit = null
+                        editResult?.issueNotice?.show()
                         projectStatusText = if (updatedDraft.resultStatusEdited) {
                             "Result edit applied with manual status."
                         } else {
@@ -10466,6 +10455,17 @@ private data class DesktopReadoutEditDraft(
     val resultStatusEdited: Boolean = false
 )
 
+private data class DesktopReadoutSaveIssueNotice(
+    val title: String,
+    val summary: String,
+    val details: List<String> = emptyList()
+)
+
+private data class DesktopReadoutEditSaveResult(
+    val projectFile: EventProjectFile,
+    val issueNotice: DesktopReadoutSaveIssueNotice?
+)
+
 private data class DesktopReadoutPunchEditDraft(
     val rowId: String,
     val controlId: String?,
@@ -11428,6 +11428,106 @@ private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEdit
         }
     }
     return null
+}
+
+private fun EventRaceData.readoutByResultId(resultId: String): EventReadoutData? =
+    competitorData
+        .mapNotNull { it.readoutData }
+        .plus(unmatchedReadoutData)
+        .firstOrNull { it.result.id == resultId }
+
+private fun saveDesktopReadoutEdit(
+    currentProject: EventProjectFile,
+    updatedDraft: DesktopReadoutEditDraft
+): DesktopReadoutEditSaveResult {
+    val controlPunchesText = updatedDraft.controlPunches.toControlPunchesText(currentProject.raceData.controls)
+    val recalculatedProject = EventProjectEditor.updateReadoutEdit(
+        projectFile = currentProject,
+        resultId = updatedDraft.resultId,
+        startSeconds = updatedDraft.startSeconds,
+        finishSeconds = updatedDraft.finishSeconds,
+        controlPunchesText = controlPunchesText,
+        resultStatus = updatedDraft.resultStatus,
+        categoryId = updatedDraft.categoryId,
+        updateCompetitorCategory = updatedDraft.updateCompetitorCategory,
+        punchIdFactory = { index, type -> "edited-punch-check-${UUID.randomUUID()}-$index-${type.name}" },
+        startSiTime = updatedDraft.startSiTime,
+        finishSiTime = updatedDraft.finishSiTime,
+        recalculateStatus = true
+    )
+    val issueNotice = recalculatedProject.raceData.readoutSaveIssueNotice(
+        resultId = updatedDraft.resultId,
+        selectedStatus = updatedDraft.resultStatus,
+        statusWasEdited = updatedDraft.resultStatusEdited
+    )
+    val updatedProject = EventProjectEditor.updateReadoutEdit(
+        projectFile = currentProject,
+        resultId = updatedDraft.resultId,
+        startSeconds = updatedDraft.startSeconds,
+        finishSeconds = updatedDraft.finishSeconds,
+        controlPunchesText = controlPunchesText,
+        resultStatus = updatedDraft.resultStatus,
+        categoryId = updatedDraft.categoryId,
+        updateCompetitorCategory = updatedDraft.updateCompetitorCategory,
+        punchIdFactory = { index, type -> "edited-punch-${UUID.randomUUID()}-$index-${type.name}" },
+        startSiTime = updatedDraft.startSiTime,
+        finishSiTime = updatedDraft.finishSiTime,
+        recalculateStatus = !updatedDraft.resultStatusEdited
+    )
+    return DesktopReadoutEditSaveResult(
+        projectFile = updatedProject,
+        issueNotice = issueNotice
+    )
+}
+
+private fun EventRaceData.readoutSaveIssueNotice(
+    resultId: String,
+    selectedStatus: ResultStatus,
+    statusWasEdited: Boolean
+): DesktopReadoutSaveIssueNotice? {
+    val recalculatedReadout = readoutByResultId(resultId) ?: return null
+    val recalculatedStatus = recalculatedReadout.result.resultStatus
+    val issueExplanation = recalculatedReadout.readoutIssueExplanation()
+    val hasIssue = issueExplanation != null || recalculatedStatus.isCalculatedIssueStatus()
+    if (!hasIssue) {
+        return null
+    }
+
+    val details = buildList {
+        issueExplanation?.let(::add)
+        if (recalculatedStatus.isCalculatedIssueStatus()) {
+            add("Calculated status: ${recalculatedStatus.toDisplayLabel()}.")
+        }
+    }
+    val summary = if (statusWasEdited && selectedStatus != recalculatedStatus) {
+        "The result was saved with manual status ${selectedStatus.toDisplayLabel()}, but recalculation still reports ${recalculatedStatus.toDisplayLabel()}."
+    } else {
+        "The result was saved, but recalculation still reports ${recalculatedStatus.toDisplayLabel()}."
+    }
+    return DesktopReadoutSaveIssueNotice(
+        title = "Result Saved With Remaining Issue",
+        summary = summary,
+        details = details.distinct()
+    )
+}
+
+private fun ResultStatus.isCalculatedIssueStatus(): Boolean =
+    this != ResultStatus.OK && this != ResultStatus.NO_RANKING
+
+private fun DesktopReadoutSaveIssueNotice.show() {
+    val message = buildString {
+        append(summary)
+        details.forEach { detail ->
+            append("\n\n")
+            append(detail)
+        }
+    }
+    javax.swing.JOptionPane.showMessageDialog(
+        null,
+        message,
+        title,
+        javax.swing.JOptionPane.INFORMATION_MESSAGE
+    )
 }
 
 private fun EventRaceData.elapsedRaceTimeText(

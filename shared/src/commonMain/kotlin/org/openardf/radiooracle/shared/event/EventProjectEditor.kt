@@ -2468,7 +2468,6 @@ object EventProjectEditor {
             runTiming.blocksResult -> ResultStatus.ERROR
             recalculateStatus -> recalculatedStatus
             shouldRefreshCorrectedError -> recalculatedStatus
-            resultStatus == ResultStatus.OK && evaluation != null -> evaluation.resultStatus
             else -> resultStatus
         }
         val controlStatuses = (evaluation?.punchStatuses ?: List(controlPunchEntries.size) { PunchStatus.UNKNOWN })
