@@ -419,7 +419,7 @@
     <string name="print_automatic_manually_value" translatable="false">manually</string>
     <string name="print_automatic_category_matched_value" translatable="false">category_matched</string>
     <string name="print_automatic_competitor_matched_value" translatable="false">competitor_matched</string>
-    <string name="print_automatic_always_value" translatable="false">allways</string>
+    <string name="print_automatic_always_value" translatable="false">always</string>
 
     <array name="preferences_automatic_prints">
         <item>@string/print_automatic_manually</item>

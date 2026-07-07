@@ -76,7 +76,8 @@ object ResultsProcessor {
     internal const val PRINT_AUTOMATIC_MANUALLY_VALUE = "manually"
     internal const val PRINT_AUTOMATIC_CATEGORY_MATCHED_VALUE = "category_matched"
     internal const val PRINT_AUTOMATIC_COMPETITOR_MATCHED_VALUE = "competitor_matched"
-    internal const val PRINT_AUTOMATIC_ALWAYS_VALUE = "allways"
+    internal const val PRINT_AUTOMATIC_ALWAYS_VALUE = "always"
+    internal const val PRINT_AUTOMATIC_ALWAYS_LEGACY_VALUE = "allways"
 
     internal fun calculateReadoutRunTiming(
         startTime: SITime?,
@@ -438,7 +439,8 @@ object ResultsProcessor {
         categoryMatched: Boolean
     ): Boolean =
         when (preference) {
-            PRINT_AUTOMATIC_ALWAYS_VALUE -> true
+            PRINT_AUTOMATIC_ALWAYS_VALUE,
+            PRINT_AUTOMATIC_ALWAYS_LEGACY_VALUE -> true
             PRINT_AUTOMATIC_COMPETITOR_MATCHED_VALUE -> competitorMatched
             PRINT_AUTOMATIC_CATEGORY_MATCHED_VALUE -> competitorMatched && categoryMatched
             else -> false

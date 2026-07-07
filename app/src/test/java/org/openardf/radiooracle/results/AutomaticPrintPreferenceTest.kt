@@ -57,6 +57,19 @@ class AutomaticPrintPreferenceTest {
     }
 
     @Test
+    fun legacyMisspelledAlwaysModeStillPrintsAutomatically() {
+        val preference = ResultsProcessor.PRINT_AUTOMATIC_ALWAYS_LEGACY_VALUE
+
+        assertTrue(
+            ResultsProcessor.shouldPrintFinishTicketForPreference(
+                preference,
+                competitorMatched = false,
+                categoryMatched = false
+            )
+        )
+    }
+
+    @Test
     fun competitorMatchedModeRequiresCompetitorMatch() {
         val preference = ResultsProcessor.PRINT_AUTOMATIC_COMPETITOR_MATCHED_VALUE
 

@@ -46,6 +46,7 @@ import androidx.preference.SwitchPreference
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
+import org.openardf.radiooracle.backend.results.ResultsProcessor
 
 
 class PrintsFragment : PreferenceFragmentCompat() {
@@ -208,18 +209,38 @@ class PrintsFragment : PreferenceFragmentCompat() {
         val automaticPrintPreference =
             findPreference<ListPreference>(requireContext().getString(R.string.key_prints_automatic_printout))
 
-        automaticPrintPreference?.setOnPreferenceChangeListener { _, action ->
+        automaticPrintPreference?.let { preference ->
+            val automaticPrintKey = requireContext().getString(R.string.key_prints_automatic_printout)
+            val currentAction = prefs.getString(
+                automaticPrintKey,
+                requireContext().getString(R.string.print_automatic_manually_value)
+            )
+            val normalizedAction =
+                if (currentAction == ResultsProcessor.PRINT_AUTOMATIC_ALWAYS_LEGACY_VALUE) {
+                    ResultsProcessor.PRINT_AUTOMATIC_ALWAYS_VALUE
+                } else {
+                    currentAction
+                }
+
+            if (normalizedAction != currentAction) {
+                editor.putString(automaticPrintKey, normalizedAction)
+                editor.apply()
+            }
+
+            preference.value = normalizedAction
+            preference.updateSummaryForValue(normalizedAction)
+        }
+
+        automaticPrintPreference?.setOnPreferenceChangeListener { preference, action ->
+            val selectedAction = action.toString()
             editor.putString(
                 requireContext().getString(R.string.key_prints_automatic_printout),
-                action.toString()
+                selectedAction
             )
             editor.apply()
-            logInfo("Automatic print mode set to $action")
+            logInfo("Automatic print mode set to $selectedAction")
 
-            automaticPrintPreference.summary = requireContext().getString(
-                R.string.preferences_prints_automatic_hint,
-                action
-            )
+            (preference as ListPreference).updateSummaryForValue(selectedAction)
             true
         }
 
@@ -286,6 +307,15 @@ class PrintsFragment : PreferenceFragmentCompat() {
     private fun logWarn(message: String) {
         Log.w(LOG_TAG, message)
         DebugLog.warn(LOG_TAG, message)
+    }
+
+    private fun ListPreference.updateSummaryForValue(value: String?) {
+        val index = findIndexOfValue(value)
+        val selectedLabel = if (index >= 0) entries[index].toString() else ""
+        summary = requireContext().getString(
+            R.string.preferences_prints_automatic_hint,
+            selectedLabel
+        )
     }
 
     private fun String.maskBluetoothAddress(): String =
