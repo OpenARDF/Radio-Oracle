@@ -34,13 +34,15 @@
         android:layout_width="30dp"
         android:layout_height="wrap_content"
         android:layout_gravity="end"
-        android:src="@drawable/ic_add" />
+        android:background="@color/black"
+        android:src="@drawable/ic_add_white" />
 
     <ImageButton
         android:id="@+id/alias_item_delete_btn"
         android:layout_width="30dp"
         android:layout_height="wrap_content"
         android:layout_gravity="end"
-        android:src="@drawable/ic_delete" />
+        android:background="@color/black"
+        android:src="@drawable/ic_delete_white" />
 
 </LinearLayout>
