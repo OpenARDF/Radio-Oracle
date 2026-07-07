@@ -247,7 +247,11 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.coroutines.coroutineContext
 
-private data class FixedTableColumn(val title: String, val width: Dp)
+private data class FixedTableColumn(
+    val title: String,
+    val width: Dp,
+    val headerTextAlign: TextAlign = TextAlign.Start
+)
 
 private val TableColumnGap = 12.dp
 private val ActionRailWidth = 104.dp
@@ -419,8 +423,8 @@ private val CompetitorBaseTableColumns = listOf(
 )
 
 private val CompetitorAwardEligibilityTableColumns = listOf(
-    FixedTableColumn("USA", 72.dp),
-    FixedTableColumn("R2", 72.dp)
+    FixedTableColumn("USA", 72.dp, TextAlign.Center),
+    FixedTableColumn("R2", 72.dp, TextAlign.Center)
 )
 
 private val CompetitorTrailingTableColumns = listOf(
@@ -437,6 +441,9 @@ private fun competitorTableColumns(showAwardEligibility: Boolean): List<FixedTab
 
 private fun competitorCategoryColumnIndex(showAwardEligibility: Boolean): Int =
     if (showAwardEligibility) 8 else 6
+
+private fun region2EligibilityAfterUsaChange(usaChampEligible: Boolean, currentRegion2ChampEligible: Boolean): Boolean =
+    if (usaChampEligible) true else currentRegion2ChampEligible
 
 private val CompetitorTableColumnHints = mapOf(
     "First" to "Competitor first or given name.",
@@ -17404,7 +17411,7 @@ private fun CompetitorAwardEligibilityCells(
                     competitor.bibNumber,
                     competitor.callSign,
                     it,
-                    competitor.region2ChampEligible
+                    region2EligibilityAfterUsaChange(it, competitor.region2ChampEligible)
                 )
             },
             width = tableColumns[6].width
@@ -22303,7 +22310,8 @@ private fun FixedDetailHeaderCell(column: FixedTableColumn, tooltipText: String?
             modifier = Modifier.width(column.width),
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            textAlign = column.headerTextAlign
         )
     }
     if (tooltipText == null || column.title.isBlank()) {
