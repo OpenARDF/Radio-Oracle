@@ -135,9 +135,17 @@ object EventCsvRows {
         competitorName: String,
         statusLabel: String,
         pointsText: String,
-        runTimeText: String
-    ): String =
-        csvRow(placeText, competitorName, statusLabel, pointsText, runTimeText)
+        runTimeText: String,
+        usaAwardText: String? = null,
+        region2AwardText: String? = null
+    ): String {
+        val fields = mutableListOf<Any?>(placeText, competitorName, statusLabel, pointsText, runTimeText)
+        if (usaAwardText != null || region2AwardText != null) {
+            fields += usaAwardText.orEmpty()
+            fields += region2AwardText.orEmpty()
+        }
+        return csvRow(*fields.toTypedArray())
+    }
 
     fun ardfEventResultRow(
         categoryName: String,

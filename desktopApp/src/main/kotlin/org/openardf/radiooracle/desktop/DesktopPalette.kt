@@ -109,6 +109,7 @@ enum class DesktopSection(val label: String) {
     SiReadoutSettings("SI Readout Settings"),
     InForest("In Forest"),
     Results("Results"),
+    AwardsResults("Awards Results"),
     PublicResultsSite("Cloudflare Website"),
     PublicResultsLink("View Public Results"),
     LiveResultsOverview("Live Results"),

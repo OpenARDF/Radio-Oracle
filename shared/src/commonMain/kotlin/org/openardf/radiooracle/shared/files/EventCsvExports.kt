@@ -31,6 +31,8 @@ import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlDetails
+import org.openardf.radiooracle.shared.event.EventAwardDetails
+import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.toDisplayLabel
@@ -164,17 +166,30 @@ object EventCsvExports {
                 )
             }
 
-    fun results(raceData: EventRaceData): String =
-        EventResultDetails.from(raceData)
+    fun results(
+        raceData: EventRaceData,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+    ): String {
+        val awards = EventAwardDetails.from(raceData, awardDisplayMode)
+        val usaAwardByResultId = awards.categories
+            .flatMap { it.usaAwards }
+            .associate { it.resultId to it.awardText }
+        val region2AwardByResultId = awards.categories
+            .flatMap { it.region2Awards }
+            .associate { it.resultId to it.awardText }
+        return EventResultDetails.from(raceData)
             .joinRows { result ->
                 EventCsvRows.resultRow(
                     placeText = result.placeText,
                     competitorName = result.competitorName,
                     statusLabel = result.statusLabel,
                     pointsText = result.pointsText,
-                    runTimeText = result.runTimeText
+                    runTimeText = result.runTimeText,
+                    usaAwardText = usaAwardByResultId[result.id].takeIf { awards.hasAwards },
+                    region2AwardText = region2AwardByResultId[result.id].takeIf { awards.hasAwards }
                 )
             }
+    }
 
     fun ardfEventResults(raceData: EventRaceData): String =
         "Kategorie;Pořadí;Jméno;Person ID;Čas;TX;Status;Kontroly\n" +

@@ -64,6 +64,7 @@ class DesktopPaletteTest {
                 "SI Readout Settings",
                 "In Forest",
                 "Results",
+                "Awards Results",
                 "Cloudflare Website",
                 "View Public Results",
                 "Live Results",

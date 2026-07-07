@@ -763,6 +763,12 @@ object DesktopNavigation {
                 )
             )
             DesktopWorkflow.ResultsExport -> listOf(
+                item(
+                    "results.awards",
+                    "Awards Results",
+                    workflow,
+                    DesktopSection.AwardsResults
+                ),
                 group(
                     "results.live",
                     "Live Results",
@@ -1412,6 +1418,8 @@ object DesktopNavigation {
             "Use ROBIS to send eligible matched live results to the configured ROBIS endpoint, either manually or with background sending enabled.",
         "results.send-robis" to
             "Use Send ROBIS to send unsent matched live results to the configured ROBIS endpoint.",
+        "results.awards" to
+            "Use Awards Results to review derived USA and IARU Region 2 championship award levels by category. Awards are calculated from current preliminary results and competitor eligibility fields.",
         "results.exports" to
             "Use Exports to write result, readout, race-copy, JSON, XML, and ARDF-compatible files after race data is available.",
         "results.exports.result-files" to

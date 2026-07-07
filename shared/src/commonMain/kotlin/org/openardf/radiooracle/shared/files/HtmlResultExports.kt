@@ -27,6 +27,10 @@ package org.openardf.radiooracle.shared.files
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
+import org.openardf.radiooracle.shared.event.EventAwardCategoryDetails
+import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
+import org.openardf.radiooracle.shared.event.EventAwardDetails
+import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -40,11 +44,13 @@ object HtmlResultExports {
     fun results(
         raceData: EventRaceData,
         appVersion: String = "Desktop",
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ): String {
         val placedByCategory = raceData.competitorData
             .groupBy { it.resultCategoryId() }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
+        val awards = EventAwardDetails.from(raceData, awardDisplayMode)
 
         return buildString {
             append("<!doctype html>\n")
@@ -58,7 +64,7 @@ object HtmlResultExports {
             append("table{border-collapse:collapse;width:100%;margin-bottom:20px}")
             append("th,td{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top}")
             append("th{background:#f2f2f2}.num{text-align:right}.splits{font-size:12px;line-height:1.45}")
-            append(".meta{margin-bottom:18px;color:#444}.generated{margin-top:24px;color:#666;font-size:12px}")
+            append(".meta{margin-bottom:18px;color:#444}.notice{margin:12px 0 18px;padding:10px 12px;background:#fff4d6;border:1px solid #e4b64d;font-weight:bold}.generated{margin-top:24px;color:#666;font-size:12px}")
             append("</style></head><body>")
             append("<h1>")
             appendHtml(raceData.race.name)
@@ -68,6 +74,11 @@ object HtmlResultExports {
             append(" | Level: ")
             appendHtml(raceData.race.raceLevel.name)
             append("</div>")
+            awards.publicationNotice?.let { notice ->
+                append("<div class=\"notice\">")
+                appendHtml(notice)
+                append("</div>")
+            }
             raceData.categories
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 .forEach { categoryData ->
@@ -78,6 +89,7 @@ object HtmlResultExports {
                         protectedCourseInfoByCategoryId
                     )
                 }
+            appendAwards(awards)
             append("<div class=\"generated\">Generated with Radio-Oracle ")
             appendHtml(appVersion)
             append("</div>")
@@ -141,6 +153,59 @@ object HtmlResultExports {
         append("</td><td class=\"splits\">")
         appendHtml(readoutData.punches.toSplitText(controlLabelsByCode))
         append("</td></tr>")
+    }
+
+    private fun StringBuilder.appendAwards(awards: EventAwardDetails) {
+        if (!awards.hasAwards) {
+            return
+        }
+        append("<h2>Championship Awards</h2>")
+        awards.categories.forEach { category ->
+            append("<h3>")
+            appendHtml(category.categoryName)
+            append("</h3>")
+            appendAwardTable("USA Awards", category.usaAwards)
+            appendAwardTable("IARU Region 2 Awards", category.region2Awards)
+        }
+    }
+
+    private fun StringBuilder.appendAwardTable(
+        heading: String,
+        winners: List<EventAwardWinnerDetails>
+    ) {
+        if (winners.isEmpty()) {
+            return
+        }
+        append("<h4>")
+        appendHtml(heading)
+        append("</h4>")
+        append("<table><thead><tr>")
+        listOf("Award", "Award place", "Overall place", "Name", "Club", "Person ID", "Points", "Run time").forEach { column ->
+            append("<th>")
+            appendHtml(column)
+            append("</th>")
+        }
+        append("</tr></thead><tbody>")
+        winners.forEach { winner ->
+            append("<tr><td>")
+            appendHtml(winner.awardLevel)
+            append("</td><td class=\"num\">")
+            appendHtml(winner.awardPlace.toString())
+            append("</td><td class=\"num\">")
+            appendHtml(winner.overallPlace?.toString().orEmpty())
+            append("</td><td>")
+            appendHtml(winner.competitorName)
+            append("</td><td>")
+            appendHtml(winner.club)
+            append("</td><td>")
+            appendHtml(winner.personId)
+            append("</td><td class=\"num\">")
+            appendHtml(winner.pointsText)
+            append("</td><td>")
+            appendHtml(winner.runTimeText)
+            append("</td></tr>")
+        }
+        append("</tbody></table>")
     }
 
     private fun EventCompetitorData.resultCategoryId(): String? =

@@ -26,6 +26,7 @@ package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
+import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.files.ArdfJsonExports
 import org.openardf.radiooracle.shared.files.EventCsvExports
@@ -87,8 +88,12 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, EventCsvExports.readouts(projectFile.raceData))
     }
 
-    fun exportResultsCsv(path: Path, projectFile: EventProjectFile) {
-        writeText(path, EventCsvExports.results(projectFile.raceData))
+    fun exportResultsCsv(
+        path: Path,
+        projectFile: EventProjectFile,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+    ) {
+        writeText(path, EventCsvExports.results(projectFile.raceData, awardDisplayMode))
     }
 
     fun exportArdfEventResultsCsv(path: Path, projectFile: EventProjectFile) {
@@ -110,9 +115,10 @@ object DesktopProjectFiles : ProjectFileStore {
     fun exportFinalResultsJson(
         path: Path,
         projectFile: EventProjectFile,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ) {
-        writeText(path, FinalResultJsonExports.results(projectFile.raceData, protectedCourseInfoByCategoryId))
+        writeText(path, FinalResultJsonExports.results(projectFile.raceData, protectedCourseInfoByCategoryId, awardDisplayMode))
     }
 
     fun exportIofStartListXml(path: Path, projectFile: EventProjectFile) {
@@ -134,28 +140,46 @@ object DesktopProjectFiles : ProjectFileStore {
     fun exportResultsHtml(
         path: Path,
         projectFile: EventProjectFile,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ) {
-        writeText(path, HtmlResultExports.results(projectFile.raceData, protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId))
+        writeText(
+            path,
+            HtmlResultExports.results(
+                projectFile.raceData,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                awardDisplayMode = awardDisplayMode
+            )
+        )
     }
 
     fun exportResultsText(
         path: Path,
         projectFile: EventProjectFile,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ) {
-        writeText(path, TextResultExports.results(projectFile.raceData, protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId))
+        writeText(
+            path,
+            TextResultExports.results(
+                projectFile.raceData,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                awardDisplayMode = awardDisplayMode
+            )
+        )
     }
 
     fun exportPublicResultsSite(
         directory: Path,
         projectFile: EventProjectFile,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ): DesktopPublicResultSiteExportPaths =
         DesktopPublicResultSiteExports.export(
             directory = directory,
             projectFile = projectFile,
-            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+            awardDisplayMode = awardDisplayMode
         )
 
     private fun writeText(path: Path, text: String) {

@@ -27,6 +27,9 @@ package org.openardf.radiooracle.shared.files
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
+import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
+import org.openardf.radiooracle.shared.event.EventAwardDetails
+import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -42,11 +45,13 @@ object TextResultExports {
     fun results(
         raceData: EventRaceData,
         appVersion: String = "Desktop",
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ): String {
         val placedByCategory = raceData.competitorData
             .groupBy { it.resultCategoryId() }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
+        val awards = EventAwardDetails.from(raceData, awardDisplayMode)
 
         return buildString {
             appendLine(RULE)
@@ -55,6 +60,7 @@ object TextResultExports {
             appendLine("Race: ${raceData.race.name}")
             appendLine("Date/time: ${raceData.race.startDateTimeIso}")
             appendLine("Level: ${raceData.race.raceLevel.name}")
+            awards.publicationNotice?.let { appendLine(it) }
             appendLine()
             appendLine("Place\tName\tPerson ID\tRun time\tPoints\tControls")
             appendLine(RULE)
@@ -63,6 +69,7 @@ object TextResultExports {
             appendLine("Splits")
             appendLine(RULE)
             appendCategoryRows(raceData, placedByCategory, includeSplits = true, protectedCourseInfoByCategoryId)
+            appendAwards(awards)
             appendLine("===========================================================================")
             appendLine("Generated with Radio-Oracle $appVersion")
         }
@@ -113,6 +120,45 @@ object TextResultExports {
             appendCompetitorRow(competitorData, includeSplits, controlLabelsByCode)
         }
         appendLine()
+    }
+
+    private fun StringBuilder.appendAwards(awards: EventAwardDetails) {
+        if (!awards.hasAwards) {
+            return
+        }
+        appendLine(RULE)
+        appendLine("Championship Awards")
+        appendLine(RULE)
+        awards.categories.forEach { category ->
+            appendLine("Category ${category.categoryName}")
+            appendAwardRows("USA Awards", category.usaAwards)
+            appendAwardRows("IARU Region 2 Awards", category.region2Awards)
+            appendLine()
+        }
+    }
+
+    private fun StringBuilder.appendAwardRows(
+        heading: String,
+        winners: List<EventAwardWinnerDetails>
+    ) {
+        if (winners.isEmpty()) {
+            return
+        }
+        appendLine(heading)
+        appendLine("Award\tAward place\tOverall place\tName\tPerson ID\tRun time\tPoints")
+        winners.forEach { winner ->
+            appendLine(
+                listOf(
+                    winner.awardLevel,
+                    winner.awardPlace.toString(),
+                    winner.overallPlace?.toString().orEmpty(),
+                    winner.competitorName,
+                    winner.personId,
+                    winner.runTimeText,
+                    winner.pointsText
+                ).joinToString("\t")
+            )
+        }
     }
 
     private fun EventCompetitorData.resultCategoryId(): String? =

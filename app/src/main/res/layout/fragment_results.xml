@@ -22,7 +22,24 @@
         android:clipToPadding="false"
         android:paddingBottom="72dp"
         app:layoutManager="LinearLayoutManager"
-        app:layout_constraintTop_toBottomOf="@+id/results_toolbar"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/results_preliminary_notice"
         tools:layout_editor_absoluteX="28dp" />
+
+    <TextView
+        android:id="@+id/results_preliminary_notice"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="#FFF4D6"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp"
+        android:textColor="#4B3600"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/results_toolbar"
+        tools:text="Preliminary Results - Pending Organizer Review"
+        tools:visibility="visible" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

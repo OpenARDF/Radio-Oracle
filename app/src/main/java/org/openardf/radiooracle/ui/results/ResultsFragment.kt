@@ -49,6 +49,8 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.databinding.FragmentResultsBinding
+import org.openardf.radiooracle.shared.domain.RaceLevel
+import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
 import org.openardf.radiooracle.ui.EventToolbarSupport
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
@@ -102,6 +104,11 @@ class ResultsFragment : Fragment() {
 
         EventToolbarSupport.bind(this, resultsToolbar, selectedRaceViewModel) { race ->
             dataProcessor.raceTypeToString(race.raceType)
+        }
+        selectedRaceViewModel.race.observe(viewLifecycleOwner) { race ->
+            binding.resultsPreliminaryNotice.text = PRELIMINARY_RESULT_NOTICE
+            binding.resultsPreliminaryNotice.visibility =
+                if (race != null && race.raceLevel != RaceLevel.PRACTICE) View.VISIBLE else View.GONE
         }
 
         // Set results service icon

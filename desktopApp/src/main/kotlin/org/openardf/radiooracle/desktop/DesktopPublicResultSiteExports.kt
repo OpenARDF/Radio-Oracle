@@ -26,6 +26,10 @@ package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventAliasPunch
+import org.openardf.radiooracle.shared.event.EventAwardCategoryDetails
+import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
+import org.openardf.radiooracle.shared.event.EventAwardDetails
+import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
@@ -81,6 +85,7 @@ object DesktopPublicResultSiteExports {
         projectFile: EventProjectFile,
         appVersion: String = "Desktop",
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
         generatedAt: Instant = Instant.now()
     ): DesktopPublicResultSiteExportPaths {
         val eventPath = eventPath(projectFile, generatedAt)
@@ -92,13 +97,18 @@ object DesktopPublicResultSiteExports {
         listOf(directory, rootDataDirectory, eventDirectory, assetsDirectory, dataDirectory, downloadsDirectory)
             .forEach(Files::createDirectories)
 
-        val finalResultsJson = FinalResultJsonExports.results(projectFile.raceData, protectedCourseInfoByCategoryId)
+        val finalResultsJson = FinalResultJsonExports.results(
+            projectFile.raceData,
+            protectedCourseInfoByCategoryId,
+            awardDisplayMode
+        )
         val liveResultsJson = LiveResultJsonExports.results(projectFile.raceData)
         val iofResultListXml = IofXmlExports.resultList(projectFile.raceData)
         val printableResultsHtml = HtmlResultExports.results(
             raceData = projectFile.raceData,
             appVersion = appVersion,
-            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+            awardDisplayMode = awardDisplayMode
         )
 
         val rootIndexPath = directory.resolve("index.html")
@@ -113,7 +123,7 @@ object DesktopPublicResultSiteExports {
         writeText(assetsDirectory.resolve("site.css"), siteCss())
         writeText(assetsDirectory.resolve("site.js"), siteJs())
         writeText(directory.resolve("_headers"), headersText())
-        writeText(publicResultsPath, publicResultsJson(projectFile, generatedAt))
+        writeText(publicResultsPath, publicResultsJson(projectFile, generatedAt, awardDisplayMode))
         writeText(dataDirectory.resolve("final-results.json"), finalResultsJson)
         writeText(dataDirectory.resolve("live-results.json"), liveResultsJson)
         writeText(finalResultsPath, finalResultsJson)
@@ -168,9 +178,14 @@ object DesktopPublicResultSiteExports {
         return "$datePrefix-$nameSlug"
     }
 
-    private fun publicResultsJson(projectFile: EventProjectFile, generatedAt: Instant): String {
+    private fun publicResultsJson(
+        projectFile: EventProjectFile,
+        generatedAt: Instant,
+        awardDisplayMode: EventAwardDisplayMode
+    ): String {
         val raceData = projectFile.raceData
         val results = EventResultDetails.from(raceData)
+        val awards = EventAwardDetails.from(raceData, awardDisplayMode)
         val groupedResults = results.groupBy { it.categoryId.orEmpty() to it.categoryName }
         val splitsByResultId = publicResultSplitsByResultId(projectFile, results)
         return buildString {
@@ -189,6 +204,12 @@ object DesktopPublicResultSiteExports {
             appendJsonString(generatedAt.toString())
             append(",\n")
             append("  \"resultCount\": ${results.size},\n")
+            append("  \"publicationNotice\": ")
+            appendJsonString(awards.publicationNotice.orEmpty())
+            append(",\n")
+            append("  \"awards\": ")
+            appendAwardsJson(awards)
+            append(",\n")
             append("  \"categories\": [\n")
             groupedResults.entries.forEachIndexed { categoryIndex, (category, categoryResults) ->
                 if (categoryIndex > 0) append(",\n")
@@ -414,6 +435,11 @@ object DesktopPublicResultSiteExports {
               <div id="results"></div>
             </section>
 
+            <section id="awards-panel" class="panel" hidden>
+              <h2>Championship Awards</h2>
+              <div id="awards"></div>
+            </section>
+
             <section class="panel">
               <h2>Route Downloads</h2>
               <p>Course route KML files and route graphics will appear here once they are generated from Course Analyzer exports.</p>
@@ -436,6 +462,7 @@ object DesktopPublicResultSiteExports {
         .eyebrow{margin:0 0 6px;color:var(--accent-strong);font-size:13px;font-weight:700;text-transform:uppercase}
         h1,h2,h3,p{margin-top:0}h1{margin-bottom:8px;font-size:34px;line-height:1.1}h2{margin-bottom:8px;font-size:20px}h3{margin:20px 0 8px;font-size:17px}
         .summary,.panel p,footer,.empty-state{color:var(--muted)}
+        .notice{margin-top:12px;padding:10px 12px;border:1px solid #e4b64d;border-radius:6px;background:#fff4d6;color:#4b3600;font-weight:700}
         .parent-link{display:inline-flex;margin-top:8px;color:var(--accent-strong);font-weight:700;text-decoration:none}.parent-link:hover{text-decoration:underline}
         .download-links{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px}
         .download-links a{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:6px;background:var(--accent);color:#fff;font-weight:700;text-decoration:none;white-space:nowrap}
@@ -462,6 +489,12 @@ object DesktopPublicResultSiteExports {
         function renderSummary(data){
           document.getElementById("event-name").textContent=data.event.name;
           document.getElementById("event-meta").textContent=`${'$'}{data.event.format} | ${'$'}{data.event.level} | Start ${'$'}{data.event.start}`;
+          if(data.publicationNotice){
+            const notice=document.createElement("p");
+            notice.className="notice";
+            notice.textContent=data.publicationNotice;
+            document.querySelector(".page-header>div").appendChild(notice)
+          }
           document.getElementById("result-count").textContent=data.resultCount;
           document.getElementById("category-count").textContent=data.categories.length;
           document.getElementById("published-at").textContent=data.generatedAt
@@ -504,6 +537,18 @@ object DesktopPublicResultSiteExports {
           });
           if(visible===0){root.innerHTML='<div class="empty-state">No matching results.</div>'}
         }
+        function awardTableHtml(title,categories){
+          const populated=(categories || []).filter(category=>(category.winners || []).length>0);
+          if(populated.length===0)return "";
+          return `<section class="category"><h3>${'$'}{escapeHtml(title)}</h3>${'$'}{populated.map(category=>`<h4>${'$'}{escapeHtml(category.name)}</h4><table><thead><tr><th>Award</th><th class="number">Award place</th><th class="number">Overall place</th><th>Competitor</th><th>Club</th><th>Person ID</th><th class="number">Points</th><th>Runtime</th></tr></thead><tbody>${'$'}{category.winners.map(winner=>`<tr><td>${'$'}{escapeHtml(winner.awardLevel)}</td><td class="number">${'$'}{escapeHtml(winner.awardPlace)}</td><td class="number">${'$'}{escapeHtml(winner.overallPlace)}</td><td>${'$'}{escapeHtml(winner.competitor)}</td><td>${'$'}{escapeHtml(winner.club)}</td><td>${'$'}{escapeHtml(winner.personId)}</td><td class="number">${'$'}{escapeHtml(winner.points)}</td><td>${'$'}{escapeHtml(winner.runtime)}</td></tr>`).join("")}</tbody></table>`).join("")}</section>`
+        }
+        function renderAwards(data){
+          const awards=data.awards || {};
+          const html=awardTableHtml("USA Awards",awards.usaAwards)+awardTableHtml("IARU Region 2 Awards",awards.region2Awards);
+          if(!html)return;
+          document.getElementById("awards-panel").hidden=false;
+          document.getElementById("awards").innerHTML=html
+        }
         document.getElementById("results").addEventListener("click",event=>{
           const splitRow=event.target.closest(".split-row");
           if(splitRow){
@@ -524,6 +569,7 @@ object DesktopPublicResultSiteExports {
         loadResults().then(data=>{
           renderSummary(data);
           renderResults(data);
+          renderAwards(data);
           document.getElementById("result-filter").addEventListener("input",event=>renderResults(data,event.target.value))
         }).catch(error=>{document.getElementById("results").textContent=error.message})
         """.trimIndent() + "\n"
@@ -588,6 +634,57 @@ object DesktopPublicResultSiteExports {
             append(", \"legPlace\": ")
             appendJsonString(split.legPlace)
             append("}")
+        }
+        append("]")
+    }
+
+    private fun StringBuilder.appendAwardsJson(awards: EventAwardDetails) {
+        append("{\"usaAwards\": ")
+        appendAwardCategoriesJson(awards.categories, EventAwardCategoryDetails::usaAwards)
+        append(", \"region2Awards\": ")
+        appendAwardCategoriesJson(awards.categories, EventAwardCategoryDetails::region2Awards)
+        append("}")
+    }
+
+    private fun StringBuilder.appendAwardCategoriesJson(
+        categories: List<EventAwardCategoryDetails>,
+        winners: (EventAwardCategoryDetails) -> List<EventAwardWinnerDetails>
+    ) {
+        append("[")
+        categories.mapNotNull { category ->
+            winners(category).takeIf { it.isNotEmpty() }?.let { category to it }
+        }.forEachIndexed { categoryIndex, (category, categoryWinners) ->
+            if (categoryIndex > 0) append(", ")
+            append("{\"id\": ")
+            appendJsonString(category.categoryId.orEmpty())
+            append(", \"name\": ")
+            appendJsonString(category.categoryName)
+            append(", \"winners\": [")
+            categoryWinners.forEachIndexed { winnerIndex, winner ->
+                if (winnerIndex > 0) append(", ")
+                append("{\"awardLevel\": ")
+                appendJsonString(winner.awardLevel)
+                winner.medal?.let { medal ->
+                    append(", \"medal\": ")
+                    appendJsonString(medal)
+                }
+                append(", \"awardPlace\": ")
+                appendJsonString(winner.awardPlace.toString())
+                append(", \"overallPlace\": ")
+                appendJsonString(winner.overallPlace?.toString().orEmpty())
+                append(", \"competitor\": ")
+                appendJsonString(winner.competitorName)
+                append(", \"club\": ")
+                appendJsonString(winner.club)
+                append(", \"personId\": ")
+                appendJsonString(winner.personId)
+                append(", \"points\": ")
+                appendJsonString(winner.pointsText)
+                append(", \"runtime\": ")
+                appendJsonString(winner.runTimeText)
+                append("}")
+            }
+            append("]}")
         }
         append("]")
     }

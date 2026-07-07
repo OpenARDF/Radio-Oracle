@@ -220,7 +220,7 @@ class DesktopNavigationTest {
             DesktopNavigation.rootItems(DesktopWorkflow.Series).map { it.label }
         )
         assertEquals(
-            listOf("Live Results", "Exports"),
+            listOf("Awards Results", "Live Results", "Exports"),
             DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport).map { it.label }
         )
         assertEquals(
@@ -357,7 +357,7 @@ class DesktopNavigationTest {
         assertEquals("Results/File Export", DesktopNavigation.breadcrumb(state))
         assertFalse(DesktopNavigation.canGoBack(state))
         assertEquals(
-            listOf("Live Results", "Exports"),
+            listOf("Awards Results", "Live Results", "Exports"),
             DesktopNavigation.currentItems(state).map { it.label }
         )
         assertTrue(DesktopNavigation.selectedDescription(state).contains("review scored finishers by category"))
@@ -1390,6 +1390,23 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.RobisLiveResults, robis.section)
         assertEquals(listOf("Send ROBIS"), robis.children.map { it.label })
         assertEquals(listOf(DesktopNavAction.SendRobis), robis.children.mapNotNull { it.action })
+    }
+
+    @Test
+    fun resultsMenuExposesAwardsResultsPage() {
+        val awards = DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport)
+            .first { it.label == "Awards Results" }
+
+        assertEquals(DesktopSection.AwardsResults, awards.section)
+        assertTrue(
+            DesktopNavigation.selectedDescription(
+                DesktopNavState(
+                    workflow = DesktopWorkflow.ResultsExport,
+                    selectedSection = DesktopSection.AwardsResults,
+                    selectedItemId = "results.awards"
+                )
+            ).contains("USA and IARU Region 2")
+        )
     }
 
     @Test

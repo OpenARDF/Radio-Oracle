@@ -41,6 +41,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
@@ -290,6 +291,28 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsPublicResultsSiteAwardsAndPreliminaryNoticeForNonPracticeRaces() {
+        val directory = Files.createTempDirectory("rom-desktop-public-results-site-awards")
+
+        val paths = DesktopProjectFiles.exportPublicResultsSite(
+            directory,
+            EventProjectFile(raceData = raceDataWithAwardReadout())
+        )
+        val index = Files.readString(paths.indexHtml)
+        val publicJson = Files.readString(paths.publicResultsJson)
+        val finalJson = Files.readString(paths.finalResultsJson)
+        val siteJs = Files.readString(paths.eventDirectory.resolve("assets").resolve("site.js"))
+
+        assertTrue(index.contains("awards-panel"))
+        assertTrue(siteJs.contains("renderAwards"))
+        assertTrue(publicJson.contains("\"publicationNotice\": \"$PRELIMINARY_RESULT_NOTICE\""))
+        assertTrue(publicJson.contains("\"usaAwards\":"))
+        assertTrue(publicJson.contains("\"medal\": \"Gold\""))
+        assertTrue(finalJson.contains("\"publication_notice\": \"$PRELIMINARY_RESULT_NOTICE\""))
+        assertTrue(finalJson.contains("\"usa_awards\""))
+    }
+
+    @Test
     fun exportsResultsTextFile() {
         val directory = Files.createTempDirectory("rom-desktop-results-text")
         val path = directory.resolve("results.txt")
@@ -429,6 +452,22 @@ class DesktopProjectFilesTest {
                             )
                         )
                     )
+                )
+            )
+        )
+    }
+
+    private fun raceDataWithAwardReadout(): EventRaceData {
+        val raceData = raceDataWithSplitReadout()
+        val categoryData = raceData.categories.single()
+        val competitorData = raceData.competitorData.single()
+        val competitor = competitorData.competitorCategory.competitor.copy(usaChampEligible = true)
+        return raceData.copy(
+            race = raceData.race.copy(raceLevel = RaceLevel.NATIONAL),
+            categories = listOf(categoryData.copy(competitors = listOf(competitor))),
+            competitorData = listOf(
+                competitorData.copy(
+                    competitorCategory = EventCompetitorCategory(competitor, categoryData.category)
                 )
             )
         )

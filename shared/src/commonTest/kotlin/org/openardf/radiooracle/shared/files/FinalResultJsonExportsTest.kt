@@ -39,6 +39,7 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAlias
 import org.openardf.radiooracle.shared.event.EventAliasPunch
+import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
@@ -51,6 +52,7 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -222,12 +224,64 @@ class FinalResultJsonExportsTest {
         assertEquals(ControlPointType.BEACON, controlPoint.controlType)
     }
 
+    @Test
+    fun exportsPreliminaryNoticeAndAwardsForNonPracticeResults() {
+        val category = category()
+        val document = Json.parseToJsonElement(
+            FinalResultJsonExports.results(
+                raceData(
+                    raceLevel = RaceLevel.NATIONAL,
+                    competitors = listOf(
+                        competitorData("usa", category, readout("result-usa"), usaChampEligible = true),
+                        competitorData("r2", category, readout("result-r2"), region2ChampEligible = true)
+                    )
+                )
+            )
+        ).jsonObject
+        val awards = document["awards"]!!.jsonObject
+        val usaAwards = awards["usa_awards"]!!.jsonArray.single().jsonObject["winners"]!!.jsonArray
+        val region2Awards = awards["region2_awards"]!!.jsonArray.single().jsonObject["winners"]!!.jsonArray
+
+        assertEquals(PRELIMINARY_RESULT_NOTICE, document["publication_notice"]!!.jsonPrimitive.content)
+        assertEquals("Gold", usaAwards.single().jsonObject["award_label"]!!.jsonPrimitive.content)
+        assertEquals("Gold", usaAwards.single().jsonObject["medal"]!!.jsonPrimitive.content)
+        assertEquals("RUNNER Alice", usaAwards.single().jsonObject["competitor_name"]!!.jsonPrimitive.content)
+        assertEquals(2, region2Awards.size)
+    }
+
+    @Test
+    fun finalResultsJsonCanExportAllSuccessfulAwardLevels() {
+        val category = category()
+        val document = Json.parseToJsonElement(
+            FinalResultJsonExports.results(
+                raceData(
+                    raceLevel = RaceLevel.NATIONAL,
+                    competitors = listOf(
+                        competitorData("first", category, readout("result-first", points = 5), usaChampEligible = true),
+                        competitorData("second", category, readout("result-second", points = 4), usaChampEligible = true),
+                        competitorData("third", category, readout("result-third", points = 3), usaChampEligible = true),
+                        competitorData("fourth", category, readout("result-fourth", points = 2), usaChampEligible = true)
+                    )
+                ),
+                awardDisplayMode = EventAwardDisplayMode.ALL_SUCCESSFUL_FINISHERS
+            )
+        ).jsonObject
+        val winners = document["awards"]!!
+            .jsonObject["usa_awards"]!!
+            .jsonArray.single()
+            .jsonObject["winners"]!!
+            .jsonArray
+
+        assertEquals(listOf("Gold", "Silver", "Bronze", "4th"), winners.map { it.jsonObject["award_label"]!!.jsonPrimitive.content })
+    }
+
     private fun raceData(
         competitors: List<EventCompetitorData>? = null,
         resultStatus: ResultStatus = ResultStatus.OK,
         punchStatus: PunchStatus = PunchStatus.UNKNOWN,
         categoryControlPoint: EventControlPoint? = null,
-        controls: List<EventControl> = emptyList()
+        controls: List<EventControl> = emptyList(),
+        raceLevel: RaceLevel = RaceLevel.PRACTICE
     ): EventRaceData {
         val category = category()
         val alias = EventAlias("alias", "race", 31, "Fox")
@@ -239,7 +293,7 @@ class FinalResultJsonExportsTest {
                 apiKey = "",
                 startDateTimeIso = "2026-06-01T09:00:00",
                 raceType = RaceType.CLASSIC,
-                raceLevel = RaceLevel.PRACTICE,
+                raceLevel = raceLevel,
                 raceBand = RaceBand.M80,
                 timeLimitSeconds = 7_200
             ),
@@ -278,7 +332,12 @@ class FinalResultJsonExportsTest {
             controlPointsString = "31"
         )
 
-    private fun competitor(id: String, category: EventCategory): EventCompetitor =
+    private fun competitor(
+        id: String,
+        category: EventCategory,
+        usaChampEligible: Boolean? = null,
+        region2ChampEligible: Boolean? = null
+    ): EventCompetitor =
         EventCompetitor(
             id = id,
             raceId = "race",
@@ -292,15 +351,19 @@ class FinalResultJsonExportsTest {
             siNumber = 123456,
             siRent = false,
             startNumber = 7,
-            drawnStartTimeSeconds = 600
+            drawnStartTimeSeconds = 600,
+            usaChampEligible = usaChampEligible,
+            region2ChampEligible = region2ChampEligible
         )
 
     private fun competitorData(
         id: String,
         category: EventCategory,
-        readout: EventReadoutData?
+        readout: EventReadoutData?,
+        usaChampEligible: Boolean? = null,
+        region2ChampEligible: Boolean? = null
     ): EventCompetitorData {
-        val competitor = competitor(id, category)
+        val competitor = competitor(id, category, usaChampEligible, region2ChampEligible)
         return EventCompetitorData(
             competitorCategory = EventCompetitorCategory(competitor, category),
             readoutData = readout
@@ -311,7 +374,8 @@ class FinalResultJsonExportsTest {
         id: String,
         resultStatus: ResultStatus = ResultStatus.OK,
         punchStatus: PunchStatus = PunchStatus.UNKNOWN,
-        alias: EventAlias = EventAlias("alias", "race", 31, "Fox")
+        alias: EventAlias = EventAlias("alias", "race", 31, "Fox"),
+        points: Int = 2
     ): EventReadoutData =
         EventReadoutData(
             result = EventResult(
@@ -326,7 +390,7 @@ class FinalResultJsonExportsTest {
                 readoutDateTimeIso = "2026-06-01T10:21:00",
                 automaticStatus = true,
                 resultStatus = resultStatus,
-                points = 2,
+                points = points,
                 runTimeSeconds = 1_200,
                 modified = false,
                 sent = false,

@@ -37,6 +37,10 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAlias
 import org.openardf.radiooracle.shared.event.EventAliasPunch
+import org.openardf.radiooracle.shared.event.EventAwardCategoryDetails
+import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
+import org.openardf.radiooracle.shared.event.EventAwardDetails
+import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControl
@@ -46,6 +50,7 @@ import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
+import org.openardf.radiooracle.shared.event.resultPublicationNotice
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Android-shaped final-result JSON export containing categories, aliases, and competitors. */
@@ -59,21 +64,26 @@ object FinalResultJsonExports {
 
     fun results(
         raceData: EventRaceData,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ): String =
-        json.encodeToString(resultDocument(raceData, protectedCourseInfoByCategoryId))
+        json.encodeToString(resultDocument(raceData, protectedCourseInfoByCategoryId, awardDisplayMode))
 
     fun resultDocument(
         raceData: EventRaceData,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ): FinalResultsJson {
         val controlsById = raceData.controls.associateBy { it.id }
+        val awards = EventAwardDetails.from(raceData, awardDisplayMode)
         return FinalResultsJson(
+            publicationNotice = raceData.race.resultPublicationNotice(),
             categories = raceData.competitionCategories()
                 .map { it.toFinalCategory(controlsById, protectedCourseInfoByCategoryId) },
             aliases = androidAliases(raceData),
             competitors = raceData.competitorData
-                .map { it.toFinalCompetitor(raceData) }
+                .map { it.toFinalCompetitor(raceData) },
+            awards = awards.takeIf { it.hasAwards }?.toFinalAwards()
         )
     }
 
@@ -235,9 +245,11 @@ object FinalResultJsonExports {
 
     @Serializable
     data class FinalResultsJson(
+        @SerialName("publication_notice") val publicationNotice: String? = null,
         val categories: List<FinalCategoryJson>,
         val aliases: List<FinalAliasJson>,
-        val competitors: List<FinalCompetitorJson>
+        val competitors: List<FinalCompetitorJson>,
+        val awards: FinalAwardsJson? = null
     )
 
     @Serializable
@@ -311,4 +323,69 @@ object FinalResultJsonExports {
         @SerialName("punch_status") val punchStatus: String,
         @SerialName("split_time") val splitTime: String
     )
+
+    @Serializable
+    data class FinalAwardsJson(
+        @SerialName("usa_awards") val usaAwards: List<FinalAwardCategoryJson>,
+        @SerialName("region2_awards") val region2Awards: List<FinalAwardCategoryJson>
+    )
+
+    @Serializable
+    data class FinalAwardCategoryJson(
+        @SerialName("category_id") val categoryId: String? = null,
+        @SerialName("category_name") val categoryName: String,
+        val winners: List<FinalAwardWinnerJson>
+    )
+
+    @Serializable
+    data class FinalAwardWinnerJson(
+        @SerialName("award_label") val awardLabel: String,
+        val medal: String? = null,
+        @SerialName("award_place") val awardPlace: Int,
+        @SerialName("overall_place") val overallPlace: Int? = null,
+        @SerialName("result_id") val resultId: String,
+        @SerialName("competitor_id") val competitorId: String,
+        @SerialName("competitor_name") val competitorName: String,
+        val club: String,
+        @SerialName("person_id") val personId: String,
+        val status: String,
+        val points: String,
+        @SerialName("run_time") val runTime: String
+    )
+
+    private fun EventAwardDetails.toFinalAwards(): FinalAwardsJson =
+        FinalAwardsJson(
+            usaAwards = categories.mapNotNull { it.toFinalAwardCategory(EventAwardCategoryDetails::usaAwards) },
+            region2Awards = categories.mapNotNull { it.toFinalAwardCategory(EventAwardCategoryDetails::region2Awards) }
+        )
+
+    private fun EventAwardCategoryDetails.toFinalAwardCategory(
+        winners: (EventAwardCategoryDetails) -> List<EventAwardWinnerDetails>
+    ): FinalAwardCategoryJson? {
+        val categoryWinners = winners(this)
+        if (categoryWinners.isEmpty()) {
+            return null
+        }
+        return FinalAwardCategoryJson(
+            categoryId = categoryId,
+            categoryName = categoryName,
+            winners = categoryWinners.map { it.toFinalAwardWinner() }
+        )
+    }
+
+    private fun EventAwardWinnerDetails.toFinalAwardWinner(): FinalAwardWinnerJson =
+        FinalAwardWinnerJson(
+            awardLabel = awardLevel,
+            medal = medal,
+            awardPlace = awardPlace,
+            overallPlace = overallPlace,
+            resultId = resultId,
+            competitorId = competitorId,
+            competitorName = competitorName,
+            club = club,
+            personId = personId,
+            status = statusLabel,
+            points = pointsText,
+            runTime = runTimeText
+        )
 }

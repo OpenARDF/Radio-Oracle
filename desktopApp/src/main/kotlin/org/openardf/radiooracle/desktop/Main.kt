@@ -152,6 +152,9 @@ import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
+import org.openardf.radiooracle.shared.event.EventAwardDetails
+import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
+import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
@@ -437,6 +440,17 @@ private val ResultTableColumns = listOf(
     FixedTableColumn("Edit", 104.dp)
 )
 
+private val AwardTableColumns = listOf(
+    FixedTableColumn("Award", 96.dp),
+    FixedTableColumn("Award place", 104.dp),
+    FixedTableColumn("Overall", 88.dp),
+    FixedTableColumn("Competitor", 240.dp),
+    FixedTableColumn("Club", 160.dp),
+    FixedTableColumn("Person ID", 120.dp),
+    FixedTableColumn("Points", 80.dp),
+    FixedTableColumn("Runtime", 104.dp)
+)
+
 private val ReadoutBaseTableColumns = listOf(
     FixedTableColumn("SI no.", 112.dp),
     FixedTableColumn("Competitor", 240.dp),
@@ -492,6 +506,9 @@ private val ControlTableColumnHints = mapOf(
     "Public label" to "Optional public-facing name used on tickets, readout displays, course lists, and exported results. Short labels can also be typed in category Controls fields.",
     "Notes" to "Private organizer notes for this logical control."
 )
+
+private fun currentDesktopAwardDisplayMode(): EventAwardDisplayMode =
+    DesktopAppSettingsPreferences.awardDisplayMode()
 
 /** Starts the first Compose Desktop shell for Radio-Oracle. */
 fun main(args: Array<String>) = application {
@@ -1170,7 +1187,8 @@ fun main(args: Array<String>) = application {
             val paths = DesktopProjectFiles.exportPublicResultsSite(
                 directory,
                 currentProject,
-                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                currentDesktopAwardDisplayMode()
             )
             localResultsWebServerDirectory = paths.directory
             localResultsWebServerEventPath = paths.eventPath
@@ -3735,7 +3753,8 @@ fun main(args: Array<String>) = application {
                     DesktopProjectFiles.exportFinalResultsJson(
                         path,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        currentDesktopAwardDisplayMode()
                     )
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
@@ -3791,7 +3810,8 @@ fun main(args: Array<String>) = application {
                     DesktopProjectFiles.exportResultsHtml(
                         path,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        currentDesktopAwardDisplayMode()
                     )
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
@@ -3808,7 +3828,8 @@ fun main(args: Array<String>) = application {
                     val paths = DesktopProjectFiles.exportPublicResultsSite(
                         directory,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        currentDesktopAwardDisplayMode()
                     )
                     publicResultSiteDirectory = paths.directory
                     publicResultSiteEventPath = paths.eventPath
@@ -3977,7 +3998,8 @@ fun main(args: Array<String>) = application {
                     DesktopProjectFiles.exportResultsText(
                         path,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap()
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        currentDesktopAwardDisplayMode()
                     )
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
@@ -5567,7 +5589,9 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportReadoutsCsv ->
                     exportCsv("Export Readouts CSV", "readouts", DesktopProjectFiles::exportReadoutsCsv)
                 DesktopNavAction.ExportResultsCsv ->
-                    exportCsv("Export Results CSV", "results", DesktopProjectFiles::exportResultsCsv)
+                    exportCsv("Export Results CSV", "results") { path, project ->
+                        DesktopProjectFiles.exportResultsCsv(path, project, currentDesktopAwardDisplayMode())
+                    }
                 DesktopNavAction.ExportArdfEventResultsCsv ->
                     exportCsv("Export ARDFEvent Results CSV", "ardfevent results", DesktopProjectFiles::exportArdfEventResultsCsv)
                 DesktopNavAction.ExportResultsText -> exportResultsText()
@@ -10606,6 +10630,14 @@ private fun RadioOManagerDesktopApp(
     onDiscardEventFileChangesForNavigation: () -> Boolean = { false },
     onDiscardUnsavedNewEventFile: () -> Unit = {}
 ) {
+    var awardDisplayMode by remember {
+        mutableStateOf(DesktopAppSettingsPreferences.awardDisplayMode())
+    }
+    fun setAwardDisplayMode(mode: EventAwardDisplayMode) {
+        awardDisplayMode = mode
+        DesktopAppSettingsPreferences.setAwardDisplayMode(mode)
+    }
+
     MaterialTheme(
         colors = MaterialTheme.colors.copy(
             primary = DesktopPalette.Primary,
@@ -10898,6 +10930,7 @@ private fun RadioOManagerDesktopApp(
                                     readoutDuplicatePolicy = readoutDuplicatePolicy,
                                     isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
                                     areAliasesEnabled = areAliasesEnabled,
+                                    awardDisplayMode = awardDisplayMode,
                                     localResultsWebServerUrl = localResultsWebServerUrl,
                                     publishedPublicResultSiteUrl = publishedPublicResultSiteUrl,
                                     printerDiagnostics = printerDiagnostics,
@@ -10910,6 +10943,7 @@ private fun RadioOManagerDesktopApp(
                                     onSetReadoutDuplicatePolicy = onSetReadoutDuplicatePolicy,
                                     onSetReadoutAlertSoundEnabled = onSetReadoutAlertSoundEnabled,
                                     onSetAliasesEnabled = onSetAliasesEnabled,
+                                    onSetAwardDisplayMode = ::setAwardDisplayMode,
                                     isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
                                     protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                                     protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
@@ -12011,6 +12045,7 @@ private fun SectionWorkspace(
     readoutDuplicatePolicy: EventReadoutDuplicatePolicy,
     isReadoutAlertSoundEnabled: Boolean,
     areAliasesEnabled: Boolean,
+    awardDisplayMode: EventAwardDisplayMode,
     localResultsWebServerUrl: String?,
     publishedPublicResultSiteUrl: String?,
     printerDiagnostics: DesktopPrinterDiagnostics,
@@ -12023,6 +12058,7 @@ private fun SectionWorkspace(
     onSetReadoutDuplicatePolicy: (EventReadoutDuplicatePolicy) -> Unit,
     onSetReadoutAlertSoundEnabled: (Boolean) -> Unit,
     onSetAliasesEnabled: (Boolean) -> Unit,
+    onSetAwardDisplayMode: (EventAwardDisplayMode) -> Unit,
     isProtectedCourseOrderUnlocked: Boolean,
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
@@ -12338,6 +12374,9 @@ private fun SectionWorkspace(
                 onEditReadout = onEditReadout
             )
         }
+        if (section == DesktopSection.AwardsResults && projectFile != null) {
+            AwardsResultDetailsPanel(EventAwardDetails.from(projectFile.raceData, awardDisplayMode))
+        }
         if (section == DesktopSection.EventDiagnostics) {
             EventDiagnosticsPanel(
                 diagnostics = DesktopProjectDiagnostics.from(
@@ -12389,6 +12428,8 @@ private fun SectionWorkspace(
             DisplaySettingsPanel(
                 areAliasesEnabled = areAliasesEnabled,
                 onSetAliasesEnabled = onSetAliasesEnabled,
+                awardDisplayMode = awardDisplayMode,
+                onSetAwardDisplayMode = onSetAwardDisplayMode,
                 isEventFileOpen = projectFile != null
             )
         }
@@ -13021,6 +13062,8 @@ private fun RobisLiveResultsPanel(
 private fun DisplaySettingsPanel(
     areAliasesEnabled: Boolean,
     onSetAliasesEnabled: (Boolean) -> Unit,
+    awardDisplayMode: EventAwardDisplayMode,
+    onSetAwardDisplayMode: (EventAwardDisplayMode) -> Unit,
     isEventFileOpen: Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -13034,6 +13077,24 @@ private fun DisplaySettingsPanel(
                 text = "Use control labels",
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Awards",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            EnumPicker(
+                selectedValue = awardDisplayMode,
+                values = EventAwardDisplayMode.entries,
+                label = { it.displayLabel },
+                onValueSelected = onSetAwardDisplayMode,
+                modifier = Modifier.width(280.dp)
             )
         }
     }
@@ -13450,6 +13511,97 @@ private fun ResultDetailRow(
         ) {
             ButtonLabel("Edit")
         }
+    }
+}
+
+/** Shows derived USA and IARU Region 2 championship awards by category. */
+@Composable
+private fun AwardsResultDetailsPanel(awards: EventAwardDetails) {
+    val horizontalScrollState = rememberScrollState()
+    val tableWidth = fixedTableWidth(AwardTableColumns)
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        awards.publicationNotice?.let { notice ->
+            Text(
+                text = notice,
+                color = DesktopPalette.Warning,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        if (!awards.hasAwards) {
+            Text(
+                text = if (awards.publicationNotice == null) {
+                    "Awards are not shown for practice races."
+                } else {
+                    "No USA or IARU Region 2 award winners are available from the current results."
+                },
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+            return
+        }
+        Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
+            Column(
+                modifier = Modifier.width(tableWidth),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                awards.categories.forEach { category ->
+                    ResultCategoryHeader(category.categoryName, category.usaAwards.size + category.region2Awards.size, tableWidth)
+                    AwardScopeRows("USA Awards", category.usaAwards)
+                    AwardScopeRows("IARU Region 2 Awards", category.region2Awards)
+                }
+            }
+        }
+        HorizontalScrollbar(
+            adapter = rememberScrollbarAdapter(horizontalScrollState),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun AwardScopeRows(
+    label: String,
+    winners: List<EventAwardWinnerDetails>
+) {
+    Text(
+        text = label,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .width(fixedTableWidth(AwardTableColumns))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    )
+    if (winners.isEmpty()) {
+        Text(
+            text = "No eligible winners.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+        return
+    }
+    FixedDetailHeaderRow(AwardTableColumns)
+    winners.forEach { winner ->
+        AwardDetailRow(winner)
+    }
+}
+
+@Composable
+private fun AwardDetailRow(winner: EventAwardWinnerDetails) {
+    Row(
+        modifier = Modifier.width(fixedTableWidth(AwardTableColumns)),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FixedTableText(winner.awardLevel, AwardTableColumns[0].width)
+        FixedTableText(winner.awardPlace.toString(), AwardTableColumns[1].width)
+        FixedTableText(winner.overallPlace?.toString().orEmpty(), AwardTableColumns[2].width)
+        FixedTableText(winner.competitorName, AwardTableColumns[3].width)
+        FixedTableText(winner.club, AwardTableColumns[4].width)
+        FixedTableText(winner.personId, AwardTableColumns[5].width)
+        FixedTableText(winner.pointsText, AwardTableColumns[6].width)
+        FixedTableText(winner.runTimeText, AwardTableColumns[7].width)
     }
 }
 

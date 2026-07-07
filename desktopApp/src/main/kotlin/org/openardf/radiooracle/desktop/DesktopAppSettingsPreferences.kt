@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.desktop
 
 import java.util.prefs.Preferences
+import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortDiscoveryMode
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortDiscoverySettings
 
@@ -34,6 +35,8 @@ interface DesktopAppSettingsStore : DesktopSportIdentPortDiscoverySettings {
     fun setSportIdentPortDiscoveryMode(mode: DesktopSportIdentPortDiscoveryMode)
     fun cloudflarePagesPublishSettings(): DesktopCloudflarePagesPublishSettings
     fun setCloudflarePagesPublishSettings(settings: DesktopCloudflarePagesPublishSettings)
+    fun awardDisplayMode(): EventAwardDisplayMode
+    fun setAwardDisplayMode(mode: EventAwardDisplayMode)
     fun windowBounds(): DesktopWindowBounds?
     fun setWindowBounds(bounds: DesktopWindowBounds)
 }
@@ -101,6 +104,7 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
     private const val CLOUDFLARE_BRANCH_KEY = "cloudflarePagesBranch"
     private const val CLOUDFLARE_ACCOUNT_ID_KEY = "cloudflarePagesAccountId"
     private const val CLOUDFLARE_API_TOKEN_KEY = "cloudflarePagesApiToken"
+    private const val AWARD_DISPLAY_MODE_KEY = "awardDisplayMode"
     private const val WINDOW_X_KEY = "windowX"
     private const val WINDOW_Y_KEY = "windowY"
     private const val WINDOW_WIDTH_KEY = "windowWidth"
@@ -152,6 +156,17 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
         preferences.put(CLOUDFLARE_BRANCH_KEY, normalized.branch)
         preferences.put(CLOUDFLARE_ACCOUNT_ID_KEY, normalized.accountId)
         preferences.put(CLOUDFLARE_API_TOKEN_KEY, normalized.apiToken)
+    }
+
+    override fun awardDisplayMode(): EventAwardDisplayMode =
+        runCatching {
+            EventAwardDisplayMode.valueOf(
+                preferences.get(AWARD_DISPLAY_MODE_KEY, EventAwardDisplayMode.FIRST_TO_THIRD.name)
+            )
+        }.getOrDefault(EventAwardDisplayMode.FIRST_TO_THIRD)
+
+    override fun setAwardDisplayMode(mode: EventAwardDisplayMode) {
+        preferences.put(AWARD_DISPLAY_MODE_KEY, mode.name)
     }
 
     override fun windowBounds(): DesktopWindowBounds? {
