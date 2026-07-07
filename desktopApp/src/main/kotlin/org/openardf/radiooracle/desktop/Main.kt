@@ -158,6 +158,7 @@ import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
+import org.openardf.radiooracle.shared.event.EventAwardScope
 import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
@@ -177,6 +178,7 @@ import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutSeverity
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
+import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceDetails
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventProjectFile
@@ -201,11 +203,13 @@ import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawStartGroupMode
+import org.openardf.radiooracle.shared.event.awardScopes
+import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.defaultScored
 import org.openardf.radiooracle.shared.event.defaultTimeLimitMinutes
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
 import org.openardf.radiooracle.shared.event.readoutIssueExplanation
-import org.openardf.radiooracle.shared.event.supportsChampionshipAwards
+import org.openardf.radiooracle.shared.event.resultPublicationNotice
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
@@ -422,11 +426,6 @@ private val CompetitorBaseTableColumns = listOf(
     FixedTableColumn("Birth", 72.dp)
 )
 
-private val CompetitorAwardEligibilityTableColumns = listOf(
-    FixedTableColumn("USA", 72.dp, TextAlign.Center),
-    FixedTableColumn("R2", 72.dp, TextAlign.Center)
-)
-
 private val CompetitorTrailingTableColumns = listOf(
     FixedTableColumn("Category", 136.dp),
     FixedTableColumn("Start no.", 86.dp),
@@ -434,16 +433,33 @@ private val CompetitorTrailingTableColumns = listOf(
     FixedTableColumn("SI no.", 110.dp)
 )
 
-private fun competitorTableColumns(showAwardEligibility: Boolean): List<FixedTableColumn> =
+private fun competitorAwardEligibilityTableColumns(awardScopes: List<EventAwardScope>): List<FixedTableColumn> =
+    awardScopes.map { scope ->
+        FixedTableColumn(scope.shortEligibilityLabel(), 72.dp, TextAlign.Center)
+    }
+
+private fun competitorTableColumns(awardScopes: List<EventAwardScope>): List<FixedTableColumn> =
     CompetitorBaseTableColumns +
-        (if (showAwardEligibility) CompetitorAwardEligibilityTableColumns else emptyList()) +
+        competitorAwardEligibilityTableColumns(awardScopes) +
         CompetitorTrailingTableColumns
 
-private fun competitorCategoryColumnIndex(showAwardEligibility: Boolean): Int =
-    if (showAwardEligibility) 8 else 6
+private fun competitorCategoryColumnIndex(awardScopes: List<EventAwardScope>): Int =
+    CompetitorBaseTableColumns.size + awardScopes.size
 
 private fun region2EligibilityAfterUsaChange(usaChampEligible: Boolean, currentRegion2ChampEligible: Boolean): Boolean =
     if (usaChampEligible) true else currentRegion2ChampEligible
+
+private fun EventAwardScope.shortEligibilityLabel(): String =
+    when (this) {
+        EventAwardScope.NATIONAL -> "Nat'l"
+        EventAwardScope.REGIONAL -> "Reg."
+    }
+
+private fun EventAwardScope.eligibilityHint(): String =
+    when (this) {
+        EventAwardScope.NATIONAL -> "Eligible for national championship awards."
+        EventAwardScope.REGIONAL -> "Eligible for regional championship awards."
+    }
 
 private val CompetitorTableColumnHints = mapOf(
     "First" to "Competitor first or given name.",
@@ -452,8 +468,8 @@ private val CompetitorTableColumnHints = mapOf(
     "Bib no." to "Numeric code assigned by organizers to uniquely identify each competitor when bib numbers are used.",
     "Call sign" to "Optional radio call sign or on-air identifier for this competitor.",
     "Birth" to "Optional birth year.",
-    "USA" to "Eligible for USA championship awards.",
-    "R2" to "Eligible for IARU Region 2 championship awards.",
+    EventAwardScope.NATIONAL.shortEligibilityLabel() to EventAwardScope.NATIONAL.eligibilityHint(),
+    EventAwardScope.REGIONAL.shortEligibilityLabel() to EventAwardScope.REGIONAL.eligibilityHint(),
     "Category" to "Competition category assigned to this competitor.",
     "Start no." to "Race-specific start number used by this Race File and its start list.",
     "Start time" to "Drawn start time in minutes and seconds from the race start, such as 012:00.",
@@ -6633,7 +6649,7 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onUpdateRaceSettings = { raceType, raceLevel, raceBand, timeLimitMinutes ->
+            onUpdateRaceSettings = { raceType, raceLevel, raceBand, timeLimitMinutes, combinedNationalRegionalAwards ->
                 runCatching {
                     val currentProject = projectSession.currentProject
                     val shouldPromptForNationalDefaults = currentProject != null &&
@@ -6647,7 +6663,8 @@ fun main(args: Array<String>) = application {
                             raceType,
                             raceLevel,
                             raceBand,
-                            timeLimitMinutes
+                            timeLimitMinutes,
+                            combinedNationalRegionalAwards
                         )
                     }
                     projectFile?.let { markEventDefinitionChangeIfLoaded(previousProject, it) }
@@ -10955,7 +10972,7 @@ private fun RadioOManagerDesktopApp(
     raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
-    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit = { _, _, _, _ -> },
+    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit = { _, _, _, _, _ -> },
     onUpdateEventFileName: (String) -> Boolean = { false },
     onRenameCategory: (String, String) -> Unit = { _, _ -> },
     onUpdateCategoryGender: (String, Boolean) -> Unit = { _, _ -> },
@@ -12575,7 +12592,7 @@ private fun SectionWorkspace(
     siPortMutex: Mutex,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
-    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
+    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit,
     onUpdateEventFileName: (String) -> Boolean,
     onOpenEventFileWorkingFolder: () -> Unit,
     onRenameCategory: (String, String) -> Unit,
@@ -12887,6 +12904,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Results && projectFile != null) {
             ResultDetailsPanel(
                 results = EventResultDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
+                publicationNotice = projectFile.raceData.race.resultPublicationNotice(),
                 onUpdateReadoutStatus = onUpdateReadoutStatus,
                 onEditReadout = onEditReadout
             )
@@ -12945,23 +12963,20 @@ private fun SectionWorkspace(
             DisplaySettingsPanel(
                 areAliasesEnabled = areAliasesEnabled,
                 onSetAliasesEnabled = onSetAliasesEnabled,
-                awardDisplayMode = awardDisplayMode,
-                onSetAwardDisplayMode = onSetAwardDisplayMode,
                 isEventFileOpen = projectFile != null
             )
         }
         if (section == DesktopSection.Settings) {
             AppSettingsPanel(
                 projectFile = projectFile,
-                diagnostics = DesktopProjectDiagnostics.from(
-                    projectFile,
-                    protectedCourseInfoByCategoryId.takeIf { isProtectedCourseOrderUnlocked } ?: emptyMap()
-                ),
                 printerDiagnostics = printerDiagnostics,
                 isUpdateCheckingEnabled = isUpdateCheckingEnabled,
+                awardDisplayMode = awardDisplayMode,
                 cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
                 isCourseDataUnlocked = isProtectedCourseOrderUnlocked,
                 onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
+                onSetAwardDisplayMode = onSetAwardDisplayMode,
+                onUpdateRaceSettings = onUpdateRaceSettings,
                 onSetCloudflarePagesPublishSettings = onSetCloudflarePagesPublishSettings,
                 onUpdateCoursePassword = onUpdateProtectedCoursePassword
             )
@@ -13045,7 +13060,7 @@ private fun SetupSectionWorkspaceContent(
     eventStartListDrawNumbering: DesktopStartListDrawNumbering?,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
-    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
+    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit,
     onUpdateEventFileName: (String) -> Boolean,
     onOpenEventFileWorkingFolder: () -> Unit,
     onRenameCategory: (String, String) -> Unit,
@@ -13144,7 +13159,7 @@ private fun SetupSectionWorkspaceContent(
         CompetitorDetailsPanel(
             competitors = EventCompetitorDetails.from(projectFile.raceData),
             categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
-            showAwardEligibility = projectFile.raceData.race.supportsChampionshipAwards(),
+            awardScopes = projectFile.raceData.race.awardScopes().toList(),
             onRenameCompetitor = onRenameCompetitor,
             onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
             onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
@@ -13883,8 +13898,6 @@ private fun RobisLiveResultsPanel(
 private fun DisplaySettingsPanel(
     areAliasesEnabled: Boolean,
     onSetAliasesEnabled: (Boolean) -> Unit,
-    awardDisplayMode: EventAwardDisplayMode,
-    onSetAwardDisplayMode: (EventAwardDisplayMode) -> Unit,
     isEventFileOpen: Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -13900,37 +13913,21 @@ private fun DisplaySettingsPanel(
                 fontSize = 13.sp
             )
         }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Awards",
-                color = DesktopPalette.Black,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            EnumPicker(
-                selectedValue = awardDisplayMode,
-                values = EventAwardDisplayMode.entries,
-                label = { it.displayLabel },
-                onValueSelected = onSetAwardDisplayMode,
-                modifier = Modifier.width(280.dp)
-            )
-        }
     }
 }
 
-/** Shows application-level status and desktop-beta scope. */
+/** Shows application-level settings that are not tied to one setup table. */
 @Composable
 private fun AppSettingsPanel(
     projectFile: EventProjectFile?,
-    diagnostics: DesktopProjectDiagnostics,
     printerDiagnostics: DesktopPrinterDiagnostics,
     isUpdateCheckingEnabled: Boolean,
+    awardDisplayMode: EventAwardDisplayMode,
     cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings,
     isCourseDataUnlocked: Boolean,
     onSetUpdateCheckingEnabled: (Boolean) -> Unit,
+    onSetAwardDisplayMode: (EventAwardDisplayMode) -> Unit,
+    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit,
     onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
     onUpdateCoursePassword: (String, String, String) -> Boolean
 ) {
@@ -13980,17 +13977,85 @@ private fun AppSettingsPanel(
                 onUpdateCoursePassword = onUpdateCoursePassword
             )
         }
-        AppSettingsSection("Desktop beta scope") {
-            diagnostics.betaLimitations.forEach { limitation ->
-                Text(
-                    text = limitation,
-                    color = DesktopPalette.Black,
-                    fontSize = 13.sp
-                )
-            }
+        AppSettingsSection("Race awards") {
+            RaceAwardSettingsPanel(
+                projectFile = projectFile,
+                awardDisplayMode = awardDisplayMode,
+                onSetAwardDisplayMode = onSetAwardDisplayMode,
+                onUpdateRaceSettings = onUpdateRaceSettings
+            )
         }
     }
 }
+
+@Composable
+private fun RaceAwardSettingsPanel(
+    projectFile: EventProjectFile?,
+    awardDisplayMode: EventAwardDisplayMode,
+    onSetAwardDisplayMode: (EventAwardDisplayMode) -> Unit,
+    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit
+) {
+    val race = projectFile?.raceData?.race
+    val awardsEnabled = race != null && race.raceLevel != RaceLevel.PRACTICE
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = race?.combinedNationalRegionalAwards == true,
+                onCheckedChange = { enabled ->
+                    race?.let {
+                        onUpdateRaceSettings(
+                            it.raceType,
+                            it.raceLevel,
+                            it.raceBand,
+                            (it.timeLimitSeconds / 60).toString(),
+                            enabled
+                        )
+                    }
+                },
+                enabled = awardsEnabled
+            )
+            Text(
+                text = "Regional and National event together",
+                color = if (awardsEnabled) DesktopPalette.Black else DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Award levels",
+                color = if (awardsEnabled) DesktopPalette.Black else DesktopPalette.Disconnected,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            EnumPicker(
+                selectedValue = awardDisplayMode,
+                values = EventAwardDisplayMode.entries,
+                label = { it.displayLabel },
+                onValueSelected = onSetAwardDisplayMode,
+                modifier = Modifier.width(280.dp),
+                enabled = awardsEnabled
+            )
+        }
+        Text(
+            text = raceAwardSettingsSummary(race),
+            color = Color.DarkGray,
+            fontSize = 13.sp
+        )
+    }
+}
+
+private fun raceAwardSettingsSummary(race: EventRace?): String =
+    when {
+        race == null -> "Open or create a Race File before configuring championship award display."
+        race.raceLevel == RaceLevel.PRACTICE -> "Practice races do not show championship award eligibility or award positions."
+        race.combinedNationalRegionalAwards -> "Competitor setup and awards results show both National and Regional award fields."
+        race.raceLevel == RaceLevel.NATIONAL -> "Competitor setup and awards results show National award fields."
+        race.raceLevel == RaceLevel.REGIONAL -> "Competitor setup and awards results show Regional award fields."
+        else -> "Select National, Regional, or combined National/Regional awards to show championship award fields."
+    }
 
 @Composable
 private fun CloudflarePagesPublishSettingsPanel(
@@ -14253,6 +14318,7 @@ private fun ReadoutDuplicatePolicyPicker(
 @Composable
 private fun ResultDetailsPanel(
     results: List<EventResultDetails>,
+    publicationNotice: String?,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
     onEditReadout: (String) -> Unit
 ) {
@@ -14261,6 +14327,14 @@ private fun ResultDetailsPanel(
     val groupedResults = results.groupBy { it.categoryId to it.categoryName }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        publicationNotice?.let { notice ->
+            Text(
+                text = notice,
+                color = DesktopPalette.Warning,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
         Box(modifier = Modifier.fillMaxWidth().horizontalScroll(horizontalScrollState)) {
             Column(
                 modifier = Modifier.width(tableWidth),
@@ -14335,7 +14409,7 @@ private fun ResultDetailRow(
     }
 }
 
-/** Shows derived USA and IARU Region 2 championship awards by category. */
+/** Shows derived National and Regional championship awards by category. */
 @Composable
 private fun AwardsResultDetailsPanel(awards: EventAwardDetails) {
     val horizontalScrollState = rememberScrollState()
@@ -14354,8 +14428,10 @@ private fun AwardsResultDetailsPanel(awards: EventAwardDetails) {
             Text(
                 text = if (awards.publicationNotice == null) {
                     "Awards are not shown for practice races."
+                } else if (awards.awardScopes.isEmpty()) {
+                    "Awards are shown for National, Regional, or combined National/Regional races."
                 } else {
-                    "No USA or IARU Region 2 award winners are available from the current results."
+                    "No ${awards.awardScopes.joinToString(" or ") { it.displayLabel }} winners are available from the current results."
                 },
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
@@ -14368,9 +14444,11 @@ private fun AwardsResultDetailsPanel(awards: EventAwardDetails) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 awards.categories.forEach { category ->
-                    ResultCategoryHeader(category.categoryName, category.usaAwards.size + category.region2Awards.size, tableWidth)
-                    AwardScopeRows("USA Awards", category.usaAwards)
-                    AwardScopeRows("IARU Region 2 Awards", category.region2Awards)
+                    val awardCount = awards.awardScopes.sumOf { scope -> category.awardsForScope(scope).size }
+                    ResultCategoryHeader(category.categoryName, awardCount, tableWidth)
+                    awards.awardScopes.forEach { scope ->
+                        AwardScopeRows(scope.displayLabel, category.awardsForScope(scope))
+                    }
                 }
             }
         }
@@ -16755,7 +16833,7 @@ private fun CompetitorPicker(
 private fun CompetitorDetailsPanel(
     competitors: List<EventCompetitorDetails>,
     categories: List<EventCategoryDetails>,
-    showAwardEligibility: Boolean,
+    awardScopes: List<EventAwardScope>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
     onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
@@ -16769,7 +16847,7 @@ private fun CompetitorDetailsPanel(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val horizontalScrollState = rememberScrollState()
-    val tableColumns = competitorTableColumns(showAwardEligibility)
+    val tableColumns = competitorTableColumns(awardScopes)
     val tableWidth = fixedTableWidth(tableColumns)
     val orderedCompetitors = rememberEditableRowOrder(competitors) { it.id }
     var firstNameDraft by remember { mutableStateOf("") }
@@ -16844,7 +16922,7 @@ private fun CompetitorDetailsPanel(
             tableColumns = tableColumns,
             tableWidth = tableWidth,
             horizontalScrollState = horizontalScrollState,
-            showAwardEligibility = showAwardEligibility,
+            awardScopes = awardScopes,
             canAddCompetitor = canAddCompetitor,
             onAddCompetitor = ::addCompetitor,
             firstNameDraft = firstNameDraft,
@@ -16875,7 +16953,7 @@ private fun CompetitorDetailsPanel(
             categories = categories,
             tableColumns = tableColumns,
             horizontalScrollState = horizontalScrollState,
-            showAwardEligibility = showAwardEligibility,
+            awardScopes = awardScopes,
             onRenameCompetitor = onRenameCompetitor,
             onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
             onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
@@ -16925,7 +17003,7 @@ private fun CompetitorAddTable(
     tableColumns: List<FixedTableColumn>,
     tableWidth: Dp,
     horizontalScrollState: androidx.compose.foundation.ScrollState,
-    showAwardEligibility: Boolean,
+    awardScopes: List<EventAwardScope>,
     canAddCompetitor: Boolean,
     onAddCompetitor: () -> Unit,
     firstNameDraft: String,
@@ -16967,7 +17045,7 @@ private fun CompetitorAddTable(
                 CompetitorAddRow(
                     categories = categories,
                     tableColumns = tableColumns,
-                    showAwardEligibility = showAwardEligibility,
+                    awardScopes = awardScopes,
                     firstNameDraft = firstNameDraft,
                     onFirstNameChange = onFirstNameChange,
                     lastNameDraft = lastNameDraft,
@@ -17004,7 +17082,7 @@ private fun CompetitorExistingRows(
     categories: List<EventCategoryDetails>,
     tableColumns: List<FixedTableColumn>,
     horizontalScrollState: androidx.compose.foundation.ScrollState,
-    showAwardEligibility: Boolean,
+    awardScopes: List<EventAwardScope>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
     onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
@@ -17027,7 +17105,7 @@ private fun CompetitorExistingRows(
                             competitor = competitor,
                             categories = categories,
                             tableColumns = tableColumns,
-                            showAwardEligibility = showAwardEligibility,
+                            awardScopes = awardScopes,
                             onRenameCompetitor = onRenameCompetitor,
                             onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
                             onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
@@ -17047,7 +17125,7 @@ private fun CompetitorExistingRows(
 private fun CompetitorAddRow(
     categories: List<EventCategoryDetails>,
     tableColumns: List<FixedTableColumn>,
-    showAwardEligibility: Boolean,
+    awardScopes: List<EventAwardScope>,
     firstNameDraft: String,
     onFirstNameChange: (String) -> Unit,
     lastNameDraft: String,
@@ -17068,7 +17146,7 @@ private fun CompetitorAddRow(
     onSiNumberChange: (String) -> Unit,
     onCommit: () -> Unit
 ) {
-    val categoryColumnIndex = competitorCategoryColumnIndex(showAwardEligibility)
+    val categoryColumnIndex = competitorCategoryColumnIndex(awardScopes)
     Row(
         modifier = Modifier.width(fixedTableWidth(tableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -17116,9 +17194,8 @@ private fun CompetitorAddRow(
             label = "Birth",
             onCommit = onCommit
         )
-        if (showAwardEligibility) {
-            Spacer(modifier = Modifier.width(tableColumns[6].width))
-            Spacer(modifier = Modifier.width(tableColumns[7].width))
+        awardScopes.forEachIndexed { index, _ ->
+            Spacer(modifier = Modifier.width(tableColumns[CompetitorBaseTableColumns.size + index].width))
         }
         CategoryPicker(
             selectedCategoryId = selectedCategoryId,
@@ -17180,7 +17257,7 @@ private fun CompetitorDetailRow(
     competitor: EventCompetitorDetails,
     categories: List<EventCategoryDetails>,
     tableColumns: List<FixedTableColumn>,
-    showAwardEligibility: Boolean,
+    awardScopes: List<EventAwardScope>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
     onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
@@ -17188,7 +17265,7 @@ private fun CompetitorDetailRow(
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAssignCompetitorCategory: (String, String?) -> Unit
 ) {
-    val categoryColumnIndex = competitorCategoryColumnIndex(showAwardEligibility)
+    val categoryColumnIndex = competitorCategoryColumnIndex(awardScopes)
     var firstNameDraft by remember(competitor.id, competitor.firstName) { mutableStateOf(competitor.firstName) }
     var lastNameDraft by remember(competitor.id, competitor.lastName) { mutableStateOf(competitor.lastName) }
     var clubDraft by remember(competitor.id, competitor.club) { mutableStateOf(competitor.club) }
@@ -17281,7 +17358,7 @@ private fun CompetitorDetailRow(
         )
         CompetitorAwardEligibilityCells(
             competitor = competitor,
-            showAwardEligibility = showAwardEligibility,
+            awardScopes = awardScopes,
             tableColumns = tableColumns,
             warningText = warningText,
             onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity
@@ -17393,45 +17470,42 @@ private fun CompetitorIdentityCells(
 @Composable
 private fun CompetitorAwardEligibilityCells(
     competitor: EventCompetitorDetails,
-    showAwardEligibility: Boolean,
+    awardScopes: List<EventAwardScope>,
     tableColumns: List<FixedTableColumn>,
     warningText: String,
     onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit
 ) {
-    if (!showAwardEligibility) {
-        return
-    }
-    ControlWarningTooltip(warningText) {
-        AwardEligibilityCheckbox(
-            checked = competitor.usaChampEligible,
-            onCheckedChange = {
-                onUpdateCompetitorClubIdentity(
-                    competitor.id,
-                    competitor.club,
-                    competitor.bibNumber,
-                    competitor.callSign,
-                    it,
-                    region2EligibilityAfterUsaChange(it, competitor.region2ChampEligible)
-                )
-            },
-            width = tableColumns[6].width
-        )
-    }
-    ControlWarningTooltip(warningText) {
-        AwardEligibilityCheckbox(
-            checked = competitor.region2ChampEligible,
-            onCheckedChange = {
-                onUpdateCompetitorClubIdentity(
-                    competitor.id,
-                    competitor.club,
-                    competitor.bibNumber,
-                    competitor.callSign,
-                    competitor.usaChampEligible,
-                    it
-                )
-            },
-            width = tableColumns[7].width
-        )
+    awardScopes.forEachIndexed { index, scope ->
+        val columnWidth = tableColumns[CompetitorBaseTableColumns.size + index].width
+        ControlWarningTooltip(warningText) {
+            AwardEligibilityCheckbox(
+                checked = when (scope) {
+                    EventAwardScope.NATIONAL -> competitor.usaChampEligible
+                    EventAwardScope.REGIONAL -> competitor.region2ChampEligible
+                },
+                onCheckedChange = { checked ->
+                    val region2ChampEligible = when (scope) {
+                        EventAwardScope.NATIONAL -> {
+                            if (EventAwardScope.REGIONAL in awardScopes) {
+                                region2EligibilityAfterUsaChange(checked, competitor.region2ChampEligible)
+                            } else {
+                                competitor.region2ChampEligible
+                            }
+                        }
+                        EventAwardScope.REGIONAL -> checked
+                    }
+                    onUpdateCompetitorClubIdentity(
+                        competitor.id,
+                        competitor.club,
+                        competitor.bibNumber,
+                        competitor.callSign,
+                        if (scope == EventAwardScope.NATIONAL) checked else competitor.usaChampEligible,
+                        region2ChampEligible
+                    )
+                },
+                width = columnWidth
+            )
+        }
     }
 }
 
@@ -21613,7 +21687,7 @@ private fun RaceDetailsPanel(
     parentSeriesText: String?,
     onRenameRace: (String) -> Unit,
     onUpdateRaceStartDateTime: (String) -> Unit,
-    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
+    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit,
     onUpdateEventFileName: (String) -> Boolean,
     onOpenEventFileWorkingFolder: () -> Unit
 ) {
@@ -21645,18 +21719,6 @@ private fun RaceDetailsPanel(
     }
     var hasEventFileNameDraftChanged by remember(currentEventFileName) { mutableStateOf(false) }
     var wasEventFileNameFocused by remember { mutableStateOf(false) }
-
-    fun applyRaceSettings(
-        raceType: RaceType = selectedRaceFormat.raceType,
-        raceLevel: RaceLevel = selectedRaceLevel,
-        raceBand: RaceBand = selectedRaceFormat.raceBand,
-        timeLimitMinutes: String = timeLimitMinutesDraft
-    ) {
-        val timeLimit = timeLimitMinutes.trim().toLongOrNull()
-        if (timeLimit != null && timeLimit >= 0) {
-            onUpdateRaceSettings(raceType, raceLevel, raceBand, timeLimitMinutes)
-        }
-    }
 
     fun promptForEventStart(reason: String) {
         eventStartPromptReason = reason
@@ -21716,42 +21778,19 @@ private fun RaceDetailsPanel(
             },
             onCommitEventFileName = ::commitEventFileNameDraft
         )
-        RaceStartDateTimeField(
+        RaceDetailsSettingsSection(
             startDateTimeDraft = startDateTimeDraft,
-            onStartDateTimeChange = {
-                startDateTimeDraft = it
-                onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(it))
-            }
-        )
-        RaceSettingsFields(
             selectedRaceFormat = selectedRaceFormat,
+            onSelectedRaceFormatChange = { selectedRaceFormat = it },
             selectedRaceLevel = selectedRaceLevel,
+            onSelectedRaceLevelChange = { selectedRaceLevel = it },
             timeLimitMinutesDraft = timeLimitMinutesDraft,
-            onRaceFormatChange = {
-                val changed = it != selectedRaceFormat
-                selectedRaceFormat = it
-                applyRaceSettings(raceType = it.raceType, raceBand = it.raceBand)
-                if (changed) {
-                    promptForEventStart("race format")
-                }
-            },
-            onRaceLevelChange = {
-                val changed = it != selectedRaceLevel
-                val defaultLimitMinutes = it.defaultTimeLimitMinutes()?.toString()
-                val nextTimeLimitMinutes = defaultLimitMinutes ?: timeLimitMinutesDraft
-                selectedRaceLevel = it
-                if (defaultLimitMinutes != null) {
-                    timeLimitMinutesDraft = nextTimeLimitMinutes
-                }
-                applyRaceSettings(raceLevel = it, timeLimitMinutes = nextTimeLimitMinutes)
-                if (changed) {
-                    promptForEventStart("race type")
-                }
-            },
-            onTimeLimitMinutesChange = {
-                timeLimitMinutesDraft = it
-                applyRaceSettings(timeLimitMinutes = it)
-            }
+            onTimeLimitMinutesDraftChange = { timeLimitMinutesDraft = it },
+            combinedNationalRegionalAwards = details.combinedNationalRegionalAwards,
+            onStartDateTimeDraftChange = { startDateTimeDraft = it },
+            onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
+            onUpdateRaceSettings = onUpdateRaceSettings,
+            onPromptForEventStart = ::promptForEventStart
         )
         RaceEventFileFolderRow(
             eventFilePath = eventFilePath,
@@ -21770,6 +21809,78 @@ private fun RaceDetailsPanel(
             onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(it))
         },
         onDismiss = { isEventStartPromptVisible = false }
+    )
+}
+
+@Composable
+private fun RaceDetailsSettingsSection(
+    startDateTimeDraft: LocalDateTime,
+    selectedRaceFormat: DesktopRaceFormat,
+    onSelectedRaceFormatChange: (DesktopRaceFormat) -> Unit,
+    selectedRaceLevel: RaceLevel,
+    onSelectedRaceLevelChange: (RaceLevel) -> Unit,
+    timeLimitMinutesDraft: String,
+    onTimeLimitMinutesDraftChange: (String) -> Unit,
+    combinedNationalRegionalAwards: Boolean,
+    onStartDateTimeDraftChange: (LocalDateTime) -> Unit,
+    onUpdateRaceStartDateTime: (String) -> Unit,
+    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit,
+    onPromptForEventStart: (String) -> Unit
+) {
+    fun applyRaceSettings(
+        raceType: RaceType = selectedRaceFormat.raceType,
+        raceLevel: RaceLevel = selectedRaceLevel,
+        raceBand: RaceBand = selectedRaceFormat.raceBand,
+        timeLimitMinutes: String = timeLimitMinutesDraft
+    ) {
+        val timeLimit = timeLimitMinutes.trim().toLongOrNull()
+        if (timeLimit != null && timeLimit >= 0) {
+            onUpdateRaceSettings(
+                raceType,
+                raceLevel,
+                raceBand,
+                timeLimitMinutes,
+                combinedNationalRegionalAwards
+            )
+        }
+    }
+
+    RaceStartDateTimeField(
+        startDateTimeDraft = startDateTimeDraft,
+        onStartDateTimeChange = {
+            onStartDateTimeDraftChange(it)
+            onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(it))
+        }
+    )
+    RaceSettingsFields(
+        selectedRaceFormat = selectedRaceFormat,
+        selectedRaceLevel = selectedRaceLevel,
+        timeLimitMinutesDraft = timeLimitMinutesDraft,
+        onRaceFormatChange = {
+            val changed = it != selectedRaceFormat
+            onSelectedRaceFormatChange(it)
+            applyRaceSettings(raceType = it.raceType, raceBand = it.raceBand)
+            if (changed) {
+                onPromptForEventStart("race format")
+            }
+        },
+        onRaceLevelChange = {
+            val changed = it != selectedRaceLevel
+            val defaultLimitMinutes = it.defaultTimeLimitMinutes()?.toString()
+            val nextTimeLimitMinutes = defaultLimitMinutes ?: timeLimitMinutesDraft
+            onSelectedRaceLevelChange(it)
+            if (defaultLimitMinutes != null) {
+                onTimeLimitMinutesDraftChange(nextTimeLimitMinutes)
+            }
+            applyRaceSettings(raceLevel = it, timeLimitMinutes = nextTimeLimitMinutes)
+            if (changed) {
+                onPromptForEventStart("race type")
+            }
+        },
+        onTimeLimitMinutesChange = {
+            onTimeLimitMinutesDraftChange(it)
+            applyRaceSettings(timeLimitMinutes = it)
+        }
     )
 }
 

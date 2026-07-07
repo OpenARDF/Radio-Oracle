@@ -42,7 +42,8 @@ data class EventRaceDetails(
     val raceBand: RaceBand,
     val raceBandLabel: String,
     val timeLimitMinutesText: String,
-    val timeLimitText: String
+    val timeLimitText: String,
+    val combinedNationalRegionalAwards: Boolean
 ) {
     companion object {
         /** Builds display-ready race details from portable event race metadata. */
@@ -57,7 +58,8 @@ data class EventRaceDetails(
                 raceBand = race.raceBand,
                 raceBandLabel = race.raceBand.toDisplayLabel(),
                 timeLimitMinutesText = (race.timeLimitSeconds / 60).toString(),
-                timeLimitText = DurationFormatter.secondsToFormattedString(race.timeLimitSeconds, useMinutes = true)
+                timeLimitText = DurationFormatter.secondsToFormattedString(race.timeLimitSeconds, useMinutes = true),
+                combinedNationalRegionalAwards = race.combinedNationalRegionalAwards
             )
     }
 }

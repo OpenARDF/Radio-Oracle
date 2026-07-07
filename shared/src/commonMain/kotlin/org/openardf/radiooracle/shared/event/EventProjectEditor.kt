@@ -141,7 +141,8 @@ object EventProjectEditor {
         raceType: RaceType,
         raceLevel: RaceLevel,
         raceBand: RaceBand,
-        timeLimitMinutes: String
+        timeLimitMinutes: String,
+        combinedNationalRegionalAwards: Boolean = projectFile.raceData.race.combinedNationalRegionalAwards
     ): EventProjectFile {
         val trimmedTimeLimit = timeLimitMinutes.trim()
         require(trimmedTimeLimit.isNotEmpty()) {
@@ -159,7 +160,8 @@ object EventProjectEditor {
                     raceType = raceType,
                     raceLevel = raceLevel,
                     raceBand = raceBand,
-                    timeLimitSeconds = timeLimitMinutesValue * 60
+                    timeLimitSeconds = timeLimitMinutesValue * 60,
+                    combinedNationalRegionalAwards = combinedNationalRegionalAwards
                 )
             )
         )

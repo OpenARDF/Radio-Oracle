@@ -64,9 +64,10 @@ class EventAwardDetailsTest {
     }
 
     @Test
-    fun derivesUsaAndRegion2MedalsFromEligibility() {
+    fun derivesNationalAndRegionalMedalsFromCombinedEligibility() {
         val awards = EventAwardDetails.from(
             raceData(
+                combinedNationalRegionalAwards = true,
                 competitors = listOf(
                     competitorData("canada", "Cara", "Canada", region2Eligible = true, points = 5),
                     competitorData("usa-one", "Alice", "Usa", usaEligible = true, points = 4),
@@ -84,6 +85,43 @@ class EventAwardDetailsTest {
         assertEquals(listOf("CANADA Cara", "USA Alice", "USA Bob"), category.region2Awards.map { it.competitorName })
         assertEquals(listOf("Gold", "Silver", "Bronze"), category.region2Awards.map { it.medal })
         assertEquals(listOf(1, 2, 4), category.region2Awards.map { it.overallPlace })
+    }
+
+    @Test
+    fun nationalRacesOnlyShowNationalAwardsByDefault() {
+        val awards = EventAwardDetails.from(
+            raceData(
+                raceLevel = RaceLevel.NATIONAL,
+                competitors = listOf(
+                    competitorData("national", "Alice", "National", usaEligible = true, points = 4),
+                    competitorData("regional", "Cara", "Regional", region2Eligible = true, points = 5)
+                )
+            )
+        )
+
+        assertEquals(setOf(EventAwardScope.NATIONAL), awards.awardScopes)
+        assertEquals(listOf("NATIONAL Alice"), awards.categories.single().usaAwards.map { it.competitorName })
+        assertEquals(emptyList(), awards.categories.single().region2Awards)
+    }
+
+    @Test
+    fun regionalRacesOnlyShowRegionalAwardsByDefault() {
+        val awards = EventAwardDetails.from(
+            raceData(
+                raceLevel = RaceLevel.REGIONAL,
+                competitors = listOf(
+                    competitorData("national", "Alice", "National", usaEligible = true, points = 4),
+                    competitorData("regional", "Cara", "Regional", region2Eligible = true, points = 5)
+                )
+            )
+        )
+
+        assertEquals(setOf(EventAwardScope.REGIONAL), awards.awardScopes)
+        assertEquals(emptyList(), awards.categories.single().usaAwards)
+        assertEquals(
+            listOf("REGIONAL Cara", "NATIONAL Alice"),
+            awards.categories.single().region2Awards.map { it.competitorName }
+        )
     }
 
     @Test
@@ -146,6 +184,7 @@ class EventAwardDetailsTest {
 
     private fun raceData(
         raceLevel: RaceLevel = RaceLevel.NATIONAL,
+        combinedNationalRegionalAwards: Boolean = false,
         competitors: List<EventCompetitorData>
     ): EventRaceData {
         val race = EventRace(
@@ -156,7 +195,8 @@ class EventAwardDetailsTest {
             raceType = RaceType.CLASSIC,
             raceLevel = raceLevel,
             raceBand = RaceBand.M80,
-            timeLimitSeconds = 7_200
+            timeLimitSeconds = 7_200,
+            combinedNationalRegionalAwards = combinedNationalRegionalAwards
         )
         val category = category()
         return EventRaceData(

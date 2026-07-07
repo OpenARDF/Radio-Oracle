@@ -96,20 +96,29 @@ object EventCsvFormat {
             "call_sign",
             "email",
             "cell_phone",
-            "usa_champ_eligible",
-            "region2_champ_eligible"
+            "national_champ_eligible",
+            "regional_champ_eligible"
         )
+        val LEGACY_AWARD_HEADER = HEADER.toMutableList().also {
+            it[USA_CHAMP_ELIGIBLE] = "usa_champ_eligible"
+            it[REGION2_CHAMP_ELIGIBLE] = "region2_champ_eligible"
+        }
         val LEGACY_INDEX_HEADER = HEADER.toMutableList().also { it[PERSON_ID] = "index" }
+        val LEGACY_INDEX_AWARD_HEADER = LEGACY_AWARD_HEADER.toMutableList().also { it[PERSON_ID] = "index" }
         val LEGACY_HEADER = HEADER.take(PREFERRED_START_GROUP + 1)
         val LEGACY_INDEX_HEADER_WITHOUT_IDENTITY_EXTRAS = LEGACY_INDEX_HEADER.take(PREFERRED_START_GROUP + 1)
         val HEADER_ROW = HEADER.joinToString(DELIMITER.toString())
 
         fun isHeader(fields: List<String>): Boolean =
             fields.map { it.trim().lowercase() }.let { normalized ->
-                normalized == HEADER ||
+                    normalized == HEADER ||
+                    normalized == LEGACY_AWARD_HEADER ||
                     normalized == LEGACY_INDEX_HEADER ||
+                    normalized == LEGACY_INDEX_AWARD_HEADER ||
                     normalized == HEADER.dropLast(1) ||
+                    normalized == LEGACY_AWARD_HEADER.dropLast(1) ||
                     normalized == LEGACY_INDEX_HEADER.dropLast(1) ||
+                    normalized == LEGACY_INDEX_AWARD_HEADER.dropLast(1) ||
                     normalized == LEGACY_HEADER ||
                     normalized == LEGACY_INDEX_HEADER_WITHOUT_IDENTITY_EXTRAS ||
                     normalized == LEGACY_HEADER.dropLast(1)

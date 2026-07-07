@@ -544,7 +544,7 @@ object DesktopPublicResultSiteExports {
         }
         function renderAwards(data){
           const awards=data.awards || {};
-          const html=awardTableHtml("USA Awards",awards.usaAwards)+awardTableHtml("IARU Region 2 Awards",awards.region2Awards);
+          const html=awardTableHtml("National Awards",awards.usaAwards)+awardTableHtml("Regional Awards",awards.region2Awards);
           if(!html)return;
           document.getElementById("awards-panel").hidden=false;
           document.getElementById("awards").innerHTML=html

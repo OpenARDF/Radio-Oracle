@@ -34,13 +34,28 @@ const val PRELIMINARY_RESULT_NOTICE = "Preliminary Results - Pending Organizer R
 fun EventRace.resultPublicationNotice(): String? =
     if (raceLevel == RaceLevel.PRACTICE) null else PRELIMINARY_RESULT_NOTICE
 
+fun EventRace.awardScopes(): Set<EventAwardScope> =
+    when {
+        raceLevel == RaceLevel.PRACTICE -> emptySet()
+        combinedNationalRegionalAwards -> setOf(EventAwardScope.NATIONAL, EventAwardScope.REGIONAL)
+        raceLevel == RaceLevel.NATIONAL -> setOf(EventAwardScope.NATIONAL)
+        raceLevel == RaceLevel.REGIONAL -> setOf(EventAwardScope.REGIONAL)
+        else -> emptySet()
+    }
+
 fun EventRace.supportsChampionshipAwards(): Boolean =
-    raceLevel != RaceLevel.PRACTICE
+    awardScopes().isNotEmpty()
 
 enum class EventAwardScope(val displayLabel: String) {
-    USA("USA Awards"),
-    REGION2("IARU Region 2 Awards")
+    NATIONAL("National Awards"),
+    REGIONAL("Regional Awards")
 }
+
+fun EventAwardCategoryDetails.awardsForScope(scope: EventAwardScope): List<EventAwardWinnerDetails> =
+    when (scope) {
+        EventAwardScope.NATIONAL -> usaAwards
+        EventAwardScope.REGIONAL -> region2Awards
+    }
 
 enum class EventAwardDisplayMode(val displayLabel: String) {
     FIRST_TO_THIRD("Show only first to third place awards"),
@@ -49,6 +64,7 @@ enum class EventAwardDisplayMode(val displayLabel: String) {
 
 data class EventAwardDetails(
     val publicationNotice: String?,
+    val awardScopes: Set<EventAwardScope>,
     val categories: List<EventAwardCategoryDetails>
 ) {
     val hasAwards: Boolean
@@ -60,8 +76,9 @@ data class EventAwardDetails(
             displayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
         ): EventAwardDetails {
             val publicationNotice = raceData.race.resultPublicationNotice()
-            if (!raceData.race.supportsChampionshipAwards()) {
-                return EventAwardDetails(publicationNotice, emptyList())
+            val awardScopes = raceData.race.awardScopes()
+            if (awardScopes.isEmpty()) {
+                return EventAwardDetails(publicationNotice, awardScopes, emptyList())
             }
 
             val categoriesById = raceData.categories.associateBy { it.category.id }
@@ -79,20 +96,28 @@ data class EventAwardDetails(
                     result.id to result.place
                 }.toMap()
 
-                val usaAwards = awardWinners(
-                    scope = EventAwardScope.USA,
-                    competitors = competitors,
-                    overallPlaceByResultId = overallPlaceByResultId,
-                    displayMode = displayMode,
-                    isEligible = { it.usaChampEligible == true }
-                )
-                val region2Awards = awardWinners(
-                    scope = EventAwardScope.REGION2,
-                    competitors = competitors,
-                    overallPlaceByResultId = overallPlaceByResultId,
-                    displayMode = displayMode,
-                    isEligible = { it.region2ChampEligible == true || it.usaChampEligible == true }
-                )
+                val usaAwards = if (EventAwardScope.NATIONAL in awardScopes) {
+                    awardWinners(
+                        scope = EventAwardScope.NATIONAL,
+                        competitors = competitors,
+                        overallPlaceByResultId = overallPlaceByResultId,
+                        displayMode = displayMode,
+                        isEligible = { it.usaChampEligible == true }
+                    )
+                } else {
+                    emptyList()
+                }
+                val region2Awards = if (EventAwardScope.REGIONAL in awardScopes) {
+                    awardWinners(
+                        scope = EventAwardScope.REGIONAL,
+                        competitors = competitors,
+                        overallPlaceByResultId = overallPlaceByResultId,
+                        displayMode = displayMode,
+                        isEligible = { it.region2ChampEligible == true || it.usaChampEligible == true }
+                    )
+                } else {
+                    emptyList()
+                }
                 if (usaAwards.isEmpty() && region2Awards.isEmpty()) {
                     null
                 } else {
@@ -106,7 +131,7 @@ data class EventAwardDetails(
                 }
             }.sortedWith(compareBy<EventAwardCategoryDetails> { it.categorySortOrder }.thenBy { it.categoryName })
 
-            return EventAwardDetails(publicationNotice, categories)
+            return EventAwardDetails(publicationNotice, awardScopes, categories)
         }
 
         private fun awardWinners(

@@ -715,12 +715,20 @@ object DesktopEventRegSpreadsheetParser {
         val emailIndex = headers.indexOfFirstHeader("email", "e-mail", "email address")
         val cellPhoneIndex = headers.indexOfFirstHeader("cellphone", "cell phone", "mobile", "phone")
         val usaChampEligibilityIndex = headers.indexOfFirstHeader(
+            "National--Champ Eligibility",
+            "National Champ Eligibility",
+            "National Championship Eligibility",
+            "Nat'l Champ Eligibility",
             "USA--Champ Eligibility",
             "USA Champ Eligibility",
             "USA Championship Eligibility",
             "US Champ Eligibility"
         )
         val region2ChampEligibilityIndex = headers.indexOfFirstHeader(
+            "Regional--Champ Eligibility",
+            "Regional Champ Eligibility",
+            "Regional Championship Eligibility",
+            "Reg Champ Eligibility",
             "Region2--Champ Eligibility",
             "Region 2--Champ Eligibility",
             "Region2 Champ Eligibility",
@@ -1226,8 +1234,8 @@ object DesktopSpreadsheetCompetitorImporter {
             addChange("Call sign", originalCompetitor.callSign, updatedCompetitor.callSign)
             addChange("Email", originalCompetitor.email, updatedCompetitor.email)
             addChange("Cell", originalCompetitor.cellPhone, updatedCompetitor.cellPhone)
-            addChange("USA eligibility", originalCompetitor.usaChampEligible?.toString().orEmpty(), updatedCompetitor.usaChampEligible?.toString().orEmpty())
-            addChange("Region 2 eligibility", originalCompetitor.region2ChampEligible?.toString().orEmpty(), updatedCompetitor.region2ChampEligible?.toString().orEmpty())
+            addChange("National eligibility", originalCompetitor.usaChampEligible?.toString().orEmpty(), updatedCompetitor.usaChampEligible?.toString().orEmpty())
+            addChange("Regional eligibility", originalCompetitor.region2ChampEligible?.toString().orEmpty(), updatedCompetitor.region2ChampEligible?.toString().orEmpty())
             addChange("SI", originalCompetitor.siNumber?.toString().orEmpty(), updatedCompetitor.siNumber?.toString().orEmpty())
             addChange("Gender", originalCompetitor.isMan.toString(), updatedCompetitor.isMan.toString())
             addChange("Birth year", originalCompetitor.birthYear?.toString().orEmpty(), updatedCompetitor.birthYear?.toString().orEmpty())

@@ -44,7 +44,8 @@ data class EventRace(
     val raceLevel: RaceLevel,
     val raceBand: RaceBand,
     val timeLimitSeconds: Long,
-    val courseAnalyzerSpeedCompensationFactor: Double = 1.0
+    val courseAnalyzerSpeedCompensationFactor: Double = 1.0,
+    val combinedNationalRegionalAwards: Boolean = false
 )
 
 /**

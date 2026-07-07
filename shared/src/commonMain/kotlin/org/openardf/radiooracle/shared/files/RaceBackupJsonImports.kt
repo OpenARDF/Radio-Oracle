@@ -77,7 +77,8 @@ object RaceBackupJsonImports {
             raceType = root.enumValue("race_type", RaceType.CLASSIC),
             raceLevel = root.enumValue("race_level", RaceLevel.PRACTICE),
             raceBand = root.enumValue("race_band", RaceBand.M80),
-            timeLimitSeconds = (root.longValue("race_time_limit") ?: 120L) * 60L
+            timeLimitSeconds = (root.longValue("race_time_limit") ?: 120L) * 60L,
+            combinedNationalRegionalAwards = root.boolean("combined_national_regional_awards") ?: false
         )
 
         val categoryData = root.array("categories").mapIndexed { index, element ->

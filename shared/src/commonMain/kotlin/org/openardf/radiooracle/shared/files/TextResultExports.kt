@@ -34,6 +34,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.time.DurationFormatter
@@ -131,8 +132,9 @@ object TextResultExports {
         appendLine(RULE)
         awards.categories.forEach { category ->
             appendLine("Category ${category.categoryName}")
-            appendAwardRows("USA Awards", category.usaAwards)
-            appendAwardRows("IARU Region 2 Awards", category.region2Awards)
+            awards.awardScopes.forEach { scope ->
+                appendAwardRows(scope.displayLabel, category.awardsForScope(scope))
+            }
             appendLine()
         }
     }

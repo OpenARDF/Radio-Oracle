@@ -35,6 +35,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.time.DurationFormatter
@@ -164,8 +165,9 @@ object HtmlResultExports {
             append("<h3>")
             appendHtml(category.categoryName)
             append("</h3>")
-            appendAwardTable("USA Awards", category.usaAwards)
-            appendAwardTable("IARU Region 2 Awards", category.region2Awards)
+            awards.awardScopes.forEach { scope ->
+                appendAwardTable(scope.displayLabel, category.awardsForScope(scope))
+            }
         }
     }
 

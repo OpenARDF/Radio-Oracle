@@ -1429,7 +1429,7 @@ class DesktopNavigationTest {
                     selectedSection = DesktopSection.AwardsResults,
                     selectedItemId = "results.awards"
                 )
-            ).contains("USA and IARU Region 2")
+            ).contains("National and Regional")
         )
     }
 

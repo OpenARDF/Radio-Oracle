@@ -231,6 +231,7 @@ class FinalResultJsonExportsTest {
             FinalResultJsonExports.results(
                 raceData(
                     raceLevel = RaceLevel.NATIONAL,
+                    combinedNationalRegionalAwards = true,
                     competitors = listOf(
                         competitorData("usa", category, readout("result-usa"), usaChampEligible = true),
                         competitorData("r2", category, readout("result-r2"), region2ChampEligible = true)
@@ -281,7 +282,8 @@ class FinalResultJsonExportsTest {
         punchStatus: PunchStatus = PunchStatus.UNKNOWN,
         categoryControlPoint: EventControlPoint? = null,
         controls: List<EventControl> = emptyList(),
-        raceLevel: RaceLevel = RaceLevel.PRACTICE
+        raceLevel: RaceLevel = RaceLevel.PRACTICE,
+        combinedNationalRegionalAwards: Boolean = false
     ): EventRaceData {
         val category = category()
         val alias = EventAlias("alias", "race", 31, "Fox")
@@ -295,7 +297,8 @@ class FinalResultJsonExportsTest {
                 raceType = RaceType.CLASSIC,
                 raceLevel = raceLevel,
                 raceBand = RaceBand.M80,
-                timeLimitSeconds = 7_200
+                timeLimitSeconds = 7_200,
+                combinedNationalRegionalAwards = combinedNationalRegionalAwards
             ),
             categories = listOf(
                 EventCategoryData(
