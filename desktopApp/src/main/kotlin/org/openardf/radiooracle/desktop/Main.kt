@@ -86,6 +86,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
@@ -7904,280 +7905,42 @@ private fun CourseKmlKmzImportReviewDialog(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text("File: ${review.sourceName}")
-                        selectedSummary.eventTypeWarnings.forEach { warning ->
-                            Text(
-                                text = warning,
-                                color = DesktopPalette.Error,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        selectedSummary.categoryAssumptions.forEach { assumption ->
-                            Text(
-                                text = "No category indication was found for route ${assumption.routeName}; assuming ${assumption.categoryName}.",
-                                color = Color(0xFFC46A00),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        selectedSummary.rejectedRoutes.forEach { rejected ->
-                            Text(
-                                text = "Skipped route ${rejected.routeName} for ${rejected.categoryName}: ${rejected.reason}",
-                                color = DesktopPalette.Error,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        if (selectedSummary.duplicateRouteAssignments.isNotEmpty()) {
-                            Text(
-                                text = "Duplicate Route Assignments Found",
-                                color = DesktopPalette.Error,
-                                fontWeight = FontWeight.Bold
-                            )
-                            selectedSummary.duplicateRouteAssignments.forEach { assignment ->
-                                Text(
-                                    "Category ${assignment.categoryName} has ${assignment.routeChoices.size} matching routes. Select exactly one to import.",
-                                    fontSize = 13.sp,
-                                    color = Color.DarkGray
-                                )
-                                assignment.routeChoices.forEach { choice ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Checkbox(
-                                            checked = selectedDuplicateRouteChoices[assignment.categoryId] == choice.routeKey,
-                                            onCheckedChange = { checked ->
-                                                selectedDuplicateRouteChoices = if (checked) {
-                                                    selectedDuplicateRouteChoices + (assignment.categoryId to choice.routeKey)
-                                                } else {
-                                                    selectedDuplicateRouteChoices - assignment.categoryId
-                                                }
-                                            }
-                                        )
-                                        Text("${choice.routeName} (route ${choice.routeIndex + 1})")
-                                    }
-                                }
-                            }
-                            Text(
-                                "Only the selected route for each listed category will be imported. Unselected duplicate routes are skipped.",
-                                fontSize = 12.sp,
-                                color = Color.DarkGray
-                            )
-                        }
+                        CourseRouteImportWarnings(selectedSummary)
+                        CourseRouteDuplicateAssignments(
+                            summary = selectedSummary,
+                            selectedDuplicateRouteChoices = selectedDuplicateRouteChoices,
+                            onSelectedDuplicateRouteChoicesChange = { selectedDuplicateRouteChoices = it }
+                        )
                         Text("Matched Categories: ${selectedSummary.matchedCategoryCount} Of ${selectedSummary.routeCount} Routes")
                         Text("Categories: $categoriesText")
-                        if (importAllHasControlListChanges) {
-                            if (summary.missingCategoryNames.isNotEmpty()) {
-                                Text("New Course Mappings Found In $formatLabel:")
-                                summary.missingCategoryNames.forEach { categoryName ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Checkbox(
-                                            checked = categoryName in selectedMissingCategoryNames,
-                                            onCheckedChange = { checked ->
-                                                selectedMissingCategoryNames = if (checked) {
-                                                    selectedMissingCategoryNames + categoryName
-                                                } else {
-                                                    selectedMissingCategoryNames - categoryName
-                                                }
-                                            }
-                                        )
-                                        Text(
-                                            "$categoryName${
-                                                if (defaultImportMissingCourseMapping(categoryName)) {
-                                                    " (standard)"
-                                                } else {
-                                                    " (nonstandard)"
-                                                }
-                                            }"
-                                        )
-                                    }
-                                }
-                                Text(
-                                    "Existing Race File categories are updated when their routes match. Selected new mappings store route/course data for later category activation; they do not create active competitor categories.",
-                                    fontSize = 12.sp,
-                                    color = Color.DarkGray
-                                )
-                            }
-                            if (summary.missingControlNames.isNotEmpty()) {
-                                Text("Controls Listed In $formatLabel But Not In The Race File: ${summary.missingControlNames.joinToString()}")
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Checkbox(
-                                        checked = createMissingControls,
-                                        onCheckedChange = { createMissingControls = it }
-                                    )
-                                    Text("Create Missing Controls In Setup > Controls")
-                                }
-                                Text(
-                                    "When selected, imported controls that do not already match Race File controls are added to the controls list.",
-                                    fontSize = 12.sp,
-                                    color = Color.DarkGray
-                                )
-                            }
-                            if (createMissingControls || selectedMissingCategoryNames.isNotEmpty()) {
-                                Text(
-                                    DesktopControlImportPruning.ImportAllControlsDeletionNotice,
-                                    fontSize = 12.sp,
-                                    color = Color.DarkGray
-                                )
-                            }
-                        }
-                        if (selectedSummary.deletedControlNames.isNotEmpty()) {
-                            Text(
-                                text = "Existing Controls To Delete: ${selectedSummary.deletedControlNames.joinToString()}",
-                                color = DesktopPalette.Warning,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        if (selectedSummary.importedCategoryCount > 0) {
-                            Text("Course Mappings To Import/Update: ${selectedSummary.importedCategoryCount}")
-                        }
-                        if (selectedSummary.assignedCategoryControlCount > 0) {
-                            Text("Category Assigned Control Points Available To Copy: ${selectedSummary.assignedCategoryControlCount}")
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Checkbox(
-                                    checked = applyCategoryAssignments,
-                                    onCheckedChange = { applyCategoryAssignments = it }
-                                )
-                                Text("Replace Category Assigned Controls With Matched $formatLabel Controls")
-                            }
-                            Text(
-                                "If selected, existing assigned controls for the matched category are replaced and stored in neutral fox-label order, not route order.",
-                                fontSize = 12.sp,
-                                color = Color.DarkGray
-                            )
-                        }
-                        if (selectedSummary.duplicateCategoryCount > 0) {
-                            Text("Duplicate Categories Already Imported: ${selectedSummary.duplicateCategoryCount}")
-                        }
-                        Text("Matched Course Controls: ${courseControlMatchSummary(selectedSummary.matchedFoxCount, selectedSummary.matchedBeaconCount, selectedSummary.matchedSpectatorCount)}")
-                        if (selectedSiConflictCount > 0) {
-                            Text("Imported SI= Lines Differ From Existing Race File SI Numbers: $selectedSiConflictCount")
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Checkbox(
-                                    checked = overwriteImportedSiNumbers,
-                                    onCheckedChange = { overwriteImportedSiNumbers = it }
-                                )
-                                Text("Overwrite Race File SI Numbers From Imported SI= Lines")
-                            }
-                            Text(
-                                text = if (overwriteImportedSiNumbers) {
-                                    "The imported SI= values will replace the existing Race File SI numbers for matched controls."
-                                } else {
-                                    "The current Race File SI numbers will be retained; imported SI= values remain in the source file only."
-                                },
-                                fontSize = 12.sp,
-                                color = Color.DarkGray
-                            )
-                        }
-                        if (selectedSiUpdateCount > 0) {
-                            Text("Control Identities To Update From SI= Lines: $selectedSiUpdateCount")
-                        }
-                        if (selectedSummary.controlPublicLabelUpdateCount > 0) {
-                            Text("Control Public Labels To Update: ${selectedSummary.controlPublicLabelUpdateCount}")
-                        }
-                        if (selectedSummary.labelConversions.isNotEmpty()) {
-                            Text("Imported Control Names To Treat As Existing Race File Labels:")
-                            selectedSummary.labelConversions.take(8).forEach { conversion ->
-                                Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
-                            }
-                            if (selectedSummary.labelConversions.size > 8) {
-                                Text("Additional likely name matches: ${selectedSummary.labelConversions.size - 8}")
-                            }
-                        }
-                        if (selectedSummary.changedControlLocationCount > 0) {
-                            Text("Control Locations To Update: ${selectedSummary.changedControlLocationCount}")
-                            Text("Stored courses affected by location changes: ${selectedSummary.controlLocationAffectedCategoryCount}")
-                        }
-                        if (selectedSummary.staleCourseMappingCategoryNames.isNotEmpty()) {
-                            Text(
-                                text = "Stale Course Mappings To Clear: ${selectedSummary.staleCourseMappingCategoryNames.joinToString()}",
-                                color = DesktopPalette.Warning,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Checkbox(
-                                    checked = keepStaleCourseMappings,
-                                    onCheckedChange = { keepStaleCourseMappings = it }
-                                )
-                                Text("Keep Stale Course Mappings Anyway")
-                            }
-                            Text(
-                                "These mappings reference controls whose locations changed, but this import did not include replacement route data for those categories. By default they will be deleted so stale course data is not reused.",
-                                fontSize = 12.sp,
-                                color = Color.DarkGray
-                            )
-                        }
-                        if (canFetchElevations) {
-                            Text(
-                                if (selectedSummary.isDuplicateOnly) {
-                                    "Stored route/control elevations missing: $missingStoredElevationPointCount course points"
-                                } else {
-                                    "Imported route/control elevations missing: $missingStoredElevationPointCount course points"
-                                }
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Checkbox(
-                                    checked = fetchElevations,
-                                    onCheckedChange = { fetchElevations = it }
-                                )
-                                Text(
-                                    if (selectedSummary.isDuplicateOnly) {
-                                        "Download missing elevations for the stored route"
-                                    } else {
-                                        "Download missing elevations for the imported route after making it active"
-                                    }
-                                )
-                            }
-                        }
-                        Text(
-                            text = if (selectedSummary.isDuplicateOnly) {
-                                "This file has the same SHA-256 hash as route data already stored in the Race File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Race File unchanged."
-                            } else if (
-                                selectedSummary.hasControlPublicLabelUpdates &&
-                                selectedSummary.importedCategoryCount == 0 &&
-                                selectedSummary.assignedCategoryControlCount == 0 &&
-                                selectedSummary.changedControlLocationCount == 0
-                            ) {
-                                "Accept Import will copy matched $formatLabel control names into blank Public Label fields in the active Race File model. Matching Notes that duplicate the imported names are cleared. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
-                            } else if (
-                                selectedSummary.hasLabelConversions &&
-                                selectedSummary.importedCategoryCount == 0 &&
-                                selectedSummary.assignedCategoryControlCount == 0 &&
-                                selectedSummary.changedControlLocationCount == 0
-                            ) {
-                                "Accept Import will use these $formatLabel names as matches to existing Race File labels in the active Race File model. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
-                            } else if (
-                                selectedSummary.importedCategoryCount == 0 &&
-                                (selectedSummary.changedControlLocationCount > 0 || selectedSummary.controlIdentityUpdateCount > 0)
-                            ) {
-                                "Accept Import will update control identities or locations in the active Race File model. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
-                            } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.controlSiConflictCount > 0) {
-                                "Choose whether to retain current Race File SI numbers or overwrite them from imported SI= lines. Cancel leaves the Race File unchanged."
-                            } else if (selectedSummary.importedCategoryCount == 0 && selectedSummary.assignedCategoryControlCount > 0) {
-                                "Accept Import will make the matched $formatLabel control points active in memory for Course Analyzer. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
-                            } else if (selectedSummary.hasLabelConversions) {
-                                "Accept Import will use these $formatLabel names as matches to existing Race File labels, then update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
-                            } else {
-                                "Accept Import will update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import becomes active. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
-                            },
-                            fontSize = 13.sp,
-                            color = Color.DarkGray
+                        CourseRouteImportMissingControlListChanges(
+                            formatLabel = formatLabel,
+                            summary = summary,
+                            importAllHasControlListChanges = importAllHasControlListChanges,
+                            selectedMissingCategoryNames = selectedMissingCategoryNames,
+                            createMissingControls = createMissingControls,
+                            onSelectedMissingCategoryNamesChange = { selectedMissingCategoryNames = it },
+                            onCreateMissingControlsChange = { createMissingControls = it }
+                        )
+                        CourseRouteImportSelectedChanges(
+                            summary = selectedSummary,
+                            formatLabel = formatLabel,
+                            selectedSiConflictCount = selectedSiConflictCount,
+                            selectedSiUpdateCount = selectedSiUpdateCount,
+                            applyCategoryAssignments = applyCategoryAssignments,
+                            overwriteImportedSiNumbers = overwriteImportedSiNumbers,
+                            keepStaleCourseMappings = keepStaleCourseMappings,
+                            canFetchElevations = canFetchElevations,
+                            missingStoredElevationPointCount = missingStoredElevationPointCount,
+                            fetchElevations = fetchElevations,
+                            onApplyCategoryAssignmentsChange = { applyCategoryAssignments = it },
+                            onOverwriteImportedSiNumbersChange = { overwriteImportedSiNumbers = it },
+                            onKeepStaleCourseMappingsChange = { keepStaleCourseMappings = it },
+                            onFetchElevationsChange = { fetchElevations = it }
+                        )
+                        CourseRouteImportFinalNotice(
+                            summary = selectedSummary,
+                            formatLabel = formatLabel
                         )
                     }
                 }
@@ -8215,6 +7978,369 @@ private fun CourseKmlKmzImportReviewDialog(
             }
         }
     }
+}
+
+@Composable
+private fun CourseRouteImportWarnings(summary: DesktopCourseKmlImportSummary) {
+    summary.eventTypeWarnings.forEach { warning ->
+        Text(
+            text = warning,
+            color = DesktopPalette.Error,
+            fontWeight = FontWeight.Bold
+        )
+    }
+    summary.categoryAssumptions.forEach { assumption ->
+        Text(
+            text = "No category indication was found for route ${assumption.routeName}; assuming ${assumption.categoryName}.",
+            color = Color(0xFFC46A00),
+            fontWeight = FontWeight.Bold
+        )
+    }
+    summary.rejectedRoutes.forEach { rejected ->
+        Text(
+            text = "Skipped route ${rejected.routeName} for ${rejected.categoryName}: ${rejected.reason}",
+            color = DesktopPalette.Error,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun CourseRouteDuplicateAssignments(
+    summary: DesktopCourseKmlImportSummary,
+    selectedDuplicateRouteChoices: Map<String, String>,
+    onSelectedDuplicateRouteChoicesChange: (Map<String, String>) -> Unit
+) {
+    if (summary.duplicateRouteAssignments.isEmpty()) {
+        return
+    }
+    Text(
+        text = "Duplicate Route Assignments Found",
+        color = DesktopPalette.Error,
+        fontWeight = FontWeight.Bold
+    )
+    summary.duplicateRouteAssignments.forEach { assignment ->
+        Text(
+            "Category ${assignment.categoryName} has ${assignment.routeChoices.size} matching routes. Select exactly one to import.",
+            fontSize = 13.sp,
+            color = Color.DarkGray
+        )
+        assignment.routeChoices.forEach { choice ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = selectedDuplicateRouteChoices[assignment.categoryId] == choice.routeKey,
+                    onCheckedChange = { checked ->
+                        onSelectedDuplicateRouteChoicesChange(
+                            if (checked) {
+                                selectedDuplicateRouteChoices + (assignment.categoryId to choice.routeKey)
+                            } else {
+                                selectedDuplicateRouteChoices - assignment.categoryId
+                            }
+                        )
+                    }
+                )
+                Text("${choice.routeName} (route ${choice.routeIndex + 1})")
+            }
+        }
+    }
+    Text(
+        "Only the selected route for each listed category will be imported. Unselected duplicate routes are skipped.",
+        fontSize = 12.sp,
+        color = Color.DarkGray
+    )
+}
+
+@Composable
+private fun CourseRouteImportMissingControlListChanges(
+    formatLabel: String,
+    summary: DesktopCourseKmlImportSummary,
+    importAllHasControlListChanges: Boolean,
+    selectedMissingCategoryNames: Set<String>,
+    createMissingControls: Boolean,
+    onSelectedMissingCategoryNamesChange: (Set<String>) -> Unit,
+    onCreateMissingControlsChange: (Boolean) -> Unit
+) {
+    if (!importAllHasControlListChanges) {
+        return
+    }
+    if (summary.missingCategoryNames.isNotEmpty()) {
+        Text("New Course Mappings Found In $formatLabel:")
+        summary.missingCategoryNames.forEach { categoryName ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = categoryName in selectedMissingCategoryNames,
+                    onCheckedChange = { checked ->
+                        onSelectedMissingCategoryNamesChange(
+                            if (checked) {
+                                selectedMissingCategoryNames + categoryName
+                            } else {
+                                selectedMissingCategoryNames - categoryName
+                            }
+                        )
+                    }
+                )
+                Text(
+                    "$categoryName${
+                        if (defaultImportMissingCourseMapping(categoryName)) {
+                            " (standard)"
+                        } else {
+                            " (nonstandard)"
+                        }
+                    }"
+                )
+            }
+        }
+        Text(
+            "Existing Race File categories are updated when their routes match. Selected new mappings store route/course data for later category activation; they do not create active competitor categories.",
+            fontSize = 12.sp,
+            color = Color.DarkGray
+        )
+    }
+    if (summary.missingControlNames.isNotEmpty()) {
+        Text("Controls Listed In $formatLabel But Not In The Race File: ${summary.missingControlNames.joinToString()}")
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Checkbox(
+                checked = createMissingControls,
+                onCheckedChange = onCreateMissingControlsChange
+            )
+            Text("Create Missing Controls In Setup > Controls")
+        }
+        Text(
+            "When selected, imported controls that do not already match Race File controls are added to the controls list.",
+            fontSize = 12.sp,
+            color = Color.DarkGray
+        )
+    }
+    if (createMissingControls || selectedMissingCategoryNames.isNotEmpty()) {
+        Text(
+            DesktopControlImportPruning.ImportAllControlsDeletionNotice,
+            fontSize = 12.sp,
+            color = Color.DarkGray
+        )
+    }
+}
+
+@Composable
+private fun CourseRouteImportSelectedChanges(
+    summary: DesktopCourseKmlImportSummary,
+    formatLabel: String,
+    selectedSiConflictCount: Int,
+    selectedSiUpdateCount: Int,
+    applyCategoryAssignments: Boolean,
+    overwriteImportedSiNumbers: Boolean,
+    keepStaleCourseMappings: Boolean,
+    canFetchElevations: Boolean,
+    missingStoredElevationPointCount: Int,
+    fetchElevations: Boolean,
+    onApplyCategoryAssignmentsChange: (Boolean) -> Unit,
+    onOverwriteImportedSiNumbersChange: (Boolean) -> Unit,
+    onKeepStaleCourseMappingsChange: (Boolean) -> Unit,
+    onFetchElevationsChange: (Boolean) -> Unit
+) {
+    if (summary.deletedControlNames.isNotEmpty()) {
+        Text(
+            text = "Existing Controls To Delete: ${summary.deletedControlNames.joinToString()}",
+            color = DesktopPalette.Warning,
+            fontWeight = FontWeight.Bold
+        )
+    }
+    if (summary.importedCategoryCount > 0) {
+        Text("Course Mappings To Import/Update: ${summary.importedCategoryCount}")
+    }
+    if (summary.assignedCategoryControlCount > 0) {
+        Text("Category Assigned Control Points Available To Copy: ${summary.assignedCategoryControlCount}")
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Checkbox(
+                checked = applyCategoryAssignments,
+                onCheckedChange = onApplyCategoryAssignmentsChange
+            )
+            Text("Replace Category Assigned Controls With Matched $formatLabel Controls")
+        }
+        Text(
+            "If selected, existing assigned controls for the matched category are replaced and stored in neutral fox-label order, not route order.",
+            fontSize = 12.sp,
+            color = Color.DarkGray
+        )
+    }
+    if (summary.duplicateCategoryCount > 0) {
+        Text("Duplicate Categories Already Imported: ${summary.duplicateCategoryCount}")
+    }
+    Text("Matched Course Controls: ${courseControlMatchSummary(summary.matchedFoxCount, summary.matchedBeaconCount, summary.matchedSpectatorCount)}")
+    CourseRouteImportSiChanges(
+        selectedSiConflictCount = selectedSiConflictCount,
+        selectedSiUpdateCount = selectedSiUpdateCount,
+        overwriteImportedSiNumbers = overwriteImportedSiNumbers,
+        onOverwriteImportedSiNumbersChange = onOverwriteImportedSiNumbersChange
+    )
+    CourseRouteImportLabelAndLocationChanges(summary)
+    CourseRouteImportStaleMappings(
+        summary = summary,
+        keepStaleCourseMappings = keepStaleCourseMappings,
+        onKeepStaleCourseMappingsChange = onKeepStaleCourseMappingsChange
+    )
+    if (canFetchElevations) {
+        Text(
+            if (summary.isDuplicateOnly) {
+                "Stored route/control elevations missing: $missingStoredElevationPointCount course points"
+            } else {
+                "Imported route/control elevations missing: $missingStoredElevationPointCount course points"
+            }
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Checkbox(
+                checked = fetchElevations,
+                onCheckedChange = onFetchElevationsChange
+            )
+            Text(
+                if (summary.isDuplicateOnly) {
+                    "Download missing elevations for the stored route"
+                } else {
+                    "Download missing elevations for the imported route after making it active"
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CourseRouteImportSiChanges(
+    selectedSiConflictCount: Int,
+    selectedSiUpdateCount: Int,
+    overwriteImportedSiNumbers: Boolean,
+    onOverwriteImportedSiNumbersChange: (Boolean) -> Unit
+) {
+    if (selectedSiConflictCount > 0) {
+        Text("Imported SI= Lines Differ From Existing Race File SI Numbers: $selectedSiConflictCount")
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Checkbox(
+                checked = overwriteImportedSiNumbers,
+                onCheckedChange = onOverwriteImportedSiNumbersChange
+            )
+            Text("Overwrite Race File SI Numbers From Imported SI= Lines")
+        }
+        Text(
+            text = if (overwriteImportedSiNumbers) {
+                "The imported SI= values will replace the existing Race File SI numbers for matched controls."
+            } else {
+                "The current Race File SI numbers will be retained; imported SI= values remain in the source file only."
+            },
+            fontSize = 12.sp,
+            color = Color.DarkGray
+        )
+    }
+    if (selectedSiUpdateCount > 0) {
+        Text("Control Identities To Update From SI= Lines: $selectedSiUpdateCount")
+    }
+}
+
+@Composable
+private fun CourseRouteImportLabelAndLocationChanges(summary: DesktopCourseKmlImportSummary) {
+    if (summary.controlPublicLabelUpdateCount > 0) {
+        Text("Control Public Labels To Update: ${summary.controlPublicLabelUpdateCount}")
+    }
+    if (summary.labelConversions.isNotEmpty()) {
+        Text("Imported Control Names To Treat As Existing Race File Labels:")
+        summary.labelConversions.take(8).forEach { conversion ->
+            Text("${conversion.importedName} -> ${conversion.eventControlLabel}")
+        }
+        if (summary.labelConversions.size > 8) {
+            Text("Additional likely name matches: ${summary.labelConversions.size - 8}")
+        }
+    }
+    if (summary.changedControlLocationCount > 0) {
+        Text("Control Locations To Update: ${summary.changedControlLocationCount}")
+        Text("Stored courses affected by location changes: ${summary.controlLocationAffectedCategoryCount}")
+    }
+}
+
+@Composable
+private fun CourseRouteImportStaleMappings(
+    summary: DesktopCourseKmlImportSummary,
+    keepStaleCourseMappings: Boolean,
+    onKeepStaleCourseMappingsChange: (Boolean) -> Unit
+) {
+    if (summary.staleCourseMappingCategoryNames.isEmpty()) {
+        return
+    }
+    Text(
+        text = "Stale Course Mappings To Clear: ${summary.staleCourseMappingCategoryNames.joinToString()}",
+        color = DesktopPalette.Warning,
+        fontWeight = FontWeight.Bold
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Checkbox(
+            checked = keepStaleCourseMappings,
+            onCheckedChange = onKeepStaleCourseMappingsChange
+        )
+        Text("Keep Stale Course Mappings Anyway")
+    }
+    Text(
+        "These mappings reference controls whose locations changed, but this import did not include replacement route data for those categories. By default they will be deleted so stale course data is not reused.",
+        fontSize = 12.sp,
+        color = Color.DarkGray
+    )
+}
+
+@Composable
+private fun CourseRouteImportFinalNotice(
+    summary: DesktopCourseKmlImportSummary,
+    formatLabel: String
+) {
+    Text(
+        text = if (summary.isDuplicateOnly) {
+            "This file has the same SHA-256 hash as route data already stored in the Race File, so controls and route data will not be reloaded. Elevation retrieval can still fill missing USGS 3DEP route and course-object points. Cancel leaves the Race File unchanged."
+        } else if (
+            summary.hasControlPublicLabelUpdates &&
+            summary.importedCategoryCount == 0 &&
+            summary.assignedCategoryControlCount == 0 &&
+            summary.changedControlLocationCount == 0
+        ) {
+            "Accept Import will copy matched $formatLabel control names into blank Public Label fields in the active Race File model. Matching Notes that duplicate the imported names are cleared. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+        } else if (
+            summary.hasLabelConversions &&
+            summary.importedCategoryCount == 0 &&
+            summary.assignedCategoryControlCount == 0 &&
+            summary.changedControlLocationCount == 0
+        ) {
+            "Accept Import will use these $formatLabel names as matches to existing Race File labels in the active Race File model. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+        } else if (
+            summary.importedCategoryCount == 0 &&
+            (summary.changedControlLocationCount > 0 || summary.controlIdentityUpdateCount > 0)
+        ) {
+            "Accept Import will update control identities or locations in the active Race File model. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+        } else if (summary.importedCategoryCount == 0 && summary.controlSiConflictCount > 0) {
+            "Choose whether to retain current Race File SI numbers or overwrite them from imported SI= lines. Cancel leaves the Race File unchanged."
+        } else if (summary.importedCategoryCount == 0 && summary.assignedCategoryControlCount > 0) {
+            "Accept Import will make the matched $formatLabel control points active in memory for Course Analyzer. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+        } else if (summary.hasLabelConversions) {
+            "Accept Import will use these $formatLabel names as matches to existing Race File labels, then update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+        } else {
+            "Accept Import will update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import becomes active. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+        },
+        fontSize = 13.sp,
+        color = Color.DarkGray
+    )
 }
 
 @Composable
@@ -18735,35 +18861,11 @@ private fun CourseAnalysisPanel(
                 passwordDraft = ""
             }
         }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextField(
-                value = passwordDraft,
-                onValueChange = { passwordDraft = it },
-                label = { Text("Password") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier
-                    .width(260.dp)
-                    .commitOnEnter(::unlock)
-            )
-            DisabledReasonTooltip(
-                if (passwordDraft.isBlank()) {
-                    "Enter the Race Password to view route data and run analysis."
-                } else {
-                    null
-                }
-            ) {
-                Button(
-                    onClick = ::unlock,
-                    enabled = passwordDraft.isNotBlank()
-                ) {
-                    ButtonLabel("Unlock")
-                }
-            }
-        }
+        CourseAnalysisUnlockPrompt(
+            passwordDraft = passwordDraft,
+            onPasswordDraftChange = { passwordDraft = it },
+            onUnlock = ::unlock
+        )
         return
     }
 
@@ -18836,46 +18938,25 @@ private fun CourseAnalysisPanel(
         pendingMissingDataResult = null
     }
 
-    suspend fun analyzeSelectedCourse(
-        categoryId: String,
-        analysisProjectFile: EventProjectFile = projectFile,
-        analysisProtectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = analysisCourseInfoByCategoryId
-    ): DesktopCourseAnalysisSummary =
-        withContext(Dispatchers.Default) {
-            DesktopCourseAnalyzer.analyze(
-                projectFile = analysisProjectFile,
-                categoryId = categoryId,
-                protectedCourseInfo = analysisProtectedCourseInfoByCategoryId[categoryId],
-                protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId],
-                eventFileName = eventFilePath?.fileName?.toString(),
-                elevationLookup = DesktopVenueElevationCache::elevationMeters,
-                elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes,
-                magneticDeclinationProvider = DesktopMagneticDeclination::result
-            )
-        }
     fun analyzeDisabledReason(categoryId: String?): String? =
-        DesktopCourseAnalyzer.analysisUnavailableReason(
+        courseAnalysisUnavailableReason(
             projectFile = projectFile,
             categoryId = categoryId,
-            protectedCourseInfo = categoryId?.let(analysisCourseInfoByCategoryId::get),
-            protectedIdealOrderText = categoryId?.let(protectedIdealOrderByCategoryId::get)
+            protectedCourseInfoByCategoryId = analysisCourseInfoByCategoryId,
+            protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId
         )
 
     suspend fun analyzeWithLocalCachePreparation(categoryId: String): DesktopCourseAnalysisSummary {
-        var summary = analyzeSelectedCourse(categoryId)
-        if (summary.hasMissingElevationData) {
-            analysisProgressMessage = "Checking the local elevation cache before asking for an internet download."
-            val preparation = onResolveCachedElevations(categoryId)
-            if (preparation != null) {
-                exportStatusText = preparation.statusText
-                summary = analyzeSelectedCourse(
-                    categoryId = categoryId,
-                    analysisProjectFile = preparation.projectFile,
-                    analysisProtectedCourseInfoByCategoryId = preparation.protectedCourseInfoByCategoryId
-                )
-            }
-        }
-        return summary
+        return analyzeCourseWithLocalCachePreparation(
+            projectFile = projectFile,
+            categoryId = categoryId,
+            protectedCourseInfoByCategoryId = analysisCourseInfoByCategoryId,
+            protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+            eventFilePath = eventFilePath,
+            onResolveCachedElevations = onResolveCachedElevations,
+            onProgressMessage = { analysisProgressMessage = it },
+            onStatusText = { exportStatusText = it }
+        )
     }
 
     fun showAnalysisSummary(summary: DesktopCourseAnalysisSummary) {
@@ -18909,263 +18990,434 @@ private fun CourseAnalysisPanel(
             return@Column
         }
         val currentAnalyzeDisabledReason = analyzeDisabledReason(effectiveSelectedCategoryId)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            CourseAnalysisCategoryPicker(
-                selectedCategoryId = effectiveSelectedCategoryId,
-                categories = categories.map { it.category.id to it.category.name },
-                onCategorySelected = {
-                    selectedCategoryId = it
-                    onAnalysisResultChange(null)
-                    pendingMissingDataResult = null
-                    exportStatusText = null
-                    onApplyStatusTextChange(null)
-                },
-                modifier = Modifier.width(280.dp)
-            )
-            TextField(
-                value = speedFactorDraft,
-                onValueChange = {
-                    speedFactorDraft = it
-                    speedStatusText = null
-                },
-                label = { Text("Speed Factor") },
-                singleLine = true,
-                modifier = Modifier
-                    .width(126.dp)
-                    .onFocusChanged { state ->
-                        if (speedFactorFocused && !state.isFocused) {
-                            applySpeedFactorDraft()
-                        }
-                        speedFactorFocused = state.isFocused
+        CourseAnalysisActionRow(
+            selectedCategoryId = effectiveSelectedCategoryId,
+            categories = categories.map { it.category.id to it.category.name },
+            speedFactorDraft = speedFactorDraft,
+            speedFactorFocused = speedFactorFocused,
+            analyzeDisabledReason = currentAnalyzeDisabledReason,
+            isAnalyzing = isAnalyzing,
+            analysisResult = analysisResult,
+            onCategorySelected = {
+                selectedCategoryId = it
+                onAnalysisResultChange(null)
+                pendingMissingDataResult = null
+                exportStatusText = null
+                onApplyStatusTextChange(null)
+            },
+            onSpeedFactorDraftChange = {
+                speedFactorDraft = it
+                speedStatusText = null
+            },
+            onSpeedFactorFocusChange = { state ->
+                if (speedFactorFocused && !state.isFocused) {
+                    applySpeedFactorDraft()
+                }
+                speedFactorFocused = state.isFocused
+            },
+            onApplySpeedFactorDraft = ::applySpeedFactorDraft,
+            onAnalyze = {
+                val categoryId = effectiveSelectedCategoryId ?: return@CourseAnalysisActionRow
+                if (isAnalyzing) return@CourseAnalysisActionRow
+                isAnalyzing = true
+                exportStatusText = null
+                onApplyStatusTextChange(null)
+                onAnalysisResultChange(null)
+                pendingMissingDataResult = null
+                analysisScope.launch {
+                    try {
+                        // Let Compose paint the progress dialog before route optimization
+                        // begins; Foxoring hybrid search can otherwise make the UI appear
+                        // unresponsive on slower machines.
+                        delay(100)
+                        analysisProgressMessage = "Calculating route metrics, route optimization, route timing, rule checks, and report graphics."
+                        val summary = analyzeWithLocalCachePreparation(categoryId)
+                        acceptAnalysisSummary(categoryId, summary)
+                    } catch (error: Throwable) {
+                        exportStatusText = "Analysis failed: ${error.message ?: error::class.simpleName}"
+                        DesktopDebugLog.error("CourseAnalysis", "Analysis failed: ${error.message ?: error::class.simpleName}")
+                    } finally {
+                        isAnalyzing = false
                     }
-                    .commitOnEnter(::applySpeedFactorDraft)
-            )
-            DisabledReasonTooltip(
-                currentAnalyzeDisabledReason
-            ) {
-                Button(
-                    onClick = {
-                        val categoryId = effectiveSelectedCategoryId ?: return@Button
-                        if (isAnalyzing) return@Button
-                        isAnalyzing = true
-                        exportStatusText = null
-                        onApplyStatusTextChange(null)
-                        onAnalysisResultChange(null)
-                        pendingMissingDataResult = null
-                        analysisScope.launch {
-                            try {
-                                // Let Compose paint the progress dialog before route optimization
-                                // begins; Foxoring hybrid search can otherwise make the UI appear
-                                // unresponsive on slower machines.
-                                delay(100)
-                                analysisProgressMessage = "Calculating route metrics, route optimization, route timing, rule checks, and report graphics."
-                                val summary = analyzeWithLocalCachePreparation(categoryId)
-                                acceptAnalysisSummary(categoryId, summary)
-                            } catch (error: Throwable) {
-                                exportStatusText = "Analysis failed: ${error.message ?: error::class.simpleName}"
-                                DesktopDebugLog.error("CourseAnalysis", "Analysis failed: ${error.message ?: error::class.simpleName}")
-                            } finally {
-                                isAnalyzing = false
-                            }
-                        }
-                    },
-                    enabled = currentAnalyzeDisabledReason == null && !isAnalyzing
-                ) {
-                    ButtonLabel("Analyze")
+                }
+            },
+            onExportAnalysis = {
+                val summary = analysisResult ?: return@CourseAnalysisActionRow
+                DesktopFileDialogs.chooseExportCourseAnalysisPdf(
+                    defaultFileName = DesktopCourseAnalysisExports.defaultPdfFileName(summary)
+                )?.let { path ->
+                    runCatching {
+                        val exportPaths = DesktopCourseAnalysisExports.exportPdfAndKml(path, summary)
+                        exportStatusText = "Exported ${exportPaths.pdfPath.fileName} and ${exportPaths.kmlPath.fileName}"
+                        DesktopDebugLog.info(
+                            "CourseAnalysis",
+                            "Exported analysis PDF ${exportPaths.pdfPath.fileName} and KML ${exportPaths.kmlPath.fileName}"
+                        )
+                    }.onFailure { error ->
+                        exportStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                        DesktopDebugLog.error("CourseAnalysis", "Analysis export failed: ${error.message ?: error::class.simpleName}")
+                    }
                 }
             }
-            DisabledReasonTooltip(
-                when {
-                    isAnalyzing -> null
-                    analysisResult == null -> "Run analysis before exporting."
-                    else -> null
+        )
+        CourseAnalysisStatusMessages(
+            analyzeDisabledReason = currentAnalyzeDisabledReason,
+            isAnalyzing = isAnalyzing,
+            analysisProgressMessage = analysisProgressMessage,
+            applyStatusText = applyStatusText,
+            exportStatusText = exportStatusText,
+            speedStatusText = speedStatusText,
+            analysisResult = analysisResult
+        )
+        CourseAnalysisResultView(analysisResult)
+    }
+
+    pendingMissingDataResult?.let { prompt ->
+        CourseAnalysisMissingDataDialog(
+            prompt = prompt,
+            onDismiss = { pendingMissingDataResult = null },
+            onConfirm = { downloadBeforeAnalyzing ->
+                val summary = prompt.summary
+                val canDownloadMissingElevationData = shouldOfferCalculatedRouteElevationDownload(summary)
+                pendingMissingDataResult = null
+                if (!downloadBeforeAnalyzing || !canDownloadMissingElevationData) {
+                    showAnalysisSummary(summary)
+                    return@CourseAnalysisMissingDataDialog
                 }
-            ) {
-                Button(
-                    onClick = {
-                        val summary = analysisResult ?: return@Button
-                        DesktopFileDialogs.chooseExportCourseAnalysisPdf(
-                            defaultFileName = DesktopCourseAnalysisExports.defaultPdfFileName(summary)
-                        )?.let { path ->
-                            runCatching {
-                                val exportPaths = DesktopCourseAnalysisExports.exportPdfAndKml(path, summary)
-                                exportStatusText = "Exported ${exportPaths.pdfPath.fileName} and ${exportPaths.kmlPath.fileName}"
-                                DesktopDebugLog.info(
-                                    "CourseAnalysis",
-                                    "Exported analysis PDF ${exportPaths.pdfPath.fileName} and KML ${exportPaths.kmlPath.fileName}"
-                                )
-                            }.onFailure { error ->
-                                exportStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
-                                DesktopDebugLog.error("CourseAnalysis", "Analysis export failed: ${error.message ?: error::class.simpleName}")
-                            }
+                if (isAnalyzing) {
+                    return@CourseAnalysisMissingDataDialog
+                }
+                isAnalyzing = true
+                analysisProgressMessage = "Downloading missing elevation data from the internet."
+                analysisScope.launch {
+                    try {
+                        val preparation = onDownloadMissingElevations(prompt.categoryId, summary)
+                        if (preparation != null) {
+                            exportStatusText = preparation.statusText
                         }
-                    },
-                    enabled = analysisResult != null && !isAnalyzing
-                ) {
-                    ButtonLabel("Export Analysis...")
+                        analysisProgressMessage = "Re-running analysis with the latest available elevation data."
+                        val refreshedSummary = analyzeCourseCategory(
+                            projectFile = preparation?.projectFile ?: projectFile,
+                            categoryId = prompt.categoryId,
+                            protectedCourseInfoByCategoryId = preparation?.protectedCourseInfoByCategoryId
+                                ?: protectedCourseInfoByCategoryId,
+                            protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                            eventFilePath = eventFilePath
+                        )
+                        acceptAnalysisSummary(prompt.categoryId, refreshedSummary)
+                    } catch (error: Throwable) {
+                        exportStatusText = if (error is CancellationException) {
+                            "Elevation download canceled. Analysis was not run."
+                        } else {
+                            "Elevation download failed: ${error.message ?: error::class.simpleName}"
+                        }
+                        DesktopDebugLog.error("CourseAnalysis", "Elevation preparation failed: ${error.message ?: error::class.simpleName}")
+                    } finally {
+                        isAnalyzing = false
+                        analysisProgressMessage =
+                            "Calculating route metrics, route optimization, route timing, rule checks, and report graphics."
+                    }
                 }
             }
-        }
-        currentAnalyzeDisabledReason?.let { disabledReason ->
-            Text(
-                text = disabledReason,
-                color = DesktopPalette.Black,
-                fontSize = 13.sp
+        )
+    }
+}
+
+private fun courseAnalysisUnavailableReason(
+    projectFile: EventProjectFile,
+    categoryId: String?,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    protectedIdealOrderByCategoryId: Map<String, String>
+): String? =
+    DesktopCourseAnalyzer.analysisUnavailableReason(
+        projectFile = projectFile,
+        categoryId = categoryId,
+        protectedCourseInfo = categoryId?.let(protectedCourseInfoByCategoryId::get),
+        protectedIdealOrderText = categoryId?.let(protectedIdealOrderByCategoryId::get)
+    )
+
+private suspend fun analyzeCourseWithLocalCachePreparation(
+    projectFile: EventProjectFile,
+    categoryId: String,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    protectedIdealOrderByCategoryId: Map<String, String>,
+    eventFilePath: Path?,
+    onResolveCachedElevations: suspend (String) -> CourseAnalysisElevationPreparationResult?,
+    onProgressMessage: (String) -> Unit,
+    onStatusText: (String) -> Unit
+): DesktopCourseAnalysisSummary {
+    var summary = analyzeCourseCategory(
+        projectFile = projectFile,
+        categoryId = categoryId,
+        protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+        protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+        eventFilePath = eventFilePath
+    )
+    if (summary.hasMissingElevationData) {
+        onProgressMessage("Checking the local elevation cache before asking for an internet download.")
+        val preparation = onResolveCachedElevations(categoryId)
+        if (preparation != null) {
+            onStatusText(preparation.statusText)
+            summary = analyzeCourseCategory(
+                projectFile = preparation.projectFile,
+                categoryId = categoryId,
+                protectedCourseInfoByCategoryId = preparation.protectedCourseInfoByCategoryId,
+                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                eventFilePath = eventFilePath
             )
         }
-        if (isAnalyzing) {
-            IndeterminateProgressDialog(
-                title = "Analyzing course",
-                message = analysisProgressMessage
-            )
+    }
+    return summary
+}
+
+private suspend fun analyzeCourseCategory(
+    projectFile: EventProjectFile,
+    categoryId: String,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    protectedIdealOrderByCategoryId: Map<String, String>,
+    eventFilePath: Path?
+): DesktopCourseAnalysisSummary =
+    withContext(Dispatchers.Default) {
+        DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = categoryId,
+            protectedCourseInfo = protectedCourseInfoByCategoryId[categoryId],
+            protectedIdealOrderText = protectedIdealOrderByCategoryId[categoryId],
+            eventFileName = eventFilePath?.fileName?.toString(),
+            elevationLookup = DesktopVenueElevationCache::elevationMeters,
+            elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes,
+            magneticDeclinationProvider = DesktopMagneticDeclination::result
+        )
+    }
+
+@Composable
+private fun CourseAnalysisUnlockPrompt(
+    passwordDraft: String,
+    onPasswordDraftChange: (String) -> Unit,
+    onUnlock: () -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextField(
+            value = passwordDraft,
+            onValueChange = onPasswordDraftChange,
+            label = { Text("Password") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier
+                .width(260.dp)
+                .commitOnEnter(onUnlock)
+        )
+        DisabledReasonTooltip(
+            if (passwordDraft.isBlank()) {
+                "Enter the Race Password to view route data and run analysis."
+            } else {
+                null
+            }
+        ) {
+            Button(
+                onClick = onUnlock,
+                enabled = passwordDraft.isNotBlank()
+            ) {
+                ButtonLabel("Unlock")
+            }
         }
-        applyStatusText?.let { statusText ->
-            Text(
-                text = statusText,
-                color = if (statusText.startsWith("Save") && statusText.contains("failed")) {
-                    DesktopPalette.Error
-                } else {
-                    DesktopPalette.Disconnected
-                },
-                fontSize = 13.sp
-            )
+    }
+}
+
+@Composable
+private fun CourseAnalysisActionRow(
+    selectedCategoryId: String?,
+    categories: List<Pair<String, String>>,
+    speedFactorDraft: String,
+    speedFactorFocused: Boolean,
+    analyzeDisabledReason: String?,
+    isAnalyzing: Boolean,
+    analysisResult: DesktopCourseAnalysisSummary?,
+    onCategorySelected: (String) -> Unit,
+    onSpeedFactorDraftChange: (String) -> Unit,
+    onSpeedFactorFocusChange: (FocusState) -> Unit,
+    onApplySpeedFactorDraft: () -> Unit,
+    onAnalyze: () -> Unit,
+    onExportAnalysis: () -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CourseAnalysisCategoryPicker(
+            selectedCategoryId = selectedCategoryId,
+            categories = categories,
+            onCategorySelected = onCategorySelected,
+            modifier = Modifier.width(280.dp)
+        )
+        TextField(
+            value = speedFactorDraft,
+            onValueChange = onSpeedFactorDraftChange,
+            label = { Text("Speed Factor") },
+            singleLine = true,
+            modifier = Modifier
+                .width(126.dp)
+                .onFocusChanged(onSpeedFactorFocusChange)
+                .commitOnEnter(onApplySpeedFactorDraft)
+        )
+        DisabledReasonTooltip(analyzeDisabledReason) {
+            Button(
+                onClick = onAnalyze,
+                enabled = analyzeDisabledReason == null && !isAnalyzing
+            ) {
+                ButtonLabel("Analyze")
+            }
         }
-        exportStatusText?.let { statusText ->
-            Text(
-                text = statusText,
-                color = if (statusText.startsWith("Export failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
-                fontSize = 13.sp
-            )
+        DisabledReasonTooltip(
+            when {
+                isAnalyzing -> null
+                analysisResult == null -> "Run analysis before exporting."
+                else -> null
+            }
+        ) {
+            Button(
+                onClick = onExportAnalysis,
+                enabled = analysisResult != null && !isAnalyzing
+            ) {
+                ButtonLabel("Export Analysis...")
+            }
         }
+    }
+}
+
+@Composable
+private fun CourseAnalysisStatusMessages(
+    analyzeDisabledReason: String?,
+    isAnalyzing: Boolean,
+    analysisProgressMessage: String,
+    applyStatusText: String?,
+    exportStatusText: String?,
+    speedStatusText: String?,
+    analysisResult: DesktopCourseAnalysisSummary?
+) {
+    analyzeDisabledReason?.let { disabledReason ->
         Text(
-            text = speedStatusText
-                ?: "Speed factor is race-wide by default: 1.00 normal, below 1.00 slower conditions, above 1.00 faster conditions. Per-leg speed factors specified in course component descriptions with SS=#.## override the race-wide factor for the following leg.",
-            color = if (speedStatusText?.contains("failed", ignoreCase = true) == true ||
-                speedStatusText?.contains("must be", ignoreCase = true) == true
-            ) {
+            text = disabledReason,
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+    }
+    if (isAnalyzing) {
+        IndeterminateProgressDialog(
+            title = "Analyzing course",
+            message = analysisProgressMessage
+        )
+    }
+    applyStatusText?.let { statusText ->
+        Text(
+            text = statusText,
+            color = if (statusText.startsWith("Save") && statusText.contains("failed")) {
                 DesktopPalette.Error
             } else {
                 DesktopPalette.Disconnected
             },
             fontSize = 13.sp
         )
-        analysisResult?.takeIf { it.usesExpiredMagneticDeclinationModel }?.let {
-            Text(
-                text = expiredMagneticDeclinationModelWarningText(),
-                color = DesktopPalette.Disconnected,
-                fontSize = 13.sp
-            )
-        }
-        CourseAnalysisResultView(analysisResult)
     }
+    exportStatusText?.let { statusText ->
+        Text(
+            text = statusText,
+            color = if (statusText.startsWith("Export failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+    }
+    Text(
+        text = speedStatusText
+            ?: "Speed factor is race-wide by default: 1.00 normal, below 1.00 slower conditions, above 1.00 faster conditions. Per-leg speed factors specified in course component descriptions with SS=#.## override the race-wide factor for the following leg.",
+        color = if (speedStatusText?.contains("failed", ignoreCase = true) == true ||
+            speedStatusText?.contains("must be", ignoreCase = true) == true
+        ) {
+            DesktopPalette.Error
+        } else {
+            DesktopPalette.Disconnected
+        },
+        fontSize = 13.sp
+    )
+    analysisResult?.takeIf { it.usesExpiredMagneticDeclinationModel }?.let {
+        Text(
+            text = expiredMagneticDeclinationModelWarningText(),
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+    }
+}
 
-    pendingMissingDataResult?.let { prompt ->
-        val summary = prompt.summary
-        val canDownloadMissingElevationData = shouldOfferCalculatedRouteElevationDownload(summary)
-        var downloadBeforeAnalyzing by remember(prompt) { mutableStateOf(canDownloadMissingElevationData) }
-        AlertDialog(
-            onDismissRequest = { pendingMissingDataResult = null },
-            title = { Text("Course Analysis Data Is Incomplete") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+@Composable
+private fun CourseAnalysisMissingDataDialog(
+    prompt: CourseAnalysisMissingDataPrompt,
+    onDismiss: () -> Unit,
+    onConfirm: (downloadBeforeAnalyzing: Boolean) -> Unit
+) {
+    val summary = prompt.summary
+    val canDownloadMissingElevationData = shouldOfferCalculatedRouteElevationDownload(summary)
+    var downloadBeforeAnalyzing by remember(prompt) { mutableStateOf(canDownloadMissingElevationData) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Course Analysis Data Is Incomplete") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "The analyzer can continue, but the result may be partial.",
+                    color = DesktopPalette.Black,
+                    fontSize = 14.sp
+                )
+                summary.missingElements.forEach { missing ->
                     Text(
-                        text = "The analyzer can continue, but the result may be partial.",
+                        text = "- $missing",
                         color = DesktopPalette.Black,
-                        fontSize = 14.sp
+                        fontSize = 13.sp
                     )
-                    summary.missingElements.forEach { missing ->
+                }
+                if (canDownloadMissingElevationData) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = downloadBeforeAnalyzing,
+                            onCheckedChange = { downloadBeforeAnalyzing = it }
+                        )
                         Text(
-                            text = "- $missing",
+                            text = "Download missing elevation data from the internet before analyzing",
                             color = DesktopPalette.Black,
                             fontSize = 13.sp
                         )
                     }
-                    if (canDownloadMissingElevationData) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = downloadBeforeAnalyzing,
-                                onCheckedChange = { downloadBeforeAnalyzing = it }
-                            )
-                            Text(
-                                text = "Download missing elevation data from the internet before analyzing",
-                                color = DesktopPalette.Black,
-                                fontSize = 13.sp
-                            )
-                        }
-                        Text(
-                            text = "The saved route already has elevation data. Downloading uses internet elevation data to fill the local calculated-route cache before comparison.",
-                            color = DesktopPalette.Disconnected,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        pendingMissingDataResult = null
-                        if (!downloadBeforeAnalyzing || !canDownloadMissingElevationData) {
-                            showAnalysisSummary(summary)
-                            return@Button
-                        }
-                        if (isAnalyzing) {
-                            return@Button
-                        }
-                        isAnalyzing = true
-                        analysisProgressMessage = "Downloading missing elevation data from the internet."
-                        analysisScope.launch {
-                            try {
-                                val preparation = onDownloadMissingElevations(prompt.categoryId, summary)
-                                if (preparation != null) {
-                                    exportStatusText = preparation.statusText
-                                }
-                                analysisProgressMessage = "Re-running analysis with the latest available elevation data."
-                                val refreshedSummary = analyzeSelectedCourse(
-                                    categoryId = prompt.categoryId,
-                                    analysisProjectFile = preparation?.projectFile ?: projectFile,
-                                    analysisProtectedCourseInfoByCategoryId = preparation?.protectedCourseInfoByCategoryId
-                                        ?: protectedCourseInfoByCategoryId
-                                )
-                                acceptAnalysisSummary(prompt.categoryId, refreshedSummary)
-                            } catch (error: Throwable) {
-                                exportStatusText = if (error is CancellationException) {
-                                    "Elevation download canceled. Analysis was not run."
-                                } else {
-                                    "Elevation download failed: ${error.message ?: error::class.simpleName}"
-                                }
-                                DesktopDebugLog.error("CourseAnalysis", "Elevation preparation failed: ${error.message ?: error::class.simpleName}")
-                            } finally {
-                                isAnalyzing = false
-                                analysisProgressMessage =
-                                    "Calculating route metrics, route optimization, route timing, rule checks, and report graphics."
-                            }
-                        }
-                    }
-                ) {
-                    ButtonLabel(
-                        if (downloadBeforeAnalyzing && canDownloadMissingElevationData) {
-                            "Download Missing Elevations"
-                        } else {
-                            "Analyze with Missing Elevations"
-                        }
+                    Text(
+                        text = "The saved route already has elevation data. Downloading uses internet elevation data to fill the local calculated-route cache before comparison.",
+                        color = DesktopPalette.Disconnected,
+                        fontSize = 12.sp
                     )
                 }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { pendingMissingDataResult = null }) {
-                        ButtonLabel("Cancel")
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(downloadBeforeAnalyzing) }) {
+                ButtonLabel(
+                    if (downloadBeforeAnalyzing && canDownloadMissingElevationData) {
+                        "Download Missing Elevations"
+                    } else {
+                        "Analyze with Missing Elevations"
                     }
+                )
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onDismiss) {
+                    ButtonLabel("Cancel")
                 }
             }
-        )
-    }
+        }
+    )
 }
 
 private fun calculatedRouteApplyDisabledReason(analysisResult: DesktopCourseAnalysisSummary?): String? =
