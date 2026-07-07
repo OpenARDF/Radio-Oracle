@@ -71,7 +71,25 @@ class DesktopAppUpdateSupportTest {
         assertFalse(status.launchedByJdeploy)
         assertNull(status.jdeployUpdatesAvailable)
         assertFalse(DesktopAppUpdateSupport.shouldShowAutomaticNotice(status))
-        assertTrue(DesktopAppUpdateSupport.dialogMessage(status).contains("not launched by jDeploy"))
+        assertTrue(DesktopAppUpdateSupport.dialogMessage(status).contains("not started by the desktop installer"))
+        assertTrue(DesktopAppUpdateSupport.dialogMessage(status).contains("open the update page"))
+    }
+
+    @Test
+    fun explainsMissingInstallerUpdateStatusWithoutImplementationJargon() {
+        val status = DesktopAppUpdateSupport.status("1.0.10") { key ->
+            when (key) {
+                "jdeploy.app.version" -> "1.0.10"
+                else -> null
+            }
+        }
+        val message = DesktopAppUpdateSupport.dialogMessage(status)
+
+        assertTrue(status.launchedByJdeploy)
+        assertNull(status.jdeployUpdatesAvailable)
+        assertTrue(message.contains("could not determine update availability"))
+        assertFalse(message.contains("launched by jDeploy"))
+        assertFalse(message.contains("status was not reported"))
     }
 
     @Test

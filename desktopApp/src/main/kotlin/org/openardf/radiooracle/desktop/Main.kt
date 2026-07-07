@@ -9999,7 +9999,7 @@ private fun AboutRadioOracleDialog(
                     )
                     AboutRadioOracleInfoRow(
                         label = "Updates",
-                        value = "Check for updates",
+                        value = "Show update status",
                         onClick = onCheckForUpdates
                     )
                 }
@@ -10072,11 +10072,11 @@ private fun manualUpdateCheckResult(
         messageDialogText = null,
         statusText = when (status.jdeployUpdatesAvailable) {
             true -> "jDeploy reported a Radio-Oracle update is available."
-            false -> "jDeploy did not report a Radio-Oracle update at launch."
+            false -> "No Radio-Oracle update was reported when this app started."
             null -> if (status.launchedByJdeploy) {
-                "Radio-Oracle was launched by jDeploy, but update status was not reported."
+                "Radio-Oracle could not determine update availability for this launch."
             } else {
-                "Radio-Oracle was not launched by jDeploy, so update status is unavailable in this run."
+                "This copy of Radio-Oracle was not started by the desktop installer, so automatic update status is unavailable."
             }
         }
     )
@@ -10180,10 +10180,10 @@ private fun updateCheckStatusText(
         updateCheckStatus.jdeployUpdatesAvailable == true ->
             "jDeploy reported a Radio-Oracle update is available. Current version: ${updateCheckStatus.currentVersion}."
         updateCheckStatus.jdeployUpdatesAvailable == false ->
-            "jDeploy did not report a Radio-Oracle update at launch. Current version: ${updateCheckStatus.currentVersion}."
+            "No Radio-Oracle update was reported when this app started. Current version: ${updateCheckStatus.currentVersion}."
         updateCheckStatus.launchedByJdeploy ->
-            "Radio-Oracle was launched by jDeploy, but update status was not reported."
-        else -> "Radio-Oracle was not launched by jDeploy, so update status is not available in this run."
+            "Radio-Oracle could not determine update availability for this launch."
+        else -> "This copy of Radio-Oracle was not started by the desktop installer, so automatic update status is unavailable."
     }
 
 private sealed interface DesktopPendingNavigation {

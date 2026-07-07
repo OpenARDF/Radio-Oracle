@@ -60,31 +60,35 @@ object DesktopAppUpdateSupport {
 
     fun disabledDialogMessage(): String =
         "Radio-Oracle update checks are disabled in App Settings.\n\n" +
-            "Enable update checks to show jDeploy update status from app startup, or open the update page directly:\n" +
+            "Enable update checks to show automatic update status at startup, or open the update page directly:\n" +
             updatePageUrl
 
     fun dialogMessage(status: DesktopAppUpdateStatus): String =
         buildString {
             when (status.jdeployUpdatesAvailable) {
                 true -> append("An updated version of Radio-Oracle is available.")
-                false -> append("jDeploy did not report a Radio-Oracle update at launch.")
+                false -> append("No Radio-Oracle update was reported when this app started.")
                 null -> {
                     if (status.launchedByJdeploy) {
-                        append("Radio-Oracle was launched by jDeploy, but update status was not reported.")
+                        append("Radio-Oracle could not determine update availability for this launch.")
                     } else {
-                        append("Radio-Oracle was not launched by jDeploy, so jDeploy update status is not available in this run.")
+                        append(
+                            "This copy of Radio-Oracle was not started by the desktop installer, " +
+                                "so automatic update status is unavailable."
+                        )
                     }
                 }
             }
             append("\n\nCurrent version: ${status.currentVersion}")
             if (!status.jdeployAppVersion.isNullOrBlank() && status.jdeployAppVersion != status.currentVersion) {
-                append("\njDeploy package version: ${status.jdeployAppVersion}")
+                append("\nInstalled package version: ${status.jdeployAppVersion}")
             }
             if (!status.jdeployAppSource.isNullOrBlank()) {
-                append("\njDeploy source: ${status.jdeployAppSource}")
+                append("\nUpdate source: ${status.jdeployAppSource}")
             }
             append("\n\nUpdate page:\n$updatePageUrl")
-            append("\n\njDeploy-installed copies normally check for updates automatically each time they launch.")
+            append("\n\nTo check manually, open the update page and install the latest available version.")
+            append("\n\nInstalled desktop copies normally check for updates automatically when they launch.")
         }
 
     private fun parseFlexibleBoolean(value: String?): Boolean? =
