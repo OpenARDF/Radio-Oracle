@@ -73,4 +73,12 @@ class DesktopAppUpdateSupportTest {
         assertFalse(DesktopAppUpdateSupport.shouldShowAutomaticNotice(status))
         assertTrue(DesktopAppUpdateSupport.dialogMessage(status).contains("not launched by jDeploy"))
     }
+
+    @Test
+    fun disabledDialogMessageExplainsSettingAndProvidesUpdatePage() {
+        val message = DesktopAppUpdateSupport.disabledDialogMessage()
+
+        assertTrue(message.contains("disabled in App Settings"))
+        assertTrue(message.contains(DesktopAppUpdateSupport.updatePageUrl))
+    }
 }

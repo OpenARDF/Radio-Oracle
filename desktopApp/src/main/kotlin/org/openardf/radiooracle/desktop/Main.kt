@@ -639,6 +639,7 @@ fun main(args: Array<String>) = application {
         }
         var updateCheckStatus by remember { mutableStateOf<DesktopAppUpdateStatus?>(null) }
         var appUpdateDialogStatus by remember { mutableStateOf<DesktopAppUpdateStatus?>(null) }
+        var appUpdateMessageDialogText by remember { mutableStateOf<String?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
         var printerDiagnostics by remember { mutableStateOf(DesktopPrinterDiagnostics.from(emptyList())) }
         var lastLoggedSiReaderStatus by remember { mutableStateOf<String?>(null) }
@@ -3168,22 +3169,14 @@ fun main(args: Array<String>) = application {
         }
 
         fun checkForUpdates() {
-            if (!isUpdateCheckingEnabled) {
-                updateCheckStatus = null
-                projectStatusText = "Radio-Oracle update checks are disabled in App Settings."
-                return
-            }
-            val status = DesktopAppUpdateSupport.status(currentVersion = DesktopBuildInfo.baseVersion)
-            updateCheckStatus = status
-            projectStatusText = when (status.jdeployUpdatesAvailable) {
-                true -> "jDeploy reported a Radio-Oracle update is available."
-                false -> "jDeploy did not report a Radio-Oracle update at launch."
-                null -> if (status.launchedByJdeploy) {
-                    "Radio-Oracle was launched by jDeploy, but update status was not reported."
-                } else {
-                    "Radio-Oracle was not launched by jDeploy, so update status is unavailable in this run."
-                }
-            }
+            val result = manualUpdateCheckResult(
+                isUpdateCheckingEnabled = isUpdateCheckingEnabled,
+                currentVersion = DesktopBuildInfo.baseVersion
+            )
+            updateCheckStatus = result.updateCheckStatus
+            appUpdateDialogStatus = result.updateDialogStatus
+            appUpdateMessageDialogText = result.messageDialogText
+            projectStatusText = result.statusText
             DesktopDebugLog.info("Update", projectStatusText)
         }
 
@@ -3193,6 +3186,7 @@ fun main(args: Array<String>) = application {
             if (!enabled) {
                 updateCheckStatus = null
                 appUpdateDialogStatus = null
+                appUpdateMessageDialogText = null
             }
             projectStatusText = if (enabled) {
                 "Radio-Oracle update checks enabled."
@@ -6105,13 +6099,13 @@ fun main(args: Array<String>) = application {
                 onDismiss = { androidFileReceiveResultDialog = null }
             )
         }
-        appUpdateDialogStatus?.let { status ->
-            RadioOracleUpdateDialog(
-                status = status,
-                onOpenUpdateLink = { openExternalUrl(DesktopAppUpdateSupport.updatePageUrl) },
-                onDismiss = { appUpdateDialogStatus = null }
-            )
-        }
+        DesktopAppUpdateDialogs(
+            updateStatus = appUpdateDialogStatus,
+            message = appUpdateMessageDialogText,
+            onOpenUpdateLink = { openExternalUrl(DesktopAppUpdateSupport.updatePageUrl) },
+            onDismissStatus = { appUpdateDialogStatus = null },
+            onDismissMessage = { appUpdateMessageDialogText = null }
+        )
         pendingCourseKmlKmzImportWarning?.let { warning ->
             AlertDialog(
                 onDismissRequest = { pendingCourseKmlKmzImportWarning = null },
@@ -10052,6 +10046,66 @@ private fun AboutRadioOracleInfoRow(
     }
 }
 
+private data class DesktopManualUpdateCheckResult(
+    val updateCheckStatus: DesktopAppUpdateStatus?,
+    val updateDialogStatus: DesktopAppUpdateStatus?,
+    val messageDialogText: String?,
+    val statusText: String
+)
+
+private fun manualUpdateCheckResult(
+    isUpdateCheckingEnabled: Boolean,
+    currentVersion: String
+): DesktopManualUpdateCheckResult {
+    if (!isUpdateCheckingEnabled) {
+        return DesktopManualUpdateCheckResult(
+            updateCheckStatus = null,
+            updateDialogStatus = null,
+            messageDialogText = DesktopAppUpdateSupport.disabledDialogMessage(),
+            statusText = "Radio-Oracle update checks are disabled in App Settings."
+        )
+    }
+    val status = DesktopAppUpdateSupport.status(currentVersion = currentVersion)
+    return DesktopManualUpdateCheckResult(
+        updateCheckStatus = status,
+        updateDialogStatus = status,
+        messageDialogText = null,
+        statusText = when (status.jdeployUpdatesAvailable) {
+            true -> "jDeploy reported a Radio-Oracle update is available."
+            false -> "jDeploy did not report a Radio-Oracle update at launch."
+            null -> if (status.launchedByJdeploy) {
+                "Radio-Oracle was launched by jDeploy, but update status was not reported."
+            } else {
+                "Radio-Oracle was not launched by jDeploy, so update status is unavailable in this run."
+            }
+        }
+    )
+}
+
+@Composable
+private fun DesktopAppUpdateDialogs(
+    updateStatus: DesktopAppUpdateStatus?,
+    message: String?,
+    onOpenUpdateLink: () -> Unit,
+    onDismissStatus: () -> Unit,
+    onDismissMessage: () -> Unit
+) {
+    updateStatus?.let { status ->
+        RadioOracleUpdateDialog(
+            status = status,
+            onOpenUpdateLink = onOpenUpdateLink,
+            onDismiss = onDismissStatus
+        )
+    }
+    message?.let { text ->
+        RadioOracleUpdateMessageDialog(
+            message = text,
+            onOpenUpdateLink = onOpenUpdateLink,
+            onDismiss = onDismissMessage
+        )
+    }
+}
+
 @Composable
 private fun RadioOracleUpdateDialog(
     status: DesktopAppUpdateStatus,
@@ -10064,6 +10118,38 @@ private fun RadioOracleUpdateDialog(
         text = {
             SelectionContainer {
                 Text(DesktopAppUpdateSupport.dialogMessage(status))
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onOpenUpdateLink()
+                    onDismiss()
+                }
+            ) {
+                Text("Open Update Link")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
+    )
+}
+
+@Composable
+private fun RadioOracleUpdateMessageDialog(
+    message: String,
+    onOpenUpdateLink: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Radio-Oracle Updates") },
+        text = {
+            SelectionContainer {
+                Text(message)
             }
         },
         confirmButton = {
