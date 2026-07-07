@@ -954,8 +954,17 @@ object DesktopNavigation {
             )
         }
 
+    fun rootItems(workflow: DesktopWorkflow, readiness: DesktopNavigationReadiness): List<DesktopNavItem> =
+        rootItems(workflow).filterForReadiness(workflow, readiness)
+
     fun currentItems(state: DesktopNavState): List<DesktopNavItem> {
         val activeMenuItems = menuItemsForStack(state.workflow, state.submenuStack)
+        val selectedLeaf = activeMenuItems.firstOrNull { it.id == state.selectedItemId && it.children.isEmpty() }
+        return selectedLeaf?.children ?: activeMenuItems
+    }
+
+    fun currentItems(state: DesktopNavState, readiness: DesktopNavigationReadiness): List<DesktopNavItem> {
+        val activeMenuItems = menuItemsForStack(state.workflow, state.submenuStack, readiness)
         val selectedLeaf = activeMenuItems.firstOrNull { it.id == state.selectedItemId && it.children.isEmpty() }
         return selectedLeaf?.children ?: activeMenuItems
     }
@@ -981,6 +990,15 @@ object DesktopNavigation {
 
     fun menuItemsForStack(workflow: DesktopWorkflow, submenuStack: List<String>): List<DesktopNavItem> =
         submenuStack.fold(roots.getValue(workflow)) { items, id ->
+            items.firstOrNull { it.id == id }?.children ?: items
+        }
+
+    fun menuItemsForStack(
+        workflow: DesktopWorkflow,
+        submenuStack: List<String>,
+        readiness: DesktopNavigationReadiness
+    ): List<DesktopNavItem> =
+        submenuStack.fold(rootItems(workflow, readiness)) { items, id ->
             items.firstOrNull { it.id == id }?.children ?: items
         }
 
@@ -1260,6 +1278,16 @@ object DesktopNavigation {
         fun flatten(items: List<DesktopNavItem>): List<DesktopNavItem> =
             items + items.flatMap { flatten(it.children) }
         return flatten(roots.getValue(workflow))
+    }
+
+    private fun List<DesktopNavItem>.filterForReadiness(
+        workflow: DesktopWorkflow,
+        readiness: DesktopNavigationReadiness
+    ): List<DesktopNavItem> {
+        if (workflow != DesktopWorkflow.ResultsExport || readiness.raceLevel != RaceLevel.PRACTICE) {
+            return this
+        }
+        return filterNot { it.id == "results.awards" }
     }
 
     private val workflowDescriptions: Map<DesktopWorkflow, String> = mapOf(

@@ -230,6 +230,30 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun resultsMenuHidesAwardsResultsForPracticeEvents() {
+        val practiceEvent = DesktopNavigationReadiness(
+            hasEventFile = true,
+            hasRaceOpsData = true,
+            raceLevel = RaceLevel.PRACTICE
+        )
+        val practiceSeriesEvent = practiceEvent.copy(hasSeriesContext = true)
+        val regionalEvent = practiceEvent.copy(raceLevel = RaceLevel.REGIONAL)
+
+        assertEquals(
+            listOf("Awards Results", "Live Results", "Exports"),
+            DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport, regionalEvent).map { it.label }
+        )
+        assertEquals(
+            listOf("Live Results", "Exports"),
+            DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport, practiceEvent).map { it.label }
+        )
+        assertEquals(
+            listOf("Live Results", "Exports"),
+            DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport, practiceSeriesEvent).map { it.label }
+        )
+    }
+
+    @Test
     fun seriesWorkflowRequiresSeriesContext() {
         assertEquals(
             "Series is available after this Race File is linked to a Race Series.",

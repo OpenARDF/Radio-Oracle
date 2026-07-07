@@ -985,7 +985,9 @@ object EventProjectEditor {
         club: String,
         bibNumber: String,
         callSign: String,
-        personId: String? = null
+        personId: String? = null,
+        usaChampEligible: Boolean? = null,
+        region2ChampEligible: Boolean? = null
     ): EventProjectFile {
         val trimmedBibNumber = bibNumber.trim()
         val trimmedCallSign = normalizedCompetitorCallSign(callSign)
@@ -1017,7 +1019,9 @@ object EventProjectEditor {
                             club = club.trim(),
                             index = personId?.trim() ?: competitor.index,
                             bibNumber = trimmedBibNumber,
-                            callSign = trimmedCallSign
+                            callSign = trimmedCallSign,
+                            usaChampEligible = usaChampEligible ?: competitor.usaChampEligible,
+                            region2ChampEligible = region2ChampEligible ?: competitor.region2ChampEligible
                         )
                     )
                 )
@@ -1060,6 +1064,40 @@ object EventProjectEditor {
                 data.copy(
                     competitorCategory = competitorCategory.copy(
                         competitor = competitor.copy(birthYear = birthYearValue)
+                    )
+                )
+            } else {
+                data
+            }
+        }
+        require(foundCompetitor) {
+            "Competitor was not found: $competitorId"
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(competitorData = competitorData)
+        )
+    }
+
+    /** Returns a copy of the Race File with one competitor's championship award eligibility changed. */
+    fun updateCompetitorAwardEligibility(
+        projectFile: EventProjectFile,
+        competitorId: String,
+        usaChampEligible: Boolean,
+        region2ChampEligible: Boolean
+    ): EventProjectFile {
+        var foundCompetitor = false
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val competitorCategory = data.competitorCategory
+            val competitor = competitorCategory.competitor
+            if (competitor.id == competitorId) {
+                foundCompetitor = true
+                data.copy(
+                    competitorCategory = competitorCategory.copy(
+                        competitor = competitor.copy(
+                            usaChampEligible = usaChampEligible,
+                            region2ChampEligible = region2ChampEligible
+                        )
                     )
                 )
             } else {
@@ -1391,7 +1429,9 @@ object EventProjectEditor {
         firstName: String,
         lastName: String,
         startNumber: String,
-        siNumber: String
+        siNumber: String,
+        usaChampEligible: Boolean? = null,
+        region2ChampEligible: Boolean? = null
     ): EventProjectFile {
         require(competitorId.isNotBlank()) {
             "Competitor ID cannot be blank."
@@ -1409,6 +1449,9 @@ object EventProjectEditor {
             siNumber = siNumber,
             existingCompetitors = projectFile.raceData.competitorData,
             existingCompetitorPosition = null
+        ).copy(
+            usaChampEligible = usaChampEligible,
+            region2ChampEligible = region2ChampEligible
         )
 
         return projectFile.copy(

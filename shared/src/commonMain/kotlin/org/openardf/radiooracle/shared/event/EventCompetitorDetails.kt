@@ -37,6 +37,8 @@ data class EventCompetitorDetails(
     val bibNumber: String,
     val callSign: String,
     val birthYearText: String,
+    val usaChampEligible: Boolean,
+    val region2ChampEligible: Boolean,
     val categoryId: String?,
     val categoryName: String,
     val startNumber: Int?,
@@ -69,6 +71,8 @@ data class EventCompetitorDetails(
                         bibNumber = competitor.bibNumber,
                         callSign = competitor.callSign,
                         birthYearText = competitor.birthYear?.toString() ?: "",
+                        usaChampEligible = competitor.usaChampEligible == true,
+                        region2ChampEligible = competitor.region2ChampEligible == true,
                         categoryId = competitor.categoryId,
                         categoryName = competitorCategory.category?.name
                             ?: competitor.categoryId?.let { categoryNamesById[it] }

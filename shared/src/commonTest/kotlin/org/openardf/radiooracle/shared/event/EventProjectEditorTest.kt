@@ -917,6 +917,24 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun updatesCompetitorAwardEligibility() {
+        val original = projectFile(
+            competitors = listOf(competitorData("comp-1", "Alice", "Runner"))
+        )
+
+        val updated = EventProjectEditor.updateCompetitorAwardEligibility(
+            projectFile = original,
+            competitorId = "comp-1",
+            usaChampEligible = true,
+            region2ChampEligible = false
+        )
+
+        val competitor = updated.raceData.competitorData.single().competitorCategory.competitor
+        assertEquals(true, competitor.usaChampEligible)
+        assertEquals(false, competitor.region2ChampEligible)
+    }
+
+    @Test
     fun rejectsUnknownCompetitorClubAndPersonIdUpdate() {
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.updateCompetitorClubPersonId(projectFile(), "missing", "OK Test", "A101")
@@ -1025,7 +1043,16 @@ class EventProjectEditorTest {
             competitors = listOf(competitorData("comp-1", "Alice", "Runner", startNumber = 1, siNumber = 1111))
         )
 
-        val updated = EventProjectEditor.addCompetitor(original, "comp-2", " Bob ", " Racer ", " 2 ", " ")
+        val updated = EventProjectEditor.addCompetitor(
+            original,
+            "comp-2",
+            " Bob ",
+            " Racer ",
+            " 2 ",
+            " ",
+            usaChampEligible = true,
+            region2ChampEligible = false
+        )
 
         val competitor = updated.raceData.competitorData.last().competitorCategory.competitor
         assertEquals("comp-2", competitor.id)
@@ -1035,6 +1062,8 @@ class EventProjectEditorTest {
         assertEquals("Racer", competitor.lastName)
         assertEquals(null, competitor.startNumber)
         assertEquals(null, competitor.siNumber)
+        assertEquals(true, competitor.usaChampEligible)
+        assertEquals(false, competitor.region2ChampEligible)
     }
 
     @Test
@@ -1298,7 +1327,9 @@ class EventProjectEditorTest {
                     lastName = "Berg",
                     categoryName = "W21",
                     startNumber = null,
-                    index = "T003"
+                    index = "T003",
+                    usaChampEligible = false,
+                    region2ChampEligible = true
                 )
             ),
             competitorIdFactory = { "comp-${nextCompetitorId++}" },
@@ -1318,6 +1349,8 @@ class EventProjectEditorTest {
         assertEquals("cat-2", newCategoryCompetitor.competitor.categoryId)
         assertEquals("W21", newCategoryCompetitor.category?.name)
         assertEquals(false, newCategoryCompetitor.category?.isMan)
+        assertEquals(false, newCategoryCompetitor.competitor.usaChampEligible)
+        assertEquals(true, newCategoryCompetitor.competitor.region2ChampEligible)
     }
 
     @Test
@@ -4571,7 +4604,9 @@ class EventProjectEditorTest {
         siRent: Boolean = false,
         bibNumber: String = "",
         callSign: String = "",
-        courseName: String = ""
+        courseName: String = "",
+        usaChampEligible: Boolean? = null,
+        region2ChampEligible: Boolean? = null
     ): CompetitorCsvImportRow =
         CompetitorCsvImportRow(
             siNumber = siNumber,
@@ -4587,7 +4622,9 @@ class EventProjectEditorTest {
             siRent = siRent,
             bibNumber = bibNumber,
             callSign = callSign,
-            courseName = courseName
+            courseName = courseName,
+            usaChampEligible = usaChampEligible,
+            region2ChampEligible = region2ChampEligible
         )
 
     private fun readout(

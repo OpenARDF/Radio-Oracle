@@ -48,6 +48,8 @@ class EventCompetitorDetailsTest {
         assertEquals("101", rows[0].startNumberText)
         assertEquals("10:15", rows[0].startTimeText)
         assertEquals("123456", rows[0].siNumberText)
+        assertEquals(true, rows[0].usaChampEligible)
+        assertEquals(false, rows[0].region2ChampEligible)
         assertEquals(emptyList(), rows[0].warningReasons)
 
         assertEquals("Bob", rows[1].id)
@@ -57,6 +59,8 @@ class EventCompetitorDetailsTest {
         assertEquals("102", rows[1].startNumberText)
         assertEquals("", rows[1].startTimeText)
         assertEquals("", rows[1].siNumberText)
+        assertEquals(false, rows[1].usaChampEligible)
+        assertEquals(true, rows[1].region2ChampEligible)
         assertEquals(listOf("No SI number is assigned.", "No category is assigned."), rows[1].warningReasons)
     }
 
@@ -88,8 +92,20 @@ class EventCompetitorDetailsTest {
     private fun raceData(
         categoryName: String = "W21",
         competitors: List<EventCompetitorData> = listOf(
-            competitorData("Alice", categoryId = "category", siNumber = 123456, startNumber = 101),
-            competitorData("Bob", categoryId = null, siNumber = null, startNumber = 102)
+            competitorData(
+                "Alice",
+                categoryId = "category",
+                siNumber = 123456,
+                startNumber = 101,
+                usaChampEligible = true
+            ),
+            competitorData(
+                "Bob",
+                categoryId = null,
+                siNumber = null,
+                startNumber = 102,
+                region2ChampEligible = true
+            )
         )
     ): EventRaceData {
         val category = EventCategory(
@@ -130,7 +146,9 @@ class EventCompetitorDetailsTest {
         categoryId: String?,
         siNumber: Int?,
         startNumber: Int,
-        birthYear: Int? = if (firstName == "Alice") 1985 else null
+        birthYear: Int? = if (firstName == "Alice") 1985 else null,
+        usaChampEligible: Boolean? = null,
+        region2ChampEligible: Boolean? = null
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
@@ -147,7 +165,9 @@ class EventCompetitorDetailsTest {
                     siNumber = siNumber,
                     siRent = false,
                     startNumber = startNumber,
-                    drawnStartTimeSeconds = if (firstName == "Alice") 10 * 60L + 15 else null
+                    drawnStartTimeSeconds = if (firstName == "Alice") 10 * 60L + 15 else null,
+                    usaChampEligible = usaChampEligible,
+                    region2ChampEligible = region2ChampEligible
                 ),
                 category = null
             ),
