@@ -147,7 +147,10 @@ import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockDownload
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortDiscoveryMode
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortSelector
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationPowerStateWriteResult
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentStationProbe
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentTimeSyncInspection
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentTimeSyncResult
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentTimeSyncService
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
@@ -13220,87 +13223,28 @@ private fun SportIdentTimeSyncPanel(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DetailRow("Computer time", localTimeText)
         DetailRow("SI station", siReaderState.statusText)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = portDiscoveryMode == DesktopSportIdentPortDiscoveryMode.PROBE_FTDI_ADAPTERS,
-                onCheckedChange = { enabled ->
-                    onSetPortDiscoveryMode(
-                        if (enabled) {
-                            DesktopSportIdentPortDiscoveryMode.PROBE_FTDI_ADAPTERS
-                        } else {
-                            DesktopSportIdentPortDiscoveryMode.SPORTIDENT_USB_ONLY
-                        }
-                    )
-                }
-            )
-            Text(
-                text = "Probe FTDI/RS232 adapters for SPORTident stations",
-                color = DesktopPalette.Black,
-                fontSize = 13.sp
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = putStationToSleepAfterSync,
-                onCheckedChange = { putStationToSleepAfterSync = it }
-            )
-            Text(
-                text = "Put station to sleep after sync",
-                color = DesktopPalette.Black,
-                fontSize = 13.sp
-            )
-        }
-        inspectionStatus?.let { status ->
-            Text(
-                text = status,
-                color = DesktopPalette.Disconnected,
-                fontSize = 13.sp
-            )
-        }
-        siCodeText?.let { codeText ->
-            Text(
-                text = codeText,
-                color = DesktopPalette.PrimaryVariant,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        SportIdentTimeSyncSettings(
+            portDiscoveryMode = portDiscoveryMode,
+            putStationToSleepAfterSync = putStationToSleepAfterSync,
+            onSetPortDiscoveryMode = onSetPortDiscoveryMode,
+            onPutStationToSleepAfterSyncChange = { putStationToSleepAfterSync = it }
+        )
+        SportIdentTimeSyncReadouts(
+            inspectionStatus = inspectionStatus,
+            siCodeText = siCodeText,
+            stationTimeDeltaText = null,
+            syncStatus = null,
+            syncStatusColor = syncStatusColor
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
                     isInspecting = true
                     scope.launch {
-                        val inspection = withContext(Dispatchers.IO) {
-                            siPortMutex.withLock {
-                                desktopSportIdentTimeSyncService().inspectDownloadStation()
-                            }
-                        }
-                        inspectionStatus = listOfNotNull(
-                            inspection.statusText,
-                            inspection.portInfo?.describe()?.let { "Port: $it" },
-                            inspection.baudRate?.let { "Baud: $it" },
-                            inspection.coupledStationClock?.stationInfo?.let(::formatSportIdentStationDiagnostics)
-                                ?: inspection.stationInfo
-                                    ?.takeUnless { inspection.requiresCoupledStation }
-                                    ?.let(::formatSportIdentStationDiagnostics),
-                            inspection.coupledStationClock?.let { clock ->
-                                val stationTime = DesktopDateTimeText.displayIsoOrRaw(clock.stationTime.toString())
-                                "Station ${clock.stationInfo.serialNumber}; " +
-                                    "station time $stationTime; " +
-                                    "station is ${formatSportIdentTimeDelta(clock.stationMinusComputerMillis)}."
-                            },
-                            inspection.coupledStationInspectionError?.let { "Station: $it" },
-                            inspection.disabledReason
-                        ).joinToString(" ")
-                        siCodeText = inspection.coupledStationClock?.stationInfo?.stationCodeNumber
-                            ?.let { "SI Station: $it" }
-                            ?: inspection.stationInfo
-                                ?.takeUnless { inspection.requiresCoupledStation }
-                                ?.stationCodeNumber
-                                ?.let { "Reader Station: $it" }
-                        stationTimeDeltaText = inspection.coupledStationClock
-                            ?.stationMinusComputerMillis
-                            ?.let(::formatSportIdentTimeDeltaRow)
+                        val inspection = inspectSportIdentStation(siPortMutex)
+                        inspectionStatus = sportIdentInspectionStatusText(inspection)
+                        siCodeText = sportIdentInspectionStationCodeText(inspection)
+                        stationTimeDeltaText = sportIdentInspectionTimeDeltaText(inspection)
                         isInspecting = false
                     }
                 },
@@ -13315,50 +13259,15 @@ private fun SportIdentTimeSyncPanel(
                     syncStatusColor = DesktopPalette.Disconnected
                     scope.launch {
                         val outcome = runCatching {
-                            withContext(Dispatchers.IO) {
-                                siPortMutex.withLock {
-                                    desktopSportIdentTimeSyncService().syncTime(
-                                        putStationToSleepAfterSync = putStationToSleepAfterSync
-                                    )
-                                }
-                            }
+                            syncSportIdentStationTime(siPortMutex, putStationToSleepAfterSync)
                         }
                         syncStatus = outcome.fold(
                             onSuccess = { result ->
-                                val requested = DesktopDateTimeText.displayIsoOrRaw(result.sourceTime.toString())
-                                val before = result.beforeTime
-                                    ?.let { DesktopDateTimeText.displayIsoOrRaw(it.toString()) }
-                                    ?: "unknown"
-                                val delta = result.confirmedStationMinusComputerMillis
-                                    ?.let(::formatSportIdentTimeDelta)
-                                    ?: "unknown relative to the computer"
-                                val offsetText = if (result.currentTimeOffsetMillis == 0L) {
-                                    ""
-                                } else {
-                                    " Applied ${formatSportIdentSignedDuration(result.currentTimeOffsetMillis)} offset."
-                                }
-                                val leadText = result.secondBoundaryLeadMillis
-                                    ?.let { " Started final write ${formatSportIdentDuration(it)} before the target second." }
-                                    ?: ""
-                                val retryText = if (result.attempts > 1) {
-                                    " Succeeded on attempt ${result.attempts}."
-                                } else {
-                                    ""
-                                }
-                                val boundaryText = result.secondBoundaryWaitMillis
-                                    ?.takeIf { it > 0L }
-                                    ?.let { " Waited ${formatSportIdentDuration(it)} for the calibrated pre-boundary write point." }
-                                    ?: ""
-                                val powerStateText = result.stationPowerStateWrite
-                                    ?.let { " ${it.message}" }
-                                    ?: ""
                                 siCodeText = result.stationInfo.stationCodeNumber?.let { "SI Station: $it" }
                                 stationTimeDeltaText = result.confirmedStationMinusComputerMillis
                                     ?.let(::formatSportIdentTimeDeltaRow)
                                 syncStatusColor = DesktopPalette.Connected
-                                "Synced station ${result.stationInfo.serialNumber} to $requested. " +
-                                    "After sync, station is $delta. Previous station time: $before." +
-                                    offsetText + leadText + boundaryText + retryText + powerStateText
+                                sportIdentSyncSuccessStatusText(result)
                             },
                             onFailure = { error ->
                                 syncStatusColor = DesktopPalette.Error
@@ -13379,19 +13288,11 @@ private fun SportIdentTimeSyncPanel(
                     syncStatusColor = DesktopPalette.Disconnected
                     scope.launch {
                         val outcome = runCatching {
-                            withContext(Dispatchers.IO) {
-                                siPortMutex.withLock {
-                                    desktopSportIdentTimeSyncService().sleepStation()
-                                }
-                            }
+                            sleepSportIdentStation(siPortMutex)
                         }
                         syncStatus = outcome.fold(
                             onSuccess = { result ->
-                                syncStatusColor = if (result.confirmed == true) {
-                                    DesktopPalette.Connected
-                                } else {
-                                    DesktopPalette.Error
-                                }
+                                syncStatusColor = sportIdentSleepStatusColor(result)
                                 result.message
                             },
                             onFailure = { error ->
@@ -13407,35 +13308,205 @@ private fun SportIdentTimeSyncPanel(
                 ButtonLabel(if (isSleeping) "Sleeping" else "Sleep")
             }
         }
-        stationTimeDeltaText?.let { deltaText ->
-            Text(
-                text = deltaText,
-                color = DesktopPalette.PrimaryVariant,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        syncStatus?.let { status ->
-            Text(
-                text = status,
-                color = syncStatusColor,
-                fontSize = 13.sp
-            )
-        }
-        val statusText = when {
-            isStationBusy -> "Station is busy with SI-card readout."
-            siReaderState.severity == DesktopSiReaderSeverity.DISCONNECTED -> "Connect a SPORTident download station."
-            siReaderState.severity == DesktopSiReaderSeverity.ERROR -> "Resolve the station connection error before syncing time."
-            siReaderState.severity == DesktopSiReaderSeverity.WARNING -> "Inspect the attached SPORTident station before syncing time."
-            else -> "Keep the target station connected, either coupled to the download station or attached directly, then sync."
-        }
+        SportIdentTimeSyncReadouts(
+            inspectionStatus = null,
+            siCodeText = null,
+            stationTimeDeltaText = stationTimeDeltaText,
+            syncStatus = syncStatus,
+            syncStatusColor = syncStatusColor
+        )
+        Text(sportIdentTimeSyncGuidance(isStationBusy, siReaderState.severity), color = DesktopPalette.Disconnected, fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun SportIdentTimeSyncSettings(
+    portDiscoveryMode: DesktopSportIdentPortDiscoveryMode,
+    putStationToSleepAfterSync: Boolean,
+    onSetPortDiscoveryMode: (DesktopSportIdentPortDiscoveryMode) -> Unit,
+    onPutStationToSleepAfterSyncChange: (Boolean) -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = portDiscoveryMode == DesktopSportIdentPortDiscoveryMode.PROBE_FTDI_ADAPTERS,
+            onCheckedChange = { enabled ->
+                onSetPortDiscoveryMode(
+                    if (enabled) {
+                        DesktopSportIdentPortDiscoveryMode.PROBE_FTDI_ADAPTERS
+                    } else {
+                        DesktopSportIdentPortDiscoveryMode.SPORTIDENT_USB_ONLY
+                    }
+                )
+            }
+        )
         Text(
-            text = statusText,
-            color = DesktopPalette.Disconnected,
+            text = "Probe FTDI/RS232 adapters for SPORTident stations",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = putStationToSleepAfterSync,
+            onCheckedChange = onPutStationToSleepAfterSyncChange
+        )
+        Text(
+            text = "Put station to sleep after sync",
+            color = DesktopPalette.Black,
             fontSize = 13.sp
         )
     }
 }
+
+@Composable
+private fun SportIdentTimeSyncReadouts(
+    inspectionStatus: String?,
+    siCodeText: String?,
+    stationTimeDeltaText: String?,
+    syncStatus: String?,
+    syncStatusColor: Color
+) {
+    inspectionStatus?.let { status ->
+        Text(
+            text = status,
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+    }
+    siCodeText?.let { codeText ->
+        Text(
+            text = codeText,
+            color = DesktopPalette.PrimaryVariant,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+    stationTimeDeltaText?.let { deltaText ->
+        Text(
+            text = deltaText,
+            color = DesktopPalette.PrimaryVariant,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+    syncStatus?.let { status ->
+        Text(
+            text = status,
+            color = syncStatusColor,
+            fontSize = 13.sp
+        )
+    }
+}
+
+private fun sportIdentTimeSyncGuidance(
+    isStationBusy: Boolean,
+    severity: DesktopSiReaderSeverity
+): String =
+    when {
+        isStationBusy -> "Station is busy with SI-card readout."
+        severity == DesktopSiReaderSeverity.DISCONNECTED -> "Connect a SPORTident download station."
+        severity == DesktopSiReaderSeverity.ERROR -> "Resolve the station connection error before syncing time."
+        severity == DesktopSiReaderSeverity.WARNING -> "Inspect the attached SPORTident station before syncing time."
+        else -> "Keep the target station connected, either coupled to the download station or attached directly, then sync."
+    }
+
+private suspend fun inspectSportIdentStation(siPortMutex: Mutex): DesktopSportIdentTimeSyncInspection =
+    withContext(Dispatchers.IO) {
+        siPortMutex.withLock {
+            desktopSportIdentTimeSyncService().inspectDownloadStation()
+        }
+    }
+
+private suspend fun syncSportIdentStationTime(
+    siPortMutex: Mutex,
+    putStationToSleepAfterSync: Boolean
+): DesktopSportIdentTimeSyncResult =
+    withContext(Dispatchers.IO) {
+        siPortMutex.withLock {
+            desktopSportIdentTimeSyncService().syncTime(
+                putStationToSleepAfterSync = putStationToSleepAfterSync
+            )
+        }
+    }
+
+private suspend fun sleepSportIdentStation(siPortMutex: Mutex): DesktopSportIdentStationPowerStateWriteResult =
+    withContext(Dispatchers.IO) {
+        siPortMutex.withLock {
+            desktopSportIdentTimeSyncService().sleepStation()
+        }
+    }
+
+private fun sportIdentInspectionStatusText(inspection: DesktopSportIdentTimeSyncInspection): String =
+    listOfNotNull(
+        inspection.statusText,
+        inspection.portInfo?.describe()?.let { "Port: $it" },
+        inspection.baudRate?.let { "Baud: $it" },
+        inspection.coupledStationClock?.stationInfo?.let(::formatSportIdentStationDiagnostics)
+            ?: inspection.stationInfo
+                ?.takeUnless { inspection.requiresCoupledStation }
+                ?.let(::formatSportIdentStationDiagnostics),
+        inspection.coupledStationClock?.let { clock ->
+            val stationTime = DesktopDateTimeText.displayIsoOrRaw(clock.stationTime.toString())
+            "Station ${clock.stationInfo.serialNumber}; " +
+                "station time $stationTime; " +
+                "station is ${formatSportIdentTimeDelta(clock.stationMinusComputerMillis)}."
+        },
+        inspection.coupledStationInspectionError?.let { "Station: $it" },
+        inspection.disabledReason
+    ).joinToString(" ")
+
+private fun sportIdentInspectionStationCodeText(inspection: DesktopSportIdentTimeSyncInspection): String? =
+    inspection.coupledStationClock?.stationInfo?.stationCodeNumber
+        ?.let { "SI Station: $it" }
+        ?: inspection.stationInfo
+            ?.takeUnless { inspection.requiresCoupledStation }
+            ?.stationCodeNumber
+            ?.let { "Reader Station: $it" }
+
+private fun sportIdentInspectionTimeDeltaText(inspection: DesktopSportIdentTimeSyncInspection): String? =
+    inspection.coupledStationClock
+        ?.stationMinusComputerMillis
+        ?.let(::formatSportIdentTimeDeltaRow)
+
+private fun sportIdentSyncSuccessStatusText(result: DesktopSportIdentTimeSyncResult): String {
+    val requested = DesktopDateTimeText.displayIsoOrRaw(result.sourceTime.toString())
+    val before = result.beforeTime
+        ?.let { DesktopDateTimeText.displayIsoOrRaw(it.toString()) }
+        ?: "unknown"
+    val delta = result.confirmedStationMinusComputerMillis
+        ?.let(::formatSportIdentTimeDelta)
+        ?: "unknown relative to the computer"
+    val offsetText = if (result.currentTimeOffsetMillis == 0L) {
+        ""
+    } else {
+        " Applied ${formatSportIdentSignedDuration(result.currentTimeOffsetMillis)} offset."
+    }
+    val leadText = result.secondBoundaryLeadMillis
+        ?.let { " Started final write ${formatSportIdentDuration(it)} before the target second." }
+        ?: ""
+    val retryText = if (result.attempts > 1) {
+        " Succeeded on attempt ${result.attempts}."
+    } else {
+        ""
+    }
+    val boundaryText = result.secondBoundaryWaitMillis
+        ?.takeIf { it > 0L }
+        ?.let { " Waited ${formatSportIdentDuration(it)} for the calibrated pre-boundary write point." }
+        ?: ""
+    val powerStateText = result.stationPowerStateWrite
+        ?.let { " ${it.message}" }
+        ?: ""
+    return "Synced station ${result.stationInfo.serialNumber} to $requested. " +
+        "After sync, station is $delta. Previous station time: $before." +
+        offsetText + leadText + boundaryText + retryText + powerStateText
+}
+
+private fun sportIdentSleepStatusColor(result: DesktopSportIdentStationPowerStateWriteResult): Color =
+    if (result.confirmed == true) {
+        DesktopPalette.Connected
+    } else {
+        DesktopPalette.Error
+    }
 
 private fun formatSportIdentTimeDelta(deltaMillis: Long): String {
     if (deltaMillis == 0L) {
@@ -16171,222 +16242,371 @@ private fun ReadoutEditDialog(
                             .verticalScroll(dialogScrollState),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = draft.competitorName.ifBlank { "Unmatched readout" },
-                            fontWeight = FontWeight.Bold
+                        ReadoutEditHeader(
+                            competitorName = draft.competitorName,
+                            liveIssueExplanation = liveIssueExplanation
                         )
-                        liveIssueExplanation?.let { explanation ->
-                            Text(
-                                text = "Result explanation: $explanation",
-                                color = DesktopPalette.Error,
-                                fontSize = 13.sp,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            LabeledTextField(
-                                label = "Start SI Time",
-                                value = startSiTime,
-                                onValueChange = { startSiTime = it },
-                                modifier = Modifier.width(160.dp),
-                                isError = startSiTime.isInvalidOptionalReadoutTime(),
-                                onCommit = ::saveDraft
-                            )
-                            LabeledTextField(
-                                label = "Finish SI Time",
-                                value = finishSiTime,
-                                onValueChange = { finishSiTime = it },
-                                modifier = Modifier.width(160.dp),
-                                isError = finishSiTime.isInvalidOptionalReadoutTime(),
-                                onCommit = ::saveDraft
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            LabeledTextField(
-                                label = "Start Elapsed",
-                                value = startSeconds,
-                                onValueChange = {
-                                    if (!draft.isPractice) {
-                                        startSeconds = it
-                                    }
-                                },
-                                modifier = Modifier.width(160.dp),
-                                enabled = !draft.isPractice,
-                                isError = !draft.isPractice && startSeconds.isInvalidOptionalReadoutTime(),
-                                onCommit = ::saveDraft
-                            )
-                            LabeledTextField(
-                                label = "Finish Elapsed",
-                                value = finishSeconds,
-                                onValueChange = { finishSeconds = it },
-                                modifier = Modifier.width(160.dp),
-                                isError = finishSeconds.isInvalidFinishElapsedTime(startSeconds, !draft.isPractice),
-                                onCommit = ::saveDraft
-                            )
-                        }
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Control Punches", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            if (controlPunches.isEmpty()) {
-                                Text(
-                                    text = "No control punches.",
-                                    color = DesktopPalette.Disconnected,
-                                    fontSize = 12.sp
+                        ReadoutEditTimeFields(
+                            isPractice = draft.isPractice,
+                            startSiTime = startSiTime,
+                            finishSiTime = finishSiTime,
+                            startSeconds = startSeconds,
+                            finishSeconds = finishSeconds,
+                            onStartSiTimeChange = { startSiTime = it },
+                            onFinishSiTimeChange = { finishSiTime = it },
+                            onStartSecondsChange = { startSeconds = it },
+                            onFinishSecondsChange = { finishSeconds = it },
+                            onCommit = ::saveDraft
+                        )
+                        ReadoutControlPunchesEditor(
+                            controlPunches = controlPunches,
+                            sortedControls = sortedControls,
+                            addableControls = addableControls,
+                            selectedControlId = selectedControlId,
+                            punchTimeMode = punchTimeMode,
+                            validationMessage = validationMessage,
+                            startSeconds = startSeconds,
+                            elapsedBaseSeconds = draft.elapsedBaseSeconds,
+                            onControlPunchesChange = { controlPunches = it },
+                            onSelectedControlIdChange = { selectedControlId = it },
+                            onPunchTimeModeChange = { punchTimeMode = it },
+                            onCommit = ::saveDraft
+                        )
+                        ReadoutEditStatusAndCategoryFields(
+                            resultStatus = resultStatus,
+                            categoryId = categoryId,
+                            categories = categories,
+                            competitorCategoryChanged = competitorCategoryChanged,
+                            updateCompetitorCategory = updateCompetitorCategory,
+                            onResultStatusChange = {
+                                resultStatus = it
+                                resultStatusEdited = true
+                            },
+                            onCategoryIdChange = { categoryId = it },
+                            onUpdateCompetitorCategoryChange = { updateCompetitorCategory = it }
+                        )
+                    }
+                }
+                ReadoutEditDialogActions(
+                    onCancel = onCancel,
+                    onSave = ::saveDraft,
+                    isSaveEnabled = validationMessage == null
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReadoutEditHeader(
+    competitorName: String,
+    liveIssueExplanation: String?
+) {
+    Text(
+        text = competitorName.ifBlank { "Unmatched readout" },
+        fontWeight = FontWeight.Bold
+    )
+    liveIssueExplanation?.let { explanation ->
+        Text(
+            text = "Result explanation: $explanation",
+            color = DesktopPalette.Error,
+            fontSize = 13.sp,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun ReadoutEditTimeFields(
+    isPractice: Boolean,
+    startSiTime: String,
+    finishSiTime: String,
+    startSeconds: String,
+    finishSeconds: String,
+    onStartSiTimeChange: (String) -> Unit,
+    onFinishSiTimeChange: (String) -> Unit,
+    onStartSecondsChange: (String) -> Unit,
+    onFinishSecondsChange: (String) -> Unit,
+    onCommit: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LabeledTextField(
+            label = "Start SI Time",
+            value = startSiTime,
+            onValueChange = onStartSiTimeChange,
+            modifier = Modifier.width(160.dp),
+            isError = startSiTime.isInvalidOptionalReadoutTime(),
+            onCommit = onCommit
+        )
+        LabeledTextField(
+            label = "Finish SI Time",
+            value = finishSiTime,
+            onValueChange = onFinishSiTimeChange,
+            modifier = Modifier.width(160.dp),
+            isError = finishSiTime.isInvalidOptionalReadoutTime(),
+            onCommit = onCommit
+        )
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LabeledTextField(
+            label = "Start Elapsed",
+            value = startSeconds,
+            onValueChange = {
+                if (!isPractice) {
+                    onStartSecondsChange(it)
+                }
+            },
+            modifier = Modifier.width(160.dp),
+            enabled = !isPractice,
+            isError = !isPractice && startSeconds.isInvalidOptionalReadoutTime(),
+            onCommit = onCommit
+        )
+        LabeledTextField(
+            label = "Finish Elapsed",
+            value = finishSeconds,
+            onValueChange = onFinishSecondsChange,
+            modifier = Modifier.width(160.dp),
+            isError = finishSeconds.isInvalidFinishElapsedTime(startSeconds, !isPractice),
+            onCommit = onCommit
+        )
+    }
+}
+
+@Composable
+private fun ReadoutControlPunchesEditor(
+    controlPunches: List<DesktopReadoutPunchEditDraft>,
+    sortedControls: List<EventControl>,
+    addableControls: List<EventControl>,
+    selectedControlId: String?,
+    punchTimeMode: DesktopReadoutPunchTimeMode,
+    validationMessage: String?,
+    startSeconds: String,
+    elapsedBaseSeconds: Long?,
+    onControlPunchesChange: (List<DesktopReadoutPunchEditDraft>) -> Unit,
+    onSelectedControlIdChange: (String?) -> Unit,
+    onPunchTimeModeChange: (DesktopReadoutPunchTimeMode) -> Unit,
+    onCommit: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ReadoutControlPunchesHeader(
+            controlPunches = controlPunches,
+            punchTimeMode = punchTimeMode,
+            onPunchTimeModeChange = onPunchTimeModeChange
+        )
+        controlPunches.forEachIndexed { index, punch ->
+            ReadoutPunchEditRow(
+                punchNumber = index + 1,
+                punch = punch,
+                controls = sortedControls,
+                canMoveUp = index > 0,
+                canMoveDown = index < controlPunches.lastIndex,
+                timeMode = punchTimeMode,
+                isTimeError = punch.timeText(punchTimeMode).isInvalidRequiredReadoutTime(),
+                onControlSelected = { controlId ->
+                    val control = sortedControls.firstOrNull { it.id == controlId }
+                    onControlPunchesChange(
+                        controlPunches.map { row ->
+                            if (row.rowId == punch.rowId && control != null) {
+                                row.copy(
+                                    controlId = control.id,
+                                    siCode = control.siCode,
+                                    controlText = control.editPunchToken(sortedControls),
+                                    punchStatus = PunchStatus.UNKNOWN
                                 )
                             } else {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    FixedTableText("#", 32.dp, DesktopPalette.Disconnected)
-                                    FixedTableText("Control", 112.dp, DesktopPalette.Disconnected)
-                                    Text(
-                                        text = punchTimeMode.columnLabel,
-                                        color = DesktopPalette.Primary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier
-                                            .width(92.dp)
-                                            .clickable {
-                                                punchTimeMode = when (punchTimeMode) {
-                                                    DesktopReadoutPunchTimeMode.ELAPSED -> DesktopReadoutPunchTimeMode.SI
-                                                    DesktopReadoutPunchTimeMode.SI -> DesktopReadoutPunchTimeMode.ELAPSED
-                                                }
-                                            }
-                                    )
-                                    Spacer(Modifier.width(160.dp))
-                                }
+                                row
                             }
-                            controlPunches.forEachIndexed { index, punch ->
-                                ReadoutPunchEditRow(
-                                    punchNumber = index + 1,
-                                    punch = punch,
-                                    controls = sortedControls,
-                                    canMoveUp = index > 0,
-                                    canMoveDown = index < controlPunches.lastIndex,
+                        }
+                    )
+                },
+                onTimeChanged = { timeText ->
+                    onControlPunchesChange(
+                        controlPunches.map { row ->
+                            if (row.rowId == punch.rowId) {
+                                row.withEditedTime(
                                     timeMode = punchTimeMode,
-                                    isTimeError = punch.timeText(punchTimeMode).isInvalidRequiredReadoutTime(),
-                                    onControlSelected = { controlId ->
-                                        val control = sortedControls.firstOrNull { it.id == controlId }
-                                        controlPunches = controlPunches.map { row ->
-                                            if (row.rowId == punch.rowId && control != null) {
-                                                row.copy(
-                                                    controlId = control.id,
-                                                    siCode = control.siCode,
-                                                    controlText = control.editPunchToken(sortedControls),
-                                                    punchStatus = PunchStatus.UNKNOWN
-                                                )
-                                            } else {
-                                                row
-                                            }
-                                        }
-                                    },
-                                    onTimeChanged = { timeText ->
-                                        controlPunches = controlPunches.map { row ->
-                                            if (row.rowId == punch.rowId) {
-                                                row.withEditedTime(
-                                                    timeMode = punchTimeMode,
-                                                    value = timeText,
-                                                    elapsedBaseSeconds = draft.elapsedBaseSeconds
-                                                )
-                                            } else {
-                                                row
-                                            }
-                                        }
-                                    },
-                                    onMoveUp = {
-                                        controlPunches = controlPunches.moved(index, index - 1)
-                                    },
-                                    onMoveDown = {
-                                        controlPunches = controlPunches.moved(index, index + 1)
-                                    },
-                                    onDelete = {
-                                        controlPunches = controlPunches.filterNot { row -> row.rowId == punch.rowId }
-                                    },
-                                    onCommit = ::saveDraft
+                                    value = timeText,
+                                    elapsedBaseSeconds = elapsedBaseSeconds
                                 )
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                ReadoutControlPicker(
-                                    selectedControlId = selectedControlId,
-                                    controls = addableControls,
-                                    onControlSelected = { selectedControlId = it },
-                                    modifier = Modifier.width(140.dp)
-                                )
-                                Button(
-                                    onClick = {
-                                        val control = addableControls.firstOrNull { it.id == selectedControlId } ?: return@Button
-                                        val elapsedTime = defaultNewPunchElapsedTime(startSeconds)
-                                        controlPunches = controlPunches + DesktopReadoutPunchEditDraft(
-                                            rowId = "new-punch-${UUID.randomUUID()}",
-                                            controlId = control.id,
-                                            siCode = control.siCode,
-                                            controlText = control.editPunchToken(sortedControls),
-                                            elapsedTime = elapsedTime,
-                                            siTime = elapsedTime.toReadoutSiTimeText(draft.elapsedBaseSeconds) ?: "00:00:00",
-                                            punchStatus = PunchStatus.UNKNOWN
-                                        )
-                                    },
-                                    enabled = selectedControlId != null && addableControls.isNotEmpty()
-                                ) {
-                                    ButtonLabel("Add Punch")
-                                }
-                            }
-                            validationMessage?.let { message ->
-                                Text(text = message, color = DesktopPalette.Error, fontSize = 12.sp)
+                            } else {
+                                row
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Status", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                ResultStatusPicker(
-                                    selectedStatus = resultStatus,
-                                    onStatusSelected = {
-                                        resultStatus = it
-                                        resultStatusEdited = true
-                                    },
-                                    modifier = Modifier.width(160.dp)
-                                )
-                            }
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Result Category", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                CategoryPicker(
-                                    selectedCategoryId = categoryId,
-                                    categories = categories,
-                                    onCategorySelected = { categoryId = it },
-                                    modifier = Modifier.width(220.dp)
-                                )
-                            }
+                    )
+                },
+                onMoveUp = {
+                    onControlPunchesChange(controlPunches.moved(index, index - 1))
+                },
+                onMoveDown = {
+                    onControlPunchesChange(controlPunches.moved(index, index + 1))
+                },
+                onDelete = {
+                    onControlPunchesChange(controlPunches.filterNot { row -> row.rowId == punch.rowId })
+                },
+                onCommit = onCommit
+            )
+        }
+        ReadoutAddPunchRow(
+            sortedControls = sortedControls,
+            addableControls = addableControls,
+            selectedControlId = selectedControlId,
+            startSeconds = startSeconds,
+            elapsedBaseSeconds = elapsedBaseSeconds,
+            controlPunches = controlPunches,
+            onSelectedControlIdChange = onSelectedControlIdChange,
+            onControlPunchesChange = onControlPunchesChange
+        )
+        validationMessage?.let { message ->
+            Text(text = message, color = DesktopPalette.Error, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun ReadoutControlPunchesHeader(
+    controlPunches: List<DesktopReadoutPunchEditDraft>,
+    punchTimeMode: DesktopReadoutPunchTimeMode,
+    onPunchTimeModeChange: (DesktopReadoutPunchTimeMode) -> Unit
+) {
+    Text("Control Punches", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    if (controlPunches.isEmpty()) {
+        Text(
+            text = "No control punches.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 12.sp
+        )
+        return
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        FixedTableText("#", 32.dp, DesktopPalette.Disconnected)
+        FixedTableText("Control", 112.dp, DesktopPalette.Disconnected)
+        Text(
+            text = punchTimeMode.columnLabel,
+            color = DesktopPalette.Primary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .width(92.dp)
+                .clickable {
+                    onPunchTimeModeChange(
+                        when (punchTimeMode) {
+                            DesktopReadoutPunchTimeMode.ELAPSED -> DesktopReadoutPunchTimeMode.SI
+                            DesktopReadoutPunchTimeMode.SI -> DesktopReadoutPunchTimeMode.ELAPSED
                         }
-                        if (competitorCategoryChanged) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clickable {
-                                    updateCompetitorCategory = !updateCompetitorCategory
-                                }
-                            ) {
-                                Checkbox(
-                                    checked = updateCompetitorCategory,
-                                    onCheckedChange = { updateCompetitorCategory = it },
-                                    enabled = true
-                                )
-                                Text(
-                                    "Also change competitor category",
-                                    color = DesktopPalette.Black
-                                )
-                            }
-                        }
-                    }
+                    )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(onClick = onCancel) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = ::saveDraft, enabled = validationMessage == null) {
-                        Text("Save")
-                    }
-                }
+        )
+        Spacer(Modifier.width(160.dp))
+    }
+}
+
+@Composable
+private fun ReadoutAddPunchRow(
+    sortedControls: List<EventControl>,
+    addableControls: List<EventControl>,
+    selectedControlId: String?,
+    startSeconds: String,
+    elapsedBaseSeconds: Long?,
+    controlPunches: List<DesktopReadoutPunchEditDraft>,
+    onSelectedControlIdChange: (String?) -> Unit,
+    onControlPunchesChange: (List<DesktopReadoutPunchEditDraft>) -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        ReadoutControlPicker(
+            selectedControlId = selectedControlId,
+            controls = addableControls,
+            onControlSelected = onSelectedControlIdChange,
+            modifier = Modifier.width(140.dp)
+        )
+        Button(
+            onClick = {
+                val control = addableControls.firstOrNull { it.id == selectedControlId } ?: return@Button
+                val elapsedTime = defaultNewPunchElapsedTime(startSeconds)
+                onControlPunchesChange(
+                    controlPunches + DesktopReadoutPunchEditDraft(
+                        rowId = "new-punch-${UUID.randomUUID()}",
+                        controlId = control.id,
+                        siCode = control.siCode,
+                        controlText = control.editPunchToken(sortedControls),
+                        elapsedTime = elapsedTime,
+                        siTime = elapsedTime.toReadoutSiTimeText(elapsedBaseSeconds) ?: "00:00:00",
+                        punchStatus = PunchStatus.UNKNOWN
+                    )
+                )
+            },
+            enabled = selectedControlId != null && addableControls.isNotEmpty()
+        ) {
+            ButtonLabel("Add Punch")
+        }
+    }
+}
+
+@Composable
+private fun ReadoutEditStatusAndCategoryFields(
+    resultStatus: ResultStatus,
+    categoryId: String?,
+    categories: List<EventCategoryDetails>,
+    competitorCategoryChanged: Boolean,
+    updateCompetitorCategory: Boolean,
+    onResultStatusChange: (ResultStatus) -> Unit,
+    onCategoryIdChange: (String?) -> Unit,
+    onUpdateCompetitorCategoryChange: (Boolean) -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Status", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            ResultStatusPicker(
+                selectedStatus = resultStatus,
+                onStatusSelected = onResultStatusChange,
+                modifier = Modifier.width(160.dp)
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Result Category", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            CategoryPicker(
+                selectedCategoryId = categoryId,
+                categories = categories,
+                onCategorySelected = onCategoryIdChange,
+                modifier = Modifier.width(220.dp)
+            )
+        }
+    }
+    if (competitorCategoryChanged) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable {
+                onUpdateCompetitorCategoryChange(!updateCompetitorCategory)
             }
+        ) {
+            Checkbox(
+                checked = updateCompetitorCategory,
+                onCheckedChange = onUpdateCompetitorCategoryChange,
+                enabled = true
+            )
+            Text(
+                "Also change competitor category",
+                color = DesktopPalette.Black
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReadoutEditDialogActions(
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+    isSaveEnabled: Boolean
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End
+    ) {
+        Button(onClick = onCancel) {
+            Text("Cancel")
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Button(onClick = onSave, enabled = isSaveEnabled) {
+            Text("Save")
         }
     }
 }
@@ -21440,22 +21660,15 @@ private fun RaceDetailsPanel(
         if (!hasEventFileNameDraftChanged) {
             return
         }
-        val fallbackName = currentEventFileName ?: DesktopProjectFilePaths.defaultProjectFileName(details.name)
-        val fallbackDisplayName = DesktopProjectFilePaths.projectFileDisplayStem(fallbackName)
-        val normalizedFileName = eventFileNameDraft
-            .takeIf { it.isNotBlank() }
-            ?.let(DesktopProjectFilePaths::defaultProjectFileName)
-            ?: fallbackName
-        if (normalizedFileName == currentEventFileName) {
-            eventFileNameDraft = fallbackDisplayName
-            hasEventFileNameDraftChanged = false
-            return
-        }
-        hasEventFileNameDraftChanged = false
-        val didSave = onUpdateEventFileName(normalizedFileName)
-        eventFileNameDraft = DesktopProjectFilePaths.projectFileDisplayStem(
-            if (didSave) normalizedFileName else fallbackName
+        val commit = raceEventFileNameCommitTarget(
+            draft = eventFileNameDraft,
+            currentEventFileName = currentEventFileName,
+            raceName = details.name
         )
+        hasEventFileNameDraftChanged = false
+        eventFileNameDraft = commit.fileNameToSave
+            ?.let { fileName -> commit.displayStem(didSave = onUpdateEventFileName(fileName)) }
+            ?: commit.fallbackDisplayStem
     }
 
     fun commitRaceNameDraft() {
@@ -21466,155 +21679,270 @@ private fun RaceDetailsPanel(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        parentSeriesText?.let {
-            Text(
-                text = it,
-                color = DesktopPalette.SeriesNavigation,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextField(
-                value = raceNameDraft,
-                onValueChange = {
-                    raceNameDraft = it
-                    onRenameRace(it)
-                    if (it.trim().isNotEmpty() && it.trim() != details.name.trim()) {
-                        shouldPromptForEventStartAfterNameEdit = true
-                    }
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .onFocusChanged { focusState ->
-                        if (wasRaceNameFocused && !focusState.isFocused && shouldPromptForEventStartAfterNameEdit) {
-                            commitRaceNameDraft()
-                        }
-                        wasRaceNameFocused = focusState.isFocused
-                    }
-                    .commitOnEnter(::commitRaceNameDraft),
-                label = { Text("Race Name") }
-            )
-        }
-        TextField(
-            value = eventFileNameDraft,
-            onValueChange = {
+        RaceDetailsIdentityFields(
+            parentSeriesText = parentSeriesText,
+            raceNameDraft = raceNameDraft,
+            eventFileNameDraft = eventFileNameDraft,
+            onRaceNameChange = {
+                raceNameDraft = it
+                onRenameRace(it)
+                if (it.trim().isNotEmpty() && it.trim() != details.name.trim()) {
+                    shouldPromptForEventStartAfterNameEdit = true
+                }
+            },
+            onRaceNameFocusChange = { focusState ->
+                if (wasRaceNameFocused && !focusState.isFocused && shouldPromptForEventStartAfterNameEdit) {
+                    commitRaceNameDraft()
+                }
+                wasRaceNameFocused = focusState.isFocused
+            },
+            onCommitRaceName = ::commitRaceNameDraft,
+            onEventFileNameChange = {
                 eventFileNameDraft = it
                 hasEventFileNameDraftChanged = true
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { focusState ->
-                    if (wasEventFileNameFocused && !focusState.isFocused) {
-                        commitEventFileNameDraft()
-                    }
-                    wasEventFileNameFocused = focusState.isFocused
+            onEventFileNameFocusChange = { focusState ->
+                if (wasEventFileNameFocused && !focusState.isFocused) {
+                    commitEventFileNameDraft()
                 }
-                .commitOnEnter(::commitEventFileNameDraft),
-            label = { Text("Race File Name") }
+                wasEventFileNameFocused = focusState.isFocused
+            },
+            onCommitEventFileName = ::commitEventFileNameDraft
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            DateTimePickerField(
-                label = "Race Start Date/Time",
-                value = startDateTimeDraft,
-                onValueChange = {
-                    startDateTimeDraft = it
-                    onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(it))
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        Text(
-            text = "Used for Race Ops elapsed time, in-forest status, finish/result timestamps, and exports. Set this to the race's actual start, not the file creation time.",
-            color = DesktopPalette.Disconnected,
-            fontSize = 13.sp
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            DesktopRaceFormatPicker(
-                selectedRaceFormat,
-                {
-                    val changed = it != selectedRaceFormat
-                    selectedRaceFormat = it
-                    applyRaceSettings(raceType = it.raceType, raceBand = it.raceBand)
-                    if (changed) {
-                        promptForEventStart("race format")
-                    }
-                },
-                Modifier.weight(1f)
-            )
-            RaceLevelPicker(
-                selectedRaceLevel,
-                {
-                    val changed = it != selectedRaceLevel
-                    val defaultLimitMinutes = it.defaultTimeLimitMinutes()?.toString()
-                    val nextTimeLimitMinutes = defaultLimitMinutes ?: timeLimitMinutesDraft
-                    selectedRaceLevel = it
-                    if (defaultLimitMinutes != null) {
-                        timeLimitMinutesDraft = nextTimeLimitMinutes
-                    }
-                    applyRaceSettings(raceLevel = it, timeLimitMinutes = nextTimeLimitMinutes)
-                    if (changed) {
-                        promptForEventStart("race type")
-                    }
-                },
-                Modifier.weight(1f)
-            )
-            TextField(
-                value = timeLimitMinutesDraft,
-                onValueChange = {
-                    timeLimitMinutesDraft = it
-                    applyRaceSettings(timeLimitMinutes = it)
-                },
-                modifier = Modifier.weight(1f),
-                label = { Text("Limit (min.)") }
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SelectionContainer(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = desktopEventFileFolderText(eventFilePath, eventFileWorkingFolder),
-                    color = DesktopPalette.Disconnected,
-                    fontSize = 13.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Button(onClick = onOpenEventFileWorkingFolder) {
-                ButtonLabel("Open Folder")
-            }
-        }
-    }
-
-    if (isEventStartPromptVisible) {
-        DateTimePickerDialog(
-            initialValue = startDateTimeDraft,
-            title = "Enter Race Start date/time",
-            description = "The $eventStartPromptReason changed. Confirm or update the Race Start date/time for this race.",
-            onValueSelected = {
-                isEventStartPromptVisible = false
+        RaceStartDateTimeField(
+            startDateTimeDraft = startDateTimeDraft,
+            onStartDateTimeChange = {
                 startDateTimeDraft = it
                 onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(it))
-            },
-            onDismiss = { isEventStartPromptVisible = false }
+            }
         )
+        RaceSettingsFields(
+            selectedRaceFormat = selectedRaceFormat,
+            selectedRaceLevel = selectedRaceLevel,
+            timeLimitMinutesDraft = timeLimitMinutesDraft,
+            onRaceFormatChange = {
+                val changed = it != selectedRaceFormat
+                selectedRaceFormat = it
+                applyRaceSettings(raceType = it.raceType, raceBand = it.raceBand)
+                if (changed) {
+                    promptForEventStart("race format")
+                }
+            },
+            onRaceLevelChange = {
+                val changed = it != selectedRaceLevel
+                val defaultLimitMinutes = it.defaultTimeLimitMinutes()?.toString()
+                val nextTimeLimitMinutes = defaultLimitMinutes ?: timeLimitMinutesDraft
+                selectedRaceLevel = it
+                if (defaultLimitMinutes != null) {
+                    timeLimitMinutesDraft = nextTimeLimitMinutes
+                }
+                applyRaceSettings(raceLevel = it, timeLimitMinutes = nextTimeLimitMinutes)
+                if (changed) {
+                    promptForEventStart("race type")
+                }
+            },
+            onTimeLimitMinutesChange = {
+                timeLimitMinutesDraft = it
+                applyRaceSettings(timeLimitMinutes = it)
+            }
+        )
+        RaceEventFileFolderRow(
+            eventFilePath = eventFilePath,
+            eventFileWorkingFolder = eventFileWorkingFolder,
+            onOpenEventFileWorkingFolder = onOpenEventFileWorkingFolder
+        )
+    }
+
+    RaceEventStartPromptDialog(
+        isVisible = isEventStartPromptVisible,
+        startDateTimeDraft = startDateTimeDraft,
+        reason = eventStartPromptReason,
+        onValueSelected = {
+            isEventStartPromptVisible = false
+            startDateTimeDraft = it
+            onUpdateRaceStartDateTime(DesktopDateTimeText.isoText(it))
+        },
+        onDismiss = { isEventStartPromptVisible = false }
+    )
+}
+
+private data class RaceEventFileNameCommitTarget(
+    val fileNameToSave: String?,
+    val fallbackName: String,
+    val fallbackDisplayStem: String
+) {
+    fun displayStem(didSave: Boolean): String =
+        DesktopProjectFilePaths.projectFileDisplayStem(
+            if (didSave && fileNameToSave != null) fileNameToSave else fallbackName
+        )
+}
+
+private fun raceEventFileNameCommitTarget(
+    draft: String,
+    currentEventFileName: String?,
+    raceName: String
+): RaceEventFileNameCommitTarget {
+    val fallbackName = currentEventFileName ?: DesktopProjectFilePaths.defaultProjectFileName(raceName)
+    val fallbackDisplayStem = DesktopProjectFilePaths.projectFileDisplayStem(fallbackName)
+    val normalizedFileName = draft
+        .takeIf { it.isNotBlank() }
+        ?.let(DesktopProjectFilePaths::defaultProjectFileName)
+        ?: fallbackName
+    return RaceEventFileNameCommitTarget(
+        fileNameToSave = normalizedFileName.takeUnless { it == currentEventFileName },
+        fallbackName = fallbackName,
+        fallbackDisplayStem = fallbackDisplayStem
+    )
+}
+
+@Composable
+private fun RaceEventStartPromptDialog(
+    isVisible: Boolean,
+    startDateTimeDraft: LocalDateTime,
+    reason: String,
+    onValueSelected: (LocalDateTime) -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (!isVisible) {
+        return
+    }
+    DateTimePickerDialog(
+        initialValue = startDateTimeDraft,
+        title = "Enter Race Start date/time",
+        description = "The $reason changed. Confirm or update the Race Start date/time for this race.",
+        onValueSelected = onValueSelected,
+        onDismiss = onDismiss
+    )
+}
+
+@Composable
+private fun RaceDetailsIdentityFields(
+    parentSeriesText: String?,
+    raceNameDraft: String,
+    eventFileNameDraft: String,
+    onRaceNameChange: (String) -> Unit,
+    onRaceNameFocusChange: (FocusState) -> Unit,
+    onCommitRaceName: () -> Unit,
+    onEventFileNameChange: (String) -> Unit,
+    onEventFileNameFocusChange: (FocusState) -> Unit,
+    onCommitEventFileName: () -> Unit
+) {
+    parentSeriesText?.let {
+        Text(
+            text = it,
+            color = DesktopPalette.SeriesNavigation,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextField(
+            value = raceNameDraft,
+            onValueChange = onRaceNameChange,
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged(onRaceNameFocusChange)
+                .commitOnEnter(onCommitRaceName),
+            label = { Text("Race Name") }
+        )
+    }
+    TextField(
+        value = eventFileNameDraft,
+        onValueChange = onEventFileNameChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged(onEventFileNameFocusChange)
+            .commitOnEnter(onCommitEventFileName),
+        label = { Text("Race File Name") }
+    )
+}
+
+@Composable
+private fun RaceStartDateTimeField(
+    startDateTimeDraft: LocalDateTime,
+    onStartDateTimeChange: (LocalDateTime) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        DateTimePickerField(
+            label = "Race Start Date/Time",
+            value = startDateTimeDraft,
+            onValueChange = onStartDateTimeChange,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    Text(
+        text = "Used for Race Ops elapsed time, in-forest status, finish/result timestamps, and exports. Set this to the race's actual start, not the file creation time.",
+        color = DesktopPalette.Disconnected,
+        fontSize = 13.sp
+    )
+}
+
+@Composable
+private fun RaceSettingsFields(
+    selectedRaceFormat: DesktopRaceFormat,
+    selectedRaceLevel: RaceLevel,
+    timeLimitMinutesDraft: String,
+    onRaceFormatChange: (DesktopRaceFormat) -> Unit,
+    onRaceLevelChange: (RaceLevel) -> Unit,
+    onTimeLimitMinutesChange: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        DesktopRaceFormatPicker(
+            selectedRaceFormat,
+            onRaceFormatChange,
+            Modifier.weight(1f)
+        )
+        RaceLevelPicker(
+            selectedRaceLevel,
+            onRaceLevelChange,
+            Modifier.weight(1f)
+        )
+        TextField(
+            value = timeLimitMinutesDraft,
+            onValueChange = onTimeLimitMinutesChange,
+            modifier = Modifier.weight(1f),
+            label = { Text("Limit (min.)") }
+        )
+    }
+}
+
+@Composable
+private fun RaceEventFileFolderRow(
+    eventFilePath: Path?,
+    eventFileWorkingFolder: Path,
+    onOpenEventFileWorkingFolder: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SelectionContainer(modifier = Modifier.weight(1f)) {
+            Text(
+                text = desktopEventFileFolderText(eventFilePath, eventFileWorkingFolder),
+                color = DesktopPalette.Disconnected,
+                fontSize = 13.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Button(onClick = onOpenEventFileWorkingFolder) {
+            ButtonLabel("Open Folder")
+        }
     }
 }
 
