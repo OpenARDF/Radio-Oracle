@@ -58,11 +58,6 @@ object DesktopAppUpdateSupport {
     fun shouldShowAutomaticNotice(status: DesktopAppUpdateStatus): Boolean =
         status.jdeployUpdatesAvailable == true
 
-    fun disabledDialogMessage(): String =
-        "Radio-Oracle update checks are disabled in App Settings.\n\n" +
-            "Enable update checks to show automatic update status at startup, or open the update page directly:\n" +
-            updatePageUrl
-
     fun dialogMessage(status: DesktopAppUpdateStatus): String =
         buildString {
             when (status.jdeployUpdatesAvailable) {
