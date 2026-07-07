@@ -28,9 +28,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -143,7 +141,7 @@ class EventSeriesCardReadRoutingIntegrationTest {
     }
 
     @Test
-    fun nonPracticeSeriesCardReadDoesNotRouteToAnotherEvent() = runBlocking {
+    fun nonPracticeSeriesCardReadStoresResultInMatchedEventAndRequestsSelection() = runBlocking {
         val processor = DataProcessor.get()
         val day1 = raceData(
             "Regional Day 1",
@@ -169,7 +167,7 @@ class EventSeriesCardReadRoutingIntegrationTest {
         )
 
         val selectionRequest = async {
-            withTimeoutOrNull(250) { processor.raceSelectionRequests.first() }
+            withTimeout(1_000) { processor.raceSelectionRequests.first() }
         }
         val stored = processor.processCardDataForCurrentRaceOrSeries(
             cardData = card(siNumber = 1001, punches = listOf(41, 42)),
@@ -177,12 +175,55 @@ class EventSeriesCardReadRoutingIntegrationTest {
         )
 
         assertEquals(true, stored)
-        assertNull(selectionRequest.await())
+        assertEquals(day2.race.id, selectionRequest.await())
+        assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(day1.race.id))
         assertEquals(
-            listOf(ResultDataSummary(raceId = day1.race.id, siNumber = 1001)),
-            processor.resultSummaries(day1.race.id)
+            listOf(ResultDataSummary(raceId = day2.race.id, siNumber = 1001)),
+            processor.resultSummaries(day2.race.id)
         )
-        assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(day2.race.id))
+    }
+
+    @Test
+    fun mixedLevelSeriesCardReadRoutesFromChampionshipToPracticeEvent() = runBlocking {
+        val processor = DataProcessor.get()
+        val championship = raceData(
+            "Championship",
+            listOf(31, 32),
+            siNumber = 1001,
+            raceLevel = RaceLevel.REGIONAL
+        )
+        val practice = raceData(
+            "Practice",
+            listOf(41, 42),
+            siNumber = 1001,
+            raceLevel = RaceLevel.PRACTICE
+        )
+        val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
+        processor.saveRaceData(championship)
+        processor.saveRaceData(practice)
+        processor.saveEventSeries(
+            series = series,
+            members = listOf(
+                member(series.seriesId, "championship", championship, order = 0),
+                member(series.seriesId, "practice", practice, order = 1)
+            )
+        )
+
+        val selectionRequest = async {
+            withTimeout(1_000) { processor.raceSelectionRequests.first() }
+        }
+        val stored = processor.processCardDataForCurrentRaceOrSeries(
+            cardData = card(siNumber = 1001, punches = listOf(41, 42)),
+            currentRace = championship.race
+        )
+
+        assertEquals(true, stored)
+        assertEquals(practice.race.id, selectionRequest.await())
+        assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(championship.race.id))
+        assertEquals(
+            listOf(ResultDataSummary(raceId = practice.race.id, siNumber = 1001)),
+            processor.resultSummaries(practice.race.id)
+        )
     }
 
     private suspend fun DataProcessor.resultSummaries(raceId: UUID): List<ResultDataSummary> =

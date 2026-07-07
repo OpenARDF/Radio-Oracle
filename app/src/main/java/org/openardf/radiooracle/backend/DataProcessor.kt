@@ -555,10 +555,6 @@ class DataProcessor private constructor(context: Context) {
         appContext.get()?.let { ResultsProcessor.processCardData(cardData, race, it, this) }
 
     suspend fun processCardDataForCurrentRaceOrSeries(cardData: CardData, currentRace: Race): Boolean? {
-        if (currentRace.raceLevel != RaceLevel.PRACTICE) {
-            return processCardData(cardData, currentRace)
-        }
-
         val seriesMembers = eventSeriesReadoutMembersForRace(currentRace.id)
         if (seriesMembers.size < 2) {
             return processCardData(cardData, currentRace)

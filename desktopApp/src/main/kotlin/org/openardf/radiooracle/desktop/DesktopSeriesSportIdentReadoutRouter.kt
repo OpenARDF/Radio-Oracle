@@ -78,9 +78,7 @@ object DesktopSeriesSportIdentReadoutRouter {
         readoutDateTime: LocalDateTime
     ): DesktopSeriesPracticeInForestUpdate {
         val members = loadSeriesMembers(store, manifestPath)
-        if (members.isEmpty() || members.any { it.projectFile.raceData.race.raceLevel != RaceLevel.PRACTICE }) {
-            return DesktopSeriesPracticeInForestUpdate(emptySet(), 0)
-        }
+            .filter { it.projectFile.raceData.race.raceLevel == RaceLevel.PRACTICE }
         return writeChangedMembers(store, members) { projectFile ->
             startPracticeCompetitorInForest(projectFile, readout, readoutDateTime)
         }

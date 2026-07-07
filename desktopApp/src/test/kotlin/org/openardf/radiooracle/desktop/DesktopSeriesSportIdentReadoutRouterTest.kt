@@ -237,7 +237,7 @@ class DesktopSeriesSportIdentReadoutRouterTest {
     }
 
     @Test
-    fun blankPracticeCardDoesNotStartMixedRaceLevelSeries() {
+    fun blankPracticeCardStartsOnlyPracticeEventsInMixedRaceLevelSeries() {
         val store = FakeSeriesStore()
         val manifestPath = Path.of("/series/events.radio-oracle.json")
         val firstPath = Path.of("/series/first.rom.json")
@@ -256,9 +256,10 @@ class DesktopSeriesSportIdentReadoutRouterTest {
             readoutDateTime = LocalDateTime.parse("2026-06-23T18:05:00")
         )
 
-        assertEquals(emptySet<Path>(), update.updatedEventPaths)
-        assertEquals(0, update.updatedCompetitorCount)
-        assertEquals(emptyList<EventProjectFile>(), store.eventFiles.values.filter { it.raceData.competitorData.isNotEmpty() })
+        assertEquals(setOf(firstPath), update.updatedEventPaths)
+        assertEquals(1, update.updatedCompetitorCount)
+        assertEquals(1, store.eventFiles.getValue(firstPath).raceData.competitorData.size)
+        assertEquals(emptyList<EventProjectFile>(), listOf(store.eventFiles.getValue(secondPath)).filter { it.raceData.competitorData.isNotEmpty() })
     }
 
     @Test
