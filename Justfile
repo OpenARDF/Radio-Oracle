@@ -19,6 +19,9 @@ gradle +args:
 compile:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:compileKotlin
 
+function-size:
+    node ./scripts/check-kotlin-function-size.mjs
+
 test:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test
 

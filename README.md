@@ -45,6 +45,7 @@ The project currently includes:
 ## More Information
 
 - [Desktop preparation and packaging](docs/desktop-prep.md)
+- [Coding guidelines](docs/coding-guidelines.md)
 - [Course Analyzer documentation](docs/course-analyzer.md)
 - [Competitor CSV format](docs/competitor-csv.md)
 

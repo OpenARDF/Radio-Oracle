@@ -431,6 +431,9 @@ private fun competitorTableColumns(showAwardEligibility: Boolean): List<FixedTab
         (if (showAwardEligibility) CompetitorAwardEligibilityTableColumns else emptyList()) +
         CompetitorTrailingTableColumns
 
+private fun competitorCategoryColumnIndex(showAwardEligibility: Boolean): Int =
+    if (showAwardEligibility) 8 else 6
+
 private val CompetitorTableColumnHints = mapOf(
     "First" to "Competitor first or given name.",
     "Last" to "Competitor last or family name.",
@@ -5538,117 +5541,365 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun handleNavAction(action: DesktopNavAction) {
+        fun handleEventFileNavAction(action: DesktopNavAction): Boolean =
             when (action) {
-                DesktopNavAction.NewEventFile -> requestNewEventFile()
-                DesktopNavAction.OpenEventFile -> chooseOpenEventFile()
-                DesktopNavAction.ReceiveFileFromAndroid -> receiveFileFromAndroid()
-                DesktopNavAction.ImportEventRegWebsite -> showEventRegImportDialog()
-                DesktopNavAction.ImportGoogleSheet -> showGoogleSheetImportDialog()
-                DesktopNavAction.ImportEventRegCompetitorsCsv -> showEventRegCompetitorCsvImportDialog()
-                DesktopNavAction.ImportCompetitorsSpreadsheet -> showCompetitorSpreadsheetImportDialog()
-                DesktopNavAction.ImportIofEntryListXml -> importIofEntryListXml()
-                DesktopNavAction.ExportIofEntryListXml -> exportIofEntryListXml()
-                DesktopNavAction.SaveEventFile -> saveCurrentProject()
-                DesktopNavAction.CloseEventFile -> requestCloseEventFile()
-                DesktopNavAction.ImportCategoriesCsv -> importCategoriesCsv()
-                DesktopNavAction.ImportCategoriesRaceFile -> importCategoriesRaceFile()
-                DesktopNavAction.ImportIofCourseDataXml -> importIofCourseDataXml()
-                DesktopNavAction.ImportControlsCsv -> importControlsCsv()
-                DesktopNavAction.ImportCourseKmlKmz -> chooseImportCourseKmlKmz()
-                DesktopNavAction.ImportCourseGpx -> chooseImportCourseGpx()
-                DesktopNavAction.ImportControlsKmlKmz -> chooseImportControlsKmlKmz()
-                DesktopNavAction.ImportControlsGpx -> chooseImportControlsGpx()
-                DesktopNavAction.ImportDemFile -> chooseImportDemFiles()
-                DesktopNavAction.DeleteAllControls ->
+                DesktopNavAction.NewEventFile -> {
+                    requestNewEventFile()
+                    true
+                }
+                DesktopNavAction.OpenEventFile -> {
+                    chooseOpenEventFile()
+                    true
+                }
+                DesktopNavAction.SaveEventFile -> {
+                    saveCurrentProject()
+                    true
+                }
+                DesktopNavAction.CloseEventFile -> {
+                    requestCloseEventFile()
+                    true
+                }
+                DesktopNavAction.ExportEventFileCopy -> {
+                    exportEventFileCopy()
+                    true
+                }
+                DesktopNavAction.SendEventFileToAndroid,
+                DesktopNavAction.SendEventSeriesToAndroid -> {
+                    sendEventFileToAndroid()
+                    true
+                }
+                DesktopNavAction.ReceiveFileFromAndroid,
+                DesktopNavAction.ReceiveEventSeriesFromAndroid -> {
+                    receiveFileFromAndroid()
+                    true
+                }
+                else -> false
+            }
+
+        fun handleImportNavAction(action: DesktopNavAction): Boolean =
+            when (action) {
+                DesktopNavAction.ImportEventRegWebsite -> {
+                    showEventRegImportDialog()
+                    true
+                }
+                DesktopNavAction.ImportGoogleSheet -> {
+                    showGoogleSheetImportDialog()
+                    true
+                }
+                DesktopNavAction.ImportEventRegCompetitorsCsv -> {
+                    showEventRegCompetitorCsvImportDialog()
+                    true
+                }
+                DesktopNavAction.ImportCompetitorsSpreadsheet -> {
+                    showCompetitorSpreadsheetImportDialog()
+                    true
+                }
+                DesktopNavAction.ImportIofEntryListXml -> {
+                    importIofEntryListXml()
+                    true
+                }
+                DesktopNavAction.ImportCategoriesCsv -> {
+                    importCategoriesCsv()
+                    true
+                }
+                DesktopNavAction.ImportCategoriesRaceFile -> {
+                    importCategoriesRaceFile()
+                    true
+                }
+                DesktopNavAction.ImportIofCourseDataXml -> {
+                    importIofCourseDataXml()
+                    true
+                }
+                DesktopNavAction.ImportControlsCsv -> {
+                    importControlsCsv()
+                    true
+                }
+                DesktopNavAction.ImportCourseKmlKmz -> {
+                    chooseImportCourseKmlKmz()
+                    true
+                }
+                DesktopNavAction.ImportCourseGpx -> {
+                    chooseImportCourseGpx()
+                    true
+                }
+                DesktopNavAction.ImportControlsKmlKmz -> {
+                    chooseImportControlsKmlKmz()
+                    true
+                }
+                DesktopNavAction.ImportControlsGpx -> {
+                    chooseImportControlsGpx()
+                    true
+                }
+                DesktopNavAction.ImportDemFile -> {
+                    chooseImportDemFiles()
+                    true
+                }
+                DesktopNavAction.ImportCompetitorsCsv -> {
+                    importCompetitorsCsv()
+                    true
+                }
+                DesktopNavAction.ImportCompetitorsRaceFile -> {
+                    importCompetitorsRaceFile()
+                    true
+                }
+                DesktopNavAction.ImportStartsCsv -> {
+                    importCompetitorStartsCsv()
+                    true
+                }
+                DesktopNavAction.ImportIofStartListXml -> {
+                    importIofStartListXml()
+                    true
+                }
+                DesktopNavAction.ImportIofResultListXml -> {
+                    importIofResultListXml()
+                    true
+                }
+                else -> false
+            }
+
+        fun handleBulkDeleteNavAction(action: DesktopNavAction): Boolean =
+            when (action) {
+                DesktopNavAction.DeleteAllControls -> {
                     isDeleteAllControlsDialogVisible = true
-                DesktopNavAction.DeleteAllCategoryAssignedControls ->
+                    true
+                }
+                DesktopNavAction.DeleteAllCategoryAssignedControls -> {
                     pendingBulkCategoryAction = BulkCategoryAction.DeleteAllAssignedControls
-                DesktopNavAction.DeleteAllCategories ->
+                    true
+                }
+                DesktopNavAction.DeleteAllCategories -> {
                     pendingBulkCategoryAction = BulkCategoryAction.DeleteAllCategories
-                DesktopNavAction.DeleteAllCompetitors ->
+                    true
+                }
+                DesktopNavAction.DeleteAllCompetitors -> {
                     isDeleteAllCompetitorsDialogVisible = true
-                DesktopNavAction.ImportCompetitorsCsv -> importCompetitorsCsv()
-                DesktopNavAction.ImportCompetitorsRaceFile -> importCompetitorsRaceFile()
-                DesktopNavAction.ImportStartsCsv -> importCompetitorStartsCsv()
-                DesktopNavAction.ImportIofStartListXml -> importIofStartListXml()
-                DesktopNavAction.ExportEventFileCopy -> exportEventFileCopy()
-                DesktopNavAction.SendEventFileToAndroid -> sendEventFileToAndroid()
-                DesktopNavAction.SendEventSeriesToAndroid -> sendEventFileToAndroid()
-                DesktopNavAction.ReceiveEventSeriesFromAndroid -> receiveFileFromAndroid()
-                DesktopNavAction.ExportAndroidEventSeriesPackage -> exportAndroidEventSeriesPackage()
-                DesktopNavAction.ExportCategoriesCsv -> exportCategoriesCsv()
-                DesktopNavAction.ExportIofCourseDataXml -> exportIofCourseDataXml()
-                DesktopNavAction.ExportControlsCsv ->
+                    true
+                }
+                else -> false
+            }
+
+        fun handleExportNavAction(action: DesktopNavAction): Boolean =
+            when (action) {
+                DesktopNavAction.ExportIofEntryListXml -> {
+                    exportIofEntryListXml()
+                    true
+                }
+                DesktopNavAction.ExportAndroidEventSeriesPackage -> {
+                    exportAndroidEventSeriesPackage()
+                    true
+                }
+                DesktopNavAction.ExportCategoriesCsv -> {
+                    exportCategoriesCsv()
+                    true
+                }
+                DesktopNavAction.ExportIofCourseDataXml -> {
+                    exportIofCourseDataXml()
+                    true
+                }
+                DesktopNavAction.ExportControlsCsv -> {
                     exportCsv("Export Controls CSV", "controls", DesktopProjectFiles::exportControlsCsv)
-                DesktopNavAction.ExportCourseKmlKmz -> chooseExportCourseKmlKmz()
-                DesktopNavAction.ExportCourseGpx -> chooseExportCourseGpx()
-                DesktopNavAction.ExportCourseOverlays -> chooseExportCourseOverlays()
-                DesktopNavAction.ExportCompetitorsCsv ->
+                    true
+                }
+                DesktopNavAction.ExportCourseKmlKmz -> {
+                    chooseExportCourseKmlKmz()
+                    true
+                }
+                DesktopNavAction.ExportCourseGpx -> {
+                    chooseExportCourseGpx()
+                    true
+                }
+                DesktopNavAction.ExportCourseOverlays -> {
+                    chooseExportCourseOverlays()
+                    true
+                }
+                DesktopNavAction.ExportCompetitorsCsv -> {
                     exportCsv("Export Competitors CSV", "competitors", DesktopProjectFiles::exportCompetitorsCsv)
-                DesktopNavAction.ExportStartsCsv ->
+                    true
+                }
+                DesktopNavAction.ExportStartsCsv -> {
                     exportCsv("Export Starts CSV", "starts", DesktopProjectFiles::exportCompetitorStartsCsv)
-                DesktopNavAction.ExportStartsByCategoryCsv ->
+                    true
+                }
+                DesktopNavAction.ExportStartsByCategoryCsv -> {
                     exportCsv(
                         "Export Starts by Category CSV",
                         "starts by category",
                         DesktopProjectFiles::exportCompetitorStartsByCategoryCsv
                     )
-                DesktopNavAction.ExportStartsByMinuteCsv ->
+                    true
+                }
+                DesktopNavAction.ExportStartsByMinuteCsv -> {
                     exportCsv(
                         "Export Starts by Minute CSV",
                         "starts by minute",
                         DesktopProjectFiles::exportCompetitorStartsByMinuteCsv
                     )
-                DesktopNavAction.ExportRobisStartListCsv ->
+                    true
+                }
+                DesktopNavAction.ExportRobisStartListCsv -> {
                     exportCsv("Export ROBIS Start List CSV", "robis start list", DesktopProjectFiles::exportRobisStartListCsv)
-                DesktopNavAction.ExportReadoutsCsv ->
+                    true
+                }
+                DesktopNavAction.ExportReadoutsCsv -> {
                     exportCsv("Export Readouts CSV", "readouts", DesktopProjectFiles::exportReadoutsCsv)
-                DesktopNavAction.ExportResultsCsv ->
+                    true
+                }
+                DesktopNavAction.ExportResultsCsv -> {
                     exportCsv("Export Results CSV", "results") { path, project ->
                         DesktopProjectFiles.exportResultsCsv(path, project, currentDesktopAwardDisplayMode())
                     }
-                DesktopNavAction.ExportArdfEventResultsCsv ->
+                    true
+                }
+                DesktopNavAction.ExportArdfEventResultsCsv -> {
                     exportCsv("Export ARDFEvent Results CSV", "ardfevent results", DesktopProjectFiles::exportArdfEventResultsCsv)
-                DesktopNavAction.ExportResultsText -> exportResultsText()
-                DesktopNavAction.ExportResultsHtml -> exportResultsHtml()
-                DesktopNavAction.GeneratePublicResultsSite -> generatePublicResultsSite()
-                DesktopNavAction.PublishPublicResultsSite -> publishPublicResultsSite()
-                DesktopNavAction.OpenPublicResultsSitePreview -> openPublicResultsSitePreview()
-                DesktopNavAction.StopPublicResultsSitePreview -> stopPublicResultsSitePreview()
-                DesktopNavAction.ExportArdfJson -> exportArdfJson()
-                DesktopNavAction.ExportAndroidRaceBackupJson -> exportAndroidRaceBackupJson()
-                DesktopNavAction.ExportLiveResultsJson -> exportLiveResultsJson()
-                DesktopNavAction.ExportFinalResultsJson -> exportFinalResultsJson()
-                DesktopNavAction.ImportIofResultListXml -> importIofResultListXml()
-                DesktopNavAction.ExportIofStartListXml -> exportIofStartListXml()
-                DesktopNavAction.ExportIofResultListXml -> exportIofResultListXml()
-                DesktopNavAction.DownloadSiCard -> downloadSportIdentReadout()
-                DesktopNavAction.StartContinuousSiReadout -> startContinuousSportIdentReadout()
-                DesktopNavAction.StopContinuousSiReadout -> stopContinuousSportIdentReadout()
-                DesktopNavAction.OpenLocalResultsWebPage -> openLocalResultsWebPage()
-                DesktopNavAction.PreviewLocalResultsWebPage -> previewLocalResultsWebPage()
-                DesktopNavAction.StartLocalResultsWebServer -> startLocalResultsWebServerOnWifi()
-                DesktopNavAction.StopLocalResultsWebServer -> stopLocalResultsWebServer()
-                DesktopNavAction.SendRobis -> sendRobisLiveResults()
-                DesktopNavAction.CreateEventSeriesWithCurrentEvent -> createEventSeriesWithCurrentEvent()
+                    true
+                }
+                DesktopNavAction.ExportResultsText -> {
+                    exportResultsText()
+                    true
+                }
+                DesktopNavAction.ExportResultsHtml -> {
+                    exportResultsHtml()
+                    true
+                }
+                DesktopNavAction.GeneratePublicResultsSite -> {
+                    generatePublicResultsSite()
+                    true
+                }
+                DesktopNavAction.PublishPublicResultsSite -> {
+                    publishPublicResultsSite()
+                    true
+                }
+                DesktopNavAction.OpenPublicResultsSitePreview -> {
+                    openPublicResultsSitePreview()
+                    true
+                }
+                DesktopNavAction.StopPublicResultsSitePreview -> {
+                    stopPublicResultsSitePreview()
+                    true
+                }
+                DesktopNavAction.ExportArdfJson -> {
+                    exportArdfJson()
+                    true
+                }
+                DesktopNavAction.ExportAndroidRaceBackupJson -> {
+                    exportAndroidRaceBackupJson()
+                    true
+                }
+                DesktopNavAction.ExportLiveResultsJson -> {
+                    exportLiveResultsJson()
+                    true
+                }
+                DesktopNavAction.ExportFinalResultsJson -> {
+                    exportFinalResultsJson()
+                    true
+                }
+                DesktopNavAction.ExportIofStartListXml -> {
+                    exportIofStartListXml()
+                    true
+                }
+                DesktopNavAction.ExportIofResultListXml -> {
+                    exportIofResultListXml()
+                    true
+                }
+                else -> false
+            }
+
+        fun handleRaceOpsNavAction(action: DesktopNavAction): Boolean =
+            when (action) {
+                DesktopNavAction.DownloadSiCard -> {
+                    downloadSportIdentReadout()
+                    true
+                }
+                DesktopNavAction.StartContinuousSiReadout -> {
+                    startContinuousSportIdentReadout()
+                    true
+                }
+                DesktopNavAction.StopContinuousSiReadout -> {
+                    stopContinuousSportIdentReadout()
+                    true
+                }
+                DesktopNavAction.OpenLocalResultsWebPage -> {
+                    openLocalResultsWebPage()
+                    true
+                }
+                DesktopNavAction.PreviewLocalResultsWebPage -> {
+                    previewLocalResultsWebPage()
+                    true
+                }
+                DesktopNavAction.StartLocalResultsWebServer -> {
+                    startLocalResultsWebServerOnWifi()
+                    true
+                }
+                DesktopNavAction.StopLocalResultsWebServer -> {
+                    stopLocalResultsWebServer()
+                    true
+                }
+                DesktopNavAction.SendRobis -> {
+                    sendRobisLiveResults()
+                    true
+                }
+                else -> false
+            }
+
+        fun handleSeriesNavAction(action: DesktopNavAction): Boolean =
+            when (action) {
+                DesktopNavAction.CreateEventSeriesWithCurrentEvent -> {
+                    createEventSeriesWithCurrentEvent()
+                    true
+                }
                 DesktopNavAction.LinkCurrentEventToSeries,
-                DesktopNavAction.ChangeCurrentEventSeriesLink -> linkCurrentEventToSeries()
-                DesktopNavAction.RemoveCurrentEventFromSeries -> removeCurrentEventFromSeries()
+                DesktopNavAction.ChangeCurrentEventSeriesLink -> {
+                    linkCurrentEventToSeries()
+                    true
+                }
+                DesktopNavAction.RemoveCurrentEventFromSeries -> {
+                    removeCurrentEventFromSeries()
+                    true
+                }
                 DesktopNavAction.ValidateCurrentEventSeriesLink,
-                DesktopNavAction.ValidateEventSeries -> validateCurrentEventSeries()
-                DesktopNavAction.BalanceStartListFromEventSeries -> balanceStartListFromEventSeries()
-                DesktopNavAction.AddEventToSeries -> addEventToCurrentSeries()
-                DesktopNavAction.ExportEventSeries -> exportCurrentEventSeries()
+                DesktopNavAction.ValidateEventSeries -> {
+                    validateCurrentEventSeries()
+                    true
+                }
+                DesktopNavAction.BalanceStartListFromEventSeries -> {
+                    balanceStartListFromEventSeries()
+                    true
+                }
+                DesktopNavAction.AddEventToSeries -> {
+                    addEventToCurrentSeries()
+                    true
+                }
+                DesktopNavAction.ExportEventSeries -> {
+                    exportCurrentEventSeries()
+                    true
+                }
+                else -> false
+            }
+
+        fun handleAppNavAction(action: DesktopNavAction): Boolean =
+            when (action) {
                 DesktopNavAction.ShowDebugLogHelp -> {
                     val logDirectory = DesktopDebugLog.logDirectory()
                     DesktopDebugLog.info("App", "User requested desktop log location")
                     projectStatusText = "Desktop logs: $logDirectory"
+                    true
                 }
                 DesktopNavAction.ShowAbout -> {
                     isAboutDialogVisible = true
+                    true
                 }
+                else -> false
             }
+
+        fun handleNavAction(action: DesktopNavAction) {
+            handleEventFileNavAction(action) ||
+                handleImportNavAction(action) ||
+                handleBulkDeleteNavAction(action) ||
+                handleExportNavAction(action) ||
+                handleRaceOpsNavAction(action) ||
+                handleSeriesNavAction(action) ||
+                handleAppNavAction(action)
         }
 
         MenuBar {
@@ -10835,31 +11086,13 @@ private fun RadioOManagerDesktopApp(
                 }
             }
             pendingCourseAnalysisSaveAction?.let { action ->
-                AlertDialog(
-                    onDismissRequest = { pendingCourseAnalysisSaveAction = null },
-                    title = { Text(action.title) },
-                    text = {
-                        Text(
-                            text = action.message,
-                            color = DesktopPalette.Black,
-                            fontSize = 14.sp
-                        )
+                CourseAnalysisSaveActionDialog(
+                    action = action,
+                    onConfirm = {
+                        pendingCourseAnalysisSaveAction = null
+                        saveCourseAnalysisAction(action)
                     },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                pendingCourseAnalysisSaveAction = null
-                                saveCourseAnalysisAction(action)
-                            }
-                        ) {
-                            ButtonLabel(action.buttonLabel)
-                        }
-                    },
-                    dismissButton = {
-                        Button(onClick = { pendingCourseAnalysisSaveAction = null }) {
-                            ButtonLabel("Cancel")
-                        }
-                    }
+                    onCancel = { pendingCourseAnalysisSaveAction = null }
                 )
             }
             Surface(modifier = Modifier.fillMaxSize(), color = DesktopPalette.White) {
@@ -11053,82 +11286,152 @@ private fun RadioOManagerDesktopApp(
                 }
             }
         }
-        pendingNavigation?.let { navigation ->
-            UnsavedNewEventFileDialog(
-                onSave = {
-                    if (onSaveEventFileForNavigation()) {
-                        pendingNavigation = null
-                        applyNavigation(navigation)
-                    }
-                },
-                onDiscard = {
-                    onDiscardUnsavedNewEventFile()
+        DesktopNavigationGuardDialogs(
+            pendingNavigation = pendingNavigation,
+            pendingCourseAnalysisEntryNavigation = pendingCourseAnalysisEntryNavigation,
+            pendingCourseAnalysisExitNavigation = pendingCourseAnalysisExitNavigation,
+            pendingDirtySubmenuNavigation = pendingDirtySubmenuNavigation,
+            canDiscardCourseAnalysisChangesToDisk = eventFilePath != null,
+            onSaveNavigation = { navigation ->
+                if (onSaveEventFileForNavigation()) {
                     pendingNavigation = null
                     applyNavigation(navigation)
-                },
-                onCancel = { pendingNavigation = null }
-            )
-        }
-        pendingCourseAnalysisEntryNavigation?.let { navigation ->
-            CourseAnalysisEntryDirtyEventDialog(
-                canDumpChanges = eventFilePath != null,
-                onCancel = {
+                }
+            },
+            onDiscardNavigation = { navigation ->
+                onDiscardUnsavedNewEventFile()
+                pendingNavigation = null
+                applyNavigation(navigation)
+            },
+            onCancelNavigation = { pendingNavigation = null },
+            onCancelCourseAnalysisEntry = {
+                pendingCourseAnalysisEntryNavigation = null
+                navState = courseToolsMenuNavState()
+                bypassedDisabledNavigation = null
+            },
+            onSaveCourseAnalysisEntry = { navigation ->
+                if (onSaveEventFileForNavigation()) {
                     pendingCourseAnalysisEntryNavigation = null
-                    navState = courseToolsMenuNavState()
-                    bypassedDisabledNavigation = null
-                },
-                onSaveAndContinue = {
-                    if (onSaveEventFileForNavigation()) {
-                        pendingCourseAnalysisEntryNavigation = null
-                        applyNavigation(navigation)
-                    }
-                },
-                onDumpAndContinue = {
-                    if (onDiscardEventFileChangesForNavigation()) {
-                        pendingCourseAnalysisEntryNavigation = null
-                        courseAnalysisResult = null
-                        courseAnalysisApplyStatusText = null
-                        applyNavigation(navigation)
-                    }
+                    applyNavigation(navigation)
                 }
-            )
-        }
-        pendingCourseAnalysisExitNavigation?.let { navigation ->
-            UnsavedCourseAnalysisDataDialog(
-                canDiscardToDisk = eventFilePath != null,
-                onDontSave = {
-                    if (onDiscardEventFileChangesForNavigation()) {
-                        pendingCourseAnalysisExitNavigation = null
-                        courseAnalysisResult = null
-                        courseAnalysisApplyStatusText = null
-                        applyNavigation(navigation)
-                    }
-                },
-                onReturnToAnalyzer = { pendingCourseAnalysisExitNavigation = null },
-                onSaveAndExit = {
-                    if (onSaveEventFileForNavigation()) {
-                        pendingCourseAnalysisExitNavigation = null
-                        applyNavigation(navigation)
-                    }
+            },
+            onDiscardCourseAnalysisEntry = { navigation ->
+                if (onDiscardEventFileChangesForNavigation()) {
+                    pendingCourseAnalysisEntryNavigation = null
+                    courseAnalysisResult = null
+                    courseAnalysisApplyStatusText = null
+                    applyNavigation(navigation)
                 }
-            )
-        }
-        pendingDirtySubmenuNavigation?.let { navigation ->
-            UnsavedSubmenuChangesDialog(
-                onSave = {
-                    if (onSaveEventFileForNavigation()) {
-                        pendingDirtySubmenuNavigation = null
-                        applyNavigation(navigation)
-                    }
-                },
-                onDontSave = {
+            },
+            onDiscardCourseAnalysisExit = { navigation ->
+                if (onDiscardEventFileChangesForNavigation()) {
+                    pendingCourseAnalysisExitNavigation = null
+                    courseAnalysisResult = null
+                    courseAnalysisApplyStatusText = null
+                    applyNavigation(navigation)
+                }
+            },
+            onReturnToCourseAnalysis = { pendingCourseAnalysisExitNavigation = null },
+            onSaveCourseAnalysisExit = { navigation ->
+                if (onSaveEventFileForNavigation()) {
+                    pendingCourseAnalysisExitNavigation = null
+                    applyNavigation(navigation)
+                }
+            },
+            onSaveDirtySubmenu = { navigation ->
+                if (onSaveEventFileForNavigation()) {
                     pendingDirtySubmenuNavigation = null
                     applyNavigation(navigation)
-                },
-                onCancel = { pendingDirtySubmenuNavigation = null }
-            )
-        }
+                }
+            },
+            onDiscardDirtySubmenu = { navigation ->
+                pendingDirtySubmenuNavigation = null
+                applyNavigation(navigation)
+            },
+            onCancelDirtySubmenu = { pendingDirtySubmenuNavigation = null }
+        )
     }
+}
+
+@Composable
+private fun DesktopNavigationGuardDialogs(
+    pendingNavigation: DesktopPendingNavigation?,
+    pendingCourseAnalysisEntryNavigation: DesktopPendingNavigation?,
+    pendingCourseAnalysisExitNavigation: DesktopPendingNavigation?,
+    pendingDirtySubmenuNavigation: DesktopPendingNavigation?,
+    canDiscardCourseAnalysisChangesToDisk: Boolean,
+    onSaveNavigation: (DesktopPendingNavigation) -> Unit,
+    onDiscardNavigation: (DesktopPendingNavigation) -> Unit,
+    onCancelNavigation: () -> Unit,
+    onCancelCourseAnalysisEntry: () -> Unit,
+    onSaveCourseAnalysisEntry: (DesktopPendingNavigation) -> Unit,
+    onDiscardCourseAnalysisEntry: (DesktopPendingNavigation) -> Unit,
+    onDiscardCourseAnalysisExit: (DesktopPendingNavigation) -> Unit,
+    onReturnToCourseAnalysis: () -> Unit,
+    onSaveCourseAnalysisExit: (DesktopPendingNavigation) -> Unit,
+    onSaveDirtySubmenu: (DesktopPendingNavigation) -> Unit,
+    onDiscardDirtySubmenu: (DesktopPendingNavigation) -> Unit,
+    onCancelDirtySubmenu: () -> Unit
+) {
+    pendingNavigation?.let { navigation ->
+        UnsavedNewEventFileDialog(
+            onSave = { onSaveNavigation(navigation) },
+            onDiscard = { onDiscardNavigation(navigation) },
+            onCancel = onCancelNavigation
+        )
+    }
+    pendingCourseAnalysisEntryNavigation?.let { navigation ->
+        CourseAnalysisEntryDirtyEventDialog(
+            canDumpChanges = canDiscardCourseAnalysisChangesToDisk,
+            onCancel = onCancelCourseAnalysisEntry,
+            onSaveAndContinue = { onSaveCourseAnalysisEntry(navigation) },
+            onDumpAndContinue = { onDiscardCourseAnalysisEntry(navigation) }
+        )
+    }
+    pendingCourseAnalysisExitNavigation?.let { navigation ->
+        UnsavedCourseAnalysisDataDialog(
+            canDiscardToDisk = canDiscardCourseAnalysisChangesToDisk,
+            onDontSave = { onDiscardCourseAnalysisExit(navigation) },
+            onReturnToAnalyzer = onReturnToCourseAnalysis,
+            onSaveAndExit = { onSaveCourseAnalysisExit(navigation) }
+        )
+    }
+    pendingDirtySubmenuNavigation?.let { navigation ->
+        UnsavedSubmenuChangesDialog(
+            onSave = { onSaveDirtySubmenu(navigation) },
+            onDontSave = { onDiscardDirtySubmenu(navigation) },
+            onCancel = onCancelDirtySubmenu
+        )
+    }
+}
+
+@Composable
+private fun CourseAnalysisSaveActionDialog(
+    action: CourseAnalysisSaveAction,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(action.title) },
+        text = {
+            Text(
+                text = action.message,
+                color = DesktopPalette.Black,
+                fontSize = 14.sp
+            )
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                ButtonLabel(action.buttonLabel)
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                ButtonLabel("Cancel")
+            }
+        }
+    )
 }
 
 /** Renders the Android-style app bar used at the top of the desktop window. */
@@ -12251,22 +12554,10 @@ private fun SectionWorkspace(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(
-            text = breadcrumb,
-            color = DesktopPalette.Disconnected,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = title,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = DesktopPalette.Black
-        )
-        Text(
-            text = menuDescription,
-            color = DesktopPalette.Black,
-            fontSize = 14.sp
+        SectionWorkspaceHeader(
+            breadcrumb = breadcrumb,
+            title = title,
+            menuDescription = menuDescription
         )
         if (section == DesktopSection.WorkflowHome) {
             WorkflowHomePanel(workflow)
@@ -12281,96 +12572,60 @@ private fun SectionWorkspace(
                 onCopyUrl = onCopyPublishedPublicResultsSite
             )
         }
-        if (section == DesktopSection.Races && projectFile != null) {
-            RaceDetailsPanel(
-                details = EventRaceDetails.from(projectFile.raceData.race),
-                eventFilePath = eventFilePath,
-                eventFileWorkingFolder = eventFileWorkingFolder,
-                parentSeriesText = desktopParentSeriesText(eventSeriesUiContext),
-                onRenameRace = onRenameRace,
-                onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
-                onUpdateRaceSettings = onUpdateRaceSettings,
-                onUpdateEventFileName = onUpdateEventFileName,
-                onOpenEventFileWorkingFolder = onOpenEventFileWorkingFolder
-            )
-        }
-        if (section == DesktopSection.Categories && projectFile != null) {
-            CategoryDetailsPanel(
-                categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
-                controls = EventControlDetails.from(projectFile.raceData),
-                raceLevel = projectFile.raceData.race.raceLevel,
-                onRenameCategory = onRenameCategory,
-                onUpdateCategoryGender = onUpdateCategoryGender,
-                onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
-                onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
-                onAddCategory = onAddCategory,
-                onRemoveCategory = onRemoveCategory
-            )
-        }
-        if (section == DesktopSection.ProtectedCourseOrder && projectFile != null) {
-            ProtectedCourseOrderPanel(
-                projectFile = projectFile,
-                isUnlocked = isProtectedCourseOrderUnlocked,
-                idealOrderByCategoryId = protectedIdealOrderByCategoryId,
-                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                onUnlock = onUnlockProtectedCourseOrder,
-                onUpdateIdealOrder = onUpdateProtectedIdealOrder,
-                onUpdateControlLocation = onUpdateProtectedControlLocation
-            )
-        }
-        if (
-            competitorImportReview != null &&
-            (section == DesktopSection.Competitors || section == DesktopSection.CompetitorsImportExport)
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, Color(0xFFE0E0E0)),
-                color = MaterialTheme.colors.surface
-            ) {
-                SpreadsheetCompetitorImportReviewPanel(
-                    review = competitorImportReview,
-                    onSelectionChange = onCompetitorImportReviewSelectionChange,
-                    onRowActionSelectionChange = onCompetitorImportReviewRowActionSelectionChange,
-                    onRemovalActionSelectionChange = onCompetitorImportReviewRemovalActionSelectionChange,
-                    onEmptyCategorySelectionChange = onCompetitorImportReviewEmptyCategorySelectionChange,
-                    onEmptyCourseCategorySelectionChange = onCompetitorImportReviewEmptyCourseCategorySelectionChange,
-                    onImport = onApplyCompetitorImportReview,
-                    onCancel = onCancelCompetitorImportReview,
-                    modifier = Modifier.padding(14.dp)
-                )
-            }
-        }
-        if (section == DesktopSection.Competitors && projectFile != null) {
-            CompetitorDetailsPanel(
-                competitors = EventCompetitorDetails.from(projectFile.raceData),
-                categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
-                showAwardEligibility = projectFile.raceData.race.supportsChampionshipAwards(),
-                onRenameCompetitor = onRenameCompetitor,
-                onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
-                onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
-                onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
-                onAddCompetitor = onAddCompetitor,
-                isReadCompetitorSiCardEnabled = siReaderState.severity == DesktopSiReaderSeverity.CONNECTED &&
-                    !isDownloadingSiReadout &&
-                    !isContinuousSiReadoutActive &&
-                    !isReadingCompetitorSiCard,
-                onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
-                onAssignCompetitorCategory = onAssignCompetitorCategory,
-                onRemoveCompetitor = onRemoveCompetitor
-            )
-        }
-        if (section == DesktopSection.Controls && projectFile != null) {
-            ControlDetailsPanel(
-                controls = EventControlDetails.from(projectFile.raceData),
-                categories = projectFile.raceData.categories,
-                raceType = projectFile.raceData.race.raceType,
-                onUpdateControl = onUpdateControl,
-                onAddControl = onAddControl,
-                onRemoveControl = onRemoveControl
-            )
-        }
+        SetupSectionWorkspaceContent(
+            section = section,
+            projectFile = projectFile,
+            eventFilePath = eventFilePath,
+            eventFileWorkingFolder = eventFileWorkingFolder,
+            eventSeriesUiContext = eventSeriesUiContext,
+            areAliasesEnabled = areAliasesEnabled,
+            competitorImportReview = competitorImportReview,
+            siReaderState = siReaderState,
+            isDownloadingSiReadout = isDownloadingSiReadout,
+            isContinuousSiReadoutActive = isContinuousSiReadoutActive,
+            isReadingCompetitorSiCard = isReadingCompetitorSiCard,
+            isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
+            protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+            seriesStartFairnessSummary = seriesStartFairnessSummary,
+            eventStartListDrawNumbering = eventStartListDrawNumbering,
+            onRenameRace = onRenameRace,
+            onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
+            onUpdateRaceSettings = onUpdateRaceSettings,
+            onUpdateEventFileName = onUpdateEventFileName,
+            onOpenEventFileWorkingFolder = onOpenEventFileWorkingFolder,
+            onRenameCategory = onRenameCategory,
+            onUpdateCategoryGender = onUpdateCategoryGender,
+            onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
+            onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
+            onAddCategory = onAddCategory,
+            onRemoveCategory = onRemoveCategory,
+            onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
+            onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
+            onUpdateProtectedControlLocation = onUpdateProtectedControlLocation,
+            onCompetitorImportReviewSelectionChange = onCompetitorImportReviewSelectionChange,
+            onCompetitorImportReviewRowActionSelectionChange = onCompetitorImportReviewRowActionSelectionChange,
+            onCompetitorImportReviewRemovalActionSelectionChange = onCompetitorImportReviewRemovalActionSelectionChange,
+            onCompetitorImportReviewEmptyCategorySelectionChange = onCompetitorImportReviewEmptyCategorySelectionChange,
+            onCompetitorImportReviewEmptyCourseCategorySelectionChange = onCompetitorImportReviewEmptyCourseCategorySelectionChange,
+            onApplyCompetitorImportReview = onApplyCompetitorImportReview,
+            onCancelCompetitorImportReview = onCancelCompetitorImportReview,
+            onRenameCompetitor = onRenameCompetitor,
+            onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+            onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
+            onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+            onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
+            onAddCompetitor = onAddCompetitor,
+            onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
+            onAssignCompetitorCategory = onAssignCompetitorCategory,
+            onRemoveCompetitor = onRemoveCompetitor,
+            onUpdateControl = onUpdateControl,
+            onAddControl = onAddControl,
+            onRemoveControl = onRemoveControl,
+            onUpdateStartDrawSettings = onUpdateStartDrawSettings,
+            onUpdateStartDrawSeriesOptimizationLock = onUpdateStartDrawSeriesOptimizationLock,
+            onDrawStartList = onDrawStartList
+        )
         if (section == DesktopSection.CourseAnalysis && projectFile != null) {
             CourseAnalysisPanel(
                 projectFile = projectFile,
@@ -12429,16 +12684,6 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
             ControlsRouteKmlImportPanel(onSelectFile = onImportControlsRouteKmlKmz)
-        }
-        if (section == DesktopSection.StartList && projectFile != null) {
-            StartListDetailsPanel(
-                details = EventStartListDetails.from(projectFile.raceData),
-                seriesStartFairnessSummary = seriesStartFairnessSummary,
-                eventStartListDrawNumbering = eventStartListDrawNumbering,
-                onUpdateStartDrawSettings = onUpdateStartDrawSettings,
-                onUpdateStartDrawSeriesOptimizationLock = onUpdateStartDrawSeriesOptimizationLock,
-                onDrawStartList = onDrawStartList
-            )
         }
         if (section == DesktopSection.SeriesEvents) {
             EventSeriesEventsPanel(
@@ -12585,23 +12830,219 @@ private fun SectionWorkspace(
                 onUpdateCoursePassword = onUpdateProtectedCoursePassword
             )
         }
-        if (section != DesktopSection.WorkflowHome) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(DesktopPalette.LightGrey)
-            )
-            Text(
-                text = if (projectFile != null) {
-                    "${DesktopDateTimeText.displayIsoOrRaw(projectFile.raceData.race.startDateTimeIso)} - $projectStatusText"
-                } else {
-                    projectStatusText
-                },
-                color = DesktopPalette.Disconnected,
-                fontSize = 13.sp
+        SectionWorkspaceFooter(
+            section = section,
+            projectFile = projectFile,
+            projectStatusText = projectStatusText
+        )
+    }
+}
+
+@Composable
+private fun SectionWorkspaceHeader(
+    breadcrumb: String,
+    title: String,
+    menuDescription: String
+) {
+    Text(
+        text = breadcrumb,
+        color = DesktopPalette.Disconnected,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold
+    )
+    Text(
+        text = title,
+        fontSize = 24.sp,
+        fontWeight = FontWeight.Bold,
+        color = DesktopPalette.Black
+    )
+    Text(
+        text = menuDescription,
+        color = DesktopPalette.Black,
+        fontSize = 14.sp
+    )
+}
+
+@Composable
+private fun SectionWorkspaceFooter(
+    section: DesktopSection,
+    projectFile: EventProjectFile?,
+    projectStatusText: String
+) {
+    if (section == DesktopSection.WorkflowHome) {
+        return
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(DesktopPalette.LightGrey)
+    )
+    Text(
+        text = if (projectFile != null) {
+            "${DesktopDateTimeText.displayIsoOrRaw(projectFile.raceData.race.startDateTimeIso)} - $projectStatusText"
+        } else {
+            projectStatusText
+        },
+        color = DesktopPalette.Disconnected,
+        fontSize = 13.sp
+    )
+}
+
+@Composable
+private fun SetupSectionWorkspaceContent(
+    section: DesktopSection,
+    projectFile: EventProjectFile?,
+    eventFilePath: Path?,
+    eventFileWorkingFolder: Path,
+    eventSeriesUiContext: EventSeriesUiContext?,
+    areAliasesEnabled: Boolean,
+    competitorImportReview: PendingSpreadsheetCompetitorImportReview?,
+    siReaderState: DesktopSiReaderUiState,
+    isDownloadingSiReadout: Boolean,
+    isContinuousSiReadoutActive: Boolean,
+    isReadingCompetitorSiCard: Boolean,
+    isProtectedCourseOrderUnlocked: Boolean,
+    protectedIdealOrderByCategoryId: Map<String, String>,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
+    eventStartListDrawNumbering: DesktopStartListDrawNumbering?,
+    onRenameRace: (String) -> Unit,
+    onUpdateRaceStartDateTime: (String) -> Unit,
+    onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String) -> Unit,
+    onUpdateEventFileName: (String) -> Boolean,
+    onOpenEventFileWorkingFolder: () -> Unit,
+    onRenameCategory: (String, String) -> Unit,
+    onUpdateCategoryGender: (String, Boolean) -> Unit,
+    onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
+    onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
+    onAddCategory: (String) -> Boolean,
+    onRemoveCategory: (String, Boolean) -> Unit,
+    onUnlockProtectedCourseOrder: (String) -> Boolean,
+    onUpdateProtectedIdealOrder: (String, String) -> Unit,
+    onUpdateProtectedControlLocation: (String, String, String) -> String,
+    onCompetitorImportReviewSelectionChange: (String, Boolean) -> Unit,
+    onCompetitorImportReviewRowActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onCompetitorImportReviewRemovalActionSelectionChange: (DesktopSpreadsheetCompetitorImportMapping, DesktopSpreadsheetCompetitorImportAction, Boolean) -> Unit,
+    onCompetitorImportReviewEmptyCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit,
+    onCompetitorImportReviewEmptyCourseCategorySelectionChange: (DesktopSpreadsheetCompetitorImportMapping, String, Boolean) -> Unit,
+    onApplyCompetitorImportReview: () -> Unit,
+    onCancelCompetitorImportReview: () -> Unit,
+    onRenameCompetitor: (String, String, String) -> Unit,
+    onUpdateCompetitorNumbers: (String, String, String) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
+    onUpdateCompetitorBirthYear: (String, String) -> Unit,
+    onUpdateCompetitorStartTime: (String, String) -> Unit,
+    onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean,
+    onReadCompetitorSiCardForAddRow: suspend () -> DesktopCompetitorSiCardDraft,
+    onAssignCompetitorCategory: (String, String?) -> Unit,
+    onRemoveCompetitor: (String, Boolean) -> Unit,
+    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
+    onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
+    onRemoveControl: (String) -> Unit,
+    onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
+    onUpdateStartDrawSeriesOptimizationLock: (Boolean) -> Unit,
+    onDrawStartList: (String, StartDrawOptions) -> Unit
+) {
+    if (section == DesktopSection.Races && projectFile != null) {
+        RaceDetailsPanel(
+            details = EventRaceDetails.from(projectFile.raceData.race),
+            eventFilePath = eventFilePath,
+            eventFileWorkingFolder = eventFileWorkingFolder,
+            parentSeriesText = desktopParentSeriesText(eventSeriesUiContext),
+            onRenameRace = onRenameRace,
+            onUpdateRaceStartDateTime = onUpdateRaceStartDateTime,
+            onUpdateRaceSettings = onUpdateRaceSettings,
+            onUpdateEventFileName = onUpdateEventFileName,
+            onOpenEventFileWorkingFolder = onOpenEventFileWorkingFolder
+        )
+    }
+    if (section == DesktopSection.Categories && projectFile != null) {
+        CategoryDetailsPanel(
+            categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
+            controls = EventControlDetails.from(projectFile.raceData),
+            raceLevel = projectFile.raceData.race.raceLevel,
+            onRenameCategory = onRenameCategory,
+            onUpdateCategoryGender = onUpdateCategoryGender,
+            onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
+            onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
+            onAddCategory = onAddCategory,
+            onRemoveCategory = onRemoveCategory
+        )
+    }
+    if (section == DesktopSection.ProtectedCourseOrder && projectFile != null) {
+        ProtectedCourseOrderPanel(
+            projectFile = projectFile,
+            isUnlocked = isProtectedCourseOrderUnlocked,
+            idealOrderByCategoryId = protectedIdealOrderByCategoryId,
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+            onUnlock = onUnlockProtectedCourseOrder,
+            onUpdateIdealOrder = onUpdateProtectedIdealOrder,
+            onUpdateControlLocation = onUpdateProtectedControlLocation
+        )
+    }
+    if (
+        competitorImportReview != null &&
+        (section == DesktopSection.Competitors || section == DesktopSection.CompetitorsImportExport)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFFE0E0E0)),
+            color = MaterialTheme.colors.surface
+        ) {
+            SpreadsheetCompetitorImportReviewPanel(
+                review = competitorImportReview,
+                onSelectionChange = onCompetitorImportReviewSelectionChange,
+                onRowActionSelectionChange = onCompetitorImportReviewRowActionSelectionChange,
+                onRemovalActionSelectionChange = onCompetitorImportReviewRemovalActionSelectionChange,
+                onEmptyCategorySelectionChange = onCompetitorImportReviewEmptyCategorySelectionChange,
+                onEmptyCourseCategorySelectionChange = onCompetitorImportReviewEmptyCourseCategorySelectionChange,
+                onImport = onApplyCompetitorImportReview,
+                onCancel = onCancelCompetitorImportReview,
+                modifier = Modifier.padding(14.dp)
             )
         }
+    }
+    if (section == DesktopSection.Competitors && projectFile != null) {
+        CompetitorDetailsPanel(
+            competitors = EventCompetitorDetails.from(projectFile.raceData),
+            categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
+            showAwardEligibility = projectFile.raceData.race.supportsChampionshipAwards(),
+            onRenameCompetitor = onRenameCompetitor,
+            onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+            onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
+            onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+            onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
+            onAddCompetitor = onAddCompetitor,
+            isReadCompetitorSiCardEnabled = siReaderState.severity == DesktopSiReaderSeverity.CONNECTED &&
+                !isDownloadingSiReadout &&
+                !isContinuousSiReadoutActive &&
+                !isReadingCompetitorSiCard,
+            onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
+            onAssignCompetitorCategory = onAssignCompetitorCategory,
+            onRemoveCompetitor = onRemoveCompetitor
+        )
+    }
+    if (section == DesktopSection.Controls && projectFile != null) {
+        ControlDetailsPanel(
+            controls = EventControlDetails.from(projectFile.raceData),
+            categories = projectFile.raceData.categories,
+            raceType = projectFile.raceData.race.raceType,
+            onUpdateControl = onUpdateControl,
+            onAddControl = onAddControl,
+            onRemoveControl = onRemoveControl
+        )
+    }
+    if (section == DesktopSection.StartList && projectFile != null) {
+        StartListDetailsPanel(
+            details = EventStartListDetails.from(projectFile.raceData),
+            seriesStartFairnessSummary = seriesStartFairnessSummary,
+            eventStartListDrawNumbering = eventStartListDrawNumbering,
+            onUpdateStartDrawSettings = onUpdateStartDrawSettings,
+            onUpdateStartDrawSeriesOptimizationLock = onUpdateStartDrawSeriesOptimizationLock,
+            onDrawStartList = onDrawStartList
+        )
     }
 }
 
@@ -12964,110 +13405,150 @@ private fun EventDiagnosticsPanel(
                 fontSize = 12.sp
             )
         }
-        Text(
-            text = "Race Readiness",
-            color = DesktopPalette.PrimaryVariant,
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp
+        RaceReadinessDiagnostics(diagnostics.readinessIssues)
+        RecentImportDiagnostics(
+            recentImportReport = recentImportReport,
+            recentImportCheckpoint = recentImportCheckpoint,
+            onRestoreRecentImportCheckpoint = onRestoreRecentImportCheckpoint
         )
-        if (diagnostics.readinessIssues.isEmpty()) {
-            Text(
-                text = "No readiness issues detected.",
-                color = DesktopPalette.Disconnected,
-                fontSize = 13.sp
-            )
-        } else {
-            diagnostics.readinessIssues.forEach { issue ->
-                Text(
-                    text = issue,
-                    color = DesktopPalette.Error,
-                    fontSize = 13.sp
-                )
-            }
-        }
-        recentImportReport?.let { report ->
-            Text(
-                text = "Recent Import",
-                color = DesktopPalette.PrimaryVariant,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
-            )
-            Text(
-                text = report.title,
-                color = DesktopPalette.Disconnected,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp
-            )
-            report.lines.filter { it.isNotBlank() }.forEach { line ->
-                Text(
-                    text = line,
-                    color = DesktopPalette.Disconnected,
-                    fontSize = 13.sp
-                )
-            }
-            if (recentImportCheckpoint != null) {
-                Button(onClick = onRestoreRecentImportCheckpoint) {
-                    ButtonLabel("Restore Before Import")
-                }
-                Text(
-                    text = "Restores the in-memory Race File state captured before ${recentImportCheckpoint.title}. A persistent .rom.json rollback copy was also saved at ${recentImportCheckpoint.backupPath}. Save after restore if you want to keep the in-app rollback.",
-                    color = Color.DarkGray,
-                    fontSize = 12.sp
-                )
-            }
-        }
-        if (recentActivityLog.isNotEmpty()) {
-            Text(
-                text = "Recent Activity",
-                color = DesktopPalette.PrimaryVariant,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
-            )
-            recentActivityLog.forEach { line ->
-                Text(
-                    text = line,
-                    color = DesktopPalette.Disconnected,
-                    fontSize = 13.sp
-                )
-            }
-        }
-        Text(
-            text = "Generated test data is inserted in stages. Categories include course assignments, competitors include test SI numbers and drawn start times, and test SI downloads use those competitors and assigned categories.",
-            color = DesktopPalette.Disconnected,
-            fontSize = 13.sp
+        RecentActivityDiagnostics(recentActivityLog)
+        TestDataDiagnosticsActions(
+            isEventFileOpen = isEventFileOpen,
+            onInsertTestControls = onInsertTestControls,
+            onInsertTestCategories = onInsertTestCategories,
+            onInsertTestCompetitors = onInsertTestCompetitors,
+            onInsertTestSportIdentDownloads = onInsertTestSportIdentDownloads
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onInsertTestControls,
-                enabled = isEventFileOpen
-            ) {
-                ButtonLabel("Insert Test Controls")
-            }
-            Button(
-                onClick = onInsertTestCategories,
-                enabled = isEventFileOpen
-            ) {
-                ButtonLabel("Insert Test Categories")
-            }
-            Button(
-                onClick = onInsertTestCompetitors,
-                enabled = isEventFileOpen
-            ) {
-                ButtonLabel("Insert Test Competitors")
-            }
-            Button(
-                onClick = onInsertTestSportIdentDownloads,
-                enabled = isEventFileOpen
-            ) {
-                ButtonLabel("Insert Test SI Downloads")
-            }
-        }
         diagnostics.validationIssues.forEach { issue ->
             Text(
                 text = issue,
                 color = DesktopPalette.Error,
                 fontSize = 13.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun RaceReadinessDiagnostics(readinessIssues: List<String>) {
+    Text(
+        text = "Race Readiness",
+        color = DesktopPalette.PrimaryVariant,
+        fontWeight = FontWeight.Bold,
+        fontSize = 15.sp
+    )
+    if (readinessIssues.isEmpty()) {
+        Text(
+            text = "No readiness issues detected.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+    } else {
+        readinessIssues.forEach { issue ->
+            Text(
+                text = issue,
+                color = DesktopPalette.Error,
+                fontSize = 13.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecentImportDiagnostics(
+    recentImportReport: DesktopImportReport?,
+    recentImportCheckpoint: DesktopImportCheckpoint?,
+    onRestoreRecentImportCheckpoint: () -> Unit
+) {
+    val report = recentImportReport ?: return
+    Text(
+        text = "Recent Import",
+        color = DesktopPalette.PrimaryVariant,
+        fontWeight = FontWeight.Bold,
+        fontSize = 15.sp
+    )
+    Text(
+        text = report.title,
+        color = DesktopPalette.Disconnected,
+        fontWeight = FontWeight.Bold,
+        fontSize = 13.sp
+    )
+    report.lines.filter { it.isNotBlank() }.forEach { line ->
+        Text(
+            text = line,
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+    }
+    recentImportCheckpoint?.let { checkpoint ->
+        Button(onClick = onRestoreRecentImportCheckpoint) {
+            ButtonLabel("Restore Before Import")
+        }
+        Text(
+            text = "Restores the in-memory Race File state captured before ${checkpoint.title}. A persistent .rom.json rollback copy was also saved at ${checkpoint.backupPath}. Save after restore if you want to keep the in-app rollback.",
+            color = Color.DarkGray,
+            fontSize = 12.sp
+        )
+    }
+}
+
+@Composable
+private fun RecentActivityDiagnostics(recentActivityLog: List<String>) {
+    if (recentActivityLog.isEmpty()) {
+        return
+    }
+    Text(
+        text = "Recent Activity",
+        color = DesktopPalette.PrimaryVariant,
+        fontWeight = FontWeight.Bold,
+        fontSize = 15.sp
+    )
+    recentActivityLog.forEach { line ->
+        Text(
+            text = line,
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
+    }
+}
+
+@Composable
+private fun TestDataDiagnosticsActions(
+    isEventFileOpen: Boolean,
+    onInsertTestControls: () -> Unit,
+    onInsertTestCategories: () -> Unit,
+    onInsertTestCompetitors: () -> Unit,
+    onInsertTestSportIdentDownloads: () -> Unit
+) {
+    Text(
+        text = "Generated test data is inserted in stages. Categories include course assignments, competitors include test SI numbers and drawn start times, and test SI downloads use those competitors and assigned categories.",
+        color = DesktopPalette.Disconnected,
+        fontSize = 13.sp
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            onClick = onInsertTestControls,
+            enabled = isEventFileOpen
+        ) {
+            ButtonLabel("Insert Test Controls")
+        }
+        Button(
+            onClick = onInsertTestCategories,
+            enabled = isEventFileOpen
+        ) {
+            ButtonLabel("Insert Test Categories")
+        }
+        Button(
+            onClick = onInsertTestCompetitors,
+            enabled = isEventFileOpen
+        ) {
+            ButtonLabel("Insert Test Competitors")
+        }
+        Button(
+            onClick = onInsertTestSportIdentDownloads,
+            enabled = isEventFileOpen
+        ) {
+            ButtonLabel("Insert Test SI Downloads")
         }
     }
 }
@@ -15977,127 +16458,230 @@ private fun CompetitorDetailsPanel(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Button(
-                onClick = {
-                    if (!isReadingSiCardForAdd) {
-                        isReadingSiCardForAdd = true
-                        readSiCardStatusText = "Waiting for SI card..."
-                        coroutineScope.launch {
-                            runCatching {
-                                onReadCompetitorSiCardForAddRow()
-                            }.onSuccess { draft ->
-                                siNumberDraft = draft.siNumber.toString()
-                                draft.firstName?.takeIf { it.isNotBlank() }?.let { firstNameDraft = it }
-                                draft.lastName?.takeIf { it.isNotBlank() }?.let { lastNameDraft = it }
-                                draft.club?.takeIf { it.isNotBlank() }?.let { clubDraft = it }
-                                val nameStatus = listOfNotNull(draft.firstName, draft.lastName)
-                                    .joinToString(" ")
-                                    .ifBlank { "no card-holder name" }
-                                readSiCardStatusText = "Read SI ${draft.siNumber}; $nameStatus. Review fields, then click Add."
-                            }.onFailure { error ->
-                                readSiCardStatusText = "SI card read failed: ${error.message ?: error::class.simpleName}"
-                            }
-                            isReadingSiCardForAdd = false
+        CompetitorSiCardReadRow(
+            isReadingSiCardForAdd = isReadingSiCardForAdd,
+            isReadCompetitorSiCardEnabled = isReadCompetitorSiCardEnabled,
+            readSiCardStatusText = readSiCardStatusText,
+            onReadSiCard = {
+                if (!isReadingSiCardForAdd) {
+                    isReadingSiCardForAdd = true
+                    readSiCardStatusText = "Waiting for SI card..."
+                    coroutineScope.launch {
+                        runCatching {
+                            onReadCompetitorSiCardForAddRow()
+                        }.onSuccess { draft ->
+                            siNumberDraft = draft.siNumber.toString()
+                            draft.firstName?.takeIf { it.isNotBlank() }?.let { firstNameDraft = it }
+                            draft.lastName?.takeIf { it.isNotBlank() }?.let { lastNameDraft = it }
+                            draft.club?.takeIf { it.isNotBlank() }?.let { clubDraft = it }
+                            val nameStatus = listOfNotNull(draft.firstName, draft.lastName)
+                                .joinToString(" ")
+                                .ifBlank { "no card-holder name" }
+                            readSiCardStatusText = "Read SI ${draft.siNumber}; $nameStatus. Review fields, then click Add."
+                        }.onFailure { error ->
+                            readSiCardStatusText = "SI card read failed: ${error.message ?: error::class.simpleName}"
                         }
+                        isReadingSiCardForAdd = false
                     }
-                },
-                enabled = isReadCompetitorSiCardEnabled && !isReadingSiCardForAdd,
-                modifier = Modifier.width(180.dp)
-            ) {
-                ButtonLabel(if (isReadingSiCardForAdd) "Reading SI Card" else "Read From SI Card")
-            }
-            readSiCardStatusText?.let { statusText ->
-                Text(
-                    text = statusText,
-                    color = if (statusText.startsWith("SI card read failed")) {
-                        DesktopPalette.Error
-                    } else {
-                        DesktopPalette.Disconnected
-                    },
-                    fontSize = 13.sp
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-            verticalAlignment = Alignment.Top
-        ) {
-            Button(
-                onClick = ::addCompetitor,
-                modifier = fixedActionRailModifier(),
-                enabled = canAddCompetitor
-            ) {
-                ButtonLabel("Add")
-            }
-            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
-                Column(
-                    modifier = Modifier.width(tableWidth),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CompetitorAddRow(
-                        categories = categories,
-                        tableColumns = tableColumns,
-                        showAwardEligibility = showAwardEligibility,
-                        firstNameDraft = firstNameDraft,
-                        onFirstNameChange = { firstNameDraft = it },
-                        lastNameDraft = lastNameDraft,
-                        onLastNameChange = { lastNameDraft = it },
-                        clubDraft = clubDraft,
-                        onClubChange = { clubDraft = it },
-                        bibNumberDraft = bibNumberDraft,
-                        onBibNumberChange = { bibNumberDraft = it },
-                        callSignDraft = callSignDraft,
-                        onCallSignChange = { callSignDraft = it },
-                        birthYearDraft = birthYearDraft,
-                        onBirthYearChange = { birthYearDraft = it },
-                        selectedCategoryId = selectedCategoryId,
-                        onCategorySelected = { selectedCategoryId = it },
-                        startNumberDraft = startNumberDraft,
-                        onStartNumberChange = { startNumberDraft = it },
-                        siNumberDraft = siNumberDraft,
-                        onSiNumberChange = { siNumberDraft = it },
-                        onCommit = {
-                            if (canAddCompetitor) {
-                                addCompetitor()
-                            }
-                        }
-                    )
-                    FixedDetailHeaderRow(tableColumns, CompetitorTableColumnHints)
                 }
             }
-        }
+        )
+        CompetitorAddTable(
+            categories = categories,
+            tableColumns = tableColumns,
+            tableWidth = tableWidth,
+            horizontalScrollState = horizontalScrollState,
+            showAwardEligibility = showAwardEligibility,
+            canAddCompetitor = canAddCompetitor,
+            onAddCompetitor = ::addCompetitor,
+            firstNameDraft = firstNameDraft,
+            onFirstNameChange = { firstNameDraft = it },
+            lastNameDraft = lastNameDraft,
+            onLastNameChange = { lastNameDraft = it },
+            clubDraft = clubDraft,
+            onClubChange = { clubDraft = it },
+            bibNumberDraft = bibNumberDraft,
+            onBibNumberChange = { bibNumberDraft = it },
+            callSignDraft = callSignDraft,
+            onCallSignChange = { callSignDraft = it },
+            birthYearDraft = birthYearDraft,
+            onBirthYearChange = { birthYearDraft = it },
+            selectedCategoryId = selectedCategoryId,
+            onCategorySelected = { selectedCategoryId = it },
+            startNumberDraft = startNumberDraft,
+            onStartNumberChange = { startNumberDraft = it },
+            siNumberDraft = siNumberDraft,
+            onSiNumberChange = { siNumberDraft = it }
+        )
         HorizontalScrollbar(
             adapter = rememberScrollbarAdapter(horizontalScrollState),
             modifier = Modifier.fillMaxWidth()
         )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            orderedCompetitors.forEach { competitor ->
-                key(competitor.id) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        CompetitorDeleteButton(competitor, onRemoveCompetitor)
-                        Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
-                            CompetitorDetailRow(
-                                competitor = competitor,
-                                categories = categories,
-                                tableColumns = tableColumns,
-                                showAwardEligibility = showAwardEligibility,
-                                onRenameCompetitor = onRenameCompetitor,
-                                onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
-                                onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
-                                onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
-                                onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
-                                onAssignCompetitorCategory = onAssignCompetitorCategory
-                            )
+        CompetitorExistingRows(
+            orderedCompetitors = orderedCompetitors,
+            categories = categories,
+            tableColumns = tableColumns,
+            horizontalScrollState = horizontalScrollState,
+            showAwardEligibility = showAwardEligibility,
+            onRenameCompetitor = onRenameCompetitor,
+            onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+            onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
+            onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+            onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
+            onAssignCompetitorCategory = onAssignCompetitorCategory,
+            onRemoveCompetitor = onRemoveCompetitor
+        )
+    }
+}
+
+@Composable
+private fun CompetitorSiCardReadRow(
+    isReadingSiCardForAdd: Boolean,
+    isReadCompetitorSiCardEnabled: Boolean,
+    readSiCardStatusText: String?,
+    onReadSiCard: () -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Button(
+            onClick = onReadSiCard,
+            enabled = isReadCompetitorSiCardEnabled && !isReadingSiCardForAdd,
+            modifier = Modifier.width(180.dp)
+        ) {
+            ButtonLabel(if (isReadingSiCardForAdd) "Reading SI Card" else "Read From SI Card")
+        }
+        readSiCardStatusText?.let { statusText ->
+            Text(
+                text = statusText,
+                color = if (statusText.startsWith("SI card read failed")) {
+                    DesktopPalette.Error
+                } else {
+                    DesktopPalette.Disconnected
+                },
+                fontSize = 13.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompetitorAddTable(
+    categories: List<EventCategoryDetails>,
+    tableColumns: List<FixedTableColumn>,
+    tableWidth: Dp,
+    horizontalScrollState: androidx.compose.foundation.ScrollState,
+    showAwardEligibility: Boolean,
+    canAddCompetitor: Boolean,
+    onAddCompetitor: () -> Unit,
+    firstNameDraft: String,
+    onFirstNameChange: (String) -> Unit,
+    lastNameDraft: String,
+    onLastNameChange: (String) -> Unit,
+    clubDraft: String,
+    onClubChange: (String) -> Unit,
+    bibNumberDraft: String,
+    onBibNumberChange: (String) -> Unit,
+    callSignDraft: String,
+    onCallSignChange: (String) -> Unit,
+    birthYearDraft: String,
+    onBirthYearChange: (String) -> Unit,
+    selectedCategoryId: String?,
+    onCategorySelected: (String?) -> Unit,
+    startNumberDraft: String,
+    onStartNumberChange: (String) -> Unit,
+    siNumberDraft: String,
+    onSiNumberChange: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+        verticalAlignment = Alignment.Top
+    ) {
+        Button(
+            onClick = onAddCompetitor,
+            modifier = fixedActionRailModifier(),
+            enabled = canAddCompetitor
+        ) {
+            ButtonLabel("Add")
+        }
+        Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+            Column(
+                modifier = Modifier.width(tableWidth),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CompetitorAddRow(
+                    categories = categories,
+                    tableColumns = tableColumns,
+                    showAwardEligibility = showAwardEligibility,
+                    firstNameDraft = firstNameDraft,
+                    onFirstNameChange = onFirstNameChange,
+                    lastNameDraft = lastNameDraft,
+                    onLastNameChange = onLastNameChange,
+                    clubDraft = clubDraft,
+                    onClubChange = onClubChange,
+                    bibNumberDraft = bibNumberDraft,
+                    onBibNumberChange = onBibNumberChange,
+                    callSignDraft = callSignDraft,
+                    onCallSignChange = onCallSignChange,
+                    birthYearDraft = birthYearDraft,
+                    onBirthYearChange = onBirthYearChange,
+                    selectedCategoryId = selectedCategoryId,
+                    onCategorySelected = onCategorySelected,
+                    startNumberDraft = startNumberDraft,
+                    onStartNumberChange = onStartNumberChange,
+                    siNumberDraft = siNumberDraft,
+                    onSiNumberChange = onSiNumberChange,
+                    onCommit = {
+                        if (canAddCompetitor) {
+                            onAddCompetitor()
                         }
+                    }
+                )
+                FixedDetailHeaderRow(tableColumns, CompetitorTableColumnHints)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompetitorExistingRows(
+    orderedCompetitors: List<EventCompetitorDetails>,
+    categories: List<EventCategoryDetails>,
+    tableColumns: List<FixedTableColumn>,
+    horizontalScrollState: androidx.compose.foundation.ScrollState,
+    showAwardEligibility: Boolean,
+    onRenameCompetitor: (String, String, String) -> Unit,
+    onUpdateCompetitorNumbers: (String, String, String) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
+    onUpdateCompetitorBirthYear: (String, String) -> Unit,
+    onUpdateCompetitorStartTime: (String, String) -> Unit,
+    onAssignCompetitorCategory: (String, String?) -> Unit,
+    onRemoveCompetitor: (String, Boolean) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        orderedCompetitors.forEach { competitor ->
+            key(competitor.id) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    CompetitorDeleteButton(competitor, onRemoveCompetitor)
+                    Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
+                        CompetitorDetailRow(
+                            competitor = competitor,
+                            categories = categories,
+                            tableColumns = tableColumns,
+                            showAwardEligibility = showAwardEligibility,
+                            onRenameCompetitor = onRenameCompetitor,
+                            onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                            onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
+                            onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
+                            onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
+                            onAssignCompetitorCategory = onAssignCompetitorCategory
+                        )
                     }
                 }
             }
@@ -16131,65 +16715,53 @@ private fun CompetitorAddRow(
     onSiNumberChange: (String) -> Unit,
     onCommit: () -> Unit
 ) {
-    val categoryColumnIndex = if (showAwardEligibility) 8 else 6
+    val categoryColumnIndex = competitorCategoryColumnIndex(showAwardEligibility)
     Row(
         modifier = Modifier.width(fixedTableWidth(tableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextField(
+        CommitTableTextField(
             value = firstNameDraft,
             onValueChange = onFirstNameChange,
-            modifier = Modifier
-                .width(tableColumns[0].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("First") }
+            width = tableColumns[0].width,
+            label = "First",
+            onCommit = onCommit
         )
-        TextField(
+        CommitTableTextField(
             value = lastNameDraft,
             onValueChange = onLastNameChange,
-            modifier = Modifier
-                .width(tableColumns[1].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("Last") }
+            width = tableColumns[1].width,
+            label = "Last",
+            onCommit = onCommit
         )
-        TextField(
+        CommitTableTextField(
             value = clubDraft,
             onValueChange = onClubChange,
-            modifier = Modifier
-                .width(tableColumns[2].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("Club") }
+            width = tableColumns[2].width,
+            label = "Club",
+            onCommit = onCommit
         )
-        TextField(
+        CommitTableTextField(
             value = bibNumberDraft,
             onValueChange = onBibNumberChange,
-            modifier = Modifier
-                .width(tableColumns[3].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("Bib") }
+            width = tableColumns[3].width,
+            label = "Bib",
+            onCommit = onCommit
         )
-        TextField(
+        CommitTableTextField(
             value = callSignDraft,
             onValueChange = onCallSignChange,
-            modifier = Modifier
-                .width(tableColumns[4].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("Call") }
+            width = tableColumns[4].width,
+            label = "Call",
+            onCommit = onCommit
         )
-        TextField(
+        CommitTableTextField(
             value = birthYearDraft,
             onValueChange = onBirthYearChange,
-            modifier = Modifier
-                .width(tableColumns[5].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("Birth") }
+            width = tableColumns[5].width,
+            label = "Birth",
+            onCommit = onCommit
         )
         if (showAwardEligibility) {
             Spacer(modifier = Modifier.width(tableColumns[6].width))
@@ -16203,16 +16775,33 @@ private fun CompetitorAddRow(
         )
         Spacer(modifier = Modifier.width(tableColumns[categoryColumnIndex + 1].width))
         Spacer(modifier = Modifier.width(tableColumns[categoryColumnIndex + 2].width))
-        TextField(
+        CommitTableTextField(
             value = siNumberDraft,
             onValueChange = onSiNumberChange,
-            modifier = Modifier
-                .width(tableColumns[categoryColumnIndex + 3].width)
-                .commitOnEnter(onCommit),
-            singleLine = true,
-            label = { Text("SI") }
+            width = tableColumns[categoryColumnIndex + 3].width,
+            label = "SI",
+            onCommit = onCommit
         )
     }
+}
+
+@Composable
+private fun CommitTableTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    width: Dp,
+    label: String,
+    onCommit: () -> Unit
+) {
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier
+            .width(width)
+            .commitOnEnter(onCommit),
+        singleLine = true,
+        label = { Text(label) }
+    )
 }
 
 @Composable
@@ -16246,7 +16835,7 @@ private fun CompetitorDetailRow(
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAssignCompetitorCategory: (String, String?) -> Unit
 ) {
-    val categoryColumnIndex = if (showAwardEligibility) 8 else 6
+    val categoryColumnIndex = competitorCategoryColumnIndex(showAwardEligibility)
     var firstNameDraft by remember(competitor.id, competitor.firstName) { mutableStateOf(competitor.firstName) }
     var lastNameDraft by remember(competitor.id, competitor.lastName) { mutableStateOf(competitor.lastName) }
     var clubDraft by remember(competitor.id, competitor.club) { mutableStateOf(competitor.club) }
@@ -16318,191 +16907,259 @@ private fun CompetitorDetailRow(
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ControlWarningTooltip(warningText) {
-            TextField(
-                value = firstNameDraft,
-                onValueChange = { firstNameDraft = it },
-                modifier = Modifier
-                    .width(tableColumns[0].width)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            applyPendingDrafts()
-                        }
-                    }
-                    .commitOnEnter(::applyPendingDrafts),
-                singleLine = true,
-                label = { Text("First", color = rowTextColor) },
-                textStyle = textFieldStyle
-            )
-        }
-        ControlWarningTooltip(warningText) {
-            TextField(
-                value = lastNameDraft,
-                onValueChange = { lastNameDraft = it },
-                modifier = Modifier
-                    .width(tableColumns[1].width)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            applyPendingDrafts()
-                        }
-                    }
-                    .commitOnEnter(::applyPendingDrafts),
-                singleLine = true,
-                label = { Text("Last", color = rowTextColor) },
-                textStyle = textFieldStyle
-            )
-        }
-        ControlWarningTooltip(warningText) {
-            TextField(
-                value = clubDraft,
-                onValueChange = { clubDraft = it },
-                modifier = Modifier
-                    .width(tableColumns[2].width)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            applyPendingDrafts()
-                        }
-                    }
-                    .commitOnEnter(::applyPendingDrafts),
-                singleLine = true,
-                label = { Text("Club", color = rowTextColor) },
-                textStyle = textFieldStyle
-            )
-        }
-        ControlWarningTooltip(warningText) {
-            TextField(
-                value = bibNumberDraft,
-                onValueChange = { bibNumberDraft = it },
-                modifier = Modifier
-                    .width(tableColumns[3].width)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            applyPendingDrafts()
-                        }
-                    }
-                    .commitOnEnter(::applyPendingDrafts),
-                singleLine = true,
-                label = { Text("Bib", color = rowTextColor) },
-                textStyle = textFieldStyle
-            )
-        }
-        ControlWarningTooltip(warningText) {
-            TextField(
-                value = callSignDraft,
-                onValueChange = { callSignDraft = it },
-                modifier = Modifier
-                    .width(tableColumns[4].width)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            applyPendingDrafts()
-                        }
-                    }
-                    .commitOnEnter(::applyPendingDrafts),
-                singleLine = true,
-                label = { Text("Call", color = rowTextColor) },
-                textStyle = textFieldStyle
-            )
-        }
-        ControlWarningTooltip(warningText) {
-            TextField(
-                value = birthYearDraft,
-                onValueChange = { birthYearDraft = it },
-                modifier = Modifier
-                    .width(tableColumns[5].width)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            applyPendingDrafts()
-                        }
-                    }
-                    .commitOnEnter(::applyPendingDrafts),
-                singleLine = true,
-                label = { Text("Birth", color = rowTextColor) },
-                textStyle = textFieldStyle
-            )
-        }
-        if (showAwardEligibility) {
-            ControlWarningTooltip(warningText) {
-                AwardEligibilityCheckbox(
-                    checked = competitor.usaChampEligible,
-                    onCheckedChange = {
-                        onUpdateCompetitorClubIdentity(
-                            competitor.id,
-                            competitor.club,
-                            competitor.bibNumber,
-                            competitor.callSign,
-                            it,
-                            competitor.region2ChampEligible
-                        )
-                    },
-                    width = tableColumns[6].width
+        CompetitorIdentityCells(
+            tableColumns = tableColumns,
+            warningText = warningText,
+            textColor = rowTextColor,
+            textStyle = textFieldStyle,
+            firstNameDraft = firstNameDraft,
+            onFirstNameChange = { firstNameDraft = it },
+            lastNameDraft = lastNameDraft,
+            onLastNameChange = { lastNameDraft = it },
+            clubDraft = clubDraft,
+            onClubChange = { clubDraft = it },
+            bibNumberDraft = bibNumberDraft,
+            onBibNumberChange = { bibNumberDraft = it },
+            callSignDraft = callSignDraft,
+            onCallSignChange = { callSignDraft = it },
+            birthYearDraft = birthYearDraft,
+            onBirthYearChange = { birthYearDraft = it },
+            onCommit = ::applyPendingDrafts
+        )
+        CompetitorAwardEligibilityCells(
+            competitor = competitor,
+            showAwardEligibility = showAwardEligibility,
+            tableColumns = tableColumns,
+            warningText = warningText,
+            onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity
+        )
+        CompetitorAssignmentCells(
+            competitor = competitor,
+            categories = categories,
+            tableColumns = tableColumns,
+            categoryColumnIndex = categoryColumnIndex,
+            warningText = warningText,
+            rowTextColor = rowTextColor,
+            textFieldStyle = textFieldStyle,
+            selectedCategoryId = selectedCategoryId,
+            onCategorySelected = {
+                selectedCategoryId = it
+                onAssignCompetitorCategory(competitor.id, it)
+            },
+            startTimeDraft = startTimeDraft,
+            onStartTimeChange = { startTimeDraft = it },
+            siNumberDraft = siNumberDraft,
+            onSiNumberChange = { siNumberDraft = it },
+            onCommit = ::applyPendingDrafts
+        )
+    }
+}
+
+@Composable
+private fun CompetitorIdentityCells(
+    tableColumns: List<FixedTableColumn>,
+    warningText: String,
+    textColor: Color,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    firstNameDraft: String,
+    onFirstNameChange: (String) -> Unit,
+    lastNameDraft: String,
+    onLastNameChange: (String) -> Unit,
+    clubDraft: String,
+    onClubChange: (String) -> Unit,
+    bibNumberDraft: String,
+    onBibNumberChange: (String) -> Unit,
+    callSignDraft: String,
+    onCallSignChange: (String) -> Unit,
+    birthYearDraft: String,
+    onBirthYearChange: (String) -> Unit,
+    onCommit: () -> Unit
+) {
+    EditableTableTextField(
+        value = firstNameDraft,
+        onValueChange = onFirstNameChange,
+        width = tableColumns[0].width,
+        label = "First",
+        warningText = warningText,
+        textColor = textColor,
+        textStyle = textStyle,
+        onCommit = onCommit
+    )
+    EditableTableTextField(
+        value = lastNameDraft,
+        onValueChange = onLastNameChange,
+        width = tableColumns[1].width,
+        label = "Last",
+        warningText = warningText,
+        textColor = textColor,
+        textStyle = textStyle,
+        onCommit = onCommit
+    )
+    EditableTableTextField(
+        value = clubDraft,
+        onValueChange = onClubChange,
+        width = tableColumns[2].width,
+        label = "Club",
+        warningText = warningText,
+        textColor = textColor,
+        textStyle = textStyle,
+        onCommit = onCommit
+    )
+    EditableTableTextField(
+        value = bibNumberDraft,
+        onValueChange = onBibNumberChange,
+        width = tableColumns[3].width,
+        label = "Bib",
+        warningText = warningText,
+        textColor = textColor,
+        textStyle = textStyle,
+        onCommit = onCommit
+    )
+    EditableTableTextField(
+        value = callSignDraft,
+        onValueChange = onCallSignChange,
+        width = tableColumns[4].width,
+        label = "Call",
+        warningText = warningText,
+        textColor = textColor,
+        textStyle = textStyle,
+        onCommit = onCommit
+    )
+    EditableTableTextField(
+        value = birthYearDraft,
+        onValueChange = onBirthYearChange,
+        width = tableColumns[5].width,
+        label = "Birth",
+        warningText = warningText,
+        textColor = textColor,
+        textStyle = textStyle,
+        onCommit = onCommit
+    )
+}
+
+@Composable
+private fun CompetitorAwardEligibilityCells(
+    competitor: EventCompetitorDetails,
+    showAwardEligibility: Boolean,
+    tableColumns: List<FixedTableColumn>,
+    warningText: String,
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit
+) {
+    if (!showAwardEligibility) {
+        return
+    }
+    ControlWarningTooltip(warningText) {
+        AwardEligibilityCheckbox(
+            checked = competitor.usaChampEligible,
+            onCheckedChange = {
+                onUpdateCompetitorClubIdentity(
+                    competitor.id,
+                    competitor.club,
+                    competitor.bibNumber,
+                    competitor.callSign,
+                    it,
+                    competitor.region2ChampEligible
                 )
-            }
-            ControlWarningTooltip(warningText) {
-                AwardEligibilityCheckbox(
-                    checked = competitor.region2ChampEligible,
-                    onCheckedChange = {
-                        onUpdateCompetitorClubIdentity(
-                            competitor.id,
-                            competitor.club,
-                            competitor.bibNumber,
-                            competitor.callSign,
-                            competitor.usaChampEligible,
-                            it
-                        )
-                    },
-                    width = tableColumns[7].width
+            },
+            width = tableColumns[6].width
+        )
+    }
+    ControlWarningTooltip(warningText) {
+        AwardEligibilityCheckbox(
+            checked = competitor.region2ChampEligible,
+            onCheckedChange = {
+                onUpdateCompetitorClubIdentity(
+                    competitor.id,
+                    competitor.club,
+                    competitor.bibNumber,
+                    competitor.callSign,
+                    competitor.usaChampEligible,
+                    it
                 )
-            }
-        }
-        ControlWarningTooltip(warningText) {
-            CategoryPicker(
-                selectedCategoryId = selectedCategoryId,
-                categories = categories,
-                onCategorySelected = {
-                    selectedCategoryId = it
-                    onAssignCompetitorCategory(competitor.id, it)
-                },
-                modifier = Modifier.width(tableColumns[categoryColumnIndex].width),
-                textColor = if (competitor.warningReasons.isEmpty()) Color.White else DesktopPalette.Error
-            )
-        }
-        ControlWarningTooltip(warningText) {
-            FixedTableText(competitor.startNumberText, tableColumns[categoryColumnIndex + 1].width, color = rowTextColor)
-        }
-        ControlWarningTooltip(warningText) {
-            TextField(
-                value = startTimeDraft,
-                onValueChange = { startTimeDraft = it },
-                modifier = Modifier
-                    .width(tableColumns[categoryColumnIndex + 2].width)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            applyPendingDrafts()
-                        }
+            },
+            width = tableColumns[7].width
+        )
+    }
+}
+
+@Composable
+private fun CompetitorAssignmentCells(
+    competitor: EventCompetitorDetails,
+    categories: List<EventCategoryDetails>,
+    tableColumns: List<FixedTableColumn>,
+    categoryColumnIndex: Int,
+    warningText: String,
+    rowTextColor: Color,
+    textFieldStyle: androidx.compose.ui.text.TextStyle,
+    selectedCategoryId: String?,
+    onCategorySelected: (String?) -> Unit,
+    startTimeDraft: String,
+    onStartTimeChange: (String) -> Unit,
+    siNumberDraft: String,
+    onSiNumberChange: (String) -> Unit,
+    onCommit: () -> Unit
+) {
+    ControlWarningTooltip(warningText) {
+        CategoryPicker(
+            selectedCategoryId = selectedCategoryId,
+            categories = categories,
+            onCategorySelected = onCategorySelected,
+            modifier = Modifier.width(tableColumns[categoryColumnIndex].width),
+            textColor = if (competitor.warningReasons.isEmpty()) Color.White else DesktopPalette.Error
+        )
+    }
+    ControlWarningTooltip(warningText) {
+        FixedTableText(competitor.startNumberText, tableColumns[categoryColumnIndex + 1].width, color = rowTextColor)
+    }
+    EditableTableTextField(
+        value = startTimeDraft,
+        onValueChange = onStartTimeChange,
+        width = tableColumns[categoryColumnIndex + 2].width,
+        label = "mmm:ss",
+        warningText = warningText,
+        textColor = rowTextColor,
+        textStyle = textFieldStyle,
+        onCommit = onCommit
+    )
+    EditableTableTextField(
+        value = siNumberDraft,
+        onValueChange = onSiNumberChange,
+        width = tableColumns[categoryColumnIndex + 3].width,
+        label = "SI",
+        warningText = warningText,
+        textColor = rowTextColor,
+        textStyle = textFieldStyle,
+        onCommit = onCommit
+    )
+}
+
+@Composable
+private fun EditableTableTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    width: Dp,
+    label: String,
+    warningText: String,
+    textColor: Color,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    onCommit: () -> Unit
+) {
+    ControlWarningTooltip(warningText) {
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .width(width)
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        onCommit()
                     }
-                    .commitOnEnter(::applyPendingDrafts),
-                singleLine = true,
-                label = { Text("mmm:ss", color = rowTextColor) },
-                textStyle = textFieldStyle
-            )
-        }
-        ControlWarningTooltip(warningText) {
-            TextField(
-                value = siNumberDraft,
-                onValueChange = { siNumberDraft = it },
-                modifier = Modifier
-                    .width(tableColumns[categoryColumnIndex + 3].width)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            applyPendingDrafts()
-                        }
-                    }
-                    .commitOnEnter(::applyPendingDrafts),
-                singleLine = true,
-                label = { Text("SI", color = rowTextColor) },
-                textStyle = textFieldStyle
-            )
-        }
+                }
+                .commitOnEnter(onCommit),
+            singleLine = true,
+            label = { Text(label, color = textColor) },
+            textStyle = textStyle
+        )
     }
 }
 
