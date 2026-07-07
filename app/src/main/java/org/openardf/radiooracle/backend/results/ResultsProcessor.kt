@@ -803,7 +803,7 @@ object ResultsProcessor {
     fun List<CompetitorData>.toReadoutStatistics(): StatisticsWrapper {
         val readoutCount = count { it.readoutData != null }
         return StatisticsWrapper(
-            competitors = size,
+            competitors = readoutCount,
             startedCompetitors = readoutCount,
             inLimitCompetitors = 0,
             finishedCompetitors = readoutCount

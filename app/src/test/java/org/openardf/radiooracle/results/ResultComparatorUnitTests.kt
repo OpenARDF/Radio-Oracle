@@ -92,7 +92,7 @@ class ResultComparatorUnitTests {
             listOf(missing, finished).toReadoutStatistics()
         }
 
-        assertEquals(2, statistics.competitors)
+        assertEquals(1, statistics.competitors)
         assertEquals(1, statistics.startedCompetitors)
         assertEquals(1, statistics.finishedCompetitors)
         assertEquals(0, statistics.inLimitCompetitors)
@@ -101,7 +101,7 @@ class ResultComparatorUnitTests {
             listOf(missing).toReadoutStatistics()
         }
 
-        assertEquals(1, deletedReadoutStatistics.competitors)
+        assertEquals(0, deletedReadoutStatistics.competitors)
         assertEquals(0, deletedReadoutStatistics.startedCompetitors)
         assertEquals(0, deletedReadoutStatistics.finishedCompetitors)
         assertEquals(0, deletedReadoutStatistics.inLimitCompetitors)
