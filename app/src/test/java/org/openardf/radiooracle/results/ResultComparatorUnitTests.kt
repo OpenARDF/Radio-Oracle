@@ -27,6 +27,7 @@ package org.openardf.radiooracle.results
 import junit.framework.TestCase.assertEquals
 import junit.framework.TestCase.assertNull
 import org.openardf.radiooracle.backend.results.ResultsProcessor
+import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.Result
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
@@ -55,11 +56,35 @@ class ResultComparatorUnitTests {
         assertNull(sorted[2].readoutData)
     }
 
-    private fun competitorData(name: String, result: Result?): CompetitorData {
+    @Test
+    fun resultWrappersSkipCompetitorsWithoutReadouts() {
+        val category = Category("M21")
+        val missing = competitorData("missing", result = null, category = category)
+        val finished = competitorData(
+            "finished",
+            result = result("finished", points = 2, runTime = Duration.ofMinutes(10)),
+            category = category
+        )
+
+        val wrappers = ResultsProcessor.run {
+            listOf(missing, finished).toResultWrappers()
+        }
+
+        assertEquals(1, wrappers.size)
+        assertEquals("M21", wrappers.single().category?.name)
+        assertEquals(1, wrappers.single().finished)
+        assertEquals(
+            listOf("finished"),
+            wrappers.single().competitorData.map { it.competitorCategory.competitor.firstName }
+        )
+        assertEquals(0, ResultsProcessor.run { listOf(missing).toResultWrappers() }.size)
+    }
+
+    private fun competitorData(name: String, result: Result?, category: Category? = null): CompetitorData {
         val competitor = Competitor(
             id = uuid(name),
             raceId = uuid("race"),
-            categoryId = null,
+            categoryId = category?.id,
             firstName = name,
             lastName = "Runner",
             club = "",
@@ -72,7 +97,7 @@ class ResultComparatorUnitTests {
             drawnRelativeStartTime = null
         )
         return CompetitorData(
-            competitorCategory = CompetitorCategory(competitor, category = null),
+            competitorCategory = CompetitorCategory(competitor, category = category),
             readoutData = result?.let { ReadoutData(it, emptyList()) }
         )
     }

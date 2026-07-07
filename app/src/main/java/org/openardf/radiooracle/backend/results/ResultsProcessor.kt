@@ -788,13 +788,13 @@ object ResultsProcessor {
 
     fun List<CompetitorData>.toResultWrappers(): List<ResultWrapper> {
         // Transform each ReadoutData item into a ResultWrapper
-        val res = this.groupByCategoryAndSortByPlace()
+        val res = this.filter { it.readoutData != null }.groupByCategoryAndSortByPlace()
 
         return res.map { result ->
             ResultWrapper(
                 category = result.key,
                 competitorData = result.value.toMutableList(),
-                finished = result.value.count { it.readoutData != null }
+                finished = result.value.size
             )
         }.sortedBy { it.category?.order }
     }
