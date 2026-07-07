@@ -28,6 +28,7 @@ import android.content.Context
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.PopupMenu
 import android.widget.TextView
 import de.codecrafters.tableview.TableDataAdapter
@@ -72,6 +73,10 @@ class CompetitorTableViewAdapter(
 
     override fun getCellView(rowIndex: Int, columnIndex: Int, parentView: ViewGroup?): View {
         val item = values[rowIndex]
+        if (columnIndex == ACTION_COLUMN_INDEX) {
+            return actionCellView(rowIndex, parentView, item)
+        }
+
         val view = layoutInflater.inflate(R.layout.competitor_table_cell, parentView, false)
         val cell: TextView = view.findViewById(R.id.competitor_table_cell_text)
 
@@ -235,29 +240,49 @@ class CompetitorTableViewAdapter(
 
         //Set context menu
         view.setOnLongClickListener { w ->
-            val popupMenu = PopupMenu(context, w)
-            popupMenu.inflate(R.menu.context_menu_competitor)
-
-            popupMenu.setOnMenuItemClickListener {
-                when (it.itemId) {
-                    R.id.menu_item_edit_competitor -> {
-                        onMoreClicked(0, rowIndex, item)
-                        true
-                    }
-
-                    R.id.menu_item_delete_competitor -> {
-                        onMoreClicked(1, rowIndex, item)
-                        true
-                    }
-
-                    else -> {
-                        false
-                    }
-                }
-            }
-            popupMenu.show()
+            showContextMenu(w, rowIndex, item)
             true
         }
         return view
+    }
+
+    private fun actionCellView(rowIndex: Int, parentView: ViewGroup?, item: CompetitorData): View {
+        val view = layoutInflater.inflate(R.layout.competitor_table_action_cell, parentView, false)
+        val moreButton: ImageButton = view.findViewById(R.id.competitor_table_action_more)
+        moreButton.setOnClickListener {
+            showContextMenu(moreButton, rowIndex, item)
+        }
+        view.setOnClickListener {
+            showContextMenu(moreButton, rowIndex, item)
+        }
+        return view
+    }
+
+    private fun showContextMenu(anchor: View, rowIndex: Int, item: CompetitorData) {
+        val popupMenu = PopupMenu(context, anchor)
+        popupMenu.inflate(R.menu.context_menu_competitor)
+
+        popupMenu.setOnMenuItemClickListener {
+            when (it.itemId) {
+                R.id.menu_item_edit_competitor -> {
+                    onMoreClicked(0, rowIndex, item)
+                    true
+                }
+
+                R.id.menu_item_delete_competitor -> {
+                    onMoreClicked(1, rowIndex, item)
+                    true
+                }
+
+                else -> {
+                    false
+                }
+            }
+        }
+        popupMenu.show()
+    }
+
+    private companion object {
+        const val ACTION_COLUMN_INDEX = 5
     }
 }

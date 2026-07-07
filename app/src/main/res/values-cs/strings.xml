@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="general_competitors">Závodníci</string>
+    <string name="general_actions">Akce</string>
     <string name="general_categories">Kategorie</string>
     <string name="general_readouts">Vyčítání</string>
     <string name="general_results">Výsledky</string>

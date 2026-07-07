@@ -80,6 +80,33 @@ class ResultComparatorUnitTests {
         assertEquals(0, ResultsProcessor.run { listOf(missing).toResultWrappers() }.size)
     }
 
+    @Test
+    fun readoutStatisticsSkipCompetitorsWithoutReadouts() {
+        val missing = competitorData("missing", result = null)
+        val finished = competitorData(
+            "finished",
+            result = result("finished", points = 2, runTime = Duration.ofMinutes(10))
+        )
+
+        val statistics = ResultsProcessor.run {
+            listOf(missing, finished).toReadoutStatistics()
+        }
+
+        assertEquals(2, statistics.competitors)
+        assertEquals(1, statistics.startedCompetitors)
+        assertEquals(1, statistics.finishedCompetitors)
+        assertEquals(0, statistics.inLimitCompetitors)
+
+        val deletedReadoutStatistics = ResultsProcessor.run {
+            listOf(missing).toReadoutStatistics()
+        }
+
+        assertEquals(1, deletedReadoutStatistics.competitors)
+        assertEquals(0, deletedReadoutStatistics.startedCompetitors)
+        assertEquals(0, deletedReadoutStatistics.finishedCompetitors)
+        assertEquals(0, deletedReadoutStatistics.inLimitCompetitors)
+    }
+
     private fun competitorData(name: String, result: Result?, category: Category? = null): CompetitorData {
         val competitor = Competitor(
             id = uuid(name),

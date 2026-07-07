@@ -43,7 +43,6 @@ import org.openardf.radiooracle.backend.files.FileProcessor
 import org.openardf.radiooracle.backend.files.processors.JsonProcessor
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
-import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.network.ProviderClient
 import org.openardf.radiooracle.backend.prints.PrintAttemptResult
@@ -104,7 +103,6 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
 import java.time.Duration
-import java.time.LocalDateTime
 import java.util.UUID
 
 
@@ -335,45 +333,7 @@ class DataProcessor private constructor(context: Context) {
 
     suspend fun getStatisticsByRace(raceId: UUID): StatisticsWrapper {
         val competitors = ardfRepository.getCompetitorDataFlowByRace(raceId).first()
-        val statistics = StatisticsWrapper(competitors.size, 0, 0, 0)
-        val race = getRace(raceId)
-
-        for (cd in competitors) {
-            val competitor = cd.competitorCategory.competitor
-            val category = cd.competitorCategory.category
-
-            if (cd.readoutData == null) {
-                if (competitor.drawnRelativeStartTime != null) {
-
-                    race?.let { race ->
-                        //Count started
-                        if (TimeProcessor.hasStarted(
-                                race.startDateTime,
-                                competitor.drawnRelativeStartTime!!,
-                                LocalDateTime.now()
-                            )
-                        ) {
-                            statistics.startedCompetitors++
-                        }
-
-                        val limit = category?.timeLimit ?: race.timeLimit
-                        if (TimeProcessor.isInLimit(
-                                race.startDateTime,
-                                competitor.drawnRelativeStartTime!!,
-                                limit, LocalDateTime.now()
-                            )
-                        ) {
-                            statistics.inLimitCompetitors++
-                        }
-                    }
-                }
-            } else {
-                statistics.startedCompetitors++
-                statistics.finishedCompetitors++
-            }
-
-        }
-        return statistics
+        return ResultsProcessor.run { competitors.toReadoutStatistics() }
     }
 
     fun checkIfSINumberExists(siNumber: Int, raceId: UUID): Boolean {

@@ -54,6 +54,7 @@ import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SIPort.CardData
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
+import org.openardf.radiooracle.backend.wrappers.StatisticsWrapper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -797,6 +798,16 @@ object ResultsProcessor {
                 finished = result.value.size
             )
         }.sortedBy { it.category?.order }
+    }
+
+    fun List<CompetitorData>.toReadoutStatistics(): StatisticsWrapper {
+        val readoutCount = count { it.readoutData != null }
+        return StatisticsWrapper(
+            competitors = size,
+            startedCompetitors = readoutCount,
+            inLimitCompetitors = 0,
+            finishedCompetitors = readoutCount
+        )
     }
 
     fun List<CompetitorData>.groupByCategoryAndSortByPlace(): Map<Category?, List<CompetitorData>> {

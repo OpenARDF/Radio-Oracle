@@ -170,7 +170,7 @@ class CompetitorFragment : Fragment() {
 
     private fun setTableHeaders(displayType: CompetitorTableDisplayType) {
 
-        var headers = IntArray(5)
+        var headers = IntArray(6)
         when (displayType) {
             CompetitorTableDisplayType.OVERVIEW -> {
 
@@ -180,7 +180,8 @@ class CompetitorFragment : Fragment() {
                         R.string.general_name,
                         R.string.general_club,
                         R.string.general_category,
-                        R.string.general_si_number
+                        R.string.general_si_number,
+                        R.string.general_actions
                     )
 
                 //Set comparators
@@ -189,6 +190,7 @@ class CompetitorFragment : Fragment() {
                 competitorTableView.setColumnComparator(2, CompetitorClubComparator(collator))
                 competitorTableView.setColumnComparator(3, CompetitorCategoryComparator(collator))
                 competitorTableView.setColumnComparator(4, CompetitorSINumberComparator())
+                competitorTableView.setColumnComparator(5, null)
 
             }
 
@@ -199,13 +201,15 @@ class CompetitorFragment : Fragment() {
                         R.string.general_start_time,
                         R.string.general_name,
                         R.string.general_category,
-                        R.string.general_si_number
+                        R.string.general_si_number,
+                        R.string.general_actions
                     )
                 competitorTableView.setColumnComparator(0, CompetitorStartNumComparator())
                 competitorTableView.setColumnComparator(1, CompetitorDrawnStartTimeComparator())
                 competitorTableView.setColumnComparator(2, CompetitorNameComparator(collator))
                 competitorTableView.setColumnComparator(3, CompetitorCategoryComparator(collator))
                 competitorTableView.setColumnComparator(4, CompetitorSINumberComparator())
+                competitorTableView.setColumnComparator(5, null)
             }
 
             CompetitorTableDisplayType.FINISH_REACHED -> {
@@ -216,6 +220,7 @@ class CompetitorFragment : Fragment() {
                         R.string.general_run_time,
                         R.string.general_start_time,
                         R.string.general_finish_time,
+                        R.string.general_actions
                     )
 
                 competitorTableView.setColumnComparator(0, CompetitorNameComparator(collator))
@@ -223,6 +228,7 @@ class CompetitorFragment : Fragment() {
                 competitorTableView.setColumnComparator(2, CompetitorRunTimeComparator())
                 competitorTableView.setColumnComparator(3, CompetitorStartTimeComparator())
                 competitorTableView.setColumnComparator(4, CompetitorFinishTimeComparator())
+                competitorTableView.setColumnComparator(5, null)
             }
 
             CompetitorTableDisplayType.ON_THE_WAY -> {
@@ -233,8 +239,9 @@ class CompetitorFragment : Fragment() {
                         R.string.general_start_time,
                         R.string.general_run_time,
                         R.string.competitor_to_limit,
+                        R.string.general_actions
                     )
-                for (i in 0..4) {
+                for (i in 0..5) {
                     competitorTableView.setColumnComparator(i, null)
                 }
             }
@@ -246,6 +253,7 @@ class CompetitorFragment : Fragment() {
                     R.string.general_category,
                     R.string.general_start_time,
                     R.string.general_finish_time,
+                    R.string.general_actions
                 )
 
                 competitorTableView.setColumnComparator(0, CompetitorSINumberComparator())
@@ -253,6 +261,7 @@ class CompetitorFragment : Fragment() {
                 competitorTableView.setColumnComparator(2, CompetitorCategoryComparator(collator))
                 competitorTableView.setColumnComparator(3, CompetitorStartTimeComparator())
                 competitorTableView.setColumnComparator(4, CompetitorFinishTimeComparator())
+                competitorTableView.setColumnComparator(5, null)
             }
         }
 

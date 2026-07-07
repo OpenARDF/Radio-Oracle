@@ -4,6 +4,7 @@
 
     <!--General strings -->
     <string name="general_automatic">Automatic</string>
+    <string name="general_actions">Actions</string>
     <string name="general_band">Band</string>
     <string name="general_cancel">Cancel</string>
     <string name="general_category">Category</string>
