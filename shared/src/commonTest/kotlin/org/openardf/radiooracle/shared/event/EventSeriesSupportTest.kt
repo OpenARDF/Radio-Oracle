@@ -118,7 +118,7 @@ class EventSeriesSupportTest {
     }
 
     @Test
-    fun validatesRaceLevelCompatibilityAcrossLinkedEvents() {
+    fun reportsMixedRaceLevelsAsInformationalAcrossLinkedEvents() {
         val series = seriesFile(events = listOf(seriesEvent("day-1", 0), seriesEvent("day-2", 1)))
         val linkedEvents = listOf(
             linkedEvent(
@@ -142,10 +142,13 @@ class EventSeriesSupportTest {
         val issues = EventSeriesSupport.validateLinkedEvents(series, linkedEvents)
 
         assertEquals(
-            listOf("Race File 'day-2' has race level Regional; series member races must all use Practice."),
+            listOf(
+                "Race File 'day-2' has race level Regional; the first series race uses Practice. " +
+                    "Mixed race levels are allowed; confirm this is intentional."
+            ),
             issues.map { it.message }
         )
-        assertTrue(issues.all { it.severity == EventSeriesIssueSeverity.ERROR })
+        assertTrue(issues.all { it.severity == EventSeriesIssueSeverity.INFO })
     }
 
     @Test

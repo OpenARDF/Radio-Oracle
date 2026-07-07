@@ -1161,6 +1161,8 @@ object DesktopAutomationCli {
             val issues = session.validateLinkedEvents()
             val errorCount = issues.count { it.severity == EventSeriesIssueSeverity.ERROR }
             val warningCount = issues.count { it.severity == EventSeriesIssueSeverity.WARNING }
+            val infoCount = issues.count { it.severity == EventSeriesIssueSeverity.INFO }
+            val blockingIssueCount = errorCount + warningCount
             out.println(
                 jsonObject(
                     "command" to "event-series-validate",
@@ -1168,6 +1170,7 @@ object DesktopAutomationCli {
                     "issueCount" to issues.size,
                     "errorCount" to errorCount,
                     "warningCount" to warningCount,
+                    "infoCount" to infoCount,
                     "requireClean" to requireClean,
                     "issues" to issues.map { issue ->
                         mapOf(
@@ -1178,7 +1181,7 @@ object DesktopAutomationCli {
                     }
                 )
             )
-            if (requireClean && issues.isNotEmpty()) 69 else 0
+            if (requireClean && blockingIssueCount > 0) 69 else 0
         }.getOrElse { error ->
             err.println("Race Series validation failed: ${error.message ?: error::class.simpleName}")
             66

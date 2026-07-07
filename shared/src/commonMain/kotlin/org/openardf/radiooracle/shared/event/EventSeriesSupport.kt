@@ -40,6 +40,7 @@ data class EventSeriesValidationIssue(
 )
 
 enum class EventSeriesIssueSeverity {
+    INFO,
     WARNING,
     ERROR
 }
@@ -155,10 +156,11 @@ object EventSeriesSupport {
                 .filter { it.projectFile.raceData.race.raceLevel != expectedRaceLevel }
                 .forEach { linked ->
                     issues += EventSeriesValidationIssue(
-                        severity = EventSeriesIssueSeverity.ERROR,
+                        severity = EventSeriesIssueSeverity.INFO,
                         message = "Race File '${linked.event.displayName}' has race level " +
                             "${linked.projectFile.raceData.race.raceLevel.toDisplayLabel()}; " +
-                            "series member races must all use ${expectedRaceLevel.toDisplayLabel()}.",
+                            "the first series race uses ${expectedRaceLevel.toDisplayLabel()}. " +
+                            "Mixed race levels are allowed; confirm this is intentional.",
                         seriesEventId = linked.event.seriesEventId
                     )
                 }

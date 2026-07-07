@@ -34,6 +34,7 @@ import org.junit.Test
 import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
 import org.openardf.radiooracle.desktop.usb.DesktopSerialPort
 import org.openardf.radiooracle.desktop.usb.DesktopSerialPortProvider
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -42,6 +43,8 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -684,6 +687,53 @@ class DesktopAutomationCliTest {
     }
 
     @Test
+    fun eventSeriesValidateCommandTreatsMixedRaceLevelsAsInfoOnly() {
+        val directory = Files.createTempDirectory("radio-oracle-automation-series-level-info")
+        val manifestPath = directory.resolve("series.radio-oracle.json")
+        val dayOnePath = directory.resolve("day-1.json")
+        val dayTwoPath = directory.resolve("day-2.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series-1",
+                name = "Championship Plus Practice",
+                events = listOf(
+                    EventSeriesEvent("day-1", "day-1.json", 0, "Regional Day"),
+                    EventSeriesEvent("day-2", "day-2.json", 1, "Practice Day")
+                )
+            )
+        )
+        DesktopProjectFiles.write(
+            dayOnePath,
+            validClassicSeriesProjectFile(
+                name = "Regional Day",
+                eventId = "regional-day",
+                raceLevel = RaceLevel.REGIONAL,
+                seriesLink = EventSeriesLink("series-1", "day-1")
+            )
+        )
+        DesktopProjectFiles.write(
+            dayTwoPath,
+            validClassicSeriesProjectFile(
+                name = "Practice Day",
+                eventId = "practice-day",
+                raceLevel = RaceLevel.PRACTICE,
+                seriesLink = EventSeriesLink("series-1", "day-2")
+            )
+        )
+
+        val result = runAutomation("event-series-validate", manifestPath.toString(), "--require-clean")
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.stdout.contains("\"issueCount\":1"))
+        assertTrue(result.stdout.contains("\"errorCount\":0"))
+        assertTrue(result.stdout.contains("\"warningCount\":0"))
+        assertTrue(result.stdout.contains("\"infoCount\":1"))
+        assertTrue(result.stdout.contains("\"severity\":\"INFO\""))
+        assertTrue(result.stdout.contains("Mixed race levels are allowed"))
+    }
+
+    @Test
     fun eventSeriesMatchCommandReportsCompetitorMatchingDiagnostics() {
         val directory = Files.createTempDirectory("radio-oracle-automation-series-match")
         val manifestPath = directory.resolve("series.radio-oracle.json")
@@ -1201,6 +1251,8 @@ class DesktopAutomationCliTest {
         name: String,
         eventId: String = "race",
         seriesLink: EventSeriesLink? = null,
+        raceLevel: RaceLevel = RaceLevel.PRACTICE,
+        controls: List<EventControl> = emptyList(),
         categories: List<EventCategoryData> = emptyList(),
         competitors: List<EventCompetitorData> = emptyList()
     ): EventProjectFile =
@@ -1212,10 +1264,11 @@ class DesktopAutomationCliTest {
                     apiKey = "",
                     startDateTimeIso = "2026-06-03T10:00",
                     raceType = RaceType.CLASSIC,
-                    raceLevel = RaceLevel.PRACTICE,
+                    raceLevel = raceLevel,
                     raceBand = RaceBand.M80,
                     timeLimitSeconds = 7_200
                 ),
+                controls = controls,
                 categories = categories,
                 aliases = emptyList(),
                 competitorData = competitors,
@@ -1223,6 +1276,74 @@ class DesktopAutomationCliTest {
             ),
             seriesLink = seriesLink
         )
+
+    private fun validClassicSeriesProjectFile(
+        name: String,
+        eventId: String,
+        raceLevel: RaceLevel,
+        seriesLink: EventSeriesLink
+    ): EventProjectFile {
+        val controls = classicControls(eventId)
+        return projectFile(
+            name = name,
+            eventId = eventId,
+            seriesLink = seriesLink,
+            raceLevel = raceLevel,
+            controls = controls,
+            categories = listOf(classicAssignedCategory(eventId, controls))
+        )
+    }
+
+    private fun classicControls(eventId: String): List<EventControl> =
+        (1..5).map { index ->
+            EventControl(
+                id = "fox-$index",
+                raceId = eventId,
+                label = index.toString(),
+                siCode = index,
+                type = ControlPointType.CONTROL,
+                publicLabel = index.toString()
+            )
+        } + EventControl(
+            id = "beacon",
+            raceId = eventId,
+            label = "B",
+            siCode = 31,
+            type = ControlPointType.BEACON,
+            publicLabel = "B"
+        )
+
+    private fun classicAssignedCategory(eventId: String, controls: List<EventControl>): EventCategoryData {
+        val categoryId = "$eventId-m21"
+        return EventCategoryData(
+            category = EventCategory(
+                id = categoryId,
+                raceId = eventId,
+                name = "M21",
+                isMan = true,
+                maxAge = null,
+                lengthMeters = 0,
+                climbMeters = 0,
+                order = 0,
+                differentProperties = false,
+                raceType = null,
+                raceBand = null,
+                timeLimitSeconds = null,
+                controlPointsString = "1 2 3 4 5 B"
+            ),
+            controlPoints = controls.mapIndexed { index, control ->
+                EventControlPoint(
+                    id = "$categoryId-control-${index + 1}",
+                    categoryId = categoryId,
+                    siCode = control.siCode,
+                    type = control.type,
+                    order = index + 1,
+                    controlId = control.id
+                )
+            },
+            competitors = emptyList()
+        )
+    }
 
     private fun categoryData(
         id: String,

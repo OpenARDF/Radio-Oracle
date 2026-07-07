@@ -2236,8 +2236,11 @@ fun main(args: Array<String>) = application {
                 val seriesFile = session.open(manifestPath)
                 val linkedEvents = session.loadLinkedEvents()
                 val validationIssues = session.validateLinkedEvents()
-                require(validationIssues.none { it.severity == EventSeriesIssueSeverity.ERROR }) {
-                    validationIssues.first().message
+                val firstValidationError = validationIssues.firstOrNull {
+                    it.severity == EventSeriesIssueSeverity.ERROR
+                }
+                require(firstValidationError == null) {
+                    firstValidationError?.message ?: "Series validation has blocking errors."
                 }
                 val settings = currentProject.raceData.effectiveStartDrawSettings()
                 DesktopDebugLog.info("StartList", "Balance Open Race for Series using ${currentProject.startDrawSettingsLogText()}")
@@ -14792,11 +14795,13 @@ private fun EventSeriesValidationPanel(
 
         val errorCount = state.issues.count { it.severity == EventSeriesIssueSeverity.ERROR }
         val warningCount = state.issues.count { it.severity == EventSeriesIssueSeverity.WARNING }
-        DetailHeaderRow(listOf("Errors", "Warnings", "Total issues"))
+        val infoCount = state.issues.count { it.severity == EventSeriesIssueSeverity.INFO }
+        DetailHeaderRow(listOf("Errors", "Warnings", "Info", "Total"))
         DetailGridRow(
             listOf(
                 errorCount.toString(),
                 warningCount.toString(),
+                infoCount.toString(),
                 state.issues.size.toString()
             )
         )
@@ -14835,6 +14840,7 @@ private fun EventSeriesValidationHeaderRow() {
 @Composable
 private fun EventSeriesValidationIssueRow(issue: EventSeriesValidationIssue) {
     val color = when (issue.severity) {
+        EventSeriesIssueSeverity.INFO -> DesktopPalette.PrimaryVariant
         EventSeriesIssueSeverity.ERROR -> DesktopPalette.Error
         EventSeriesIssueSeverity.WARNING -> DesktopPalette.Warning
     }
