@@ -31,6 +31,7 @@ import java.awt.Polygon
 import java.awt.Rectangle
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
+import java.awt.geom.Path2D
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
@@ -283,9 +284,7 @@ object DesktopCourseGraphic {
                 line.dashPattern(),
                 0f
             )
-            line.points.zipWithNext().forEach { (from, to) ->
-                graphics.drawLine(imageX(from), imageY(from), imageX(to), imageY(to))
-            }
+            graphics.draw(line.imageSmoothPath())
         }
     }
 
@@ -487,9 +486,7 @@ object DesktopCourseGraphic {
                 ?: DesktopCourseRouteMapStyle.linePdfRgb()
             appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} RG")
             appendLine("${pdfNumber((line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels).toDouble())} w")
-            line.points.zipWithNext().forEach { (from, to) ->
-                appendLine("${pdfPoint(from)} m ${pdfPoint(to)} l S")
-            }
+            appendPdfSmoothLine(line)
         }
         appendLine("[] 0 d")
     }
@@ -834,6 +831,90 @@ object DesktopCourseGraphic {
             y = (fromY + toY) / 2.0,
             normalX = -dy / length,
             normalY = dx / length
+        )
+    }
+
+    private fun DesktopCourseRouteMapLine.imageSmoothPath(): Path2D.Double =
+        smoothPath(
+            x = { point -> imageX(point).toDouble() },
+            y = { point -> imageY(point).toDouble() }
+        )
+
+    private fun DesktopCourseRouteMapLine.smoothPath(
+        x: (DesktopCourseRouteMapLinePoint) -> Double,
+        y: (DesktopCourseRouteMapLinePoint) -> Double
+    ): Path2D.Double {
+        val path = Path2D.Double()
+        val first = points.firstOrNull() ?: return path
+        path.moveTo(x(first), y(first))
+        if (points.size < 2) {
+            return path
+        }
+        if (points.size == 2) {
+            val end = points[1]
+            path.lineTo(x(end), y(end))
+            return path
+        }
+        for (index in 1 until points.size - 2) {
+            val control = points[index]
+            val next = points[index + 1]
+            path.quadTo(
+                x(control),
+                y(control),
+                (x(control) + x(next)) / 2.0,
+                (y(control) + y(next)) / 2.0
+            )
+        }
+        val control = points[points.lastIndex - 1]
+        val end = points.last()
+        path.quadTo(x(control), y(control), x(end), y(end))
+        return path
+    }
+
+    private fun StringBuilder.appendPdfSmoothLine(line: DesktopCourseRouteMapLine) {
+        val first = line.points.firstOrNull() ?: return
+        var currentX = pdfX(first)
+        var currentY = pdfY(first)
+        appendLine("${pdfNumber(currentX)} ${pdfNumber(currentY)} m")
+        if (line.points.size < 2) {
+            return
+        }
+        if (line.points.size == 2) {
+            val end = line.points[1]
+            appendLine("${pdfPoint(end)} l S")
+            return
+        }
+        for (index in 1 until line.points.size - 2) {
+            val control = line.points[index]
+            val next = line.points[index + 1]
+            val endX = (pdfX(control) + pdfX(next)) / 2.0
+            val endY = (pdfY(control) + pdfY(next)) / 2.0
+            appendPdfQuadratic(currentX, currentY, pdfX(control), pdfY(control), endX, endY)
+            currentX = endX
+            currentY = endY
+        }
+        val control = line.points[line.points.lastIndex - 1]
+        val end = line.points.last()
+        appendPdfQuadratic(currentX, currentY, pdfX(control), pdfY(control), pdfX(end), pdfY(end))
+        appendLine("S")
+    }
+
+    private fun StringBuilder.appendPdfQuadratic(
+        startX: Double,
+        startY: Double,
+        controlX: Double,
+        controlY: Double,
+        endX: Double,
+        endY: Double
+    ) {
+        val firstControlX = startX + (controlX - startX) * 2.0 / 3.0
+        val firstControlY = startY + (controlY - startY) * 2.0 / 3.0
+        val secondControlX = endX + (controlX - endX) * 2.0 / 3.0
+        val secondControlY = endY + (controlY - endY) * 2.0 / 3.0
+        appendLine(
+            "${pdfNumber(firstControlX)} ${pdfNumber(firstControlY)} " +
+                "${pdfNumber(secondControlX)} ${pdfNumber(secondControlY)} " +
+                "${pdfNumber(endX)} ${pdfNumber(endY)} c"
         )
     }
 

@@ -92,6 +92,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path as ComposePath
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.Key
@@ -20469,18 +20470,48 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapLineStr
     y: (DesktopCourseRouteMapLinePoint) -> Float
 ) {
     routeMap.lineStrings.forEach { line ->
-        line.points.zipWithNext().forEach { (from, to) ->
-            drawLine(
-                color = line.strokeColorArgb
-                    ?.let(DesktopCourseRouteMapStyle::composeColor)
-                    ?: DesktopCourseRouteMapStyle.lineComposeColor(),
-                start = Offset(x(from), y(from)),
-                end = Offset(x(to), y(to)),
-                strokeWidth = line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels,
+        drawPath(
+            path = line.smoothPath(x, y),
+            color = line.strokeColorArgb
+                ?.let(DesktopCourseRouteMapStyle::composeColor)
+                ?: DesktopCourseRouteMapStyle.lineComposeColor(),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels,
                 pathEffect = line.dashPathEffect()
             )
-        }
+        )
     }
+}
+
+private fun DesktopCourseRouteMapLine.smoothPath(
+    x: (DesktopCourseRouteMapLinePoint) -> Float,
+    y: (DesktopCourseRouteMapLinePoint) -> Float
+): ComposePath {
+    val path = ComposePath()
+    val first = points.firstOrNull() ?: return path
+    path.moveTo(x(first), y(first))
+    if (points.size < 2) {
+        return path
+    }
+    if (points.size == 2) {
+        val end = points[1]
+        path.lineTo(x(end), y(end))
+        return path
+    }
+    for (index in 1 until points.size - 2) {
+        val control = points[index]
+        val next = points[index + 1]
+        path.quadraticTo(
+            x(control),
+            y(control),
+            (x(control) + x(next)) / 2f,
+            (y(control) + y(next)) / 2f
+        )
+    }
+    val control = points[points.lastIndex - 1]
+    val end = points.last()
+    path.quadraticTo(x(control), y(control), x(end), y(end))
+    return path
 }
 
 private fun DesktopCourseRouteMapLine.dashPathEffect(): PathEffect? =
