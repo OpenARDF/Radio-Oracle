@@ -162,7 +162,13 @@ object DesktopCourseGraphic {
                     )
                 }
             lineOffset += route.points.size
-            DesktopCourseRouteMapLine(route.displayLabel, points)
+            val renderStyle = route.lineStyle?.blackWideRenderStyle()
+            DesktopCourseRouteMapLine(
+                label = route.displayLabel,
+                points = points,
+                strokeColorArgb = renderStyle?.argb,
+                strokeWidthPixels = renderStyle?.widthPixels?.toFloat()
+            )
         }
         val projectedPolygonPoints = projectedLinePoints.drop(lineOffset)
         var polygonOffset = 0
@@ -247,19 +253,21 @@ object DesktopCourseGraphic {
     }
 
     private fun drawImageLineStrings(graphics: java.awt.Graphics2D, routeMap: DesktopCourseRouteMap) {
-        graphics.color = DesktopCourseRouteMapStyle.lineAwtColor()
-        graphics.stroke = BasicStroke(
-            DesktopCourseRouteMapStyle.GraphicLineStrokePixels,
-            BasicStroke.CAP_BUTT,
-            BasicStroke.JOIN_ROUND,
-            10f,
-            floatArrayOf(
-                DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
-                DesktopCourseRouteMapStyle.GraphicDashGapPixels
-            ),
-            0f
-        )
         routeMap.lineStrings.forEach { line ->
+            graphics.color = line.strokeColorArgb
+                ?.let(DesktopCourseRouteMapStyle::awtColor)
+                ?: DesktopCourseRouteMapStyle.lineAwtColor()
+            graphics.stroke = BasicStroke(
+                line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels,
+                BasicStroke.CAP_BUTT,
+                BasicStroke.JOIN_ROUND,
+                10f,
+                floatArrayOf(
+                    DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
+                    DesktopCourseRouteMapStyle.GraphicDashGapPixels
+                ),
+                0f
+            )
             line.points.zipWithNext().forEach { (from, to) ->
                 graphics.drawLine(imageX(from), imageY(from), imageX(to), imageY(to))
             }
@@ -447,14 +455,16 @@ object DesktopCourseGraphic {
     }
 
     private fun StringBuilder.appendPdfLineStrings(routeMap: DesktopCourseRouteMap) {
-        val (red, green, blue) = DesktopCourseRouteMapStyle.linePdfRgb()
-        appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} RG")
-        appendLine("${pdfNumber(DesktopCourseRouteMapStyle.GraphicLineStrokePixels.toDouble())} w")
         appendLine(
             "[${pdfNumber(DesktopCourseRouteMapStyle.GraphicDashPaintPixels.toDouble())} " +
                 "${pdfNumber(DesktopCourseRouteMapStyle.GraphicDashGapPixels.toDouble())}] 0 d"
         )
         routeMap.lineStrings.forEach { line ->
+            val (red, green, blue) = line.strokeColorArgb
+                ?.let(DesktopCourseRouteMapStyle::pdfRgb)
+                ?: DesktopCourseRouteMapStyle.linePdfRgb()
+            appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} RG")
+            appendLine("${pdfNumber((line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels).toDouble())} w")
             line.points.zipWithNext().forEach { (from, to) ->
                 appendLine("${pdfPoint(from)} m ${pdfPoint(to)} l S")
             }
@@ -739,6 +749,16 @@ object DesktopCourseGraphic {
 
     private fun String?.hasCourseObjectType(type: String): Boolean =
         this?.contains(Regex("""(?i)\btype\s*(?:=\s*)?${Regex.escape(type)}\b""")) == true
+
+    private fun CourseLineStyle.blackWideRenderStyle(): CourseLineStyle? {
+        val colorArgb = argb ?: return null
+        val width = widthPixels?.takeIf { it > DesktopCourseRouteMapStyle.GraphicLineStrokePixels } ?: return null
+        return if ((colorArgb and 0x00FFFFFFL) == 0L) {
+            copy(widthPixels = width)
+        } else {
+            null
+        }
+    }
 
     private fun DesktopCourseRouteMapLine.midpoint(): DesktopCourseRouteMapLinePoint? =
         points.getOrNull(points.size / 2)

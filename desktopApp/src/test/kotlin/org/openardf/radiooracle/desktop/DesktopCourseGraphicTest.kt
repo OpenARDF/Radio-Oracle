@@ -48,9 +48,13 @@ class DesktopCourseGraphicTest {
         assertEquals(listOf("Printed Start", "B", "Finish"), routeMap.points.map { it.label })
         assertFalse(routeMap.points.any { it.label == "Hidden Control" })
         assertFalse(routeMap.points.any { it.label == "Hidden Folder Point" })
-        assertEquals(listOf("Printed Trail"), routeMap.lineStrings.map { it.label })
+        assertEquals(listOf("Printed Trail", "Black Trail"), routeMap.lineStrings.map { it.label })
+        assertEquals(null, routeMap.lineStrings.first { it.label == "Printed Trail" }.strokeColorArgb)
+        val blackTrail = routeMap.lineStrings.first { it.label == "Black Trail" }
+        assertEquals(0xFF000000L, blackTrail.strokeColorArgb)
+        assertEquals(10f, blackTrail.strokeWidthPixels)
         assertEquals(listOf("Parking"), routeMap.polygons.map { it.label })
-        assertTrue(routeMap.lineStrings.single().points.size >= 2)
+        assertTrue(routeMap.lineStrings.all { it.points.size >= 2 })
         assertTrue(routeMap.polygons.single().points.size >= 4)
         val allX = routeMap.points.map { it.xFraction } +
             routeMap.lineStrings.flatMap { line -> line.points.map { it.xFraction } } +
@@ -73,7 +77,7 @@ class DesktopCourseGraphicTest {
         )
 
         assertEquals(3, result.visiblePointCount)
-        assertEquals(1, result.visibleLineStringCount)
+        assertEquals(2, result.visibleLineStringCount)
         assertEquals(1, result.visiblePolygonCount)
         assertEquals(2, result.hiddenObjectCount)
         listOf(result.outputPaths.pngPath, result.outputPaths.jpgPath, result.outputPaths.pdfPath).forEach { output ->
@@ -82,6 +86,8 @@ class DesktopCourseGraphicTest {
         val pdfText = Files.readString(result.outputPaths.pdfPath, StandardCharsets.ISO_8859_1)
         assertTrue(pdfText.contains("[32.00 8.00] 0 d"))
         assertTrue(pdfText.contains("0.93 0.45 0.94 RG"))
+        assertTrue(pdfText.contains("0.00 0.00 0.00 RG"))
+        assertTrue(pdfText.contains("10.00 w"))
         assertTrue(pdfText.contains("/GS1 gs"))
         assertTrue(pdfText.contains("MN"))
         assertTrue(pdfText.contains("Printed Start"))
@@ -96,6 +102,18 @@ class DesktopCourseGraphicTest {
         <?xml version="1.0" encoding="UTF-8"?>
         <kml xmlns="http://www.opengis.net/kml/2.2">
           <Document>
+            <Style id="blackTrailStyle">
+              <LineStyle>
+                <color>ff000000</color>
+                <width>10</width>
+              </LineStyle>
+            </Style>
+            <StyleMap id="blackTrailStyleMap">
+              <Pair>
+                <key>normal</key>
+                <styleUrl>#blackTrailStyle</styleUrl>
+              </Pair>
+            </StyleMap>
             <Folder>
               <name>Visible</name>
               <Placemark>
@@ -123,6 +141,11 @@ class DesktopCourseGraphicTest {
                 <name>Trail</name>
                 <description>Text="Printed Trail"</description>
                 <LineString><coordinates>-121.0000,45.0000,0 -121.0010,45.0005,0 -121.0020,45.0010,0</coordinates></LineString>
+              </Placemark>
+              <Placemark>
+                <name>Black Trail</name>
+                <styleUrl>#blackTrailStyleMap</styleUrl>
+                <LineString><coordinates>-121.0020,45.0010,0 -121.0030,45.0015,0</coordinates></LineString>
               </Placemark>
               <Placemark>
                 <name>Parking</name>

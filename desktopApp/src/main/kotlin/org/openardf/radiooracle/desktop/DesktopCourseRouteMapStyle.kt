@@ -52,6 +52,9 @@ internal object DesktopCourseRouteMapStyle {
     fun lineAwtColor(): java.awt.Color =
         java.awt.Color(CourseKmlFuchsiaArgb.toInt(), true)
 
+    fun awtColor(argb: Long): java.awt.Color =
+        java.awt.Color(argb.toInt(), true)
+
     fun pdfRgb(type: DesktopCourseRouteMapPointType): Triple<Double, Double, Double> {
         val argb = argb(type)
         return Triple(
@@ -64,8 +67,18 @@ internal object DesktopCourseRouteMapStyle {
     fun linePdfRgb(): Triple<Double, Double, Double> =
         Triple(237.0 / 255.0, 114.0 / 255.0, 239.0 / 255.0)
 
+    fun pdfRgb(argb: Long): Triple<Double, Double, Double> =
+        Triple(
+            ((argb shr 16) and 0xFFL) / 255.0,
+            ((argb shr 8) and 0xFFL) / 255.0,
+            (argb and 0xFFL) / 255.0
+        )
+
     fun lineComposeColor(): Color =
         Color(CourseKmlFuchsiaArgb)
+
+    fun composeColor(argb: Long): Color =
+        Color(argb)
 
     fun markerComposeColor(): Color =
         Color(CourseKmlFuchsiaArgb)

@@ -56,6 +56,7 @@ object DesktopCourseFileReader {
             .newDocumentBuilder()
             .parse(ByteArrayInputStream(kmlText.toByteArray()))
         val placemarks = document.getElementsByTagNameNS("*", "Placemark")
+        val lineStylesByUrl = document.kmlLineStylesByUrl()
         val controls = mutableListOf<CourseControlPoint>()
         val routes = mutableListOf<CourseRoute>()
         val polygons = mutableListOf<CoursePolygon>()
@@ -99,7 +100,8 @@ object DesktopCourseFileReader {
                     speedFactorHint = description.speedFactorHint(name),
                     description = description,
                     displayLabel = displayLabel,
-                    isVisible = isVisible
+                    isVisible = isVisible,
+                    lineStyle = lineStylesByUrl[placemark.childText("styleUrl")?.trim()]
                 )
                 return@repeat
             }
@@ -251,7 +253,13 @@ data class CourseRoute(
     val speedFactorHint: Double? = null,
     val description: String? = null,
     val displayLabel: String = name,
-    val isVisible: Boolean = true
+    val isVisible: Boolean = true,
+    val lineStyle: CourseLineStyle? = null
+)
+
+data class CourseLineStyle(
+    val argb: Long?,
+    val widthPixels: Double?
 )
 
 data class CoursePolygon(
@@ -351,6 +359,55 @@ private fun org.w3c.dom.Node.childText(tagName: String): String? =
     childNodes.asSequence()
         .firstOrNull { it.localName == tagName || it.nodeName == tagName }
         ?.textContent
+
+private fun org.w3c.dom.Document.kmlLineStylesByUrl(): Map<String, CourseLineStyle> {
+    val directStyles = mutableMapOf<String, CourseLineStyle>()
+    val normalStyleUrlByMapUrl = mutableMapOf<String, String>()
+    documentElement.namedDescendants("Style").forEach { style ->
+        val id = style.attributeText("id") ?: return@forEach
+        style.lineStyleOrNull()?.let { lineStyle ->
+            directStyles["#$id"] = lineStyle
+        }
+    }
+    documentElement.namedDescendants("StyleMap").forEach { styleMap ->
+        val id = styleMap.attributeText("id") ?: return@forEach
+        styleMap.namedDescendants("Pair")
+            .firstOrNull { pair -> pair.childText("key")?.trim() == "normal" }
+            ?.childText("styleUrl")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { styleUrl -> normalStyleUrlByMapUrl["#$id"] = styleUrl }
+    }
+    return buildMap {
+        putAll(directStyles)
+        normalStyleUrlByMapUrl.forEach { (styleMapUrl, styleUrl) ->
+            directStyles[styleUrl]?.let { put(styleMapUrl, it) }
+        }
+    }
+}
+
+private fun org.w3c.dom.Node.lineStyleOrNull(): CourseLineStyle? {
+    val lineStyle = namedDescendants("LineStyle").firstOrNull() ?: return null
+    return CourseLineStyle(
+        argb = lineStyle.childText("color")?.trim()?.kmlColorToArgb(),
+        widthPixels = lineStyle.childText("width")?.trim()?.toDoubleOrNull()?.finiteCourseValueOrNull()
+    )
+}
+
+private fun org.w3c.dom.Node.attributeText(name: String): String? =
+    attributes?.getNamedItem(name)?.nodeValue?.trim()?.takeIf { it.isNotBlank() }
+
+private fun String.kmlColorToArgb(): Long? {
+    val normalized = trim().removePrefix("#")
+    if (normalized.length != 8 || normalized.any { it !in '0'..'9' && it.lowercaseChar() !in 'a'..'f' }) {
+        return null
+    }
+    val alpha = normalized.substring(0, 2).toLong(16)
+    val blue = normalized.substring(2, 4).toLong(16)
+    val green = normalized.substring(4, 6).toLong(16)
+    val red = normalized.substring(6, 8).toLong(16)
+    return (alpha shl 24) or (red shl 16) or (green shl 8) or blue
+}
 
 private fun org.w3c.dom.Node.isHiddenByVisibility(): Boolean =
     generateSequence(this) { node ->

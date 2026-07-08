@@ -20471,10 +20471,12 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapLineStr
     routeMap.lineStrings.forEach { line ->
         line.points.zipWithNext().forEach { (from, to) ->
             drawLine(
-                color = DesktopCourseRouteMapStyle.lineComposeColor(),
+                color = line.strokeColorArgb
+                    ?.let(DesktopCourseRouteMapStyle::composeColor)
+                    ?: DesktopCourseRouteMapStyle.lineComposeColor(),
                 start = Offset(x(from), y(from)),
                 end = Offset(x(to), y(to)),
-                strokeWidth = DesktopCourseRouteMapStyle.GraphicLineStrokePixels,
+                strokeWidth = line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels,
                 pathEffect = PathEffect.dashPathEffect(
                     floatArrayOf(
                         DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
