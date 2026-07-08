@@ -44,15 +44,15 @@ object DesktopPrintableStartListPdf {
     private const val HeaderHeight = 22.0
     private const val RowHeight = 20.0
     private val ScheduledTimeFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy - HH:mm", Locale.US)
-    private val CenteredColumns = setOf(0, 1)
+    private val CenteredColumns = setOf(0, 1, 3, 4, 5)
 
     private val Columns = listOf(
         PdfColumn("Start #", 52.0),
         PdfColumn("Start Time", 62.0),
         PdfColumn("Competitor's full name", 172.0),
-        PdfColumn("Bib#", 44.0),
-        PdfColumn("Age/Gender category", 104.0),
-        PdfColumn("SI Card number", 70.0)
+        PdfColumn("Bib #", 44.0),
+        PdfColumn("Category", 104.0),
+        PdfColumn("SI #", 70.0)
     )
 
     fun defaultFileName(projectFile: EventProjectFile): String =

@@ -412,8 +412,23 @@ class DesktopSmokeSampleTest {
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")
         val target = directory.resolve("desktop-smoke-start-list.pdf")
         val projectFile = DesktopProjectFiles.read(source)
+        val projectWithBib = projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
+                    if (index == 0) {
+                        data.copy(
+                            competitorCategory = data.competitorCategory.copy(
+                                competitor = data.competitorCategory.competitor.copy(bibNumber = "101")
+                            )
+                        )
+                    } else {
+                        data
+                    }
+                }
+            )
+        )
 
-        DesktopProjectFiles.exportPrintableStartListPdf(target, projectFile)
+        DesktopProjectFiles.exportPrintableStartListPdf(target, projectWithBib)
         val exported = Files.readString(target)
 
         assertTrue(exported.startsWith("%PDF-1.4"))
@@ -428,9 +443,15 @@ class DesktopSmokeSampleTest {
         assertTrue(exported.contains("1 0 0 1 77.66 669.00 Tm\n(1) Tj"))
         assertTrue(exported.contains("1 0 0 1 118.28 669.00 Tm\n(00:00:00) Tj"))
         assertTrue(exported.contains("Competitor's full name"))
-        assertTrue(exported.contains("Bib#"))
-        assertTrue(exported.contains("Age/Gender category"))
-        assertTrue(exported.contains("SI Card number"))
+        assertTrue(exported.contains("Bib #"))
+        assertTrue(exported.contains("Category"))
+        assertTrue(exported.contains("SI #"))
+        assertTrue(exported.contains("1 0 0 1 351.60 690.00 Tm\n(Bib #) Tj"))
+        assertTrue(exported.contains("1 0 0 1 419.36 690.00 Tm\n(Category) Tj"))
+        assertTrue(exported.contains("1 0 0 1 514.68 690.00 Tm\n(SI #) Tj"))
+        assertTrue(exported.contains("1 0 0 1 354.98 669.00 Tm\n(101) Tj"))
+        assertTrue(exported.contains("1 0 0 1 428.98 669.00 Tm\n(M21) Tj"))
+        assertTrue(exported.contains("1 0 0 1 508.96 669.00 Tm\n(123456) Tj"))
         assertTrue(exported.contains("0.96 0.96 0.96 rg"))
     }
 
