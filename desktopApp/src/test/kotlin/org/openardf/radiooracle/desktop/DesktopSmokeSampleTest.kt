@@ -418,7 +418,7 @@ class DesktopSmokeSampleTest {
 
         assertTrue(exported.startsWith("%PDF-1.4"))
         assertTrue(exported.contains("Desktop Smoke Race"))
-        assertTrue(exported.contains("Start Number"))
+        assertTrue(exported.contains("Start #"))
         assertTrue(exported.contains("Start Time"))
         assertTrue(exported.contains("00:00:00"))
         assertTrue(exported.contains("Competitor's full name"))

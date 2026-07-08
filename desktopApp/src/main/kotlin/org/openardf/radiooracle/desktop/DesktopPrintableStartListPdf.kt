@@ -41,7 +41,7 @@ object DesktopPrintableStartListPdf {
     private const val RowHeight = 20.0
 
     private val Columns = listOf(
-        PdfColumn("Start Number", 52.0),
+        PdfColumn("Start #", 52.0),
         PdfColumn("Start Time", 62.0),
         PdfColumn("Competitor's full name", 172.0),
         PdfColumn("Bib#", 44.0),
@@ -178,8 +178,14 @@ object DesktopPrintableStartListPdf {
             row.siNumberText
         )
         var x = Left
-        Columns.zip(values).forEach { (column, value) ->
-            appendText(x + 3.0, y, 9, fitText(value, column.width, 9))
+        Columns.zip(values).forEachIndexed { index, (column, value) ->
+            val text = fitText(value, column.width, 9)
+            val textX = if (index == 0) {
+                centeredTextX(x, column.width, text, 9)
+            } else {
+                x + 3.0
+            }
+            appendText(textX, y, 9, text)
             x += column.width
         }
     }
@@ -213,6 +219,11 @@ object DesktopPrintableStartListPdf {
         } else {
             text.take(maxChars - 3).trimEnd() + "..."
         }
+    }
+
+    private fun centeredTextX(cellLeft: Double, cellWidth: Double, text: String, fontSize: Int): Double {
+        val estimatedTextWidth = text.length * fontSize * 0.52
+        return cellLeft + ((cellWidth - estimatedTextWidth) / 2.0).coerceAtLeast(3.0)
     }
 
     private fun pdfNumber(value: Double): String =
