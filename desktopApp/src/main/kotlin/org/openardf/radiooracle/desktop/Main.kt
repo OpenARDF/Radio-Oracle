@@ -20562,17 +20562,17 @@ private fun CourseRouteMapLabels(
     showLineStringLabels: Boolean
 ) {
     routeMap.polygons.forEach { polygon ->
-        polygonLabelPoint(polygon)?.let { point ->
+        polygon.takeIf { it.label.isNotEmpty() }?.let(::polygonLabelPoint)?.let { point ->
             CourseRouteMapTextLabel(polygon.label, point.xFraction, point.yFraction, mapWidth, mapHeight)
         }
     }
-    routeMap.points.forEach { point ->
+    routeMap.points.filter { it.label.isNotEmpty() }.forEach { point ->
         if (showWaypointLabels || point.type != DesktopCourseRouteMapPointType.Waypoint) {
             CourseRouteMapTextLabel(point.label, point.xFraction, point.yFraction, mapWidth, mapHeight)
         }
     }
     if (showLineStringLabels) {
-        routeMap.lineStrings.forEach { line ->
+        routeMap.lineStrings.filter { it.label.isNotEmpty() }.forEach { line ->
             line.points.getOrNull(line.points.size / 2)?.let { point ->
                 CourseRouteMapTextLabel(line.label, point.xFraction, point.yFraction, mapWidth, mapHeight)
             }

@@ -351,12 +351,11 @@ private fun String?.speedFactorHint(placemarkName: String): Double? {
 
 private fun String?.printTextLabel(): String? {
     val text = this ?: return null
-    return Regex("(?i)(?:^|[\\s;,<])Text\\s*=\\s*\"([^\"]+)\"")
+    return Regex("(?i)(?:^|[\\s;,<])Text\\s*=\\s*\"([^\"]*)\"")
         .find(text)
         ?.groupValues
         ?.getOrNull(1)
         ?.trim()
-        ?.takeIf { it.isNotBlank() }
 }
 
 private fun String.normalizedCourseFileName(): String =

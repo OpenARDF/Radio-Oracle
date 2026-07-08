@@ -45,12 +45,13 @@ class DesktopCourseGraphicTest {
 
         assertEquals("Sprint Layout 2D Graphic", routeMap.title)
         assertEquals("Magnetic north (90.0° E declination)", routeMap.northOrientationText())
-        assertEquals(listOf("Printed Start", "B", "Finish"), routeMap.points.map { it.label })
+        assertEquals(listOf("Printed Start", "B", "Finish", ""), routeMap.points.map { it.label })
         assertEquals(
             listOf(
                 DesktopCourseRouteMapPointType.Start,
                 DesktopCourseRouteMapPointType.Beacon,
-                DesktopCourseRouteMapPointType.Finish
+                DesktopCourseRouteMapPointType.Finish,
+                DesktopCourseRouteMapPointType.Waypoint
             ),
             routeMap.points.map { it.type }
         )
@@ -91,7 +92,7 @@ class DesktopCourseGraphicTest {
             magneticDeclinationProvider = { DesktopMagneticDeclinationResult(12.3, usesExpiredCoefficients = false) }
         )
 
-        assertEquals(3, result.visiblePointCount)
+        assertEquals(4, result.visiblePointCount)
         assertEquals(3, result.visibleLineStringCount)
         assertEquals(1, result.visiblePolygonCount)
         assertEquals(2, result.hiddenObjectCount)
@@ -99,8 +100,8 @@ class DesktopCourseGraphicTest {
             assertTrue("${output.fileName} should exist", Files.size(output) > 0)
         }
         val pdfText = Files.readString(result.outputPaths.pdfPath, StandardCharsets.ISO_8859_1)
-        assertTrue(pdfText.contains("[60.00 30.00] 0 d"))
-        assertTrue(pdfText.contains("[130.00 70.00] 0 d"))
+        assertTrue(pdfText.contains("[20.00 10.00] 0 d"))
+        assertTrue(pdfText.contains("[25.00 25.00] 0 d"))
         assertTrue(pdfText.contains("[] 0 d"))
         assertTrue(pdfText.contains("0.93 0.45 0.94 RG"))
         assertTrue(pdfText.contains("0.00 0.00 0.00 RG"))
@@ -111,6 +112,7 @@ class DesktopCourseGraphicTest {
         assertTrue(pdfText.contains("Printed Start"))
         assertTrue(pdfText.contains("Printed Trail"))
         assertTrue(pdfText.contains("Parking"))
+        assertFalse(pdfText.contains("Suppressed Label"))
         val scaleBar = requireNotNull(DesktopCourseRouteMapStyle.scaleBar(result.routeMap.xRangeMeters, 684.0))
         assertTrue(pdfText.contains(scaleBar.label))
     }
@@ -178,6 +180,11 @@ class DesktopCourseGraphicTest {
                 <styleUrl>#targetPointStyle</styleUrl>
                 <description>Course object Finish; type FINISH</description>
                 <Point><coordinates>-121.0030,45.0010,0</coordinates></Point>
+              </Placemark>
+              <Placemark>
+                <name>Suppressed Label</name>
+                <description>Text=""; Course object no printed label</description>
+                <Point><coordinates>-121.0035,45.0015,0</coordinates></Point>
               </Placemark>
               <Placemark>
                 <name>Trail</name>

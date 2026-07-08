@@ -34,6 +34,7 @@ import java.awt.image.BufferedImage
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
@@ -58,7 +59,24 @@ private data class GraphicLabelRequest(
     val anchorY: Double,
     val width: Double,
     val height: Double,
-    val priority: Int
+    val priority: Int,
+    val kind: GraphicLabelKind,
+    val normalX: Double = 0.0,
+    val normalY: Double = -1.0,
+    val strokeWidth: Double = 0.0
+)
+
+private enum class GraphicLabelKind {
+    Point,
+    Line,
+    Free
+}
+
+private data class GraphicLineLabelAnchor(
+    val x: Double,
+    val y: Double,
+    val normalX: Double,
+    val normalY: Double
 )
 
 private data class GraphicLabelPlacement(
@@ -358,7 +376,7 @@ object DesktopCourseGraphic {
         val metrics = graphics.fontMetrics
         val labelHeight = metrics.height.toDouble()
         val requests = buildList {
-            routeMap.points.forEach { point ->
+            routeMap.points.filter { it.label.isNotEmpty() }.forEach { point ->
                 add(
                     GraphicLabelRequest(
                         label = point.label,
@@ -366,25 +384,34 @@ object DesktopCourseGraphic {
                         anchorY = imageY(point).toDouble(),
                         width = metrics.stringWidth(point.label).toDouble(),
                         height = labelHeight,
-                        priority = 0
+                        priority = 0,
+                        kind = GraphicLabelKind.Point
                     )
                 )
             }
-            routeMap.lineStrings.forEach { line ->
-                line.midpoint()?.let { point ->
+            routeMap.lineStrings.filter { it.label.isNotEmpty() }.forEach { line ->
+                line.labelAnchor(
+                    x = { point -> imageX(point).toDouble() },
+                    y = { point -> imageY(point).toDouble() }
+                )?.let { anchor ->
                     add(
                         GraphicLabelRequest(
                             label = line.label,
-                            anchorX = imageX(point).toDouble(),
-                            anchorY = imageY(point).toDouble(),
+                            anchorX = anchor.x,
+                            anchorY = anchor.y,
                             width = metrics.stringWidth(line.label).toDouble(),
                             height = labelHeight,
-                            priority = 1
+                            priority = 1,
+                            kind = GraphicLabelKind.Line,
+                            normalX = anchor.normalX,
+                            normalY = anchor.normalY,
+                            strokeWidth = line.strokeWidthPixels?.toDouble()
+                                ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels.toDouble()
                         )
                     )
                 }
             }
-            routeMap.polygons.forEach { polygon ->
+            routeMap.polygons.filter { it.label.isNotEmpty() }.forEach { polygon ->
                 polygon.labelPoint()?.let { point ->
                     add(
                         GraphicLabelRequest(
@@ -393,7 +420,8 @@ object DesktopCourseGraphic {
                             anchorY = imageY(point).toDouble(),
                             width = metrics.stringWidth(polygon.label).toDouble(),
                             height = labelHeight,
-                            priority = 2
+                            priority = 2,
+                            kind = GraphicLabelKind.Free
                         )
                     )
                 }
@@ -536,7 +564,7 @@ object DesktopCourseGraphic {
         val fontSize = 8.0
         val labelHeight = 10.0
         val requests = buildList {
-            routeMap.points.forEach { point ->
+            routeMap.points.filter { it.label.isNotEmpty() }.forEach { point ->
                 add(
                     GraphicLabelRequest(
                         label = point.label,
@@ -544,25 +572,31 @@ object DesktopCourseGraphic {
                         anchorY = pdfScreenY(point),
                         width = pdfLabelWidth(point.label, fontSize),
                         height = labelHeight,
-                        priority = 0
+                        priority = 0,
+                        kind = GraphicLabelKind.Point
                     )
                 )
             }
-            routeMap.lineStrings.forEach { line ->
-                line.midpoint()?.let { point ->
+            routeMap.lineStrings.filter { it.label.isNotEmpty() }.forEach { line ->
+                line.labelAnchor(::pdfScreenX, ::pdfScreenY)?.let { anchor ->
                     add(
                         GraphicLabelRequest(
                             label = line.label,
-                            anchorX = pdfScreenX(point),
-                            anchorY = pdfScreenY(point),
+                            anchorX = anchor.x,
+                            anchorY = anchor.y,
                             width = pdfLabelWidth(line.label, fontSize),
                             height = labelHeight,
-                            priority = 1
+                            priority = 1,
+                            kind = GraphicLabelKind.Line,
+                            normalX = anchor.normalX,
+                            normalY = anchor.normalY,
+                            strokeWidth = line.strokeWidthPixels?.toDouble()
+                                ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels.toDouble()
                         )
                     )
                 }
             }
-            routeMap.polygons.forEach { polygon ->
+            routeMap.polygons.filter { it.label.isNotEmpty() }.forEach { polygon ->
                 polygon.labelPoint()?.let { point ->
                     add(
                         GraphicLabelRequest(
@@ -571,7 +605,8 @@ object DesktopCourseGraphic {
                             anchorY = pdfScreenY(point),
                             width = pdfLabelWidth(polygon.label, fontSize),
                             height = labelHeight,
-                            priority = 2
+                            priority = 2,
+                            kind = GraphicLabelKind.Free
                         )
                     )
                 }
@@ -596,7 +631,9 @@ object DesktopCourseGraphic {
         return requests.sortedWith(compareBy<GraphicLabelRequest> { it.priority }.thenBy { it.label }).map { request ->
             val placement = labelCandidates(request, bounds)
                 .firstOrNull { candidate -> placedRects.none { it.intersects(candidate.toRectangle()) } }
-                ?: gridLabelCandidate(request, bounds, placedRects)
+                ?: request.takeIf { it.kind == GraphicLabelKind.Free }?.let {
+                    gridLabelCandidate(it, bounds, placedRects)
+                }
                 ?: labelCandidates(request, bounds).minBy { candidate ->
                     placedRects.sumOf { it.overlapArea(candidate.toRectangle()) }
                 }
@@ -606,8 +643,43 @@ object DesktopCourseGraphic {
     }
 
     private fun labelCandidates(request: GraphicLabelRequest, bounds: Rectangle): List<GraphicLabelPlacement> {
+        val offsets = when (request.kind) {
+            GraphicLabelKind.Point -> pointLabelOffsets(request)
+            GraphicLabelKind.Line -> lineLabelOffsets(request)
+            GraphicLabelKind.Free -> freeLabelOffsets(request)
+        }
+        return offsets.map { (dx, dy) ->
+            request.placementAt(request.anchorX + dx, request.anchorY + dy, bounds)
+        }
+    }
+
+    private fun pointLabelOffsets(request: GraphicLabelRequest): List<Pair<Double, Double>> {
+        val gap = 18.0
+        return listOf(
+            -request.width / 2.0 to -request.height - gap,
+            -request.width / 2.0 to gap
+        )
+    }
+
+    private fun lineLabelOffsets(request: GraphicLabelRequest): List<Pair<Double, Double>> {
+        val gap = 8.0
+        val halfNormalExtent =
+            kotlin.math.abs(request.normalX) * request.width / 2.0 +
+                kotlin.math.abs(request.normalY) * request.height / 2.0
+        val distance = halfNormalExtent + request.strokeWidth / 2.0 + gap
+        return listOf(
+            lineLabelOffset(request, distance),
+            lineLabelOffset(request, -distance)
+        )
+    }
+
+    private fun lineLabelOffset(request: GraphicLabelRequest, distance: Double): Pair<Double, Double> =
+        request.normalX * distance - request.width / 2.0 to
+            request.normalY * distance - request.height / 2.0
+
+    private fun freeLabelOffsets(request: GraphicLabelRequest): List<Pair<Double, Double>> {
         val gap = 16.0
-        val offsets = listOf(
+        return listOf(
             gap to -request.height - gap,
             gap to gap,
             -request.width - gap to -request.height - gap,
@@ -617,9 +689,6 @@ object DesktopCourseGraphic {
             gap to -request.height / 2.0,
             -request.width - gap to -request.height / 2.0
         )
-        return offsets.map { (dx, dy) ->
-            request.placementAt(request.anchorX + dx, request.anchorY + dy, bounds)
-        }
     }
 
     private fun gridLabelCandidate(
@@ -747,8 +816,26 @@ object DesktopCourseGraphic {
     private fun CourseLineStyle.isSolidLine(): Boolean =
         widthPixels?.let { it > DesktopCourseRouteMapStyle.GraphicLineStrokePixels } == true
 
-    private fun DesktopCourseRouteMapLine.midpoint(): DesktopCourseRouteMapLinePoint? =
-        points.getOrNull(points.size / 2)
+    private fun DesktopCourseRouteMapLine.labelAnchor(
+        x: (DesktopCourseRouteMapLinePoint) -> Double,
+        y: (DesktopCourseRouteMapLinePoint) -> Double
+    ): GraphicLineLabelAnchor? {
+        val segments = points.zipWithNext()
+        val (from, to) = segments.getOrNull(segments.size / 2) ?: return null
+        val fromX = x(from)
+        val fromY = y(from)
+        val toX = x(to)
+        val toY = y(to)
+        val dx = toX - fromX
+        val dy = toY - fromY
+        val length = hypot(dx, dy).takeIf { it > 0.0 } ?: return null
+        return GraphicLineLabelAnchor(
+            x = (fromX + toX) / 2.0,
+            y = (fromY + toY) / 2.0,
+            normalX = -dy / length,
+            normalY = dx / length
+        )
+    }
 
     private fun DesktopCourseRouteMapPolygon.labelPoint(): DesktopCourseRouteMapLinePoint? {
         if (points.isEmpty()) {
@@ -794,14 +881,14 @@ object DesktopCourseGraphic {
 
     private fun DesktopCourseRouteMap.imagePointMarkerBounds(): List<Rectangle> =
         points.map { point ->
-            Rectangle(imageX(point) - 16, imageY(point) - 16, 32, 32)
+            Rectangle(imageX(point) - 14, imageY(point) - 14, 28, 28)
         }
 
     private fun DesktopCourseRouteMap.pdfPointMarkerBounds(): List<Rectangle> =
         points.map { point ->
             val x = pdfScreenX(point).toInt()
             val y = pdfScreenY(point).toInt()
-            Rectangle(x - 11, y - 11, 22, 22)
+            Rectangle(x - 10, y - 10, 20, 20)
         }
 
     private fun imageX(point: DesktopCourseRouteMapPoint): Int =
