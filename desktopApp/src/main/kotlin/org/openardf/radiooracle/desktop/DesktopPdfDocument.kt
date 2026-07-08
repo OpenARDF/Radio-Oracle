@@ -42,11 +42,11 @@ object DesktopPdfDocument {
         val objects = mutableListOf<String>()
         objects += "<< /Type /Catalog /Pages 2 0 R >>"
         objects += "<< /Type /Pages /Kids ${safePageContents.indices.joinToString(separator = " ", prefix = "[", postfix = "]") { "${4 + it * 2} 0 R" }} /Count ${safePageContents.size} >>"
-        objects += "<< /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> $extraResourceEntries >>"
+        objects += "<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> $extraResourceEntries >>"
         safePageContents.forEachIndexed { index, content ->
             val pageObjectId = 4 + index * 2
             val contentObjectId = pageObjectId + 1
-            objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${number(pageWidth)} ${number(pageHeight)}] /Resources << /Font 3 0 R >> /Contents $contentObjectId 0 R >>"
+            objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${number(pageWidth)} ${number(pageHeight)}] /Resources 3 0 R /Contents $contentObjectId 0 R >>"
             val length = content.toByteArray(StandardCharsets.ISO_8859_1).size
             objects += "<< /Length $length >>\nstream\n$content\nendstream"
         }
