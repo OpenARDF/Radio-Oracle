@@ -673,6 +673,7 @@ fun main(args: Array<String>) = application {
         var isCompetitorSpreadsheetImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
+        var pendingProtectedStartListDrawRequest by remember { mutableStateOf<PendingProtectedStartListDrawRequest?>(null) }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
         var pendingControlsCsvSyncUnlockReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var pendingBulkCategoryAction by remember { mutableStateOf<BulkCategoryAction?>(null) }
@@ -1124,12 +1125,16 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun unlockedIdealFirstFoxByCategoryId(): Map<String, Int> =
-            protectedIdealOrderByCategoryId.mapNotNull { (categoryId, idealOrderText) ->
-                projectFile?.raceData?.controls?.let { controls ->
-                    ProtectedIdealOrderRules.firstControlCode(idealOrderText, controls)?.let { categoryId to it }
-                }
+        fun unlockedIdealFirstFoxByCategoryId(): Map<String, Int> {
+            val controls = projectFile?.raceData?.controls ?: return emptyMap()
+            val fromCourseInfo = protectedCourseInfoByCategoryId.mapNotNull { (categoryId, courseInfo) ->
+                ProtectedIdealOrderRules.firstControlCode(courseInfo.idealOrder, controls)?.let { categoryId to it }
             }.toMap()
+            val fromProtectedOrder = protectedIdealOrderByCategoryId.mapNotNull { (categoryId, idealOrderText) ->
+                ProtectedIdealOrderRules.firstControlCode(idealOrderText, controls)?.let { categoryId to it }
+            }.toMap()
+            return fromCourseInfo + fromProtectedOrder
+        }
 
         fun shouldOfferNationalStartListDefaults(project: EventProjectFile): Boolean =
             !project.raceData.effectiveStartDrawSettings().options.hasNationalEventDefaults()
@@ -6192,6 +6197,143 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
+        fun drawStartListWithCurrentCourseData(interval: String, options: StartDrawOptions) {
+            runCatching {
+                val currentProject = requireNotNull(projectSession.currentProject) {
+                    "Open or create a Race File before generating starts."
+                }
+                val currentPath = projectSession.currentPath
+                val firstFoxByCategoryId = unlockedIdealFirstFoxByCategoryId()
+                val protectedOptions = options.copy(
+                    idealFirstFoxByCategoryId = firstFoxByCategoryId
+                ).forEventStartListGeneration()
+                val firstFoxWarning = if (firstFoxByCategoryId.isEmpty()) {
+                    "First-fox spacing was not applied because no course route/ideal-order first foxes are available."
+                } else {
+                    null
+                }
+                val drawContextKey = DesktopStartListDrawNumbers.drawContextKey(interval, protectedOptions)
+                val currentEventKey = DesktopStartListDrawNumbers.eventKey(currentPath, currentProject)
+                val currentDrawExhaustedKey = "$currentEventKey|context:$drawContextKey"
+                val knownOrderCount = DesktopStartListDrawNumbers.knownOrderCount(
+                    existingNumbers = eventStartListDrawNumbers,
+                    eventPath = currentPath,
+                    projectFile = currentProject,
+                    drawContextKey = drawContextKey
+                )
+
+                fun knownOrderProject(orderNumber: Int): EventProjectFile? =
+                    eventStartListDrawProjects[
+                        DesktopStartListDrawNumbers.orderProjectKey(
+                            eventPath = currentPath,
+                            projectFile = currentProject,
+                            orderNumber = orderNumber,
+                            drawContextKey = drawContextKey
+                        )
+                    ]
+
+                fun nextKnownOrderNumber(orderCount: Int): Int {
+                    val currentOrderNumber = eventStartListDrawNumbering?.orderNumber ?: 0
+                    return if (currentOrderNumber in 1 until orderCount) {
+                        currentOrderNumber + 1
+                    } else {
+                        1
+                    }
+                }
+
+                fun numberingFor(project: EventProjectFile): DesktopStartListDrawNumbering =
+                    DesktopStartListDrawNumbers.assign(
+                        existingNumbers = eventStartListDrawNumbers,
+                        eventPath = currentPath,
+                        projectFile = project,
+                        drawContextKey = drawContextKey
+                    )
+
+                val drawResult = if (currentDrawExhaustedKey in eventStartListDrawExhaustedKeys && knownOrderCount > 0) {
+                    // Once all discoverable orders are known, button presses should cycle those orders predictably.
+                    val nextOrderNumber = nextKnownOrderNumber(knownOrderCount)
+                    val nextProject = knownOrderProject(nextOrderNumber) ?: currentProject
+                    nextProject to numberingFor(nextProject)
+                } else {
+                    var chosenProject: EventProjectFile? = null
+                    var chosenNumbering: DesktopStartListDrawNumbering? = null
+                    for (attempt in 1..EventStartListUniqueDrawMaxAttempts) {
+                        val candidateProject = EventProjectEditor.drawStartList(
+                            currentProject,
+                            interval,
+                            protectedOptions.copy(seed = "event-draw-${UUID.randomUUID()}")
+                        )
+                        val candidateNumbering = DesktopStartListDrawNumbers.assign(
+                            existingNumbers = eventStartListDrawNumbers,
+                            eventPath = currentPath,
+                            projectFile = candidateProject,
+                            drawContextKey = drawContextKey
+                        )
+                        chosenProject = candidateProject
+                        chosenNumbering = candidateNumbering
+                        if (!candidateNumbering.repeatedOrder) {
+                            eventStartListDrawProjects = eventStartListDrawProjects + (
+                                DesktopStartListDrawNumbers.orderProjectKey(
+                                    eventPath = currentPath,
+                                    projectFile = candidateProject,
+                                    orderNumber = candidateNumbering.orderNumber,
+                                    drawContextKey = drawContextKey
+                                ) to candidateProject
+                                )
+                            eventStartListDrawExhaustedKeys = eventStartListDrawExhaustedKeys - currentDrawExhaustedKey
+                            break
+                        }
+                    }
+                    val candidateProject = requireNotNull(chosenProject)
+                    val candidateNumbering = requireNotNull(chosenNumbering)
+                    if (!candidateNumbering.repeatedOrder) {
+                        candidateProject to candidateNumbering
+                    } else {
+                        val updatedKnownOrderCount = DesktopStartListDrawNumbers.knownOrderCount(
+                            existingNumbers = eventStartListDrawNumbers,
+                            eventPath = currentPath,
+                            projectFile = currentProject,
+                            drawContextKey = drawContextKey
+                        )
+                        eventStartListDrawExhaustedKeys = eventStartListDrawExhaustedKeys + currentDrawExhaustedKey
+                        val nextOrderNumber = nextKnownOrderNumber(updatedKnownOrderCount)
+                        val nextProject = knownOrderProject(nextOrderNumber) ?: candidateProject
+                        nextProject to numberingFor(nextProject)
+                    }
+                }
+                val drawnProject = drawResult.first
+                val drawNumbering = drawResult.second
+                projectSession.updateCurrentProject { drawnProject }
+                eventStartListDrawNumbers = drawNumbering.orderNumbers
+                eventStartListDrawNumbering = drawNumbering
+                eventStartListDrawEventPath = currentPath?.toAbsolutePath()?.normalize()
+                seriesStartFairnessOptimizationResult = null
+                syncProjectState()
+                val drawStatus = startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
+                val orderStatus = "Start order #${drawNumbering.orderNumber}."
+                projectStatusText = listOfNotNull(drawStatus, orderStatus, firstFoxWarning).joinToString(" ")
+                DesktopDebugLog.info(
+                    "StartList",
+                    "Generated $orderStatus ${drawnProject.startDrawSettingsLogText()} " +
+                        (firstFoxWarning ?: "firstFoxCategories=${firstFoxByCategoryId.size}")
+                )
+            }.onFailure { error ->
+                projectStatusText = "Draw failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("StartList", projectStatusText)
+            }
+        }
+
+        fun requestOrDrawStartList(interval: String, options: StartDrawOptions) {
+            val currentProject = projectSession.currentProject
+            if (currentProject != null && currentProject.hasProtectedCategoryData() && protectedCoursePassword == null) {
+                pendingProtectedStartListDrawRequest = PendingProtectedStartListDrawRequest(interval, options)
+                pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.GenerateStartList
+                projectStatusText = "Unlock course data before generating starts so first-fox spacing can be applied."
+                return
+            }
+            drawStartListWithCurrentCourseData(interval, options)
+        }
+
         pendingCourseKmlKmzUnlockAction?.let { unlockAction ->
             CourseKmlKmzUnlockDialog(
                 title = when (unlockAction) {
@@ -6202,6 +6344,7 @@ fun main(args: Array<String>) = application {
                     CourseKmlKmzUnlockAction.Export -> "Export protected controls/routes"
                     CourseKmlKmzUnlockAction.ExportGpx -> "Export protected controls/routes"
                     CourseKmlKmzUnlockAction.ExportOverlays -> "Export course overlays"
+                    CourseKmlKmzUnlockAction.GenerateStartList -> "Unlock course data for Start List"
                 },
                 description = when (unlockAction) {
                     CourseKmlKmzUnlockAction.Import ->
@@ -6218,6 +6361,8 @@ fun main(args: Array<String>) = application {
                         "Controls/route GPX export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
                     CourseKmlKmzUnlockAction.ExportOverlays ->
                         "Course overlay export uses protected course coordinates to create plain OpenOrienteering Mapper files for map production."
+                    CourseKmlKmzUnlockAction.GenerateStartList ->
+                        "Start List generation can use protected ideal-route first foxes to avoid starting similar competitors on the same first fox."
                 },
                 confirmLabel = when (unlockAction) {
                     CourseKmlKmzUnlockAction.Import -> "Unlock and Import"
@@ -6227,6 +6372,7 @@ fun main(args: Array<String>) = application {
                     CourseKmlKmzUnlockAction.Export -> "Export"
                     CourseKmlKmzUnlockAction.ExportGpx -> "Export"
                     CourseKmlKmzUnlockAction.ExportOverlays -> "Export"
+                    CourseKmlKmzUnlockAction.GenerateStartList -> "Unlock and Generate"
                 },
                 onUnlock = { password ->
                     if (unlockProtectedCourseOrder(password)) {
@@ -6242,13 +6388,23 @@ fun main(args: Array<String>) = application {
                             CourseKmlKmzUnlockAction.Export -> chooseExportCourseKmlKmzUnlocked(unlockedPassword)
                             CourseKmlKmzUnlockAction.ExportGpx -> chooseExportCourseGpxUnlocked(unlockedPassword)
                             CourseKmlKmzUnlockAction.ExportOverlays -> chooseExportCourseOverlaysUnlocked(unlockedPassword)
+                            CourseKmlKmzUnlockAction.GenerateStartList -> {
+                                val request = pendingProtectedStartListDrawRequest
+                                pendingProtectedStartListDrawRequest = null
+                                if (request != null) {
+                                    drawStartListWithCurrentCourseData(request.interval, request.options)
+                                }
+                            }
                         }
                         true
                     } else {
                         false
                     }
                 },
-                onCancel = { pendingCourseKmlKmzUnlockAction = null }
+                onCancel = {
+                    pendingCourseKmlKmzUnlockAction = null
+                    pendingProtectedStartListDrawRequest = null
+                }
             )
         }
         pendingProtectedControlDeleteId?.let { controlId ->
@@ -6902,119 +7058,7 @@ fun main(args: Array<String>) = application {
                 }
             },
             onDrawStartList = { interval, options ->
-                runCatching {
-                    val currentProject = requireNotNull(projectSession.currentProject) {
-                        "Open or create a Race File before generating starts."
-                    }
-                    val currentPath = projectSession.currentPath
-                    val protectedOptions = options.copy(
-                        idealFirstFoxByCategoryId = unlockedIdealFirstFoxByCategoryId()
-                    ).forEventStartListGeneration()
-                    val drawContextKey = DesktopStartListDrawNumbers.drawContextKey(interval, protectedOptions)
-                    val currentEventKey = DesktopStartListDrawNumbers.eventKey(currentPath, currentProject)
-                    val currentDrawExhaustedKey = "$currentEventKey|context:$drawContextKey"
-                    val knownOrderCount = DesktopStartListDrawNumbers.knownOrderCount(
-                        existingNumbers = eventStartListDrawNumbers,
-                        eventPath = currentPath,
-                        projectFile = currentProject,
-                        drawContextKey = drawContextKey
-                    )
-
-                    fun knownOrderProject(orderNumber: Int): EventProjectFile? =
-                        eventStartListDrawProjects[
-                            DesktopStartListDrawNumbers.orderProjectKey(
-                                eventPath = currentPath,
-                                projectFile = currentProject,
-                                orderNumber = orderNumber,
-                                drawContextKey = drawContextKey
-                            )
-                        ]
-
-                    fun nextKnownOrderNumber(orderCount: Int): Int {
-                        val currentOrderNumber = eventStartListDrawNumbering?.orderNumber ?: 0
-                        return if (currentOrderNumber in 1 until orderCount) {
-                            currentOrderNumber + 1
-                        } else {
-                            1
-                        }
-                    }
-
-                    fun numberingFor(project: EventProjectFile): DesktopStartListDrawNumbering =
-                        DesktopStartListDrawNumbers.assign(
-                            existingNumbers = eventStartListDrawNumbers,
-                            eventPath = currentPath,
-                            projectFile = project,
-                            drawContextKey = drawContextKey
-                        )
-
-                    val drawResult = if (currentDrawExhaustedKey in eventStartListDrawExhaustedKeys && knownOrderCount > 0) {
-                        // Once all discoverable orders are known, button presses should cycle those orders predictably.
-                        val nextOrderNumber = nextKnownOrderNumber(knownOrderCount)
-                        val nextProject = knownOrderProject(nextOrderNumber) ?: currentProject
-                        nextProject to numberingFor(nextProject)
-                    } else {
-                        var chosenProject: EventProjectFile? = null
-                        var chosenNumbering: DesktopStartListDrawNumbering? = null
-                        for (attempt in 1..EventStartListUniqueDrawMaxAttempts) {
-                            val candidateProject = EventProjectEditor.drawStartList(
-                                currentProject,
-                                interval,
-                                protectedOptions.copy(seed = "event-draw-${UUID.randomUUID()}")
-                            )
-                            val candidateNumbering = DesktopStartListDrawNumbers.assign(
-                                existingNumbers = eventStartListDrawNumbers,
-                                eventPath = currentPath,
-                                projectFile = candidateProject,
-                                drawContextKey = drawContextKey
-                            )
-                            chosenProject = candidateProject
-                            chosenNumbering = candidateNumbering
-                            if (!candidateNumbering.repeatedOrder) {
-                                eventStartListDrawProjects = eventStartListDrawProjects + (
-                                    DesktopStartListDrawNumbers.orderProjectKey(
-                                        eventPath = currentPath,
-                                        projectFile = candidateProject,
-                                        orderNumber = candidateNumbering.orderNumber,
-                                        drawContextKey = drawContextKey
-                                    ) to candidateProject
-                                    )
-                                eventStartListDrawExhaustedKeys = eventStartListDrawExhaustedKeys - currentDrawExhaustedKey
-                                break
-                            }
-                        }
-                        val candidateProject = requireNotNull(chosenProject)
-                        val candidateNumbering = requireNotNull(chosenNumbering)
-                        if (!candidateNumbering.repeatedOrder) {
-                            candidateProject to candidateNumbering
-                        } else {
-                            val updatedKnownOrderCount = DesktopStartListDrawNumbers.knownOrderCount(
-                                existingNumbers = eventStartListDrawNumbers,
-                                eventPath = currentPath,
-                                projectFile = currentProject,
-                                drawContextKey = drawContextKey
-                            )
-                            eventStartListDrawExhaustedKeys = eventStartListDrawExhaustedKeys + currentDrawExhaustedKey
-                            val nextOrderNumber = nextKnownOrderNumber(updatedKnownOrderCount)
-                            val nextProject = knownOrderProject(nextOrderNumber) ?: candidateProject
-                            nextProject to numberingFor(nextProject)
-                        }
-                    }
-                    val drawnProject = drawResult.first
-                    val drawNumbering = drawResult.second
-                    projectSession.updateCurrentProject { drawnProject }
-                    eventStartListDrawNumbers = drawNumbering.orderNumbers
-                    eventStartListDrawNumbering = drawNumbering
-                    eventStartListDrawEventPath = currentPath?.toAbsolutePath()?.normalize()
-                    seriesStartFairnessOptimizationResult = null
-                    syncProjectState()
-                    val drawStatus = startListDrawStatusText(EventStartListDetails.from(drawnProject.raceData))
-                    val orderStatus = "Start order #${drawNumbering.orderNumber}."
-                    projectStatusText = "$drawStatus $orderStatus"
-                    DesktopDebugLog.info("StartList", "Generated $orderStatus ${drawnProject.startDrawSettingsLogText()}")
-                }.onFailure { error ->
-                    projectStatusText = "Draw failed: ${error.message ?: error::class.simpleName}"
-                    DesktopDebugLog.error("StartList", projectStatusText)
-                }
+                requestOrDrawStartList(interval, options)
             },
             onAddCompetitor = {
                     firstName,
@@ -10721,8 +10765,14 @@ private enum class CourseKmlKmzUnlockAction {
     ImportControlsGpx,
     Export,
     ExportGpx,
-    ExportOverlays
+    ExportOverlays,
+    GenerateStartList
 }
+
+private data class PendingProtectedStartListDrawRequest(
+    val interval: String,
+    val options: StartDrawOptions
+)
 
 private enum class BulkCategoryAction {
     DeleteAllAssignedControls,
