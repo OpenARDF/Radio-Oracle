@@ -80,6 +80,14 @@ private data class GraphicLineLabelAnchor(
     val normalY: Double
 )
 
+private data class GraphicLineSegment(
+    val fromX: Double,
+    val fromY: Double,
+    val dx: Double,
+    val dy: Double,
+    val length: Double
+)
+
 private data class GraphicLabelPlacement(
     val label: String,
     val x: Double,
@@ -818,20 +826,31 @@ object DesktopCourseGraphic {
         y: (DesktopCourseRouteMapLinePoint) -> Double
     ): GraphicLineLabelAnchor? {
         val segments = points.zipWithNext()
-        val (from, to) = segments.getOrNull(segments.size / 2) ?: return null
-        val fromX = x(from)
-        val fromY = y(from)
-        val toX = x(to)
-        val toY = y(to)
-        val dx = toX - fromX
-        val dy = toY - fromY
-        val length = hypot(dx, dy).takeIf { it > 0.0 } ?: return null
-        return GraphicLineLabelAnchor(
-            x = (fromX + toX) / 2.0,
-            y = (fromY + toY) / 2.0,
-            normalX = -dy / length,
-            normalY = dx / length
-        )
+            .mapNotNull { (from, to) ->
+                val fromX = x(from)
+                val fromY = y(from)
+                val toX = x(to)
+                val toY = y(to)
+                val dx = toX - fromX
+                val dy = toY - fromY
+                val length = hypot(dx, dy).takeIf { it > 0.0 } ?: return@mapNotNull null
+                GraphicLineSegment(fromX, fromY, dx, dy, length)
+            }
+        val targetDistance = segments.sumOf { it.length } / 2.0
+        var distanceSoFar = 0.0
+        segments.forEach { segment ->
+            if (distanceSoFar + segment.length >= targetDistance) {
+                val fraction = ((targetDistance - distanceSoFar) / segment.length).coerceIn(0.0, 1.0)
+                return GraphicLineLabelAnchor(
+                    x = segment.fromX + segment.dx * fraction,
+                    y = segment.fromY + segment.dy * fraction,
+                    normalX = -segment.dy / segment.length,
+                    normalY = segment.dx / segment.length
+                )
+            }
+            distanceSoFar += segment.length
+        }
+        return null
     }
 
     private fun DesktopCourseRouteMapLine.imageSmoothPath(): Path2D.Double =

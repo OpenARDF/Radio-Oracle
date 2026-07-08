@@ -40,8 +40,8 @@ internal object DesktopCourseRouteMapStyle {
     const val GraphicLineStrokePixels = 5f
     const val GraphicFuchsiaDashPaintPixels = 10f
     const val GraphicFuchsiaDashGapPixels = 5f
-    const val GraphicBlackDashPaintPixels = 25f
-    const val GraphicBlackDashGapPixels = 25f
+    const val GraphicBlackDashPaintPixels = 20f
+    const val GraphicBlackDashGapPixels = 10f
     private const val GraphicPolygonArgb = 0x80C8AD7FL
     private const val CourseKmlFuchsiaArgb = 0xFFED72EFL
 
