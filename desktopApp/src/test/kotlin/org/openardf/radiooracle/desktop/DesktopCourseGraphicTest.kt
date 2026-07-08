@@ -46,13 +46,28 @@ class DesktopCourseGraphicTest {
         assertEquals("Sprint Layout 2D Graphic", routeMap.title)
         assertEquals("Magnetic north (90.0° E declination)", routeMap.northOrientationText())
         assertEquals(listOf("Printed Start", "B", "Finish"), routeMap.points.map { it.label })
+        assertEquals(
+            listOf(
+                DesktopCourseRouteMapPointType.Start,
+                DesktopCourseRouteMapPointType.Beacon,
+                DesktopCourseRouteMapPointType.Finish
+            ),
+            routeMap.points.map { it.type }
+        )
         assertFalse(routeMap.points.any { it.label == "Hidden Control" })
         assertFalse(routeMap.points.any { it.label == "Hidden Folder Point" })
-        assertEquals(listOf("Printed Trail", "Black Trail"), routeMap.lineStrings.map { it.label })
-        assertEquals(null, routeMap.lineStrings.first { it.label == "Printed Trail" }.strokeColorArgb)
+        assertEquals(listOf("Printed Trail", "Black Trail", "Thin Black Trail"), routeMap.lineStrings.map { it.label })
+        val printedTrail = routeMap.lineStrings.first { it.label == "Printed Trail" }
+        assertEquals(null, printedTrail.strokeColorArgb)
+        assertTrue(printedTrail.dashed)
         val blackTrail = routeMap.lineStrings.first { it.label == "Black Trail" }
         assertEquals(0xFF000000L, blackTrail.strokeColorArgb)
         assertEquals(10f, blackTrail.strokeWidthPixels)
+        assertFalse(blackTrail.dashed)
+        val thinBlackTrail = routeMap.lineStrings.first { it.label == "Thin Black Trail" }
+        assertEquals(0xFF000000L, thinBlackTrail.strokeColorArgb)
+        assertEquals(3f, thinBlackTrail.strokeWidthPixels)
+        assertTrue(thinBlackTrail.dashed)
         assertEquals(listOf("Parking"), routeMap.polygons.map { it.label })
         assertTrue(routeMap.lineStrings.all { it.points.size >= 2 })
         assertTrue(routeMap.polygons.single().points.size >= 4)
@@ -77,17 +92,19 @@ class DesktopCourseGraphicTest {
         )
 
         assertEquals(3, result.visiblePointCount)
-        assertEquals(2, result.visibleLineStringCount)
+        assertEquals(3, result.visibleLineStringCount)
         assertEquals(1, result.visiblePolygonCount)
         assertEquals(2, result.hiddenObjectCount)
         listOf(result.outputPaths.pngPath, result.outputPaths.jpgPath, result.outputPaths.pdfPath).forEach { output ->
             assertTrue("${output.fileName} should exist", Files.size(output) > 0)
         }
         val pdfText = Files.readString(result.outputPaths.pdfPath, StandardCharsets.ISO_8859_1)
-        assertTrue(pdfText.contains("[32.00 8.00] 0 d"))
+        assertTrue(pdfText.contains("[26.00 14.00] 0 d"))
+        assertTrue(pdfText.contains("[] 0 d"))
         assertTrue(pdfText.contains("0.93 0.45 0.94 RG"))
         assertTrue(pdfText.contains("0.00 0.00 0.00 RG"))
         assertTrue(pdfText.contains("10.00 w"))
+        assertTrue(pdfText.contains("3.00 w"))
         assertTrue(pdfText.contains("/GS1 gs"))
         assertTrue(pdfText.contains("MN"))
         assertTrue(pdfText.contains("Printed Start"))
@@ -102,10 +119,31 @@ class DesktopCourseGraphicTest {
         <?xml version="1.0" encoding="UTF-8"?>
         <kml xmlns="http://www.opengis.net/kml/2.2">
           <Document>
+            <Style id="trianglePointStyle">
+              <IconStyle>
+                <Icon><href>http://maps.google.com/mapfiles/kml/shapes/triangle.png</href></Icon>
+              </IconStyle>
+            </Style>
+            <Style id="donutPointStyle">
+              <IconStyle>
+                <Icon><href>http://maps.google.com/mapfiles/kml/shapes/donut.png</href></Icon>
+              </IconStyle>
+            </Style>
+            <Style id="targetPointStyle">
+              <IconStyle>
+                <Icon><href>http://maps.google.com/mapfiles/kml/shapes/target.png</href></Icon>
+              </IconStyle>
+            </Style>
             <Style id="blackTrailStyle">
               <LineStyle>
                 <color>ff000000</color>
                 <width>10</width>
+              </LineStyle>
+            </Style>
+            <Style id="thinBlackTrailStyle">
+              <LineStyle>
+                <color>ff000000</color>
+                <width>3</width>
               </LineStyle>
             </Style>
             <StyleMap id="blackTrailStyleMap">
@@ -118,6 +156,7 @@ class DesktopCourseGraphicTest {
               <name>Visible</name>
               <Placemark>
                 <name>Start</name>
+                <styleUrl>#trianglePointStyle</styleUrl>
                 <description>Text="Printed Start"; Course object Start; type START</description>
                 <Point><coordinates>-121.0000,45.0000,0</coordinates></Point>
               </Placemark>
@@ -129,11 +168,13 @@ class DesktopCourseGraphicTest {
               </Placemark>
               <Placemark>
                 <name>B</name>
-                <description>Course object B; type BEACON</description>
+                <styleUrl>#donutPointStyle</styleUrl>
+                <description>Course object Spectator; type SPECTATOR</description>
                 <Point><coordinates>-121.0020,45.0020,0</coordinates></Point>
               </Placemark>
               <Placemark>
                 <name>Finish</name>
+                <styleUrl>#targetPointStyle</styleUrl>
                 <description>Course object Finish; type FINISH</description>
                 <Point><coordinates>-121.0030,45.0010,0</coordinates></Point>
               </Placemark>
@@ -146,6 +187,11 @@ class DesktopCourseGraphicTest {
                 <name>Black Trail</name>
                 <styleUrl>#blackTrailStyleMap</styleUrl>
                 <LineString><coordinates>-121.0020,45.0010,0 -121.0030,45.0015,0</coordinates></LineString>
+              </Placemark>
+              <Placemark>
+                <name>Thin Black Trail</name>
+                <styleUrl>#thinBlackTrailStyle</styleUrl>
+                <LineString><coordinates>-121.0015,45.0002,0 -121.0035,45.0007,0</coordinates></LineString>
               </Placemark>
               <Placemark>
                 <name>Parking</name>

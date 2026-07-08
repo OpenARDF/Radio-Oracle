@@ -20477,16 +20477,23 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapLineStr
                 start = Offset(x(from), y(from)),
                 end = Offset(x(to), y(to)),
                 strokeWidth = line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels,
-                pathEffect = PathEffect.dashPathEffect(
-                    floatArrayOf(
-                        DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
-                        DesktopCourseRouteMapStyle.GraphicDashGapPixels
-                    )
-                )
+                pathEffect = line.dashPathEffect()
             )
         }
     }
 }
+
+private fun DesktopCourseRouteMapLine.dashPathEffect(): PathEffect? =
+    if (dashed) {
+        PathEffect.dashPathEffect(
+            floatArrayOf(
+                DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
+                DesktopCourseRouteMapStyle.GraphicDashGapPixels
+            )
+        )
+    } else {
+        null
+    }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapScaleBar(routeMap: DesktopCourseRouteMap) {
     DesktopCourseRouteMapStyle.scaleBar(routeMap.xRangeMeters, size.width.toDouble())?.let { scaleBar ->
@@ -20506,22 +20513,22 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCourseGraphicMa
     when (type) {
         DesktopCourseRouteMapPointType.Start -> {
             val triangle = androidx.compose.ui.graphics.Path().apply {
-                moveTo(center.x, center.y - 9f)
-                lineTo(center.x - 9f, center.y + 9f)
-                lineTo(center.x + 9f, center.y + 9f)
+                moveTo(center.x, center.y - 10f)
+                lineTo(center.x - 10f, center.y + 10f)
+                lineTo(center.x + 10f, center.y + 10f)
                 close()
             }
-            drawPath(triangle, markerColor)
+            drawPath(triangle, markerColor, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
         }
         DesktopCourseRouteMapPointType.Finish -> {
-            drawCircle(markerColor, radius = 10f, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f))
-            drawCircle(markerColor, radius = 4.5f, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f))
+            drawCircle(markerColor, radius = 11f, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f))
+            drawCircle(markerColor, radius = 5f, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f))
         }
-        DesktopCourseRouteMapPointType.Waypoint -> drawCircle(markerColor, radius = 7f, center = center)
+        DesktopCourseRouteMapPointType.Waypoint -> drawCircle(markerColor, radius = 8f, center = center)
         DesktopCourseRouteMapPointType.Control,
         DesktopCourseRouteMapPointType.Beacon,
         DesktopCourseRouteMapPointType.Spectator ->
-            drawCircle(markerColor, radius = 8f, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
+            drawCircle(markerColor, radius = 9f, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
     }
 }
 

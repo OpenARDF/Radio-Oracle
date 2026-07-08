@@ -57,6 +57,7 @@ object DesktopCourseFileReader {
             .parse(ByteArrayInputStream(kmlText.toByteArray()))
         val placemarks = document.getElementsByTagNameNS("*", "Placemark")
         val lineStylesByUrl = document.kmlLineStylesByUrl()
+        val pointSymbolsByUrl = document.kmlPointSymbolsByUrl()
         val controls = mutableListOf<CourseControlPoint>()
         val routes = mutableListOf<CourseRoute>()
         val polygons = mutableListOf<CoursePolygon>()
@@ -85,7 +86,8 @@ object DesktopCourseFileReader {
                         null
                     } else {
                         description.speedFactorHint(name)
-                    }
+                    },
+                    symbol = placemark.pointSymbol(pointSymbolsByUrl)
                 )
                 return@repeat
             }
@@ -244,7 +246,8 @@ data class CourseControlPoint(
     val displayLabel: String = name,
     val isVisible: Boolean = true,
     val siCodeHint: Int? = null,
-    val speedFactorHint: Double? = null
+    val speedFactorHint: Double? = null,
+    val symbol: CoursePointSymbol? = null
 )
 
 data class CourseRoute(
@@ -261,6 +264,13 @@ data class CourseLineStyle(
     val argb: Long?,
     val widthPixels: Double?
 )
+
+enum class CoursePointSymbol {
+    Triangle,
+    Donut,
+    Target,
+    Circle
+}
 
 data class CoursePolygon(
     val name: String,
@@ -360,31 +370,40 @@ private fun org.w3c.dom.Node.childText(tagName: String): String? =
         .firstOrNull { it.localName == tagName || it.nodeName == tagName }
         ?.textContent
 
-private fun org.w3c.dom.Document.kmlLineStylesByUrl(): Map<String, CourseLineStyle> {
-    val directStyles = mutableMapOf<String, CourseLineStyle>()
-    val normalStyleUrlByMapUrl = mutableMapOf<String, String>()
+private fun org.w3c.dom.Document.kmlLineStylesByUrl(): Map<String, CourseLineStyle> =
+    kmlStylesByUrl { style -> style.lineStyleOrNull() }
+
+private fun org.w3c.dom.Document.kmlPointSymbolsByUrl(): Map<String, CoursePointSymbol> =
+    kmlStylesByUrl { style -> style.pointSymbolOrNull() }
+
+private fun <T> org.w3c.dom.Document.kmlStylesByUrl(styleValue: (org.w3c.dom.Node) -> T?): Map<String, T> {
+    val directStyles = mutableMapOf<String, T>()
     documentElement.namedDescendants("Style").forEach { style ->
         val id = style.attributeText("id") ?: return@forEach
-        style.lineStyleOrNull()?.let { lineStyle ->
-            directStyles["#$id"] = lineStyle
+        styleValue(style)?.let { value ->
+            directStyles["#$id"] = value
         }
-    }
-    documentElement.namedDescendants("StyleMap").forEach { styleMap ->
-        val id = styleMap.attributeText("id") ?: return@forEach
-        styleMap.namedDescendants("Pair")
-            .firstOrNull { pair -> pair.childText("key")?.trim() == "normal" }
-            ?.childText("styleUrl")
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.let { styleUrl -> normalStyleUrlByMapUrl["#$id"] = styleUrl }
     }
     return buildMap {
         putAll(directStyles)
-        normalStyleUrlByMapUrl.forEach { (styleMapUrl, styleUrl) ->
+        kmlNormalStyleUrlsByMapUrl().forEach { (styleMapUrl, styleUrl) ->
             directStyles[styleUrl]?.let { put(styleMapUrl, it) }
         }
     }
 }
+
+private fun org.w3c.dom.Document.kmlNormalStyleUrlsByMapUrl(): Map<String, String> =
+    buildMap {
+        documentElement.namedDescendants("StyleMap").forEach { styleMap ->
+            val id = styleMap.attributeText("id") ?: return@forEach
+            styleMap.namedDescendants("Pair")
+                .firstOrNull { pair -> pair.childText("key")?.trim() == "normal" }
+                ?.childText("styleUrl")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { styleUrl -> put("#$id", styleUrl) }
+        }
+    }
 
 private fun org.w3c.dom.Node.lineStyleOrNull(): CourseLineStyle? {
     val lineStyle = namedDescendants("LineStyle").firstOrNull() ?: return null
@@ -392,6 +411,27 @@ private fun org.w3c.dom.Node.lineStyleOrNull(): CourseLineStyle? {
         argb = lineStyle.childText("color")?.trim()?.kmlColorToArgb(),
         widthPixels = lineStyle.childText("width")?.trim()?.toDoubleOrNull()?.finiteCourseValueOrNull()
     )
+}
+
+private fun org.w3c.dom.Node.pointSymbol(pointSymbolsByUrl: Map<String, CoursePointSymbol>): CoursePointSymbol? =
+    pointSymbolOrNull() ?: pointSymbolsByUrl[childText("styleUrl")?.trim()]
+
+private fun org.w3c.dom.Node.pointSymbolOrNull(): CoursePointSymbol? =
+    namedDescendants("IconStyle")
+        .firstOrNull()
+        ?.firstDescendantText("Icon", "href")
+        ?.trim()
+        ?.toCoursePointSymbol()
+
+private fun String.toCoursePointSymbol(): CoursePointSymbol? {
+    val href = lowercase()
+    return when {
+        "triangle" in href -> CoursePointSymbol.Triangle
+        "donut" in href || "doughnut" in href -> CoursePointSymbol.Donut
+        "target" in href -> CoursePointSymbol.Target
+        "placemark_circle" in href || "circle" in href -> CoursePointSymbol.Circle
+        else -> null
+    }
 }
 
 private fun org.w3c.dom.Node.attributeText(name: String): String? =

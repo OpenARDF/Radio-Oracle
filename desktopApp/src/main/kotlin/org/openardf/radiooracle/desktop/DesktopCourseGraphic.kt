@@ -24,7 +24,6 @@
 
 package org.openardf.radiooracle.desktop
 
-import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Font
@@ -162,12 +161,13 @@ object DesktopCourseGraphic {
                     )
                 }
             lineOffset += route.points.size
-            val renderStyle = route.lineStyle?.blackWideRenderStyle()
+            val renderStyle = route.lineStyle?.blackRenderStyle()
             DesktopCourseRouteMapLine(
                 label = route.displayLabel,
                 points = points,
                 strokeColorArgb = renderStyle?.argb,
-                strokeWidthPixels = renderStyle?.widthPixels?.toFloat()
+                strokeWidthPixels = renderStyle?.widthPixels?.toFloat(),
+                dashed = renderStyle?.isSolidLine() != true
             )
         }
         val projectedPolygonPoints = projectedLinePoints.drop(lineOffset)
@@ -262,10 +262,7 @@ object DesktopCourseGraphic {
                 BasicStroke.CAP_BUTT,
                 BasicStroke.JOIN_ROUND,
                 10f,
-                floatArrayOf(
-                    DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
-                    DesktopCourseRouteMapStyle.GraphicDashGapPixels
-                ),
+                line.dashPattern(),
                 0f
             )
             line.points.zipWithNext().forEach { (from, to) ->
@@ -290,25 +287,25 @@ object DesktopCourseGraphic {
         graphics.stroke = BasicStroke(4f)
         when (type) {
             DesktopCourseRouteMapPointType.Start -> {
-                graphics.fillPolygon(
+                graphics.drawPolygon(
                     Polygon(
-                        intArrayOf(centerX, centerX - 11, centerX + 11),
-                        intArrayOf(centerY - 12, centerY + 10, centerY + 10),
+                        intArrayOf(centerX, centerX - 12, centerX + 12),
+                        intArrayOf(centerY - 13, centerY + 11, centerY + 11),
                         3
                     )
                 )
             }
             DesktopCourseRouteMapPointType.Finish -> {
-                graphics.drawOval(centerX - 13, centerY - 13, 26, 26)
-                graphics.drawOval(centerX - 6, centerY - 6, 12, 12)
+                graphics.drawOval(centerX - 14, centerY - 14, 28, 28)
+                graphics.drawOval(centerX - 7, centerY - 7, 14, 14)
             }
             DesktopCourseRouteMapPointType.Waypoint -> {
-                graphics.fillOval(centerX - 9, centerY - 9, 18, 18)
+                graphics.fillOval(centerX - 10, centerY - 10, 20, 20)
             }
             DesktopCourseRouteMapPointType.Control,
             DesktopCourseRouteMapPointType.Beacon,
             DesktopCourseRouteMapPointType.Spectator -> {
-                graphics.drawOval(centerX - 11, centerY - 11, 22, 22)
+                graphics.drawOval(centerX - 12, centerY - 12, 24, 24)
             }
         }
     }
@@ -408,7 +405,7 @@ object DesktopCourseGraphic {
             occupied = listOf(
                 Rectangle(ImageMapLeft + ImageMapWidth - 106, ImageMapTop + 10, 96, 126),
                 Rectangle(ImageMapLeft, ImageHeight - 72, 220, 66)
-            )
+            ) + routeMap.imagePointMarkerBounds()
         )
     }
 
@@ -455,11 +452,8 @@ object DesktopCourseGraphic {
     }
 
     private fun StringBuilder.appendPdfLineStrings(routeMap: DesktopCourseRouteMap) {
-        appendLine(
-            "[${pdfNumber(DesktopCourseRouteMapStyle.GraphicDashPaintPixels.toDouble())} " +
-                "${pdfNumber(DesktopCourseRouteMapStyle.GraphicDashGapPixels.toDouble())}] 0 d"
-        )
         routeMap.lineStrings.forEach { line ->
+            appendPdfDashPattern(line)
             val (red, green, blue) = line.strokeColorArgb
                 ?.let(DesktopCourseRouteMapStyle::pdfRgb)
                 ?: DesktopCourseRouteMapStyle.linePdfRgb()
@@ -485,22 +479,22 @@ object DesktopCourseGraphic {
         appendLine("2 w")
         when (type) {
             DesktopCourseRouteMapPointType.Start -> {
-                appendLine("${pdfNumber(centerX)} ${pdfNumber(centerY + 8.0)} m")
-                appendLine("${pdfNumber(centerX - 8.0)} ${pdfNumber(centerY - 8.0)} l")
-                appendLine("${pdfNumber(centerX + 8.0)} ${pdfNumber(centerY - 8.0)} l")
-                appendLine("h f")
+                appendLine("${pdfNumber(centerX)} ${pdfNumber(centerY + 9.0)} m")
+                appendLine("${pdfNumber(centerX - 9.0)} ${pdfNumber(centerY - 9.0)} l")
+                appendLine("${pdfNumber(centerX + 9.0)} ${pdfNumber(centerY - 9.0)} l")
+                appendLine("h S")
             }
             DesktopCourseRouteMapPointType.Finish -> {
-                appendCircle(centerX, centerY, 9.0, fill = false)
-                appendCircle(centerX, centerY, 4.0, fill = false)
+                appendCircle(centerX, centerY, 10.0, fill = false)
+                appendCircle(centerX, centerY, 4.5, fill = false)
             }
             DesktopCourseRouteMapPointType.Waypoint -> {
-                appendCircle(centerX, centerY, 6.0, fill = true)
+                appendCircle(centerX, centerY, 6.5, fill = true)
             }
             DesktopCourseRouteMapPointType.Control,
             DesktopCourseRouteMapPointType.Beacon,
             DesktopCourseRouteMapPointType.Spectator -> {
-                appendCircle(centerX, centerY, 7.0, fill = false)
+                appendCircle(centerX, centerY, 8.0, fill = false)
             }
         }
     }
@@ -589,7 +583,7 @@ object DesktopCourseGraphic {
             occupied = listOf(
                 Rectangle((PdfMapLeft + PdfMapWidth - 62.0).toInt(), PdfMapBottom.toInt() + 10, 58, 76),
                 Rectangle(PdfMapLeft.toInt(), PdfMapBottom.toInt() + PdfMapHeight.toInt() - 24, 130, 24)
-            )
+            ) + routeMap.pdfPointMarkerBounds()
         )
     }
 
@@ -612,7 +606,7 @@ object DesktopCourseGraphic {
     }
 
     private fun labelCandidates(request: GraphicLabelRequest, bounds: Rectangle): List<GraphicLabelPlacement> {
-        val gap = 8.0
+        val gap = 22.0
         val offsets = listOf(
             gap to -request.height - gap,
             gap to gap,
@@ -733,32 +727,25 @@ object DesktopCourseGraphic {
         )
 
     private fun CourseControlPoint.graphicPointType(): DesktopCourseRouteMapPointType =
-        when {
-            description.hasCourseObjectType("START") || DesktopCoursePointLabelClassifier.isEndpointStartName(name) ->
-                DesktopCourseRouteMapPointType.Start
-            description.hasCourseObjectType("FINISH") || DesktopCoursePointLabelClassifier.isEndpointFinishName(name) ->
-                DesktopCourseRouteMapPointType.Finish
-            description.hasCourseObjectType("BEACON") || DesktopCoursePointLabelClassifier.isBeaconLabel(name) ->
-                DesktopCourseRouteMapPointType.Beacon
-            description.hasCourseObjectType("SPECTATOR") || DesktopCoursePointLabelClassifier.isSpectatorLabel(name) ->
-                DesktopCourseRouteMapPointType.Spectator
-            description.hasCourseObjectType("CONTROL") || ControlRoleLabelRules.foxNumber(name) != null ->
-                DesktopCourseRouteMapPointType.Control
-            else -> DesktopCourseRouteMapPointType.Waypoint
+        when (symbol) {
+            CoursePointSymbol.Triangle -> DesktopCourseRouteMapPointType.Start
+            CoursePointSymbol.Donut -> DesktopCourseRouteMapPointType.Beacon
+            CoursePointSymbol.Target -> DesktopCourseRouteMapPointType.Finish
+            CoursePointSymbol.Circle,
+            null -> DesktopCourseRouteMapPointType.Waypoint
         }
 
-    private fun String?.hasCourseObjectType(type: String): Boolean =
-        this?.contains(Regex("""(?i)\btype\s*(?:=\s*)?${Regex.escape(type)}\b""")) == true
-
-    private fun CourseLineStyle.blackWideRenderStyle(): CourseLineStyle? {
+    private fun CourseLineStyle.blackRenderStyle(): CourseLineStyle? {
         val colorArgb = argb ?: return null
-        val width = widthPixels?.takeIf { it > DesktopCourseRouteMapStyle.GraphicLineStrokePixels } ?: return null
         return if ((colorArgb and 0x00FFFFFFL) == 0L) {
-            copy(widthPixels = width)
+            this
         } else {
             null
         }
     }
+
+    private fun CourseLineStyle.isSolidLine(): Boolean =
+        widthPixels?.let { it > DesktopCourseRouteMapStyle.GraphicLineStrokePixels } == true
 
     private fun DesktopCourseRouteMapLine.midpoint(): DesktopCourseRouteMapLinePoint? =
         points.getOrNull(points.size / 2)
@@ -772,6 +759,39 @@ object DesktopCourseGraphic {
             yFraction = points.map { it.yFraction }.average()
         )
     }
+
+    private fun DesktopCourseRouteMapLine.dashPattern(): FloatArray? =
+        if (dashed) {
+            floatArrayOf(
+                DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
+                DesktopCourseRouteMapStyle.GraphicDashGapPixels
+            )
+        } else {
+            null
+        }
+
+    private fun StringBuilder.appendPdfDashPattern(line: DesktopCourseRouteMapLine) {
+        if (line.dashed) {
+            appendLine(
+                "[${pdfNumber(DesktopCourseRouteMapStyle.GraphicDashPaintPixels.toDouble())} " +
+                    "${pdfNumber(DesktopCourseRouteMapStyle.GraphicDashGapPixels.toDouble())}] 0 d"
+            )
+        } else {
+            appendLine("[] 0 d")
+        }
+    }
+
+    private fun DesktopCourseRouteMap.imagePointMarkerBounds(): List<Rectangle> =
+        points.map { point ->
+            Rectangle(imageX(point) - 20, imageY(point) - 20, 40, 40)
+        }
+
+    private fun DesktopCourseRouteMap.pdfPointMarkerBounds(): List<Rectangle> =
+        points.map { point ->
+            val x = pdfScreenX(point).toInt()
+            val y = pdfScreenY(point).toInt()
+            Rectangle(x - 14, y - 14, 28, 28)
+        }
 
     private fun imageX(point: DesktopCourseRouteMapPoint): Int =
         (ImageMapLeft + point.xFraction.coerceIn(0.0, 1.0) * ImageMapWidth).toInt()
