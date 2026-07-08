@@ -419,6 +419,7 @@ class DesktopSmokeSampleTest {
         assertTrue(exported.startsWith("%PDF-1.4"))
         assertTrue(exported.contains("Desktop Smoke Race"))
         assertTrue(exported.contains("Scheduled Time: Sunday, 31 May 2026 - 10:00"))
+        assertTrue(exported.contains("Time Limit: 120 minutes"))
         assertTrue(exported.contains("Start #"))
         assertTrue(exported.contains("Start Time"))
         assertTrue(exported.contains("00:00:00"))

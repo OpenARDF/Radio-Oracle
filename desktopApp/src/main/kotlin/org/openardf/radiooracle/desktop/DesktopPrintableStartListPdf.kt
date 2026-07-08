@@ -137,6 +137,7 @@ object DesktopPrintableStartListPdf {
         val scheduled = scheduledTimeText(projectFile.raceData.race.startDateTimeIso)
         appendText(Left, Top, 16, title, bold = true)
         appendText(Left, Top - 20.0, 10, "Scheduled Time: $scheduled")
+        appendText(Left, Top - 34.0, 10, timeLimitText(projectFile.raceData.race.timeLimitSeconds))
         appendText(DesktopPdfDocument.LetterWidth - 120.0, Top - 20.0, 9, "Page $pageNumber of $pageCount")
         appendTable(rows)
     }
@@ -228,6 +229,13 @@ object DesktopPrintableStartListPdf {
             LocalDateTime.parse(startDateTimeIso).format(ScheduledTimeFormatter)
         } catch (_: DateTimeParseException) {
             startDateTimeIso.replace('T', ' ')
+        }
+
+    private fun timeLimitText(timeLimitSeconds: Long?): String =
+        if (timeLimitSeconds == null) {
+            "Time Limit: Not set"
+        } else {
+            "Time Limit: ${timeLimitSeconds / 60} minutes"
         }
 
     private fun centeredTextX(cellLeft: Double, cellWidth: Double, text: String, fontSize: Int): Double {
