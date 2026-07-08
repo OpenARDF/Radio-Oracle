@@ -52,6 +52,14 @@ class DesktopCourseGraphicTest {
         assertEquals(listOf("Parking"), routeMap.polygons.map { it.label })
         assertTrue(routeMap.lineStrings.single().points.size >= 2)
         assertTrue(routeMap.polygons.single().points.size >= 4)
+        val allX = routeMap.points.map { it.xFraction } +
+            routeMap.lineStrings.flatMap { line -> line.points.map { it.xFraction } } +
+            routeMap.polygons.flatMap { polygon -> polygon.points.map { it.xFraction } }
+        val allY = routeMap.points.map { it.yFraction } +
+            routeMap.lineStrings.flatMap { line -> line.points.map { it.yFraction } } +
+            routeMap.polygons.flatMap { polygon -> polygon.points.map { it.yFraction } }
+        assertTrue(allX.all { it in 0.05..0.95 })
+        assertTrue(allY.all { it in 0.05..0.95 })
     }
 
     @Test
@@ -73,7 +81,9 @@ class DesktopCourseGraphicTest {
         }
         val pdfText = Files.readString(result.outputPaths.pdfPath, StandardCharsets.ISO_8859_1)
         assertTrue(pdfText.contains("[32.00 8.00] 0 d"))
+        assertTrue(pdfText.contains("0.93 0.45 0.94 RG"))
         assertTrue(pdfText.contains("/GS1 gs"))
+        assertTrue(pdfText.contains("MN"))
         assertTrue(pdfText.contains("Printed Start"))
         assertTrue(pdfText.contains("Printed Trail"))
         assertTrue(pdfText.contains("Parking"))

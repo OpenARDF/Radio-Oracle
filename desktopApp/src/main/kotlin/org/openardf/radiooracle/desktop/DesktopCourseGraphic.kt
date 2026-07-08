@@ -28,11 +28,15 @@ import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Font
+import java.awt.Polygon
+import java.awt.Rectangle
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
+import kotlin.math.max
+import kotlin.math.min
 
 data class DesktopCourseGraphicResult(
     val routeMap: DesktopCourseRouteMap,
@@ -49,6 +53,23 @@ data class DesktopCourseGraphicOutputPaths(
     val pdfPath: Path
 )
 
+private data class GraphicLabelRequest(
+    val label: String,
+    val anchorX: Double,
+    val anchorY: Double,
+    val width: Double,
+    val height: Double,
+    val priority: Int
+)
+
+private data class GraphicLabelPlacement(
+    val label: String,
+    val x: Double,
+    val y: Double,
+    val width: Double,
+    val height: Double
+)
+
 object DesktopCourseGraphic {
     private const val ImageWidth = 1400
     private const val ImageHeight = 1000
@@ -57,6 +78,11 @@ object DesktopCourseGraphic {
     private const val ImageMapWidth = 1260
     private const val ImageMapHeight = 800
     private const val PointRadius = 8
+    private const val GraphicFractionPadding = 0.06
+    private const val PdfMapLeft = 54.0
+    private const val PdfMapBottom = 54.0
+    private const val PdfMapWidth = 684.0
+    private const val PdfMapHeight = 450.0
 
     fun generate(
         path: Path,
@@ -131,8 +157,8 @@ object DesktopCourseGraphic {
                 .take(route.points.size)
                 .map { projectedPoint ->
                     DesktopCourseRouteMapLinePoint(
-                        xFraction = bounds.xFraction(projectedPoint.xMeters),
-                        yFraction = bounds.yFraction(projectedPoint.yMeters)
+                        xFraction = paddedFraction(bounds.xFraction(projectedPoint.xMeters)),
+                        yFraction = paddedFraction(bounds.yFraction(projectedPoint.yMeters))
                     )
                 }
             lineOffset += route.points.size
@@ -146,8 +172,8 @@ object DesktopCourseGraphic {
                 .take(polygon.points.size)
                 .map { projectedPoint ->
                     DesktopCourseRouteMapLinePoint(
-                        xFraction = bounds.xFraction(projectedPoint.xMeters),
-                        yFraction = bounds.yFraction(projectedPoint.yMeters)
+                        xFraction = paddedFraction(bounds.xFraction(projectedPoint.xMeters)),
+                        yFraction = paddedFraction(bounds.yFraction(projectedPoint.yMeters))
                     )
                 }
             polygonOffset += polygon.points.size
@@ -158,8 +184,8 @@ object DesktopCourseGraphic {
             points = projectedObjects.map { projectedPoint ->
                 DesktopCourseRouteMapPoint(
                     label = projectedPoint.source.label,
-                    xFraction = bounds.xFraction(projectedPoint.xMeters),
-                    yFraction = bounds.yFraction(projectedPoint.yMeters),
+                    xFraction = paddedFraction(bounds.xFraction(projectedPoint.xMeters)),
+                    yFraction = paddedFraction(bounds.yFraction(projectedPoint.yMeters)),
                     type = projectedPoint.source.type
                 )
             },
@@ -202,6 +228,8 @@ object DesktopCourseGraphic {
             drawImagePolygons(graphics, routeMap)
             drawImageLineStrings(graphics, routeMap)
             drawImagePoints(graphics, routeMap)
+            drawImageLabels(graphics, routeMap)
+            drawImageMagneticNorthArrow(graphics)
             drawImageScaleBar(graphics, routeMap)
         } finally {
             graphics.dispose()
@@ -215,13 +243,6 @@ object DesktopCourseGraphic {
             val xPoints = polygon.points.map(::imageX).toIntArray()
             val yPoints = polygon.points.map(::imageY).toIntArray()
             graphics.fillPolygon(xPoints, yPoints, polygon.points.size)
-        }
-        graphics.font = Font(Font.SANS_SERIF, Font.PLAIN, 16)
-        graphics.color = Color.BLACK
-        routeMap.polygons.forEach { polygon ->
-            polygon.labelPoint()?.let { point ->
-                graphics.drawString(polygon.label, imageX(point) + 8, imageY(point) - 8)
-            }
         }
     }
 
@@ -243,26 +264,71 @@ object DesktopCourseGraphic {
                 graphics.drawLine(imageX(from), imageY(from), imageX(to), imageY(to))
             }
         }
-        graphics.stroke = BasicStroke(1f)
-        graphics.font = Font(Font.SANS_SERIF, Font.PLAIN, 16)
-        graphics.color = Color.BLACK
-        routeMap.lineStrings.forEach { line ->
-            line.midpoint()?.let { point ->
-                graphics.drawString(line.label, imageX(point) + 8, imageY(point) - 8)
+    }
+
+    private fun drawImagePoints(graphics: java.awt.Graphics2D, routeMap: DesktopCourseRouteMap) {
+        routeMap.points.forEach { point ->
+            drawImageMarkerIcon(graphics, point.type, imageX(point), imageY(point))
+        }
+    }
+
+    private fun drawImageMarkerIcon(
+        graphics: java.awt.Graphics2D,
+        type: DesktopCourseRouteMapPointType,
+        centerX: Int,
+        centerY: Int
+    ) {
+        graphics.color = DesktopCourseRouteMapStyle.markerAwtColor()
+        graphics.stroke = BasicStroke(4f)
+        when (type) {
+            DesktopCourseRouteMapPointType.Start -> {
+                graphics.fillPolygon(
+                    Polygon(
+                        intArrayOf(centerX, centerX - 11, centerX + 11),
+                        intArrayOf(centerY - 12, centerY + 10, centerY + 10),
+                        3
+                    )
+                )
+            }
+            DesktopCourseRouteMapPointType.Finish -> {
+                graphics.drawOval(centerX - 13, centerY - 13, 26, 26)
+                graphics.drawOval(centerX - 6, centerY - 6, 12, 12)
+            }
+            DesktopCourseRouteMapPointType.Waypoint -> {
+                graphics.fillOval(centerX - 9, centerY - 9, 18, 18)
+            }
+            DesktopCourseRouteMapPointType.Control,
+            DesktopCourseRouteMapPointType.Beacon,
+            DesktopCourseRouteMapPointType.Spectator -> {
+                graphics.drawOval(centerX - 11, centerY - 11, 22, 22)
             }
         }
     }
 
-    private fun drawImagePoints(graphics: java.awt.Graphics2D, routeMap: DesktopCourseRouteMap) {
-        graphics.font = Font(Font.SANS_SERIF, Font.BOLD, 18)
-        routeMap.points.forEach { point ->
-            val x = imageX(point)
-            val y = imageY(point)
-            graphics.color = DesktopCourseRouteMapStyle.awtColor(point.type)
-            graphics.fillOval(x - PointRadius, y - PointRadius, PointRadius * 2, PointRadius * 2)
-            graphics.color = Color.BLACK
-            graphics.drawString(point.label, x + 12, y - 10)
+    private fun drawImageLabels(graphics: java.awt.Graphics2D, routeMap: DesktopCourseRouteMap) {
+        graphics.font = Font(Font.SANS_SERIF, Font.PLAIN, 18)
+        graphics.color = Color.BLACK
+        imageLabelPlacements(graphics, routeMap).forEach { placement ->
+            graphics.drawString(placement.label, placement.x.toInt(), (placement.y + placement.height - 4.0).toInt())
         }
+    }
+
+    private fun drawImageMagneticNorthArrow(graphics: java.awt.Graphics2D) {
+        val centerX = ImageMapLeft + ImageMapWidth - 48
+        val tipY = ImageMapTop + 26
+        val tailY = tipY + 68
+        graphics.color = Color.BLACK
+        graphics.stroke = BasicStroke(3f)
+        graphics.drawLine(centerX, tailY, centerX, tipY + 10)
+        graphics.fillPolygon(
+            Polygon(
+                intArrayOf(centerX, centerX - 10, centerX + 10),
+                intArrayOf(tipY, tipY + 20, tipY + 20),
+                3
+            )
+        )
+        graphics.font = Font(Font.SANS_SERIF, Font.BOLD, 18)
+        graphics.drawString("MN", centerX - 14, tailY + 24)
     }
 
     private fun drawImageScaleBar(graphics: java.awt.Graphics2D, routeMap: DesktopCourseRouteMap) {
@@ -278,6 +344,64 @@ object DesktopCourseGraphic {
         graphics.drawLine(right, y - 10, right, y + 10)
         graphics.font = Font(Font.SANS_SERIF, Font.PLAIN, 18)
         graphics.drawString(scaleBar.label, left, y + 32)
+    }
+
+    private fun imageLabelPlacements(
+        graphics: java.awt.Graphics2D,
+        routeMap: DesktopCourseRouteMap
+    ): List<GraphicLabelPlacement> {
+        val metrics = graphics.fontMetrics
+        val labelHeight = metrics.height.toDouble()
+        val requests = buildList {
+            routeMap.points.forEach { point ->
+                add(
+                    GraphicLabelRequest(
+                        label = point.label,
+                        anchorX = imageX(point).toDouble(),
+                        anchorY = imageY(point).toDouble(),
+                        width = metrics.stringWidth(point.label).toDouble(),
+                        height = labelHeight,
+                        priority = 0
+                    )
+                )
+            }
+            routeMap.lineStrings.forEach { line ->
+                line.midpoint()?.let { point ->
+                    add(
+                        GraphicLabelRequest(
+                            label = line.label,
+                            anchorX = imageX(point).toDouble(),
+                            anchorY = imageY(point).toDouble(),
+                            width = metrics.stringWidth(line.label).toDouble(),
+                            height = labelHeight,
+                            priority = 1
+                        )
+                    )
+                }
+            }
+            routeMap.polygons.forEach { polygon ->
+                polygon.labelPoint()?.let { point ->
+                    add(
+                        GraphicLabelRequest(
+                            label = polygon.label,
+                            anchorX = imageX(point).toDouble(),
+                            anchorY = imageY(point).toDouble(),
+                            width = metrics.stringWidth(polygon.label).toDouble(),
+                            height = labelHeight,
+                            priority = 2
+                        )
+                    )
+                }
+            }
+        }
+        return placeLabels(
+            requests = requests,
+            bounds = Rectangle(ImageMapLeft + 6, ImageMapTop + 6, ImageMapWidth - 12, ImageMapHeight - 12),
+            occupied = listOf(
+                Rectangle(ImageMapLeft + ImageMapWidth - 106, ImageMapTop + 10, 96, 126),
+                Rectangle(ImageMapLeft, ImageHeight - 72, 220, 66)
+            )
+        )
     }
 
     private fun writePdf(path: Path, routeMap: DesktopCourseRouteMap) {
@@ -301,6 +425,8 @@ object DesktopCourseGraphic {
             appendPdfPolygons(routeMap)
             appendPdfLineStrings(routeMap)
             appendPdfPoints(routeMap)
+            appendPdfLabels(routeMap)
+            appendPdfMagneticNorthArrow()
             appendPdfScaleBar(routeMap)
         }
 
@@ -318,11 +444,6 @@ object DesktopCourseGraphic {
             appendLine("h f")
         }
         appendLine("Q")
-        routeMap.polygons.forEach { polygon ->
-            polygon.labelPoint()?.let { point ->
-                appendText(pdfX(point) + 5.0, pdfY(point) + 5.0, 8, polygon.label)
-            }
-        }
     }
 
     private fun StringBuilder.appendPdfLineStrings(routeMap: DesktopCourseRouteMap) {
@@ -339,20 +460,59 @@ object DesktopCourseGraphic {
             }
         }
         appendLine("[] 0 d")
-        routeMap.lineStrings.forEach { line ->
-            line.midpoint()?.let { point ->
-                appendText(pdfX(point) + 5.0, pdfY(point) + 5.0, 8, line.label)
-            }
-        }
     }
 
     private fun StringBuilder.appendPdfPoints(routeMap: DesktopCourseRouteMap) {
         routeMap.points.forEach { point ->
-            val (red, green, blue) = DesktopCourseRouteMapStyle.pdfRgb(point.type)
-            appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} rg")
-            appendCircle(pdfX(point), pdfY(point), 4.0)
-            appendText(pdfX(point) + 5.0, pdfY(point) + 5.0, 8, point.label)
+            appendPdfMarkerIcon(point.type, pdfX(point), pdfY(point))
         }
+    }
+
+    private fun StringBuilder.appendPdfMarkerIcon(type: DesktopCourseRouteMapPointType, centerX: Double, centerY: Double) {
+        val (red, green, blue) = DesktopCourseRouteMapStyle.markerPdfRgb()
+        appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} rg")
+        appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} RG")
+        appendLine("2 w")
+        when (type) {
+            DesktopCourseRouteMapPointType.Start -> {
+                appendLine("${pdfNumber(centerX)} ${pdfNumber(centerY + 8.0)} m")
+                appendLine("${pdfNumber(centerX - 8.0)} ${pdfNumber(centerY - 8.0)} l")
+                appendLine("${pdfNumber(centerX + 8.0)} ${pdfNumber(centerY - 8.0)} l")
+                appendLine("h f")
+            }
+            DesktopCourseRouteMapPointType.Finish -> {
+                appendCircle(centerX, centerY, 9.0, fill = false)
+                appendCircle(centerX, centerY, 4.0, fill = false)
+            }
+            DesktopCourseRouteMapPointType.Waypoint -> {
+                appendCircle(centerX, centerY, 6.0, fill = true)
+            }
+            DesktopCourseRouteMapPointType.Control,
+            DesktopCourseRouteMapPointType.Beacon,
+            DesktopCourseRouteMapPointType.Spectator -> {
+                appendCircle(centerX, centerY, 7.0, fill = false)
+            }
+        }
+    }
+
+    private fun StringBuilder.appendPdfLabels(routeMap: DesktopCourseRouteMap) {
+        pdfLabelPlacements(routeMap).forEach { placement ->
+            appendText(placement.x, pdfLabelBaselineY(placement), 8, placement.label)
+        }
+    }
+
+    private fun StringBuilder.appendPdfMagneticNorthArrow() {
+        val centerX = 708.0
+        val tipY = 484.0
+        val tailY = 430.0
+        appendLine("0 0 0 RG")
+        appendLine("2 w")
+        appendLine("${pdfNumber(centerX)} ${pdfNumber(tailY)} m ${pdfNumber(centerX)} ${pdfNumber(tipY - 8.0)} l S")
+        appendLine("${pdfNumber(centerX)} ${pdfNumber(tipY)} m")
+        appendLine("${pdfNumber(centerX - 8.0)} ${pdfNumber(tipY - 16.0)} l")
+        appendLine("${pdfNumber(centerX + 8.0)} ${pdfNumber(tipY - 16.0)} l")
+        appendLine("h f")
+        appendText(centerX - 12.0, tailY - 18.0, 10, "MN")
     }
 
     private fun StringBuilder.appendPdfScaleBar(routeMap: DesktopCourseRouteMap) {
@@ -368,7 +528,141 @@ object DesktopCourseGraphic {
         appendText(left, y - 17.0, 8, scaleBar.label)
     }
 
-    private fun StringBuilder.appendCircle(centerX: Double, centerY: Double, radius: Double) {
+    private fun pdfLabelPlacements(routeMap: DesktopCourseRouteMap): List<GraphicLabelPlacement> {
+        val fontSize = 8.0
+        val labelHeight = 10.0
+        val requests = buildList {
+            routeMap.points.forEach { point ->
+                add(
+                    GraphicLabelRequest(
+                        label = point.label,
+                        anchorX = pdfScreenX(point),
+                        anchorY = pdfScreenY(point),
+                        width = pdfLabelWidth(point.label, fontSize),
+                        height = labelHeight,
+                        priority = 0
+                    )
+                )
+            }
+            routeMap.lineStrings.forEach { line ->
+                line.midpoint()?.let { point ->
+                    add(
+                        GraphicLabelRequest(
+                            label = line.label,
+                            anchorX = pdfScreenX(point),
+                            anchorY = pdfScreenY(point),
+                            width = pdfLabelWidth(line.label, fontSize),
+                            height = labelHeight,
+                            priority = 1
+                        )
+                    )
+                }
+            }
+            routeMap.polygons.forEach { polygon ->
+                polygon.labelPoint()?.let { point ->
+                    add(
+                        GraphicLabelRequest(
+                            label = polygon.label,
+                            anchorX = pdfScreenX(point),
+                            anchorY = pdfScreenY(point),
+                            width = pdfLabelWidth(polygon.label, fontSize),
+                            height = labelHeight,
+                            priority = 2
+                        )
+                    )
+                }
+            }
+        }
+        return placeLabels(
+            requests = requests,
+            bounds = Rectangle(PdfMapLeft.toInt() + 4, PdfMapBottom.toInt() + 4, PdfMapWidth.toInt() - 8, PdfMapHeight.toInt() - 8),
+            occupied = listOf(
+                Rectangle((PdfMapLeft + PdfMapWidth - 62.0).toInt(), PdfMapBottom.toInt() + 10, 58, 76),
+                Rectangle(PdfMapLeft.toInt(), PdfMapBottom.toInt() + PdfMapHeight.toInt() - 24, 130, 24)
+            )
+        )
+    }
+
+    private fun placeLabels(
+        requests: List<GraphicLabelRequest>,
+        bounds: Rectangle,
+        occupied: List<Rectangle> = emptyList()
+    ): List<GraphicLabelPlacement> {
+        val placedRects = occupied.toMutableList()
+        return requests.sortedWith(compareBy<GraphicLabelRequest> { it.priority }.thenBy { it.label }).map { request ->
+            val placement = labelCandidates(request, bounds)
+                .firstOrNull { candidate -> placedRects.none { it.intersects(candidate.toRectangle()) } }
+                ?: gridLabelCandidate(request, bounds, placedRects)
+                ?: labelCandidates(request, bounds).minBy { candidate ->
+                    placedRects.sumOf { it.overlapArea(candidate.toRectangle()) }
+                }
+            placedRects += placement.toRectangle()
+            placement
+        }
+    }
+
+    private fun labelCandidates(request: GraphicLabelRequest, bounds: Rectangle): List<GraphicLabelPlacement> {
+        val gap = 8.0
+        val offsets = listOf(
+            gap to -request.height - gap,
+            gap to gap,
+            -request.width - gap to -request.height - gap,
+            -request.width - gap to gap,
+            -request.width / 2.0 to -request.height - gap,
+            -request.width / 2.0 to gap,
+            gap to -request.height / 2.0,
+            -request.width - gap to -request.height / 2.0
+        )
+        return offsets.map { (dx, dy) ->
+            request.placementAt(request.anchorX + dx, request.anchorY + dy, bounds)
+        }
+    }
+
+    private fun gridLabelCandidate(
+        request: GraphicLabelRequest,
+        bounds: Rectangle,
+        placedRects: List<Rectangle>
+    ): GraphicLabelPlacement? {
+        val maxX = bounds.maxX - request.width
+        val maxY = bounds.maxY - request.height
+        var y = bounds.y.toDouble()
+        while (y <= maxY) {
+            var x = bounds.x.toDouble()
+            while (x <= maxX) {
+                val candidate = GraphicLabelPlacement(request.label, x, y, request.width, request.height)
+                if (placedRects.none { it.intersects(candidate.toRectangle()) }) {
+                    return candidate
+                }
+                x += 8.0
+            }
+            y += 8.0
+        }
+        return null
+    }
+
+    private fun GraphicLabelRequest.placementAt(x: Double, y: Double, bounds: Rectangle): GraphicLabelPlacement =
+        GraphicLabelPlacement(
+            label = label,
+            x = x.coerceIn(bounds.x.toDouble(), max(bounds.x.toDouble(), bounds.maxX - width)),
+            y = y.coerceIn(bounds.y.toDouble(), max(bounds.y.toDouble(), bounds.maxY - height)),
+            width = min(width, bounds.width.toDouble()),
+            height = height
+        )
+
+    private fun GraphicLabelPlacement.toRectangle(): Rectangle =
+        Rectangle(x.toInt(), y.toInt(), width.toInt() + 6, height.toInt() + 4)
+
+    private fun Rectangle.overlapArea(other: Rectangle): Int {
+        val overlapWidth = min(maxX, other.maxX) - max(x.toDouble(), other.x.toDouble())
+        val overlapHeight = min(maxY, other.maxY) - max(y.toDouble(), other.y.toDouble())
+        return if (overlapWidth > 0.0 && overlapHeight > 0.0) {
+            (overlapWidth * overlapHeight).toInt()
+        } else {
+            0
+        }
+    }
+
+    private fun StringBuilder.appendCircle(centerX: Double, centerY: Double, radius: Double, fill: Boolean) {
         val kappa = 0.5522847498
         val control = radius * kappa
         appendLine("${pdfNumber(centerX + radius)} ${pdfNumber(centerY)} m")
@@ -392,7 +686,7 @@ object DesktopCourseGraphic {
                 "${pdfNumber(centerX + radius)} ${pdfNumber(centerY - control)} " +
                 "${pdfNumber(centerX + radius)} ${pdfNumber(centerY)} c"
         )
-        appendLine("f")
+        appendLine(if (fill) "f" else "S")
     }
 
     private fun StringBuilder.appendText(x: Double, y: Double, fontSize: Int, text: String) {
@@ -415,6 +709,9 @@ object DesktopCourseGraphic {
 
     private fun defaultTitle(path: Path): String =
         "${path.fileStem()} 2D Graphic"
+
+    private fun paddedFraction(fraction: Double): Double =
+        GraphicFractionPadding + fraction.coerceIn(0.0, 1.0) * (1.0 - GraphicFractionPadding * 2.0)
 
     private fun Path.fileStem(): String =
         fileName.toString().replace(Regex("""\.[^.]+$"""), "")
@@ -471,17 +768,35 @@ object DesktopCourseGraphic {
     private fun pdfPoint(point: DesktopCourseRouteMapLinePoint): String =
         "${pdfNumber(pdfX(point))} ${pdfNumber(pdfY(point))}"
 
+    private fun pdfLabelWidth(label: String, fontSize: Double): Double =
+        label.length * fontSize * 0.55
+
+    private fun pdfLabelBaselineY(placement: GraphicLabelPlacement): Double =
+        PdfMapBottom + PdfMapHeight - (placement.y - PdfMapBottom) - placement.height + 2.0
+
+    private fun pdfScreenX(point: DesktopCourseRouteMapPoint): Double =
+        PdfMapLeft + point.xFraction.coerceIn(0.0, 1.0) * PdfMapWidth
+
+    private fun pdfScreenY(point: DesktopCourseRouteMapPoint): Double =
+        PdfMapBottom + point.yFraction.coerceIn(0.0, 1.0) * PdfMapHeight
+
+    private fun pdfScreenX(point: DesktopCourseRouteMapLinePoint): Double =
+        PdfMapLeft + point.xFraction.coerceIn(0.0, 1.0) * PdfMapWidth
+
+    private fun pdfScreenY(point: DesktopCourseRouteMapLinePoint): Double =
+        PdfMapBottom + point.yFraction.coerceIn(0.0, 1.0) * PdfMapHeight
+
     private fun pdfX(point: DesktopCourseRouteMapPoint): Double =
-        54.0 + point.xFraction.coerceIn(0.0, 1.0) * 684.0
+        PdfMapLeft + point.xFraction.coerceIn(0.0, 1.0) * PdfMapWidth
 
     private fun pdfY(point: DesktopCourseRouteMapPoint): Double =
-        54.0 + (1.0 - point.yFraction.coerceIn(0.0, 1.0)) * 450.0
+        PdfMapBottom + (1.0 - point.yFraction.coerceIn(0.0, 1.0)) * PdfMapHeight
 
     private fun pdfX(point: DesktopCourseRouteMapLinePoint): Double =
-        54.0 + point.xFraction.coerceIn(0.0, 1.0) * 684.0
+        PdfMapLeft + point.xFraction.coerceIn(0.0, 1.0) * PdfMapWidth
 
     private fun pdfY(point: DesktopCourseRouteMapLinePoint): Double =
-        54.0 + (1.0 - point.yFraction.coerceIn(0.0, 1.0)) * 450.0
+        PdfMapBottom + (1.0 - point.yFraction.coerceIn(0.0, 1.0)) * PdfMapHeight
 
     private fun pdfNumber(value: Double): String =
         DesktopPdfDocument.number(value)

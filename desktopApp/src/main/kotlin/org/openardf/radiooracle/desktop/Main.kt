@@ -20452,8 +20452,13 @@ private fun CourseRouteMapCanvas(routeMap: DesktopCourseRouteMap) {
             drawLine(DesktopPalette.Primary, Offset(xPoint(from), yPoint(from)), Offset(xPoint(to), yPoint(to)), strokeWidth = 2f)
         }
         routeMap.points.forEach { point ->
-            drawCircle(routeMapPointColor(point.type), radius = 5f, center = Offset(xPoint(point), yPoint(point)))
+            if (routeMap.routeLabels.isEmpty()) {
+                drawCourseGraphicMarker(point.type, Offset(xPoint(point), yPoint(point)))
+            } else {
+                drawCircle(routeMapPointColor(point.type), radius = 5f, center = Offset(xPoint(point), yPoint(point)))
+            }
         }
+        drawRouteMapMagneticNorthArrow()
         drawRouteMapScaleBar(routeMap)
     }
 }
@@ -20466,7 +20471,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapLineStr
     routeMap.lineStrings.forEach { line ->
         line.points.zipWithNext().forEach { (from, to) ->
             drawLine(
-                color = DesktopCourseRouteMapStyle.composeColor(DesktopCourseRouteMapPointType.Waypoint),
+                color = DesktopCourseRouteMapStyle.lineComposeColor(),
                 start = Offset(x(from), y(from)),
                 end = Offset(x(to), y(to)),
                 strokeWidth = DesktopCourseRouteMapStyle.GraphicLineStrokePixels,
@@ -20489,6 +20494,47 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapScaleBa
         drawLine(DesktopPalette.Black, Offset(0f, y - 6f), Offset(0f, y + 6f), strokeWidth = 1.5f)
         drawLine(DesktopPalette.Black, Offset(right, y - 6f), Offset(right, y + 6f), strokeWidth = 1.5f)
     }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCourseGraphicMarker(
+    type: DesktopCourseRouteMapPointType,
+    center: Offset
+) {
+    val markerColor = DesktopCourseRouteMapStyle.markerComposeColor()
+    when (type) {
+        DesktopCourseRouteMapPointType.Start -> {
+            val triangle = androidx.compose.ui.graphics.Path().apply {
+                moveTo(center.x, center.y - 9f)
+                lineTo(center.x - 9f, center.y + 9f)
+                lineTo(center.x + 9f, center.y + 9f)
+                close()
+            }
+            drawPath(triangle, markerColor)
+        }
+        DesktopCourseRouteMapPointType.Finish -> {
+            drawCircle(markerColor, radius = 10f, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f))
+            drawCircle(markerColor, radius = 4.5f, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(2.5f))
+        }
+        DesktopCourseRouteMapPointType.Waypoint -> drawCircle(markerColor, radius = 7f, center = center)
+        DesktopCourseRouteMapPointType.Control,
+        DesktopCourseRouteMapPointType.Beacon,
+        DesktopCourseRouteMapPointType.Spectator ->
+            drawCircle(markerColor, radius = 8f, center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapMagneticNorthArrow() {
+    val centerX = size.width - 26f
+    val tipY = 14f
+    val tailY = 58f
+    drawLine(DesktopPalette.Black, Offset(centerX, tailY), Offset(centerX, tipY + 8f), strokeWidth = 2f)
+    val arrowHead = androidx.compose.ui.graphics.Path().apply {
+        moveTo(centerX, tipY)
+        lineTo(centerX - 7f, tipY + 14f)
+        lineTo(centerX + 7f, tipY + 14f)
+        close()
+    }
+    drawPath(arrowHead, DesktopPalette.Black)
 }
 
 @Composable

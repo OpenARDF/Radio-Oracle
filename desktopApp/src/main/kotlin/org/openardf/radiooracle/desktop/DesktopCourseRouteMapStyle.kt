@@ -41,6 +41,7 @@ internal object DesktopCourseRouteMapStyle {
     const val GraphicDashPaintPixels = 32f
     const val GraphicDashGapPixels = 8f
     private const val GraphicPolygonArgb = 0x80C8AD7FL
+    private const val CourseKmlFuchsiaArgb = 0xFFED72EFL
 
     fun composeColor(type: DesktopCourseRouteMapPointType): Color =
         Color(argb(type))
@@ -49,7 +50,7 @@ internal object DesktopCourseRouteMapStyle {
         java.awt.Color(argb(type).toInt(), true)
 
     fun lineAwtColor(): java.awt.Color =
-        awtColor(DesktopCourseRouteMapPointType.Waypoint)
+        java.awt.Color(CourseKmlFuchsiaArgb.toInt(), true)
 
     fun pdfRgb(type: DesktopCourseRouteMapPointType): Triple<Double, Double, Double> {
         val argb = argb(type)
@@ -61,7 +62,19 @@ internal object DesktopCourseRouteMapStyle {
     }
 
     fun linePdfRgb(): Triple<Double, Double, Double> =
-        pdfRgb(DesktopCourseRouteMapPointType.Waypoint)
+        Triple(237.0 / 255.0, 114.0 / 255.0, 239.0 / 255.0)
+
+    fun lineComposeColor(): Color =
+        Color(CourseKmlFuchsiaArgb)
+
+    fun markerComposeColor(): Color =
+        Color(CourseKmlFuchsiaArgb)
+
+    fun markerAwtColor(): java.awt.Color =
+        java.awt.Color(CourseKmlFuchsiaArgb.toInt(), true)
+
+    fun markerPdfRgb(): Triple<Double, Double, Double> =
+        linePdfRgb()
 
     fun polygonComposeColor(): Color =
         Color(GraphicPolygonArgb)
