@@ -30,6 +30,10 @@ import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.time.DurationFormatter
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.util.Locale
 
 /** Printable PDF export for start crews who need a stable paper start list. */
 object DesktopPrintableStartListPdf {
@@ -39,6 +43,7 @@ object DesktopPrintableStartListPdf {
     private const val Bottom = 54.0
     private const val HeaderHeight = 22.0
     private const val RowHeight = 20.0
+    private val ScheduledTimeFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy - HH:mm", Locale.US)
     private val CenteredColumns = setOf(0, 1)
 
     private val Columns = listOf(
@@ -129,9 +134,9 @@ object DesktopPrintableStartListPdf {
         pageCount: Int
     ): String = buildString {
         val title = projectFile.raceData.race.name.ifBlank { "Untitled Race" }
-        val scheduled = projectFile.raceData.race.startDateTimeIso.replace('T', ' ')
+        val scheduled = scheduledTimeText(projectFile.raceData.race.startDateTimeIso)
         appendText(Left, Top, 16, title, bold = true)
-        appendText(Left, Top - 20.0, 10, "Scheduled: $scheduled")
+        appendText(Left, Top - 20.0, 10, "Scheduled Time: $scheduled")
         appendText(DesktopPdfDocument.LetterWidth - 120.0, Top - 20.0, 9, "Page $pageNumber of $pageCount")
         appendTable(rows)
     }
@@ -217,6 +222,13 @@ object DesktopPrintableStartListPdf {
             text.take(maxChars - 3).trimEnd() + "..."
         }
     }
+
+    private fun scheduledTimeText(startDateTimeIso: String): String =
+        try {
+            LocalDateTime.parse(startDateTimeIso).format(ScheduledTimeFormatter)
+        } catch (_: DateTimeParseException) {
+            startDateTimeIso.replace('T', ' ')
+        }
 
     private fun centeredTextX(cellLeft: Double, cellWidth: Double, text: String, fontSize: Int): Double {
         val estimatedTextWidth = text.length * fontSize * 0.52
