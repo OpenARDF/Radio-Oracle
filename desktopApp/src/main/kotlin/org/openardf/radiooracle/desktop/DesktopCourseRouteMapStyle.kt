@@ -38,8 +38,10 @@ internal data class DesktopCourseRouteMapScaleBar(
 
 internal object DesktopCourseRouteMapStyle {
     const val GraphicLineStrokePixels = 5f
-    const val GraphicDashPaintPixels = 26f
-    const val GraphicDashGapPixels = 14f
+    const val GraphicFuchsiaDashPaintPixels = 60f
+    const val GraphicFuchsiaDashGapPixels = 30f
+    const val GraphicBlackDashPaintPixels = 130f
+    const val GraphicBlackDashGapPixels = 70f
     private const val GraphicPolygonArgb = 0x80C8AD7FL
     private const val CourseKmlFuchsiaArgb = 0xFFED72EFL
 

@@ -606,7 +606,7 @@ object DesktopCourseGraphic {
     }
 
     private fun labelCandidates(request: GraphicLabelRequest, bounds: Rectangle): List<GraphicLabelPlacement> {
-        val gap = 22.0
+        val gap = 16.0
         val offsets = listOf(
             gap to -request.height - gap,
             gap to gap,
@@ -762,35 +762,46 @@ object DesktopCourseGraphic {
 
     private fun DesktopCourseRouteMapLine.dashPattern(): FloatArray? =
         if (dashed) {
-            floatArrayOf(
-                DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
-                DesktopCourseRouteMapStyle.GraphicDashGapPixels
-            )
+            val (paintPixels, gapPixels) = dashPatternPixels()
+            floatArrayOf(paintPixels, gapPixels)
         } else {
             null
         }
 
+    private fun DesktopCourseRouteMapLine.dashPatternPixels(): Pair<Float, Float> =
+        if (isBlackStroke()) {
+            DesktopCourseRouteMapStyle.GraphicBlackDashPaintPixels to
+                DesktopCourseRouteMapStyle.GraphicBlackDashGapPixels
+        } else {
+            DesktopCourseRouteMapStyle.GraphicFuchsiaDashPaintPixels to
+                DesktopCourseRouteMapStyle.GraphicFuchsiaDashGapPixels
+        }
+
     private fun StringBuilder.appendPdfDashPattern(line: DesktopCourseRouteMapLine) {
         if (line.dashed) {
+            val (paintPixels, gapPixels) = line.dashPatternPixels()
             appendLine(
-                "[${pdfNumber(DesktopCourseRouteMapStyle.GraphicDashPaintPixels.toDouble())} " +
-                    "${pdfNumber(DesktopCourseRouteMapStyle.GraphicDashGapPixels.toDouble())}] 0 d"
+                "[${pdfNumber(paintPixels.toDouble())} " +
+                    "${pdfNumber(gapPixels.toDouble())}] 0 d"
             )
         } else {
             appendLine("[] 0 d")
         }
     }
 
+    private fun DesktopCourseRouteMapLine.isBlackStroke(): Boolean =
+        strokeColorArgb?.let { (it and 0x00FFFFFFL) == 0L } == true
+
     private fun DesktopCourseRouteMap.imagePointMarkerBounds(): List<Rectangle> =
         points.map { point ->
-            Rectangle(imageX(point) - 20, imageY(point) - 20, 40, 40)
+            Rectangle(imageX(point) - 16, imageY(point) - 16, 32, 32)
         }
 
     private fun DesktopCourseRouteMap.pdfPointMarkerBounds(): List<Rectangle> =
         points.map { point ->
             val x = pdfScreenX(point).toInt()
             val y = pdfScreenY(point).toInt()
-            Rectangle(x - 14, y - 14, 28, 28)
+            Rectangle(x - 11, y - 11, 22, 22)
         }
 
     private fun imageX(point: DesktopCourseRouteMapPoint): Int =

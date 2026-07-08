@@ -20485,14 +20485,21 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapLineStr
 
 private fun DesktopCourseRouteMapLine.dashPathEffect(): PathEffect? =
     if (dashed) {
+        val (paintPixels, gapPixels) = dashPatternPixels()
         PathEffect.dashPathEffect(
-            floatArrayOf(
-                DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
-                DesktopCourseRouteMapStyle.GraphicDashGapPixels
-            )
+            floatArrayOf(paintPixels, gapPixels)
         )
     } else {
         null
+    }
+
+private fun DesktopCourseRouteMapLine.dashPatternPixels(): Pair<Float, Float> =
+    if (strokeColorArgb?.let { (it and 0x00FFFFFFL) == 0L } == true) {
+        DesktopCourseRouteMapStyle.GraphicBlackDashPaintPixels to
+            DesktopCourseRouteMapStyle.GraphicBlackDashGapPixels
+    } else {
+        DesktopCourseRouteMapStyle.GraphicFuchsiaDashPaintPixels to
+            DesktopCourseRouteMapStyle.GraphicFuchsiaDashGapPixels
     }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapScaleBar(routeMap: DesktopCourseRouteMap) {

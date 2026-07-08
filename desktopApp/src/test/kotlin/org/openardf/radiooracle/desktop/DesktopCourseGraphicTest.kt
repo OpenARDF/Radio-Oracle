@@ -99,7 +99,8 @@ class DesktopCourseGraphicTest {
             assertTrue("${output.fileName} should exist", Files.size(output) > 0)
         }
         val pdfText = Files.readString(result.outputPaths.pdfPath, StandardCharsets.ISO_8859_1)
-        assertTrue(pdfText.contains("[26.00 14.00] 0 d"))
+        assertTrue(pdfText.contains("[60.00 30.00] 0 d"))
+        assertTrue(pdfText.contains("[130.00 70.00] 0 d"))
         assertTrue(pdfText.contains("[] 0 d"))
         assertTrue(pdfText.contains("0.93 0.45 0.94 RG"))
         assertTrue(pdfText.contains("0.00 0.00 0.00 RG"))
