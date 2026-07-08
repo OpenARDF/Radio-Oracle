@@ -39,6 +39,7 @@ object DesktopPrintableStartListPdf {
     private const val Bottom = 54.0
     private const val HeaderHeight = 22.0
     private const val RowHeight = 20.0
+    private val CenteredColumns = setOf(0, 1)
 
     private val Columns = listOf(
         PdfColumn("Start #", 52.0),
@@ -146,8 +147,9 @@ object DesktopPrintableStartListPdf {
 
         // Column boundaries are drawn for every row so blank Bib/SI/category cells remain visible.
         var x = Left
-        Columns.forEach { column ->
-            appendText(x + 3.0, TableTop - 14.0, 8, fitText(column.title, column.width, 8), bold = true)
+        Columns.forEachIndexed { index, column ->
+            val text = fitText(column.title, column.width, 8)
+            appendText(textXForColumn(index, x, column.width, text, 8), TableTop - 14.0, 8, text, bold = true)
             appendLine("${pdfNumber(x)} ${pdfNumber(headerBottom)} m ${pdfNumber(x)} ${pdfNumber(TableTop)} l S")
             x += column.width
         }
@@ -180,12 +182,7 @@ object DesktopPrintableStartListPdf {
         var x = Left
         Columns.zip(values).forEachIndexed { index, (column, value) ->
             val text = fitText(value, column.width, 9)
-            val textX = if (index == 0) {
-                centeredTextX(x, column.width, text, 9)
-            } else {
-                x + 3.0
-            }
-            appendText(textX, y, 9, text)
+            appendText(textXForColumn(index, x, column.width, text, 9), y, 9, text)
             x += column.width
         }
     }
@@ -225,6 +222,13 @@ object DesktopPrintableStartListPdf {
         val estimatedTextWidth = text.length * fontSize * 0.52
         return cellLeft + ((cellWidth - estimatedTextWidth) / 2.0).coerceAtLeast(3.0)
     }
+
+    private fun textXForColumn(index: Int, cellLeft: Double, cellWidth: Double, text: String, fontSize: Int): Double =
+        if (index in CenteredColumns) {
+            centeredTextX(cellLeft, cellWidth, text, fontSize)
+        } else {
+            cellLeft + 3.0
+        }
 
     private fun pdfNumber(value: Double): String =
         DesktopPdfDocument.number(value)
