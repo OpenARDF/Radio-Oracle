@@ -102,6 +102,7 @@ enum class DesktopSection(val label: String) {
     SportIdentTimeSync("Time Sync"),
     KmlMoveCourse("Move Course"),
     KmlCreateCourse("Create Course"),
+    Kml2dGraphic("2D Graphic"),
     KmlRouteGenerator("Route Generator"),
     ControlsImportExport("Control Files"),
     ControlsRouteKmlImport("Import Controls KML/KMZ"),

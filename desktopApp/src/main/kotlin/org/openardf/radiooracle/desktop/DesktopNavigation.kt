@@ -644,6 +644,13 @@ object DesktopNavigation {
                                     requiresEventFile = false
                                 ),
                                 item(
+                                    "setup.tools.course-tools.2d-graphic",
+                                    "2D Graphic",
+                                    workflow,
+                                    DesktopSection.Kml2dGraphic,
+                                    requiresEventFile = false
+                                ),
+                                item(
                                     "setup.tools.course-tools.route-generator",
                                     "Route Generator",
                                     workflow,
@@ -1423,6 +1430,8 @@ object DesktopNavigation {
             "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
         "setup.tools.course-tools.create-course" to
             "Use Create Course to write a starter KML for a Classic, Sprint, or Foxoring course near a supplied latitude and longitude.",
+        "setup.tools.course-tools.2d-graphic" to
+            "Use 2D Graphic to turn visible KML/KMZ points and LineStrings into magnetic-north oriented PNG, JPG, and PDF course graphics.",
         "setup.tools.course-tools.route-generator" to
             "Use Route Generator to read a KML/KMZ course-points file, identify or choose Classic, Foxoring, or Sprint, and list ideal route combinations with category matches.",
         "race.readouts" to

@@ -57,6 +57,7 @@ class DesktopPaletteTest {
                 "Time Sync",
                 "Move Course",
                 "Create Course",
+                "2D Graphic",
                 "Route Generator",
                 "Control Files",
                 "Import Controls KML/KMZ",

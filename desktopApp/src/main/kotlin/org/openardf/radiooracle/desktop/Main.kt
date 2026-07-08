@@ -92,6 +92,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -12847,15 +12848,7 @@ private fun SectionWorkspace(
                 onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor
             )
         }
-        if (section == DesktopSection.KmlMoveCourse) {
-            KmlMoveCoursePanel()
-        }
-        if (section == DesktopSection.KmlCreateCourse) {
-            KmlCreateCoursePanel(projectFile)
-        }
-        if (section == DesktopSection.KmlRouteGenerator) {
-            KmlRouteGeneratorPanel()
-        }
+        CourseToolsSectionWorkspaceContent(section, projectFile)
         if (section == DesktopSection.SportIdentTools) {
             SportIdentToolsPanel()
         }
@@ -17978,6 +17971,17 @@ private fun String.sprintFastNumber(): Int? {
 }
 
 @Composable
+private fun CourseToolsSectionWorkspaceContent(section: DesktopSection, projectFile: EventProjectFile?) {
+    when (section) {
+        DesktopSection.KmlMoveCourse -> KmlMoveCoursePanel()
+        DesktopSection.KmlCreateCourse -> KmlCreateCoursePanel(projectFile)
+        DesktopSection.Kml2dGraphic -> Kml2dGraphicPanel()
+        DesktopSection.KmlRouteGenerator -> KmlRouteGeneratorPanel()
+        else -> Unit
+    }
+}
+
+@Composable
 private fun KmlMoveCoursePanel() {
     var selectedPath by remember { mutableStateOf<Path?>(null) }
     var latitudeDraft by remember { mutableStateOf("") }
@@ -18215,6 +18219,101 @@ private fun KmlCreateCoursePanel(projectFile: EventProjectFile?) {
                 fontSize = 13.sp
             )
         }
+    }
+}
+
+@Composable
+private fun Kml2dGraphicPanel() {
+    var selectedPath by remember { mutableStateOf<Path?>(null) }
+    var result by remember { mutableStateOf<DesktopCourseGraphicResult?>(null) }
+    var statusText by remember { mutableStateOf<String?>(null) }
+    var isGenerating by remember { mutableStateOf(false) }
+    val generationScope = rememberCoroutineScope()
+    val title = "2D Graphic"
+
+    fun chooseFile() {
+        if (isGenerating) return
+        DesktopFileDialogs.chooseKmlToolsFile()?.let { path ->
+            selectedPath = path
+            result = null
+            statusText = null
+            isGenerating = true
+            generationScope.launch {
+                try {
+                    delay(100)
+                    val generated = withContext(Dispatchers.Default) {
+                        DesktopCourseGraphic.generate(path)
+                    }
+                    result = generated
+                    val folderStatus = openKmlToolsOutputFolder(generated.outputPaths.pngPath).orEmpty()
+                    statusText = "Created ${generated.outputPaths.pngPath.fileName}, " +
+                        "${generated.outputPaths.jpgPath.fileName}, and ${generated.outputPaths.pdfPath.fileName}; " +
+                        "drew ${generated.visiblePointCount} visible points, ${generated.visibleLineStringCount} visible LineStrings, " +
+                        "and ${generated.visiblePolygonCount} visible Polygons; " +
+                        "ignored ${generated.hiddenObjectCount} hidden objects.$folderStatus"
+                } catch (error: Throwable) {
+                    result = null
+                    statusText = "$title failed: ${error.message ?: error::class.simpleName}"
+                } finally {
+                    isGenerating = false
+                }
+            }
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = title,
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Choose a KML/KMZ layout file. Radio-Oracle writes PNG, JPG, and PDF graphics beside the input file, ignores hidden objects, and orients the depiction to magnetic north.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = ::chooseFile,
+                enabled = !isGenerating
+            ) {
+                ButtonLabel("Choose KML/KMZ...")
+            }
+            Text(
+                text = selectedPath?.fileName?.toString() ?: "No file selected",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp
+            )
+        }
+        statusText?.let { text ->
+            Text(
+                text = text,
+                color = if (text.startsWith("$title failed")) DesktopPalette.Error else DesktopPalette.Disconnected,
+                fontSize = 13.sp
+            )
+        }
+        result?.routeMap?.let { routeMap ->
+            CourseAnalysisRouteMap(
+                routeMap = routeMap,
+                mapWidth = 620.dp,
+                mapHeight = 420.dp,
+                showWaypointLabels = true,
+                showLineStringLabels = true
+            )
+        }
+    }
+    if (isGenerating) {
+        IndeterminateProgressDialog(
+            title = "Generating 2D Graphic",
+            message = "Reading visible KML/KMZ points and LineStrings, rotating to magnetic north, and writing PNG, JPG, and PDF outputs."
+        )
     }
 }
 
@@ -20290,9 +20389,13 @@ private fun CourseAnalysisRouteMaps(routeMaps: List<DesktopCourseRouteMap>) {
 }
 
 @Composable
-private fun CourseAnalysisRouteMap(routeMap: DesktopCourseRouteMap) {
-    val mapWidth = 300.dp
-    val mapHeight = 190.dp
+private fun CourseAnalysisRouteMap(
+    routeMap: DesktopCourseRouteMap,
+    mapWidth: Dp = 300.dp,
+    mapHeight: Dp = 190.dp,
+    showWaypointLabels: Boolean = false,
+    showLineStringLabels: Boolean = false
+) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             text = routeMap.title,
@@ -20312,59 +20415,140 @@ private fun CourseAnalysisRouteMap(routeMap: DesktopCourseRouteMap) {
                 .border(1.dp, DesktopPalette.LightGrey)
                 .padding(8.dp)
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val byLabel = routeMap.points.associateBy { it.label }
-                fun x(point: DesktopCourseRouteMapPoint): Float =
-                    (point.xFraction.coerceIn(0.0, 1.0) * size.width).toFloat()
-                fun y(point: DesktopCourseRouteMapPoint): Float =
-                    (point.yFraction.coerceIn(0.0, 1.0) * size.height).toFloat()
-                val routeLinePoints = routeMap.routePointIndexes
-                    .mapNotNull { routeMap.points.getOrNull(it) }
-                    .takeIf { it.size >= 2 }
-                    ?: routeMap.routeLabels.mapNotNull { byLabel[it] }
-                routeLinePoints.zipWithNext().forEach { (from, to) ->
-                    drawLine(
-                        color = DesktopPalette.Primary,
-                        start = Offset(x(from), y(from)),
-                        end = Offset(x(to), y(to)),
-                        strokeWidth = 2f
-                    )
-                }
-                routeMap.points.forEach { point ->
-                    drawCircle(
-                        color = routeMapPointColor(point.type),
-                        radius = 5f,
-                        center = Offset(x(point), y(point))
-                    )
-                }
-            }
-            routeMap.points.forEach { point ->
-                if (point.type == DesktopCourseRouteMapPointType.Waypoint) {
-                    return@forEach
-                }
-                Text(
-                    text = point.label,
-                    color = DesktopPalette.Black,
-                    fontSize = 11.sp,
-                    modifier = Modifier.offset(
-                        x = (point.xFraction.coerceIn(0.0, 1.0) * 250.0 + 8.0).dp,
-                        y = (point.yFraction.coerceIn(0.0, 1.0) * 150.0 + 8.0).dp
-                    )
-                )
-            }
+            CourseRouteMapCanvas(routeMap)
+            CourseRouteMapLabels(routeMap, mapWidth, mapHeight, showWaypointLabels, showLineStringLabels)
         }
     }
 }
 
-private fun routeMapPointColor(type: DesktopCourseRouteMapPointType): Color =
-    when (type) {
-        DesktopCourseRouteMapPointType.Start -> DesktopPalette.Connected
-        DesktopCourseRouteMapPointType.Finish -> DesktopPalette.Error
-        DesktopCourseRouteMapPointType.Control -> DesktopPalette.Primary
-        DesktopCourseRouteMapPointType.Beacon -> DesktopPalette.Warning
-        DesktopCourseRouteMapPointType.Spectator -> DesktopPalette.Disconnected
-        DesktopCourseRouteMapPointType.Waypoint -> DesktopPalette.SeriesNavigation
+@Composable
+private fun CourseRouteMapCanvas(routeMap: DesktopCourseRouteMap) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val byLabel = routeMap.points.associateBy { it.label }
+        fun xPoint(point: DesktopCourseRouteMapPoint): Float =
+            (point.xFraction.coerceIn(0.0, 1.0) * size.width).toFloat()
+        fun yPoint(point: DesktopCourseRouteMapPoint): Float =
+            (point.yFraction.coerceIn(0.0, 1.0) * size.height).toFloat()
+        fun xLine(point: DesktopCourseRouteMapLinePoint): Float =
+            (point.xFraction.coerceIn(0.0, 1.0) * size.width).toFloat()
+        fun yLine(point: DesktopCourseRouteMapLinePoint): Float =
+            (point.yFraction.coerceIn(0.0, 1.0) * size.height).toFloat()
+        routeMap.polygons.forEach { polygon ->
+            val path = androidx.compose.ui.graphics.Path().apply {
+                polygon.points.firstOrNull()?.let { first ->
+                    moveTo(xLine(first), yLine(first))
+                    polygon.points.drop(1).forEach { lineTo(xLine(it), yLine(it)) }
+                    close()
+                }
+            }
+            drawPath(path, DesktopCourseRouteMapStyle.polygonComposeColor())
+        }
+        drawRouteMapLineStrings(routeMap, ::xLine, ::yLine)
+        val routeLinePoints = routeMap.routePointIndexes
+            .mapNotNull { routeMap.points.getOrNull(it) }
+            .takeIf { it.size >= 2 }
+            ?: routeMap.routeLabels.mapNotNull { byLabel[it] }
+        routeLinePoints.zipWithNext().forEach { (from, to) ->
+            drawLine(DesktopPalette.Primary, Offset(xPoint(from), yPoint(from)), Offset(xPoint(to), yPoint(to)), strokeWidth = 2f)
+        }
+        routeMap.points.forEach { point ->
+            drawCircle(routeMapPointColor(point.type), radius = 5f, center = Offset(xPoint(point), yPoint(point)))
+        }
+        drawRouteMapScaleBar(routeMap)
     }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapLineStrings(
+    routeMap: DesktopCourseRouteMap,
+    x: (DesktopCourseRouteMapLinePoint) -> Float,
+    y: (DesktopCourseRouteMapLinePoint) -> Float
+) {
+    routeMap.lineStrings.forEach { line ->
+        line.points.zipWithNext().forEach { (from, to) ->
+            drawLine(
+                color = DesktopCourseRouteMapStyle.composeColor(DesktopCourseRouteMapPointType.Waypoint),
+                start = Offset(x(from), y(from)),
+                end = Offset(x(to), y(to)),
+                strokeWidth = DesktopCourseRouteMapStyle.GraphicLineStrokePixels,
+                pathEffect = PathEffect.dashPathEffect(
+                    floatArrayOf(
+                        DesktopCourseRouteMapStyle.GraphicDashPaintPixels,
+                        DesktopCourseRouteMapStyle.GraphicDashGapPixels
+                    )
+                )
+            )
+        }
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapScaleBar(routeMap: DesktopCourseRouteMap) {
+    DesktopCourseRouteMapStyle.scaleBar(routeMap.xRangeMeters, size.width.toDouble())?.let { scaleBar ->
+        val y = size.height - 12f
+        val right = scaleBar.drawingLength.toFloat()
+        drawLine(DesktopPalette.Black, Offset(0f, y), Offset(right, y), strokeWidth = 3f)
+        drawLine(DesktopPalette.Black, Offset(0f, y - 6f), Offset(0f, y + 6f), strokeWidth = 1.5f)
+        drawLine(DesktopPalette.Black, Offset(right, y - 6f), Offset(right, y + 6f), strokeWidth = 1.5f)
+    }
+}
+
+@Composable
+private fun CourseRouteMapLabels(
+    routeMap: DesktopCourseRouteMap,
+    mapWidth: Dp,
+    mapHeight: Dp,
+    showWaypointLabels: Boolean,
+    showLineStringLabels: Boolean
+) {
+    routeMap.polygons.forEach { polygon ->
+        polygonLabelPoint(polygon)?.let { point ->
+            CourseRouteMapTextLabel(polygon.label, point.xFraction, point.yFraction, mapWidth, mapHeight)
+        }
+    }
+    routeMap.points.forEach { point ->
+        if (showWaypointLabels || point.type != DesktopCourseRouteMapPointType.Waypoint) {
+            CourseRouteMapTextLabel(point.label, point.xFraction, point.yFraction, mapWidth, mapHeight)
+        }
+    }
+    if (showLineStringLabels) {
+        routeMap.lineStrings.forEach { line ->
+            line.points.getOrNull(line.points.size / 2)?.let { point ->
+                CourseRouteMapTextLabel(line.label, point.xFraction, point.yFraction, mapWidth, mapHeight)
+            }
+        }
+    }
+    DesktopCourseRouteMapStyle.scaleBar(routeMap.xRangeMeters, mapWidth.value.toDouble())?.let { scaleBar ->
+        Text(
+            text = scaleBar.label,
+            color = DesktopPalette.Black,
+            fontSize = 11.sp,
+            modifier = Modifier.offset(x = 8.dp, y = (mapHeight.value - 16.0).dp)
+        )
+    }
+}
+
+@Composable
+private fun CourseRouteMapTextLabel(label: String, xFraction: Double, yFraction: Double, mapWidth: Dp, mapHeight: Dp) {
+    Text(
+        text = label,
+        color = DesktopPalette.Black,
+        fontSize = 11.sp,
+        modifier = Modifier.offset(
+            x = (xFraction.coerceIn(0.0, 1.0) * (mapWidth.value - 50.0) + 8.0).dp,
+            y = (yFraction.coerceIn(0.0, 1.0) * (mapHeight.value - 40.0) + 8.0).dp
+        )
+    )
+}
+
+private fun polygonLabelPoint(polygon: DesktopCourseRouteMapPolygon): DesktopCourseRouteMapLinePoint? {
+    val points = polygon.points.takeIf { it.isNotEmpty() } ?: return null
+    return DesktopCourseRouteMapLinePoint(
+        xFraction = points.map { it.xFraction }.average(),
+        yFraction = points.map { it.yFraction }.average()
+    )
+}
+
+private fun routeMapPointColor(type: DesktopCourseRouteMapPointType): Color =
+    DesktopCourseRouteMapStyle.composeColor(type)
 
 @Composable
 private fun CourseAnalysisSharedMetricRows(metrics: List<DesktopCourseGoodnessMetric>) {

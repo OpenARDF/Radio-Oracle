@@ -1093,6 +1093,7 @@ class DesktopNavigationTest {
                 "Course Analyzer",
                 "Move Course",
                 "Create Course",
+                "2D Graphic",
                 "Route Generator"
             ),
             courseTools.children.map { it.label }
@@ -1134,6 +1135,8 @@ class DesktopNavigationTest {
         assertFalse(courseTools.children.first { it.label == "Move Course" }.requiresEventFile)
         assertEquals(DesktopSection.KmlCreateCourse, courseTools.children.first { it.label == "Create Course" }.section)
         assertFalse(courseTools.children.first { it.label == "Create Course" }.requiresEventFile)
+        assertEquals(DesktopSection.Kml2dGraphic, courseTools.children.first { it.label == "2D Graphic" }.section)
+        assertFalse(courseTools.children.first { it.label == "2D Graphic" }.requiresEventFile)
         assertEquals(DesktopSection.KmlRouteGenerator, courseTools.children.first { it.label == "Route Generator" }.section)
         assertFalse(courseTools.children.first { it.label == "Route Generator" }.requiresEventFile)
         val sportIdentTools = tools.children.first { it.label == "SPORTident" }

@@ -35,13 +35,14 @@ object DesktopPdfDocument {
     fun bytes(
         pageContents: List<String>,
         pageWidth: Double = LetterWidth,
-        pageHeight: Double = LetterHeight
+        pageHeight: Double = LetterHeight,
+        extraResourceEntries: String = ""
     ): ByteArray {
         val safePageContents = pageContents.ifEmpty { listOf("") }
         val objects = mutableListOf<String>()
         objects += "<< /Type /Catalog /Pages 2 0 R >>"
         objects += "<< /Type /Pages /Kids ${safePageContents.indices.joinToString(separator = " ", prefix = "[", postfix = "]") { "${4 + it * 2} 0 R" }} /Count ${safePageContents.size} >>"
-        objects += "<< /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >>"
+        objects += "<< /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> $extraResourceEntries >>"
         safePageContents.forEachIndexed { index, content ->
             val pageObjectId = 4 + index * 2
             val contentObjectId = pageObjectId + 1

@@ -46,10 +46,8 @@ import org.openardf.radiooracle.shared.event.toDisplayLabel
 import java.time.LocalDateTime
 import java.util.Locale
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 data class DesktopCourseAnalysisSummary(
     val eventName: String,
@@ -170,6 +168,10 @@ data class DesktopCourseRouteMap(
     val points: List<DesktopCourseRouteMapPoint>,
     val routeLabels: List<String>,
     val routePointIndexes: List<Int> = emptyList(),
+    val polygons: List<DesktopCourseRouteMapPolygon> = emptyList(),
+    val lineStrings: List<DesktopCourseRouteMapLine> = emptyList(),
+    val xRangeMeters: Double? = null,
+    val yRangeMeters: Double? = null,
     val magneticDeclinationDegrees: Double? = null,
     val magneticDeclinationUsesExpiredModel: Boolean = false
 )
@@ -179,6 +181,21 @@ data class DesktopCourseRouteMapPoint(
     val xFraction: Double,
     val yFraction: Double,
     val type: DesktopCourseRouteMapPointType
+)
+
+data class DesktopCourseRouteMapLine(
+    val label: String,
+    val points: List<DesktopCourseRouteMapLinePoint>
+)
+
+data class DesktopCourseRouteMapLinePoint(
+    val xFraction: Double,
+    val yFraction: Double
+)
+
+data class DesktopCourseRouteMapPolygon(
+    val label: String,
+    val points: List<DesktopCourseRouteMapLinePoint>
 )
 
 data class DesktopCourseKmlExportFolder(
@@ -3068,11 +3085,11 @@ object DesktopCourseAnalyzer {
             .distinctBy { it.control.id }
             .distinctBy { controlPoint -> controlPoint.point?.coordinateKey() ?: controlPoint.control.id }
         val labeledPoints = buildList {
-            start?.let { add(RouteMapSourcePoint("S", it, DesktopCourseRouteMapPointType.Start)) }
+            start?.let { add(DesktopCourseRouteMapSourcePoint("S", it, DesktopCourseRouteMapPointType.Start)) }
             controlsToDisplay.forEach { controlPoint ->
                 val point = controlPoint.point ?: return@forEach
                 add(
-                    RouteMapSourcePoint(
+                    DesktopCourseRouteMapSourcePoint(
                         labelFor(controlPoint),
                         point,
                         controlPoint.control.routeMapType()
@@ -3080,9 +3097,15 @@ object DesktopCourseAnalyzer {
                 )
             }
             waypoints.forEach { waypoint ->
-                add(RouteMapSourcePoint(waypoint.label, waypoint.toGeoPoint(), DesktopCourseRouteMapPointType.Waypoint))
+                add(
+                    DesktopCourseRouteMapSourcePoint(
+                        waypoint.label,
+                        waypoint.toGeoPoint(),
+                        DesktopCourseRouteMapPointType.Waypoint
+                    )
+                )
             }
-            finish?.let { add(RouteMapSourcePoint("F", it, DesktopCourseRouteMapPointType.Finish)) }
+            finish?.let { add(DesktopCourseRouteMapSourcePoint("F", it, DesktopCourseRouteMapPointType.Finish)) }
         }
         val routeIntermediateSources = routeIntermediateSources(
             routePoints = routePoints,
@@ -3103,9 +3126,9 @@ object DesktopCourseAnalyzer {
             }
         }
         val routeSources = buildList {
-            start?.let { add(RouteMapSourcePoint("S", it, DesktopCourseRouteMapPointType.Start)) }
+            start?.let { add(DesktopCourseRouteMapSourcePoint("S", it, DesktopCourseRouteMapPointType.Start)) }
             addAll(routeIntermediateSources)
-            finish?.let { add(RouteMapSourcePoint("F", it, DesktopCourseRouteMapPointType.Finish)) }
+            finish?.let { add(DesktopCourseRouteMapSourcePoint("F", it, DesktopCourseRouteMapPointType.Finish)) }
         }
         val routePointIndexes = routeSources.mapNotNull { routeSource ->
             labeledPoints.indexOfFirst { labeledPoint ->
@@ -3117,25 +3140,22 @@ object DesktopCourseAnalyzer {
         if (labeledPoints.size < 2) {
             return null
         }
-        val projectedPoints = projectedRouteMapPoints(labeledPoints, magneticDeclinationDegrees)
-        val minX = projectedPoints.minOf { it.xMeters }
-        val maxX = projectedPoints.maxOf { it.xMeters }
-        val minY = projectedPoints.minOf { it.yMeters }
-        val maxY = projectedPoints.maxOf { it.yMeters }
-        val xRange = max(0.001, maxX - minX)
-        val yRange = max(0.001, maxY - minY)
+        val projectedPoints = DesktopCourseRouteMapProjection.project(labeledPoints, magneticDeclinationDegrees)
+        val bounds = DesktopCourseRouteMapProjection.bounds(projectedPoints)
         return DesktopCourseRouteMap(
             title = title,
             points = projectedPoints.map { projected ->
                 DesktopCourseRouteMapPoint(
                     label = projected.source.label,
-                    xFraction = (projected.xMeters - minX) / xRange,
-                    yFraction = (maxY - projected.yMeters) / yRange,
+                    xFraction = bounds.xFraction(projected.xMeters),
+                    yFraction = bounds.yFraction(projected.yMeters),
                     type = projected.source.type
                 )
             },
             routeLabels = routeLabels,
             routePointIndexes = routePointIndexes,
+            xRangeMeters = bounds.xRange,
+            yRangeMeters = bounds.yRange,
             magneticDeclinationDegrees = magneticDeclinationDegrees,
             magneticDeclinationUsesExpiredModel = magneticDeclinationUsesExpiredModel
         )
@@ -3164,39 +3184,21 @@ object DesktopCourseAnalyzer {
         )
     }
 
-    private fun projectedRouteMapPoints(
-        sourcePoints: List<RouteMapSourcePoint>,
-        magneticDeclinationDegrees: Double?
-    ): List<ProjectedRouteMapPoint> {
-        val centerLatitude = sourcePoints.map { it.point.latitude }.average()
-        val centerLongitude = sourcePoints.map { it.point.longitude }.average()
-        val latitudeMetersPerDegree = 111_320.0
-        val longitudeMetersPerDegree = latitudeMetersPerDegree * max(0.000001, cos(Math.toRadians(centerLatitude)))
-        val angleRadians = Math.toRadians(magneticDeclinationDegrees ?: 0.0)
-        val cosAngle = cos(angleRadians)
-        val sinAngle = sin(angleRadians)
-        return sourcePoints.map { source ->
-            val eastMeters = (source.point.longitude - centerLongitude) * longitudeMetersPerDegree
-            val northMeters = (source.point.latitude - centerLatitude) * latitudeMetersPerDegree
-            ProjectedRouteMapPoint(
-                source = source,
-                xMeters = eastMeters * cosAngle - northMeters * sinAngle,
-                yMeters = eastMeters * sinAngle + northMeters * cosAngle
-            )
-        }
-    }
-
     private fun routeIntermediateSources(
         routePoints: List<CourseGeoPoint>,
         routeControls: List<ControlAnalysisPoint>,
         waypoints: List<ProtectedCourseObjectPoint>,
         labelFor: (ControlAnalysisPoint) -> String
-    ): List<RouteMapSourcePoint> {
+    ): List<DesktopCourseRouteMapSourcePoint> {
         val sources = routeControls.mapNotNull { controlPoint ->
             val point = controlPoint.point ?: return@mapNotNull null
-            RouteMapSourcePoint(labelFor(controlPoint), point, controlPoint.control.routeMapType())
+            DesktopCourseRouteMapSourcePoint(labelFor(controlPoint), point, controlPoint.control.routeMapType())
         } + waypoints.map { waypoint ->
-            RouteMapSourcePoint(waypoint.label, waypoint.toGeoPoint(), DesktopCourseRouteMapPointType.Waypoint)
+            DesktopCourseRouteMapSourcePoint(
+                waypoint.label,
+                waypoint.toGeoPoint(),
+                DesktopCourseRouteMapPointType.Waypoint
+            )
         }
         if (routePoints.isEmpty()) {
             return sources

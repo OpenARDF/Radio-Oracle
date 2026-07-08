@@ -58,21 +58,27 @@ object DesktopCourseFileReader {
         val placemarks = document.getElementsByTagNameNS("*", "Placemark")
         val controls = mutableListOf<CourseControlPoint>()
         val routes = mutableListOf<CourseRoute>()
+        val polygons = mutableListOf<CoursePolygon>()
         repeat(placemarks.length) { index ->
             val placemark = placemarks.item(index)
             val name = placemark.childText("name")?.trim().orEmpty()
             if (name.isBlank()) {
                 return@repeat
             }
+            val description = placemark.childText("description")
+            val displayLabel = description.printTextLabel() ?: name
+            val isVisible = !placemark.isHiddenByVisibility()
             val pointCoordinates = placemark
                 .firstDescendantText("Point", "coordinates")
                 ?.let(::parseCoordinates)
                 ?.firstOrNull()
             if (pointCoordinates != null) {
-                val description = placemark.childText("description")
                 controls += CourseControlPoint(
                     name = name,
                     point = pointCoordinates,
+                    description = description,
+                    displayLabel = displayLabel,
+                    isVisible = isVisible,
                     siCodeHint = description.siCodeHint(),
                     speedFactorHint = if (DesktopCoursePointLabelClassifier.isEndpointFinishName(name)) {
                         null
@@ -87,19 +93,34 @@ object DesktopCourseFileReader {
                 ?.let(::parseCoordinates)
                 .orEmpty()
             if (lineCoordinates.size >= 2 && !lineCoordinates.isLikelyCircularLineString()) {
-                val description = placemark.childText("description")
                 routes += CourseRoute(
                     name = name,
                     points = lineCoordinates,
                     speedFactorHint = description.speedFactorHint(name),
-                    description = description
+                    description = description,
+                    displayLabel = displayLabel,
+                    isVisible = isVisible
+                )
+                return@repeat
+            }
+            val polygonCoordinates = placemark
+                .firstDescendantText("LinearRing", "coordinates")
+                ?.let(::parseCoordinates)
+                .orEmpty()
+            if (polygonCoordinates.size >= 3) {
+                polygons += CoursePolygon(
+                    name = name,
+                    points = polygonCoordinates,
+                    description = description,
+                    displayLabel = displayLabel,
+                    isVisible = isVisible
                 )
             }
         }
         require(controls.isNotEmpty()) {
             "KML/KMZ file did not contain named control point placemarks."
         }
-        return DesktopCourseKmlData(controls = controls, routes = routes)
+        return DesktopCourseKmlData(controls = controls, routes = routes, polygons = polygons)
     }
 
     private fun parseGpx(gpxText: String): DesktopCourseKmlData {
@@ -210,12 +231,16 @@ object DesktopCourseFileReader {
 
 data class DesktopCourseKmlData(
     val controls: List<CourseControlPoint>,
-    val routes: List<CourseRoute>
+    val routes: List<CourseRoute>,
+    val polygons: List<CoursePolygon> = emptyList()
 )
 
 data class CourseControlPoint(
     val name: String,
     val point: CourseGeoPoint,
+    val description: String? = null,
+    val displayLabel: String = name,
+    val isVisible: Boolean = true,
     val siCodeHint: Int? = null,
     val speedFactorHint: Double? = null
 )
@@ -224,7 +249,17 @@ data class CourseRoute(
     val name: String,
     val points: List<CourseGeoPoint>,
     val speedFactorHint: Double? = null,
-    val description: String? = null
+    val description: String? = null,
+    val displayLabel: String = name,
+    val isVisible: Boolean = true
+)
+
+data class CoursePolygon(
+    val name: String,
+    val points: List<CourseGeoPoint>,
+    val description: String? = null,
+    val displayLabel: String = name,
+    val isVisible: Boolean = true
 )
 
 data class CourseGeoPoint(
@@ -296,6 +331,16 @@ private fun String?.speedFactorHint(placemarkName: String): Double? {
     return value
 }
 
+private fun String?.printTextLabel(): String? {
+    val text = this ?: return null
+    return Regex("(?i)(?:^|[\\s;,<])Text\\s*=\\s*\"([^\"]+)\"")
+        .find(text)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+}
+
 private fun String.normalizedCourseFileName(): String =
     trim().lowercase().replace(Regex("\\s+"), " ")
 
@@ -306,6 +351,15 @@ private fun org.w3c.dom.Node.childText(tagName: String): String? =
     childNodes.asSequence()
         .firstOrNull { it.localName == tagName || it.nodeName == tagName }
         ?.textContent
+
+private fun org.w3c.dom.Node.isHiddenByVisibility(): Boolean =
+    generateSequence(this) { node ->
+        node.parentNode?.takeUnless { parent ->
+            parent.nodeType == org.w3c.dom.Node.DOCUMENT_NODE
+        }
+    }.any { node ->
+        node.childText("visibility")?.trim() == "0"
+    }
 
 private fun org.w3c.dom.Node.firstDescendantText(parentTag: String, childTag: String): String? =
     descendants()
