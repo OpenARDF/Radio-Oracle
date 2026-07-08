@@ -106,6 +106,7 @@ enum class DesktopNavAction {
     ExportStartsByCategoryCsv,
     ExportStartsByMinuteCsv,
     ExportRobisStartListCsv,
+    ExportPrintableStartListPdf,
     ExportReadoutsCsv,
     ExportResultsCsv,
     ExportArdfEventResultsCsv,
@@ -574,6 +575,12 @@ object DesktopNavigation {
                                     "Export ROBIS Start List CSV...",
                                     workflow,
                                     DesktopNavAction.ExportRobisStartListCsv
+                                ),
+                                action(
+                                    "setup.start-list.export-printable-pdf",
+                                    "Printable PDF...",
+                                    workflow,
+                                    DesktopNavAction.ExportPrintableStartListPdf
                                 ),
                                 action(
                                     "setup.start-list.export-iof",
@@ -1390,6 +1397,8 @@ object DesktopNavigation {
             "Use Export Starts by Minute CSV to write a minute-by-minute start-board view.",
         "setup.start-list.export-robis" to
             "Use Export ROBIS Start List CSV to generate a start-list file for ROBIS workflows.",
+        "setup.start-list.export-printable-pdf" to
+            "Use Printable PDF to write a paper-friendly start list for start crews and check-in tables.",
         "setup.start-list.export-iof" to
             "Use Export IOF Start List XML to write an IOF XML start-list file.",
         "setup.tools" to

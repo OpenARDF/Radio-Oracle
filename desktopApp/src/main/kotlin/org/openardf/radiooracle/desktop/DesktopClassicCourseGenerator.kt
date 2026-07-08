@@ -1243,31 +1243,7 @@ object DesktopClassicCourseGenerator {
     private fun pdfBytes(result: ClassicCourseGeneratorResult): ByteArray {
         val lines = pdfLines(result)
         val pages = lines.chunked(42).ifEmpty { listOf(listOf(PdfLine("", PdfColor.Body, 12))) }
-        val objects = mutableListOf<String>()
-        objects += "<< /Type /Catalog /Pages 2 0 R >>"
-        val pageObjectIds = pages.indices.map { 3 + it * 2 }
-        objects += "<< /Type /Pages /Kids ${pageObjectIds.joinToString(" ", prefix = "[", postfix = "]") { "$it 0 R" }} /Count ${pages.size} >>"
-        pages.forEachIndexed { index, pageLines ->
-            val pageId = pageObjectIds[index]
-            val contentId = pageId + 1
-            objects += "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> /Contents $contentId 0 R >>"
-            val content = pdfPageContent(pageLines)
-            objects += "<< /Length ${content.toByteArray(StandardCharsets.UTF_8).size} >>\nstream\n$content\nendstream"
-        }
-        val output = StringBuilder("%PDF-1.4\n")
-        val offsets = mutableListOf(0)
-        objects.forEachIndexed { index, obj ->
-            offsets += output.length
-            output.append("${index + 1} 0 obj\n$obj\nendobj\n")
-        }
-        val xrefOffset = output.length
-        output.append("xref\n0 ${objects.size + 1}\n")
-        output.append("0000000000 65535 f \n")
-        offsets.drop(1).forEach { offset ->
-            output.append(offset.toString().padStart(10, '0')).append(" 00000 n \n")
-        }
-        output.append("trailer\n<< /Size ${objects.size + 1} /Root 1 0 R >>\nstartxref\n$xrefOffset\n%%EOF\n")
-        return output.toString().toByteArray(StandardCharsets.UTF_8)
+        return DesktopPdfDocument.bytes(pages.map(::pdfPageContent))
     }
 
     private fun kmlText(result: ClassicCourseGeneratorResult): String {

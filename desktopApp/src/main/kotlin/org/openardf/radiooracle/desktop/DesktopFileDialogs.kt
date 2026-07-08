@@ -380,6 +380,13 @@ object DesktopFileDialogs {
             defaultFileName = defaultFileName
         ) { DesktopProjectFilePaths.withPdfExtension(it) }
 
+    fun chooseExportPrintableStartListPdf(defaultFileName: String? = null): Path? =
+        chooseSaveFile(
+            title = "Export Printable Start List PDF",
+            extension = DesktopProjectFilePaths.PDF_EXTENSION,
+            defaultFileName = defaultFileName
+        ) { DesktopProjectFilePaths.withPdfExtension(it) }
+
     fun chooseExportClassicCourseGeneratorPdf(defaultFileName: String? = null): Path? =
         chooseExportCourseGeneratorPdf(
             title = "Export Classic Route Generator PDF",

@@ -84,6 +84,10 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, EventCsvExports.robisStartList(projectFile.raceData))
     }
 
+    fun exportPrintableStartListPdf(path: Path, projectFile: EventProjectFile) {
+        DesktopPrintableStartListPdf.exportPdf(path, projectFile)
+    }
+
     fun exportReadoutsCsv(path: Path, projectFile: EventProjectFile) {
         writeText(path, EventCsvExports.readouts(projectFile.raceData))
     }

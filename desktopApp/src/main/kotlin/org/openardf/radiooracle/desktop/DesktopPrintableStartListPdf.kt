@@ -1,0 +1,235 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2025 Pavel Kolský
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package org.openardf.radiooracle.desktop
+
+import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.time.DurationFormatter
+import java.nio.file.Files
+import java.nio.file.Path
+
+/** Printable PDF export for start crews who need a stable paper start list. */
+object DesktopPrintableStartListPdf {
+    private const val Left = 54.0
+    private const val Top = 750.0
+    private const val TableTop = 704.0
+    private const val Bottom = 54.0
+    private const val HeaderHeight = 22.0
+    private const val RowHeight = 20.0
+
+    private val Columns = listOf(
+        PdfColumn("Start Number", 52.0),
+        PdfColumn("Start Time", 62.0),
+        PdfColumn("Competitor's full name", 172.0),
+        PdfColumn("Bib#", 44.0),
+        PdfColumn("Age/Gender category", 104.0),
+        PdfColumn("SI Card number", 70.0)
+    )
+
+    fun defaultFileName(projectFile: EventProjectFile): String =
+        DesktopProjectFilePaths.defaultPdfFileName(projectFile.raceData.race.name, "printable start list")
+
+    fun exportPdf(path: Path, projectFile: EventProjectFile) {
+        path.parent?.let { Files.createDirectories(it) }
+        Files.write(path, pdfBytes(projectFile))
+    }
+
+    internal fun pdfBytes(projectFile: EventProjectFile): ByteArray {
+        val rows = printableRows(projectFile.raceData)
+        val rowsPerPage = ((TableTop - Bottom - HeaderHeight) / RowHeight).toInt().coerceAtLeast(1)
+        val pages = rows.chunked(rowsPerPage).ifEmpty { listOf(emptyList()) }
+        val pageContents = pages.mapIndexed { index, pageRows ->
+            pageContent(
+                projectFile = projectFile,
+                rows = pageRows,
+                pageNumber = index + 1,
+                pageCount = pages.size
+            )
+        }
+        return pdfDocument(pageContents)
+    }
+
+    private fun printableRows(raceData: EventRaceData): List<PrintableStartListRow> {
+        val categoryNamesById = raceData.categories.associate { it.category.id to it.category.name }
+        val sortedRows = raceData.competitorData
+            .sortedWith(
+                compareBy<EventCompetitorData>(
+                    { it.competitorCategory.competitor.drawnStartTimeSeconds == null },
+                    { it.competitorCategory.competitor.drawnStartTimeSeconds ?: Long.MAX_VALUE },
+                    { categoryName(it, categoryNamesById) },
+                    { it.competitorCategory.competitor.fullName() }
+                )
+            )
+
+        var previousStartSeconds: Long? = null
+        var startSlotNumber = 0
+        val firstStartSeconds = sortedRows
+            .mapNotNull { it.competitorCategory.competitor.drawnStartTimeSeconds }
+            .minOrNull()
+        return sortedRows.map { data ->
+            val competitor = data.competitorCategory.competitor
+            val startSeconds = competitor.drawnStartTimeSeconds
+            val startNumberText = if (startSeconds == null) {
+                ""
+            } else {
+                if (previousStartSeconds != startSeconds) {
+                    startSlotNumber += 1
+                    previousStartSeconds = startSeconds
+                }
+                startSlotNumber.toString()
+            }
+            PrintableStartListRow(
+                startNumberText = startNumberText,
+                startTimeText = startSeconds?.let {
+                    // The header carries the scheduled race start; printed rows use start-list-relative time.
+                    DurationFormatter.secondsToFormattedString(it - (firstStartSeconds ?: it), useMinutes = false)
+                }.orEmpty(),
+                competitorName = competitor.fullName(),
+                bibNumber = competitor.bibNumber,
+                categoryName = categoryName(data, categoryNamesById),
+                siNumberText = competitor.siNumber?.toString().orEmpty(),
+                shaded = startSlotNumber > 0 && startSlotNumber % 2 == 0 && startSeconds != null
+            )
+        }
+    }
+
+    private fun categoryName(data: EventCompetitorData, categoryNamesById: Map<String, String>): String =
+        data.competitorCategory.category?.name
+            ?: data.competitorCategory.competitor.categoryId?.let { categoryNamesById[it] }
+            ?: ""
+
+    private fun pageContent(
+        projectFile: EventProjectFile,
+        rows: List<PrintableStartListRow>,
+        pageNumber: Int,
+        pageCount: Int
+    ): String = buildString {
+        val title = projectFile.raceData.race.name.ifBlank { "Untitled Race" }
+        val scheduled = projectFile.raceData.race.startDateTimeIso.replace('T', ' ')
+        appendText(Left, Top, 16, title, bold = true)
+        appendText(Left, Top - 20.0, 10, "Scheduled: $scheduled")
+        appendText(DesktopPdfDocument.LetterWidth - 120.0, Top - 20.0, 9, "Page $pageNumber of $pageCount")
+        appendTable(rows)
+    }
+
+    private fun StringBuilder.appendTable(rows: List<PrintableStartListRow>) {
+        val tableWidth = Columns.sumOf { it.width }
+        val headerBottom = TableTop - HeaderHeight
+        appendLine("0.88 0.88 0.88 rg")
+        appendLine("${pdfNumber(Left)} ${pdfNumber(headerBottom)} ${pdfNumber(tableWidth)} ${pdfNumber(HeaderHeight)} re f")
+        appendLine("0.25 0.25 0.25 RG")
+        appendLine("0.8 w")
+        appendLine("${pdfNumber(Left)} ${pdfNumber(headerBottom)} ${pdfNumber(tableWidth)} ${pdfNumber(HeaderHeight)} re S")
+
+        // Column boundaries are drawn for every row so blank Bib/SI/category cells remain visible.
+        var x = Left
+        Columns.forEach { column ->
+            appendText(x + 3.0, TableTop - 14.0, 8, fitText(column.title, column.width, 8), bold = true)
+            appendLine("${pdfNumber(x)} ${pdfNumber(headerBottom)} m ${pdfNumber(x)} ${pdfNumber(TableTop)} l S")
+            x += column.width
+        }
+        appendLine("${pdfNumber(Left + tableWidth)} ${pdfNumber(headerBottom)} m ${pdfNumber(Left + tableWidth)} ${pdfNumber(TableTop)} l S")
+
+        rows.forEachIndexed { index, row ->
+            val rowTop = headerBottom - index * RowHeight
+            val rowBottom = rowTop - RowHeight
+            if (row.shaded) {
+                appendLine("0.96 0.96 0.96 rg")
+                appendLine("${pdfNumber(Left)} ${pdfNumber(rowBottom)} ${pdfNumber(tableWidth)} ${pdfNumber(RowHeight)} re f")
+            }
+            appendLine("0.75 0.75 0.75 RG")
+            appendLine("0.4 w")
+            appendLine("${pdfNumber(Left)} ${pdfNumber(rowBottom)} m ${pdfNumber(Left + tableWidth)} ${pdfNumber(rowBottom)} l S")
+            appendRowText(row, rowTop - 13.0)
+            appendColumnLines(rowBottom, rowTop)
+        }
+    }
+
+    private fun StringBuilder.appendRowText(row: PrintableStartListRow, y: Double) {
+        val values = listOf(
+            row.startNumberText,
+            row.startTimeText,
+            row.competitorName,
+            row.bibNumber,
+            row.categoryName,
+            row.siNumberText
+        )
+        var x = Left
+        Columns.zip(values).forEach { (column, value) ->
+            appendText(x + 3.0, y, 9, fitText(value, column.width, 9))
+            x += column.width
+        }
+    }
+
+    private fun StringBuilder.appendColumnLines(bottom: Double, top: Double) {
+        var x = Left
+        appendLine("0.85 0.85 0.85 RG")
+        Columns.forEach { column ->
+            appendLine("${pdfNumber(x)} ${pdfNumber(bottom)} m ${pdfNumber(x)} ${pdfNumber(top)} l S")
+            x += column.width
+        }
+        appendLine("${pdfNumber(x)} ${pdfNumber(bottom)} m ${pdfNumber(x)} ${pdfNumber(top)} l S")
+    }
+
+    private fun StringBuilder.appendText(x: Double, y: Double, fontSize: Int, text: String, bold: Boolean = false) {
+        appendLine("BT")
+        appendLine("${if (bold) "/F2" else "/F1"} $fontSize Tf")
+        appendLine("0 0 0 rg")
+        appendLine("1 0 0 1 ${pdfNumber(x)} ${pdfNumber(y)} Tm")
+        appendLine("(${DesktopExportPrimitives.pdfText(text)}) Tj")
+        appendLine("ET")
+    }
+
+    private fun pdfDocument(pageContents: List<String>): ByteArray =
+        DesktopPdfDocument.bytes(pageContents)
+
+    private fun fitText(text: String, width: Double, fontSize: Int): String {
+        val maxChars = (width / (fontSize * 0.52)).toInt().coerceAtLeast(3)
+        return if (text.length <= maxChars) {
+            text
+        } else {
+            text.take(maxChars - 3).trimEnd() + "..."
+        }
+    }
+
+    private fun pdfNumber(value: Double): String =
+        DesktopPdfDocument.number(value)
+
+    private data class PdfColumn(
+        val title: String,
+        val width: Double
+    )
+
+    private data class PrintableStartListRow(
+        val startNumberText: String,
+        val startTimeText: String,
+        val competitorName: String,
+        val bibNumber: String,
+        val categoryName: String,
+        val siNumberText: String,
+        val shaded: Boolean
+    )
+}

@@ -407,6 +407,28 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleExportsPrintableStartListPdfFile() {
+        val directory = Files.createTempDirectory("rom-desktop-printable-start-list-smoke")
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val target = directory.resolve("desktop-smoke-start-list.pdf")
+        val projectFile = DesktopProjectFiles.read(source)
+
+        DesktopProjectFiles.exportPrintableStartListPdf(target, projectFile)
+        val exported = Files.readString(target)
+
+        assertTrue(exported.startsWith("%PDF-1.4"))
+        assertTrue(exported.contains("Desktop Smoke Race"))
+        assertTrue(exported.contains("Start Number"))
+        assertTrue(exported.contains("Start Time"))
+        assertTrue(exported.contains("00:00:00"))
+        assertTrue(exported.contains("Competitor's full name"))
+        assertTrue(exported.contains("Bib#"))
+        assertTrue(exported.contains("Age/Gender category"))
+        assertTrue(exported.contains("SI Card number"))
+        assertTrue(exported.contains("0.96 0.96 0.96 rg"))
+    }
+
+    @Test
     fun repositorySmokeSampleExportsIofResultListXmlFile() {
         val directory = Files.createTempDirectory("rom-desktop-iof-result-list-smoke")
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")

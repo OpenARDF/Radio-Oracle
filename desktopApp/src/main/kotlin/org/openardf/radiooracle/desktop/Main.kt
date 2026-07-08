@@ -3806,6 +3806,21 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportPrintableStartListPdf() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportPrintableStartListPdf(
+                DesktopPrintableStartListPdf.defaultFileName(currentProject)
+            )?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportPrintableStartListPdf(path, currentProject)
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun exportIofEntryListXml() {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportIofXml("Export IOF EntryList XML")?.let { path ->
@@ -5475,6 +5490,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportStartsByCategoryCsv,
                 DesktopNavAction.ExportStartsByMinuteCsv,
                 DesktopNavAction.ExportRobisStartListCsv,
+                DesktopNavAction.ExportPrintableStartListPdf,
                 DesktopNavAction.ExportReadoutsCsv,
                 DesktopNavAction.ExportResultsCsv,
                 DesktopNavAction.ExportArdfEventResultsCsv,
@@ -5748,6 +5764,10 @@ fun main(args: Array<String>) = application {
                 }
                 DesktopNavAction.ExportRobisStartListCsv -> {
                     exportCsv("Export ROBIS Start List CSV", "robis start list", DesktopProjectFiles::exportRobisStartListCsv)
+                    true
+                }
+                DesktopNavAction.ExportPrintableStartListPdf -> {
+                    exportPrintableStartListPdf()
                     true
                 }
                 DesktopNavAction.ExportReadoutsCsv -> {

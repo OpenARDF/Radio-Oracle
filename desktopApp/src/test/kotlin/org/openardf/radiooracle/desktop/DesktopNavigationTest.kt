@@ -501,6 +501,16 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun startListExportsIncludePrintablePdf() {
+        val startList = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Start List" }
+        val firstLevel = DesktopNavState().enter(startList)
+        val exports = DesktopNavigation.currentItems(firstLevel).first { it.label == "Exports" }
+        val exportState = firstLevel.enter(exports)
+
+        assertTrue(DesktopNavigation.currentItems(exportState).any { it.label == "Printable PDF..." })
+    }
+
+    @Test
     fun backFromNewEventFileActionReturnsToEventFileMenu() {
         val eventFileState = DesktopNavigation.selectItem(
             DesktopNavState(),
