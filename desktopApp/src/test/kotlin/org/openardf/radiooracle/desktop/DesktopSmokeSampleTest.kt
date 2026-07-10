@@ -488,6 +488,33 @@ class DesktopSmokeSampleTest {
     }
 
     @Test
+    fun repositorySmokeSampleExportsResultsPostingReportFiles() {
+        val directory = Path.of("build", "reports", "result-report-sample")
+        Files.createDirectories(directory)
+        val source = Path.of("..", "samples", "desktop-smoke.rom.json")
+        val projectFile = DesktopProjectFiles.read(source)
+        val htmlTarget = directory.resolve("desktop-smoke-report-results.html")
+        val xmlTarget = directory.resolve("desktop-smoke-report-results.xml")
+        val pdfTarget = directory.resolve("desktop-smoke-report-results.pdf")
+
+        DesktopProjectFiles.exportResultReportHtml(htmlTarget, projectFile)
+        DesktopProjectFiles.exportResultReportXml(xmlTarget, projectFile)
+        DesktopProjectFiles.exportResultReportPdf(pdfTarget, projectFile)
+
+        val html = Files.readString(htmlTarget)
+        val xml = Files.readString(xmlTarget)
+        val pdf = Files.readString(pdfTarget)
+        assertTrue(html.contains("<title>Desktop Smoke Race results report</title>"))
+        assertTrue(html.contains("<td>RUNNER Alice</td>"))
+        assertTrue(xml.contains("<ResultsReport"))
+        assertTrue(xml.contains("<RaceName>Desktop Smoke Race</RaceName>"))
+        assertTrue(xml.contains("<Name>RUNNER Alice</Name>"))
+        assertTrue(pdf.startsWith("%PDF-1.4"))
+        assertTrue(pdf.contains("Desktop Smoke Race"))
+        assertTrue(pdf.contains("RUNNER Alice"))
+    }
+
+    @Test
     fun repositorySmokeSampleExportsResultsTextFile() {
         val directory = Files.createTempDirectory("rom-desktop-results-text-smoke")
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")

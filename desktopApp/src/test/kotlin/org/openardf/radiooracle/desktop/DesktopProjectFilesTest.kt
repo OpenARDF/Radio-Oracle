@@ -246,6 +246,33 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsResultsPostingReportFiles() {
+        val directory = Files.createTempDirectory("rom-desktop-report-results")
+        val projectFile = EventProjectFile(raceData = raceDataWithReadout())
+        val htmlPath = directory.resolve("report-results.html")
+        val xmlPath = directory.resolve("report-results.xml")
+        val pdfPath = directory.resolve("report-results.pdf")
+
+        DesktopProjectFiles.exportResultReportHtml(htmlPath, projectFile)
+        DesktopProjectFiles.exportResultReportXml(xmlPath, projectFile)
+        DesktopProjectFiles.exportResultReportPdf(pdfPath, projectFile)
+
+        val html = Files.readString(htmlPath)
+        val xml = Files.readString(xmlPath)
+        val pdf = Files.readString(pdfPath)
+        assertTrue(html.contains("<title>Desktop File Race results report</title>"))
+        assertTrue(html.contains("<th>Bib #</th>"))
+        assertTrue(html.contains("<td>RUNNER Alice</td>"))
+        assertTrue(xml.contains("<ResultsReport"))
+        assertTrue(xml.contains("<RaceName>Desktop File Race</RaceName>"))
+        assertTrue(xml.contains("<Name>RUNNER Alice</Name>"))
+        assertTrue(pdf.startsWith("%PDF-1.4"))
+        assertTrue(pdf.contains("Desktop File Race"))
+        assertTrue(pdf.contains("RUNNER Alice"))
+        assertTrue(pdf.contains("Controls"))
+    }
+
+    @Test
     fun exportsPublicResultsSiteDirectory() {
         val directory = Files.createTempDirectory("rom-desktop-public-results-site")
 

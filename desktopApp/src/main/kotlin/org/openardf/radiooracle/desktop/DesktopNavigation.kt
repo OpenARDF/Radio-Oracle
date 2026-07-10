@@ -112,6 +112,9 @@ enum class DesktopNavAction {
     ExportArdfEventResultsCsv,
     ExportResultsText,
     ExportResultsHtml,
+    ExportResultReportHtml,
+    ExportResultReportXml,
+    ExportResultReportPdf,
     GeneratePublicResultsSite,
     PublishPublicResultsSite,
     OpenPublicResultsSitePreview,
@@ -861,6 +864,9 @@ object DesktopNavigation {
                                 ),
                                 action("results.export-text", "Export Results TXT...", workflow, DesktopNavAction.ExportResultsText),
                                 action("results.export-html", "Export Results HTML...", workflow, DesktopNavAction.ExportResultsHtml),
+                                action("results.export-report-html", "Export Results Report HTML...", workflow, DesktopNavAction.ExportResultReportHtml),
+                                action("results.export-report-xml", "Export Results Report XML...", workflow, DesktopNavAction.ExportResultReportXml),
+                                action("results.export-report-pdf", "Export Results Report PDF...", workflow, DesktopNavAction.ExportResultReportPdf),
                                 action("results.export-readouts", "Export Readouts CSV...", workflow, DesktopNavAction.ExportReadoutsCsv)
                             )
                         ),
@@ -1480,6 +1486,12 @@ object DesktopNavigation {
             "Use Export Results TXT to write a plain-text results report.",
         "results.export-html" to
             "Use Export Results HTML to write a browser-readable results report.",
+        "results.export-report-html" to
+            "Use Export Results Report HTML to write a printable report file for result posting workflows.",
+        "results.export-report-xml" to
+            "Use Export Results Report XML to write a report XML file with the same result rows as the HTML and PDF report files.",
+        "results.export-report-pdf" to
+            "Use Export Results Report PDF to write a printable report PDF with the same result rows as the HTML and XML report files.",
         "results.generate-public-site" to
             "Use Generate Public Results Site to write a Cloudflare Pages-ready static site folder.",
         "results.publish-public-site" to

@@ -34,6 +34,7 @@ import org.openardf.radiooracle.shared.files.FinalResultJsonExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
+import org.openardf.radiooracle.shared.files.ResultReportExports
 import org.openardf.radiooracle.shared.files.RaceBackupJsonImports
 import org.openardf.radiooracle.shared.files.RaceBackupJsonExports
 import org.openardf.radiooracle.shared.files.TextResultExports
@@ -155,6 +156,47 @@ object DesktopProjectFiles : ProjectFileStore {
                 awardDisplayMode = awardDisplayMode
             )
         )
+    }
+
+    fun exportResultReportHtml(
+        path: Path,
+        projectFile: EventProjectFile,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+    ) {
+        writeText(
+            path,
+            ResultReportExports.html(
+                projectFile.raceData,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                awardDisplayMode = awardDisplayMode
+            )
+        )
+    }
+
+    fun exportResultReportXml(
+        path: Path,
+        projectFile: EventProjectFile,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+    ) {
+        writeText(
+            path,
+            ResultReportExports.xml(
+                projectFile.raceData,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                awardDisplayMode = awardDisplayMode
+            )
+        )
+    }
+
+    fun exportResultReportPdf(
+        path: Path,
+        projectFile: EventProjectFile,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+    ) {
+        DesktopResultReportPdf.exportPdf(path, projectFile, protectedCourseInfoByCategoryId, awardDisplayMode)
     }
 
     fun exportResultsText(

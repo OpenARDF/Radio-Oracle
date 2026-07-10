@@ -394,6 +394,21 @@ class DesktopProjectFilePathsTest {
     }
 
     @Test
+    fun keepsExistingXmlExtension() {
+        val path = Path.of("event.xml")
+
+        assertEquals(path, DesktopProjectFilePaths.withXmlExtension(path))
+    }
+
+    @Test
+    fun appendsXmlExtensionWhenMissing() {
+        assertEquals(
+            Path.of("event.xml"),
+            DesktopProjectFilePaths.withXmlExtension(Path.of("event"))
+        )
+    }
+
+    @Test
     fun keepsExistingHtmlExtension() {
         val path = Path.of("results.html")
 

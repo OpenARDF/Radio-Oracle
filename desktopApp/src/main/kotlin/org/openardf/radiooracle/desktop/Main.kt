@@ -3872,6 +3872,62 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportResultReportHtml() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportHtml("Export Results Report HTML")?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportResultReportHtml(
+                        path,
+                        currentProject,
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        currentDesktopAwardDisplayMode()
+                    )
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun exportResultReportXml() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportXml("Export Results Report XML")?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportResultReportXml(
+                        path,
+                        currentProject,
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        currentDesktopAwardDisplayMode()
+                    )
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
+        fun exportResultReportPdf() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportResultReportPdf(
+                DesktopResultReportPdf.defaultFileName(currentProject)
+            )?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportResultReportPdf(
+                        path,
+                        currentProject,
+                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        currentDesktopAwardDisplayMode()
+                    )
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun generatePublicResultsSite() {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportPublicResultsSiteDirectory()?.let { directory ->
@@ -5503,6 +5559,9 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportArdfEventResultsCsv,
                 DesktopNavAction.ExportResultsText,
                 DesktopNavAction.ExportResultsHtml,
+                DesktopNavAction.ExportResultReportHtml,
+                DesktopNavAction.ExportResultReportXml,
+                DesktopNavAction.ExportResultReportPdf,
                 DesktopNavAction.GeneratePublicResultsSite,
                 DesktopNavAction.ExportArdfJson,
                 DesktopNavAction.ExportAndroidRaceBackupJson,
@@ -5797,6 +5856,18 @@ fun main(args: Array<String>) = application {
                 }
                 DesktopNavAction.ExportResultsHtml -> {
                     exportResultsHtml()
+                    true
+                }
+                DesktopNavAction.ExportResultReportHtml -> {
+                    exportResultReportHtml()
+                    true
+                }
+                DesktopNavAction.ExportResultReportXml -> {
+                    exportResultReportXml()
+                    true
+                }
+                DesktopNavAction.ExportResultReportPdf -> {
+                    exportResultReportPdf()
                     true
                 }
                 DesktopNavAction.GeneratePublicResultsSite -> {

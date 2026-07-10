@@ -158,6 +158,13 @@ object DesktopProjectFilePaths {
             path.resolveSibling("${path.fileName}$IOF_XML_EXTENSION")
         }
 
+    fun withXmlExtension(path: Path): Path =
+        if (path.fileName.toString().endsWith(XML_EXTENSION)) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$XML_EXTENSION")
+        }
+
     fun withHtmlExtension(path: Path): Path =
         if (path.fileName.toString().endsWith(HTML_EXTENSION)) {
             path
@@ -344,6 +351,11 @@ object DesktopFileDialogs {
             DesktopProjectFilePaths.withIofXmlExtension(it)
         }
 
+    fun chooseExportXml(title: String): Path? =
+        chooseSaveFile(title, DesktopProjectFilePaths.XML_EXTENSION) {
+            DesktopProjectFilePaths.withXmlExtension(it)
+        }
+
     fun chooseExportHtml(title: String): Path? =
         chooseSaveFile(title, DesktopProjectFilePaths.HTML_EXTENSION) {
             DesktopProjectFilePaths.withHtmlExtension(it)
@@ -383,6 +395,13 @@ object DesktopFileDialogs {
     fun chooseExportPrintableStartListPdf(defaultFileName: String? = null): Path? =
         chooseSaveFile(
             title = "Export Printable Start List PDF",
+            extension = DesktopProjectFilePaths.PDF_EXTENSION,
+            defaultFileName = defaultFileName
+        ) { DesktopProjectFilePaths.withPdfExtension(it) }
+
+    fun chooseExportResultReportPdf(defaultFileName: String? = null): Path? =
+        chooseSaveFile(
+            title = "Export Results Report PDF",
             extension = DesktopProjectFilePaths.PDF_EXTENSION,
             defaultFileName = defaultFileName
         ) { DesktopProjectFilePaths.withPdfExtension(it) }
