@@ -92,6 +92,57 @@ class DesktopEventRegImportTest {
     }
 
     @Test
+    fun googleSpreadsheetDownloadCandidatesPreferWorkbookAndPreserveLinkedGid() {
+        val candidates = DesktopEventRegImporter.spreadsheetDownloadCandidateUrls(
+            "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/edit?gid=2089641617#gid=2089641617"
+        )
+
+        assertEquals(
+            listOf(
+                "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/export?format=xlsx",
+                "https://drive.google.com/uc?export=download&id=test-spreadsheet-id",
+                "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/export?format=csv&gid=2089641617"
+            ),
+            candidates
+        )
+    }
+
+    @Test
+    fun parsesRichestRegistrationSectionWhenWorkbookExportIncludesSummaryTabs() {
+        val registration = DesktopEventRegSpreadsheetParser.parseCsv(
+            csvText = raceSummaryGoogleSheetCsv() + "\u000c" + sampleGoogleSheetCsv(),
+            eventName = "Radio-O Champs Reg Summary"
+        )
+
+        assertEquals(listOf("Sprint", "FoxO", "SprMod-NC"), registration.competitions.map { it.name })
+        val fala = registration.competitions.first { it.name == "Sprint" }.competitors.first()
+        assertEquals(8400555, fala.siNumber)
+        assertEquals("101", fala.bibNumber)
+        assertEquals("K4FAL", fala.callSign)
+    }
+
+    @Test
+    fun parsesChangedRaceSummaryModifierHeaders() {
+        val registration = DesktopEventRegSpreadsheetParser.parseCsv(
+            csvText = raceSummaryGoogleSheetCsv(),
+            eventName = "Radio-O Champs Reg Summary"
+        )
+
+        assertEquals(
+            listOf("Sprint", "FoxO", "2m", "80m", "SprMod-NC", "FoxMod-NC", "2mMod-NC", "80mMod-NC"),
+            registration.competitions.map { it.name }
+        )
+        assertEquals(
+            "SprMod-NC",
+            registration.competitions.first { it.name == "SprMod-NC" }.competitors.single().categoryName
+        )
+        assertEquals(
+            "80mMod-NC",
+            registration.competitions.first { it.name == "80mMod-NC" }.competitors.single().categoryName
+        )
+    }
+
+    @Test
     fun generatesOneEventFilePerCompetitionWithCompetitors() {
         val outputDirectory = Files.createTempDirectory("radio-oracle-eventreg-test")
         val ids = generateSequence(1) { it + 1 }.map { "id-$it" }.iterator()
@@ -627,6 +678,12 @@ class DesktopEventRegImportTest {
         0,Gheorghe,Fala,conf-1,Confirmed,101,1991-01-01 00:00:00,M,BOK,fala@example.test,555-0101,Y,N,8400555,N,M-21,M-21,05:00,M-21,M-21,,NC,K4FAL
         1,Kathleen,Kerns,conf-2,Confirmed,102,1959-01-01 00:00:00,F,MTHD,kerns@example.test,555-0102,N,Y,1800859,N,W-65,W-65,,NC,,,Competing,K7KER
         2,Gerald,Boyd,conf-3,Confirmed,103,1957-01-01 00:00:00,M,NMO,boyd@example.test,555-0103,Y,Y,247347,N,NC,,,M-60,M-60,,Competing,WB8WFK
+        """.trimIndent()
+
+    private fun raceSummaryGoogleSheetCsv(): String =
+        """
+        First,Last,Sprint Crs,Sprint Fee,FoxO Crs,FoxO Fee,2m Crs,2m Fee,80m Crs,80m Fee,Sprint Mod,SM Fee,Fox Mod,Fox Fee,2m Mod,2m Fee.1,80m Mod,80m Fee.1
+        Scott,Moore,M-60,32,M-60,32,M-60,32,M-60,32,Comp,5,Comp,5,Comp,5,Comp,5
         """.trimIndent()
 
     private fun sprintOnlyGoogleSheetCsv(): String =

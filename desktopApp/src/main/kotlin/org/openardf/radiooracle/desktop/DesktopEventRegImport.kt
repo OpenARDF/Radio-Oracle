@@ -340,16 +340,7 @@ object DesktopEventRegImporter {
     }
 
     fun fetchSpreadsheet(url: String): SpreadsheetDownload {
-        val googleId = googleSpreadsheetId(url)
-        val candidateUrls = if (googleId != null) {
-            listOf(
-                "https://docs.google.com/spreadsheets/d/$googleId/export?format=csv&gid=0",
-                "https://docs.google.com/spreadsheets/d/$googleId/export?format=xlsx",
-                "https://drive.google.com/uc?export=download&id=$googleId"
-            )
-        } else {
-            listOf(url)
-        }
+        val candidateUrls = spreadsheetDownloadCandidateUrls(url)
 
         val errors = mutableListOf<String>()
         candidateUrls.forEach { candidateUrl ->
@@ -373,6 +364,20 @@ object DesktopEventRegImporter {
                 "Spreadsheet could not be downloaded as CSV or XLSX: $suffix"
             }
         )
+    }
+
+    internal fun spreadsheetDownloadCandidateUrls(url: String): List<String> {
+        val googleId = googleSpreadsheetId(url)
+        return if (googleId != null) {
+            val googleGid = googleSpreadsheetGid(url) ?: "0"
+            listOf(
+                "https://docs.google.com/spreadsheets/d/$googleId/export?format=xlsx",
+                "https://drive.google.com/uc?export=download&id=$googleId",
+                "https://docs.google.com/spreadsheets/d/$googleId/export?format=csv&gid=$googleGid"
+            )
+        } else {
+            listOf(url)
+        }
     }
 
     private fun downloadSpreadsheet(url: String): SpreadsheetDownload {
@@ -408,6 +413,16 @@ object DesktopEventRegImporter {
                 ?.split("&")
                 ?.firstOrNull { it.startsWith("id=") }
                 ?.substringAfter("=")
+    }
+
+    private fun googleSpreadsheetGid(url: String): String? {
+        val uri = URI(url)
+        return sequenceOf(uri.rawQuery, uri.rawFragment)
+            .filterNotNull()
+            .flatMap { it.split("&").asSequence() }
+            .firstOrNull { it.startsWith("gid=") }
+            ?.substringAfter("=")
+            ?.takeIf { gid -> gid.isNotBlank() && gid.all { it.isDigit() } }
     }
 
     private fun fileNameFromContentDisposition(value: String): String? {
@@ -478,19 +493,29 @@ data class SpreadsheetDownload(
 
 object DesktopEventRegSpreadsheetParser {
     fun parse(download: SpreadsheetDownload, fallbackEventName: String): DesktopEventRegRegistration {
-        val rows = if (download.isXlsx()) {
-            XlsxFirstSheetReader.readRows(download.bytes)
+        val rowCandidates = if (download.isXlsx()) {
+            XlsxWorkbookReader.readSheets(download.bytes)
         } else {
-            parseCommaRows(String(download.bytes, StandardCharsets.UTF_8).substringBefore('\u000c'))
+            String(download.bytes, StandardCharsets.UTF_8)
+                .split('\u000c')
+                .map(::parseCommaRows)
+                .filter { it.isNotEmpty() }
         }
         return parseRows(
-            rows = rows,
+            rows = rowCandidates.bestRegistrationRows(),
             eventName = eventNameFromFileName(download.fileName) ?: fallbackEventName
         )
     }
 
     fun parseCsv(csvText: String, eventName: String): DesktopEventRegRegistration =
-        parseRows(parseCommaRows(csvText.substringBefore('\u000c')), eventName)
+        parseRows(
+            csvText
+                .split('\u000c')
+                .map(::parseCommaRows)
+                .filter { it.isNotEmpty() }
+                .bestRegistrationRows(),
+            eventName
+        )
 
     fun parseRows(rows: List<List<String>>, eventName: String): DesktopEventRegRegistration {
         val headerIndex = rows.indexOfFirst { row ->
@@ -590,8 +615,33 @@ object DesktopEventRegSpreadsheetParser {
                 null
             }
         }
-        return classColumns + courseOnlyColumns
+        val usedNames = (classColumns + courseOnlyColumns)
+            .mapTo(mutableSetOf()) { it.competitionName.lowercase() }
+        val modifierColumns = headers.mapIndexedNotNull { index, header ->
+            val name = modifierCompetitionName(header)
+            if (name != null && name.lowercase() !in usedNames) {
+                usedNames += name.lowercase()
+                SpreadsheetCompetitionColumn(
+                    competitionName = name,
+                    classIndex = null,
+                    courseIndex = index,
+                    startIndex = headers.indexOfFirstHeader("$name Start")
+                )
+            } else {
+                null
+            }
+        }
+        return classColumns + courseOnlyColumns + modifierColumns
     }
+
+    private fun modifierCompetitionName(header: String): String? =
+        when (header.normalizedHeader()) {
+            "sprint mod", "sprint modified", "spr mod", "spr modified" -> "SprMod-NC"
+            "fox mod", "fox modified", "foxo mod", "foxo modified" -> "FoxMod-NC"
+            "2m mod", "2m modified" -> "2mMod-NC"
+            "80m mod", "80m modified" -> "80mMod-NC"
+            else -> null
+        }
 
     private fun spreadsheetCategoryName(competitionName: String, classValue: String, courseValue: String): String {
         val value = classValue.trim().ifBlank { courseValue.trim() }
@@ -640,6 +690,72 @@ object DesktopEventRegSpreadsheetParser {
             rows += row.toList()
         }
         return rows
+    }
+
+    private fun List<List<List<String>>>.bestRegistrationRows(): List<List<String>> {
+        require(isNotEmpty()) {
+            "Spreadsheet is empty."
+        }
+        return maxByOrNull { rows -> spreadsheetRowsScore(rows) } ?: first()
+    }
+
+    private fun spreadsheetRowsScore(rows: List<List<String>>): Int {
+        val headerIndex = rows.indexOfFirst { row ->
+            row.any { it.normalizedHeader() == "first" } &&
+                row.any { it.normalizedHeader() == "last" }
+        }
+        if (headerIndex < 0) {
+            return -1
+        }
+        val headers = rows[headerIndex].map { it.trim() }
+        val competitionColumns = spreadsheetCompetitionColumns(headers)
+        if (competitionColumns.isEmpty()) {
+            return -1
+        }
+        val bodyRows = rows.drop(headerIndex + 1).filter { row -> row.any { it.isNotBlank() } }
+        val columns = SpreadsheetColumns(headers)
+        val competitorCells = competitionColumns.sumOf { column ->
+            bodyRows.count { row ->
+                val categoryName = spreadsheetCategoryName(
+                    competitionName = column.competitionName,
+                    classValue = row.getOrBlank(column.classIndex),
+                    courseValue = row.getOrBlank(column.courseIndex)
+                )
+                categoryName.isNotBlank() &&
+                    (row.getOrBlank(columns.firstNameIndex).isNotBlank() ||
+                        row.getOrBlank(columns.lastNameIndex).isNotBlank())
+            }
+        }
+        val identityColumnCount = listOf(
+            columns.clubIndex,
+            columns.siNumberIndex,
+            columns.bibNumberIndex,
+            columns.callSignIndex,
+            columns.birthYearIndex,
+            columns.sexIndex,
+            columns.personIdIndex,
+            columns.emailIndex,
+            columns.cellPhoneIndex,
+            columns.usaChampEligibilityIndex,
+            columns.region2ChampEligibilityIndex
+        ).count { it != null }
+        val filledIdentityCells = bodyRows.sumOf { row ->
+            listOf(
+                columns.clubIndex,
+                columns.siNumberIndex,
+                columns.bibNumberIndex,
+                columns.callSignIndex,
+                columns.birthYearIndex,
+                columns.sexIndex,
+                columns.personIdIndex,
+                columns.emailIndex,
+                columns.cellPhoneIndex
+            ).count { index -> row.getOrBlank(index).isNotBlank() }
+        }
+        return competitorCells * 20 +
+            competitionColumns.size * 10 +
+            identityColumnCount * 20 +
+            filledIdentityCells * 2
     }
 
     private fun normalizedStartTime(value: String): String? =
@@ -722,7 +838,10 @@ object DesktopEventRegSpreadsheetParser {
             "USA--Champ Eligibility",
             "USA Champ Eligibility",
             "USA Championship Eligibility",
-            "US Champ Eligibility"
+            "US Champ Eligibility",
+            "Elig US Ch?",
+            "Elig US Ch",
+            "US Championship Eligible"
         )
         val region2ChampEligibilityIndex = headers.indexOfFirstHeader(
             "Regional--Champ Eligibility",
@@ -733,7 +852,10 @@ object DesktopEventRegSpreadsheetParser {
             "Region 2--Champ Eligibility",
             "Region2 Champ Eligibility",
             "Region 2 Champ Eligibility",
-            "Region 2 Championship Eligibility"
+            "Region 2 Championship Eligibility",
+            "Elig R2 Ch?",
+            "Elig R2 Ch",
+            "Region 2 Championship Eligible"
         )
     }
 }
@@ -1369,13 +1491,27 @@ private fun RaceType.toDisplayText(raceBand: RaceBand?): String =
         else -> name.lowercase().replaceFirstChar { it.titlecase() }
     }
 
-private object XlsxFirstSheetReader {
+private object XlsxWorkbookReader {
     fun readRows(bytes: ByteArray): List<List<String>> {
+        return readSheets(bytes).firstOrNull()
+            ?: error("XLSX workbook is missing worksheets.")
+    }
+
+    fun readSheets(bytes: ByteArray): List<List<List<String>>> {
         val entries = unzip(bytes)
         val sharedStrings = entries["xl/sharedStrings.xml"]?.let(::readSharedStrings).orEmpty()
-        val sheetXml = entries["xl/worksheets/sheet1.xml"]
-            ?: error("XLSX workbook is missing the first worksheet.")
-        return readSheetRows(sheetXml, sharedStrings)
+        val sheetEntries = worksheetEntryNames(entries).ifEmpty {
+            entries.keys
+                .filter { it.matches(Regex("xl/worksheets/sheet\\d+\\.xml")) }
+                .sortedBy { path -> Regex("\\d+").find(path)?.value?.toIntOrNull() ?: Int.MAX_VALUE }
+        }
+        val sheets = sheetEntries.mapNotNull { entryName ->
+            entries[entryName]?.let { readSheetRows(it, sharedStrings) }?.takeIf { it.isNotEmpty() }
+        }
+        if (sheets.isEmpty()) {
+            error("XLSX workbook is missing worksheets.")
+        }
+        return sheets
     }
 
     private fun unzip(bytes: ByteArray): Map<String, ByteArray> {
@@ -1398,6 +1534,46 @@ private object XlsxFirstSheetReader {
         return (0 until nodes.length).map { index ->
             val element = nodes.item(index) as Element
             element.getElementsByTagNameNS("*", "t").asElements().joinToString("") { it.textContent }
+        }
+    }
+
+    private fun worksheetEntryNames(entries: Map<String, ByteArray>): List<String> {
+        val workbookXml = entries["xl/workbook.xml"] ?: return emptyList()
+        val relationshipXml = entries["xl/_rels/workbook.xml.rels"] ?: return emptyList()
+        val targetsById = readWorkbookRelationships(relationshipXml)
+        val document = parseXml(workbookXml)
+        val sheets = document.documentElement.getElementsByTagNameNS("*", "sheet")
+        return (0 until sheets.length).mapNotNull { index ->
+            val sheet = sheets.item(index) as Element
+            val relationshipId = sheet.getAttributeNS(
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+                "id"
+            ).ifBlank { sheet.getAttribute("r:id") }
+            targetsById[relationshipId]?.let(::workbookTargetEntryName)
+        }
+    }
+
+    private fun readWorkbookRelationships(bytes: ByteArray): Map<String, String> {
+        val document = parseXml(bytes)
+        val relationships = document.documentElement.getElementsByTagNameNS("*", "Relationship")
+        return (0 until relationships.length).mapNotNull { index ->
+            val relationship = relationships.item(index) as Element
+            val id = relationship.getAttribute("Id")
+            val target = relationship.getAttribute("Target")
+            if (id.isNotBlank() && target.contains("worksheets/")) {
+                id to target
+            } else {
+                null
+            }
+        }.toMap()
+    }
+
+    private fun workbookTargetEntryName(target: String): String {
+        val normalized = target.removePrefix("/").removePrefix("./")
+        return if (normalized.startsWith("xl/")) {
+            normalized
+        } else {
+            "xl/$normalized"
         }
     }
 
