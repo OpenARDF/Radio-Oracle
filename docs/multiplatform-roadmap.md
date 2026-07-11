@@ -1,6 +1,6 @@
 # Radio-Oracle Multiplatform Roadmap
 
-Status reviewed: 2026-06-30.
+Status reviewed: 2026-07-10.
 
 Radio-Oracle is no longer an Android-only app with a hypothetical desktop beta.
 It is a shared Kotlin project with Android race-day workflows, a desktop Race
@@ -247,7 +247,9 @@ These are deliberate limits in the current app, not necessarily defects.
 - Course Analyzer still lacks map passability knowledge. It does not know
   out-of-bounds areas, dense vegetation, lakes, uncrossable creeks/rivers,
   cliffs, fences, walls, or other barriers unless those effects are approximated
-  by imported route geometry or speed factors.
+  by imported route geometry or speed factors. Calculated routes still use
+  sampled straight control-to-control legs rather than paths selected from a
+  terrain-cost or barrier-aware model.
 
 ## Medium-Term Roadmap
 
@@ -341,11 +343,13 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Course Analyzer And Route Intelligence
 
-- Add map-informed Course Analyzer modeling after the app can ingest or
-  reference course-relevant map data. Future timing should combine category
-  factors, race-wide speed factor, per-leg `SS=#.##` factors, elevation,
-  vegetation, runnability, barriers, water, out-of-bounds constraints, and other
-  map-derived impediments.
+- Add map-informed Course Analyzer modeling by extending the existing protected
+  KML/KMZ/GPX course import, category matching, duplicate detection, elevation,
+  and analysis pipeline rather than creating a separate analysis subsystem.
+  Future timing should combine category factors, race-wide speed factor,
+  per-leg `SS=#.##` factors, elevation, vegetation, runnability, barriers,
+  water, out-of-bounds constraints, preferred corridors, and other map-derived
+  impediments.
 - Preserve the current category speed-factor table as a provisional input, not a
   final source of truth.
 - Extract a shared course-route optimization core after the current analyzer and
@@ -355,6 +359,129 @@ These are deliberate limits in the current app, not necessarily defects.
   should remain layered on top.
 - Continue improving analyzer import UX so saved, imported, calculated, and
   unsaved analyzer data are always clearly distinguished.
+
+#### Course-File Authoring And KML Boundaries
+
+- Continue supporting ordinary KML/KMZ course construction outside
+  Radio-Oracle. Suitable visual authoring tools include QGIS, OCAD,
+  OpenOrienteering Mapper, ArcGIS Earth/Pro, Google My Maps, and other editors
+  that preserve named point placemarks and named route `LineString` objects.
+  QGIS is the preferred free general-purpose desktop option, while OCAD and
+  OpenOrienteering Mapper are the natural choices when the course is designed
+  against an orienteering map.
+- Keep tool limitations visible in operator guidance. ArcGIS Earth is a close
+  direct KML/KMZ editor but its desktop application is Windows-only; ArcGIS Pro
+  is a licensed professional GIS; Google My Maps is suitable for simple
+  browser-based points and lines but is weaker for exact metadata, elevation,
+  and sensitive pre-event locations; and GIS round trips through QGIS/GDAL must
+  be checked for folder, style, and extension-data changes.
+- Keep the Radio-Oracle `Create Course` starter KML as the recommended starting
+  point for external editing. External editors must preserve recognizable
+  Start, fox, spectator, beacon, and Finish names; use ordinary vector
+  `LineString` geometry; and give category routes recognizable names such as
+  `M21 route`. Every edited file should be test-imported before it is trusted.
+- Treat KML `ExtendedData` as optional enhancement data rather than the primary
+  control-matching contract. Some GIS conversions flatten folders, rewrite
+  styles, or alter extension data even when point and line geometry survives.
+- Document that KML attaches `description` and `ExtendedData` to a feature such
+  as the enclosing `Placemark`, not to each coordinate-to-coordinate segment of
+  a `LineString`. A route can therefore have one whole-route description but
+  not native description text for every segment. Splitting one category route
+  into separate described `LineString` placemarks is not a compatible
+  Radio-Oracle workaround because those objects can be interpreted as separate
+  routes.
+- Continue using point/course-object descriptions for per-leg `SS=#.##`: a
+  value on Start, a fox, spectator, beacon, or another recognized course object
+  applies to the following leg. If arbitrary per-segment notes become a real
+  requirement, define structured route metadata keyed to stable course objects
+  or route-point identities and add explicit importer/model support rather than
+  embedding an undocumented convention in description text.
+
+#### Map-Knowledge Interchange And Preparation
+
+- Use an OGC GeoPackage (`.gpkg`) as the preferred normalized vector-map
+  interchange format for map-aware analysis. GeoPackage can hold multiple
+  typed layers, attributes, coordinate-system metadata, and spatial indexes in
+  one portable file. KML/KMZ remains appropriate for course points and routes,
+  but it is not the preferred contract for a semantically classified
+  vegetation/barrier dataset.
+- Define a versioned Radio-Oracle map-knowledge contract with, at minimum,
+  `metadata`, `symbol_rules`, `terrain_areas`, `barriers`, `corridors`, and
+  `crossings` layers. Preserve source data in optional `raw_areas`, `raw_lines`,
+  and `raw_points` layers so classifications can be audited and regenerated.
+- Standardize attributes such as source symbol/code, normalized map class,
+  speed or traversal factor, crossability, barrier penalty, confidence, notes,
+  source map date, coordinate reference system, and source hash. Keep cost
+  factors configurable and reviewable; do not treat a provisional vegetation
+  multiplier as a universal competitor-speed truth.
+- Support three practical creation paths. The OCAD path exports georeferenced
+  point, line, and area objects plus symbol numbers and projection information,
+  then combines and classifies them with QGIS/GDAL. The OpenOrienteering Mapper
+  path opens `.ocd` or `.omap` data, manually exports a GDAL-supported vector
+  format, and then normalizes it with QGIS/GDAL. The direct QGIS path draws or
+  classifies the normalized layers in QGIS for small venues or maps whose source
+  symbols cannot be mapped reliably.
+- Treat QGIS/GDAL as the supported automation surface for inspection,
+  reprojection, conversion, validation, spatial indexing, and GeoPackage
+  creation. `ogr2ogr`, `ogrinfo`, and QGIS processing models are appropriate
+  for repeatable developer/operator workflows, but product code and tests must
+  not assume a particular local QGIS application path or installation.
+- Do not design an automated conversion pipeline around the stock
+  OpenOrienteering Mapper executable. Current Mapper command-line arguments
+  open files in the GUI; the application does not provide a supported headless
+  `--convert` or `--export` command. A future automated Mapper-based conversion
+  path would require either a separately maintained GPL-compatible helper built
+  from Mapper's readers/exporters or a purpose-built parser for a documented
+  Mapper format such as XML-based `.xmap`.
+- Make map import a reviewable operation. The preview should report source and
+  target coordinate systems, map extent, overlap with the course, feature
+  counts by class, invalid geometries, unknown/custom symbol codes, unclassified
+  features, and barriers whose connectivity or crossing interpretation is
+  uncertain. Custom OCAD/Mapper symbol sets must never be silently treated as
+  standard ISOM symbols solely because their numeric codes look familiar.
+
+#### Staged Map-Aware Analysis
+
+- Slice 1: import and validate the versioned GeoPackage contract, preserve
+  provenance, and show the classified layers and unresolved symbol mappings in
+  a review surface. Keep the source map separate from the Race File when
+  appropriate, but hash it and protect any derived pre-event route/control facts
+  through the existing encrypted course-data path.
+- Slice 2: analyze existing saved/imported route geometry without changing it.
+  Report distance and proportion through each vegetation/runnability class,
+  distance along preferred corridors, and intersections with water,
+  out-of-bounds areas, cliffs, fences, walls, and other barriers. Barrier
+  crossings should be warnings with precise map locations and source-feature
+  identities.
+- Slice 3: add terrain-adjusted traversal cost along an existing route. Combine
+  map-class factors with the existing elevation/climb and category/race/per-leg
+  speed model, and show the contribution of each assumption instead of reducing
+  the result to an unexplained single number.
+- Slice 4: add least-cost path calculation between course objects. Rasterize or
+  tessellate the classified map at a documented resolution, represent hard
+  barriers as non-traversable, give roads/trails and similar corridors suitable
+  costs, preserve intentional fence gaps, and allow bridges, gates, tunnels,
+  and designated crossing points to override underlying barriers. Use a
+  bounded path algorithm such as A* or Dijkstra and prevent diagonal
+  corner-cutting across barriers.
+- Slice 5: precompute and cache directed least-cost paths between relevant
+  course objects, including geometry, distance, climb, terrain cost, and
+  provenance. Costs may be directional because uphill and downhill movement
+  differ. Feed these pairwise paths into the existing exhaustive, Sprint-loop,
+  and Foxoring heuristic route-order searches instead of rebuilding route-order
+  logic inside the map subsystem.
+- Slice 6: expose map-aware route geometry, alternate-route explanations,
+  barrier warnings, vegetation/corridor breakdowns, confidence, and source-map
+  provenance consistently in Course Analyzer UI, PDF, KML, and other analysis
+  exports. Keep calculated results advisory when map coverage, classification,
+  geometry, or crossing information is incomplete.
+- Validate map-aware routing with small synthetic fixtures before using real
+  maps: closed and open fence gaps, islands and lakes, bridges over water,
+  nested vegetation polygons, overlapping corridors, one-way cliff or slope
+  effects where modeled, custom/unknown symbols, CRS transformations, and
+  stale-map warnings. Then compare selected real courses against expert route
+  choices and field observations rather than tuning solely to match another
+  application's output.
 
 ### Race Editing Model
 
