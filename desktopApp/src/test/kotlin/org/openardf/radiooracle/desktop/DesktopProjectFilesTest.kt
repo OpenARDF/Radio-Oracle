@@ -385,7 +385,60 @@ class DesktopProjectFilesTest {
         assertTrue(siteJs.contains("courseGraphicsHtml(race)"))
         assertTrue(siteJs.indexOf("courseGraphicsHtml(race)") < siteJs.indexOf("race-results"))
         assertTrue(siteJs.contains("Promise.all(manifest.races"))
+        val siteCss = Files.readString(paths.eventDirectory.resolve("assets").resolve("site.css"))
+        assertTrue(siteCss.contains("max-width:700px"))
         assertTrue(Files.readString(paths.rootIndexHtml).contains("Summer Series"))
+    }
+
+    @Test
+    fun selectsOnePublishedDrawingForEachDistinctResultCourse() {
+        val base = raceDataWithReadout()
+        val firstCategoryData = base.categories.single()
+        val firstCompetitorData = base.competitorData.single()
+        val secondCategory = firstCategoryData.category.copy(
+            id = "category-two",
+            name = "W21",
+            order = 2
+        )
+        val secondCompetitor = firstCompetitorData.competitorCategory.competitor.copy(
+            id = "competitor-two",
+            categoryId = secondCategory.id,
+            firstName = "Bob",
+            siNumber = 654321
+        )
+        val firstReadoutData = requireNotNull(firstCompetitorData.readoutData)
+        val secondCompetitorData = firstCompetitorData.copy(
+            competitorCategory = EventCompetitorCategory(secondCompetitor, secondCategory),
+            readoutData = firstReadoutData.copy(
+                result = firstReadoutData.result.copy(
+                    id = "result-two",
+                    competitorId = secondCompetitor.id,
+                    siNumber = secondCompetitor.siNumber
+                )
+            )
+        )
+        val projectFile = EventProjectFile(
+            raceData = base.copy(
+                categories = listOf(
+                    firstCategoryData,
+                    EventCategoryData(secondCategory, controlPoints = emptyList(), competitors = listOf(secondCompetitor))
+                ),
+                competitorData = listOf(firstCompetitorData, secondCompetitorData)
+            )
+        )
+
+        val courses = publicResultCoursesForGraphics(
+            DesktopPublicResultSeriesRace(
+                projectFile = projectFile,
+                protectedCourseInfoByCategoryId = mapOf(
+                    firstCategoryData.category.id to ProtectedCourseInfo(sourceName = "course-one.kml"),
+                    secondCategory.id to ProtectedCourseInfo(sourceName = "course-two.kml")
+                )
+            )
+        )
+
+        assertEquals(listOf("M21", "W21"), courses.map { it.categoryName })
+        assertEquals(listOf("course-one.kml", "course-two.kml"), courses.map { it.courseInfo.sourceName })
     }
 
     @Test

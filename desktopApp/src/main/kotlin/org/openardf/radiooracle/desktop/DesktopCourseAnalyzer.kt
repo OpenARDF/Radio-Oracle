@@ -3143,8 +3143,38 @@ object DesktopCourseAnalyzer {
         if (labeledPoints.size < 2) {
             return null
         }
-        val projectedPoints = DesktopCourseRouteMapProjection.project(labeledPoints, magneticDeclinationDegrees)
-        val bounds = DesktopCourseRouteMapProjection.bounds(projectedPoints)
+        val routeLineSources = routePoints
+            .takeIf { it.size >= 2 }
+            ?.mapIndexed { index, point ->
+                DesktopCourseRouteMapSourcePoint(
+                    label = "Route point ${index + 1}",
+                    point = point,
+                    type = DesktopCourseRouteMapPointType.Waypoint
+                )
+            }
+            .orEmpty()
+        val projected = DesktopCourseRouteMapProjection.project(
+            labeledPoints + routeLineSources,
+            magneticDeclinationDegrees
+        )
+        val bounds = DesktopCourseRouteMapProjection.bounds(projected)
+        val projectedPoints = projected.take(labeledPoints.size)
+        val routeLine = projected
+            .drop(labeledPoints.size)
+            .map { projectedPoint ->
+                DesktopCourseRouteMapLinePoint(
+                    xFraction = bounds.xFraction(projectedPoint.xMeters),
+                    yFraction = bounds.yFraction(projectedPoint.yMeters)
+                )
+            }
+            .takeIf { it.size >= 2 }
+            ?.let { points ->
+                DesktopCourseRouteMapLine(
+                    label = "",
+                    points = points,
+                    dashed = false
+                )
+            }
         return DesktopCourseRouteMap(
             title = title,
             points = projectedPoints.map { projected ->
@@ -3157,6 +3187,7 @@ object DesktopCourseAnalyzer {
             },
             routeLabels = routeLabels,
             routePointIndexes = routePointIndexes,
+            lineStrings = listOfNotNull(routeLine),
             xRangeMeters = bounds.xRange,
             yRangeMeters = bounds.yRange,
             magneticDeclinationDegrees = magneticDeclinationDegrees,

@@ -74,6 +74,28 @@ data class DesktopPublicResultSeriesRace(
     val awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
 )
 
+internal data class DesktopPublicResultCourseGraphic(
+    val categoryId: String,
+    val categoryName: String,
+    val courseInfo: ProtectedCourseInfo
+)
+
+internal fun publicResultCoursesForGraphics(
+    race: DesktopPublicResultSeriesRace
+): List<DesktopPublicResultCourseGraphic> =
+    EventResultDetails.from(race.projectFile.raceData)
+        .mapNotNull { result ->
+            val categoryId = result.categoryId ?: return@mapNotNull null
+            val courseInfo = protectedCourseInfoForResultCategory(
+                projectFile = race.projectFile,
+                protectedCourseInfoByCategoryId = race.protectedCourseInfoByCategoryId,
+                resultCategoryId = categoryId,
+                resultCategoryName = result.categoryName
+            ) ?: return@mapNotNull null
+            DesktopPublicResultCourseGraphic(categoryId, result.categoryName, courseInfo)
+        }
+        .distinctBy { it.categoryId to it.categoryName }
+
 /** Writes the static public-results site that can be uploaded to Cloudflare Pages. */
 object DesktopPublicResultSiteExports {
     private data class SeriesRaceExport(
@@ -239,31 +261,34 @@ object DesktopPublicResultSiteExports {
         paths: DesktopPublicResultSiteExportPaths,
         race: DesktopPublicResultSeriesRace
     ): List<Path> {
-        val resultCategories = EventResultDetails.from(race.projectFile.raceData)
-            .mapNotNull { result ->
-                result.categoryId?.let { categoryId -> categoryId to result.categoryName }
-            }
-            .distinct()
         val graphicsDirectory = paths.eventDirectory.resolve("course-graphics")
-        val distinctCourses = resultCategories
-            .mapNotNull { (categoryId, categoryName) ->
-                val courseInfo = protectedCourseInfoForResultCategory(
-                    projectFile = race.projectFile,
-                    protectedCourseInfoByCategoryId = race.protectedCourseInfoByCategoryId,
-                    resultCategoryId = categoryId,
-                    resultCategoryName = categoryName
-                )
-                if (courseInfo == null && race.protectedCourseInfoByCategoryId.isNotEmpty()) {
+        val resolvedCourses = publicResultCoursesForGraphics(race)
+        val resolvedCategoryIds = resolvedCourses.mapTo(mutableSetOf()) { it.categoryId }
+        EventResultDetails.from(race.projectFile.raceData)
+            .mapNotNull { result -> result.categoryId?.let { it to result.categoryName } }
+            .distinct()
+            .filterNot { (categoryId, _) -> categoryId in resolvedCategoryIds }
+            .forEach { (categoryId, categoryName) ->
+                if (race.protectedCourseInfoByCategoryId.isNotEmpty()) {
                     DesktopDebugLog.warn(
                         "PublicResults",
                         "No unlocked course matched result category=$categoryName categoryId=$categoryId " +
                             "race=${race.projectFile.raceData.race.name}."
                     )
                 }
-                courseInfo?.let { Triple(categoryId, categoryName, it) }
             }
-            .distinctBy { it.third }
-        return distinctCourses.mapNotNull { (categoryId, categoryName, courseInfo) ->
+        val distinctCourses = resolvedCourses
+            .groupBy { it.courseInfo }
+            .map { (_, courses) ->
+                courses.first().copy(
+                    categoryName = courses.map { it.categoryName }.distinct().joinToString(", ")
+                )
+            }
+        if (distinctCourses.isEmpty()) {
+            return emptyList()
+        }
+        return distinctCourses.mapNotNull { course ->
+            val (categoryId, categoryName, courseInfo) = course
             runCatching {
                 val unavailableReason = DesktopCourseAnalyzer.analysisUnavailableReason(
                     race.projectFile,
@@ -289,7 +314,7 @@ object DesktopPublicResultSiteExports {
                 val routeMap = summary.routeMaps.firstOrNull() ?: return@runCatching null
                 val fileName = "course-${categoryId.safePathSegment()}.png"
                 val path = graphicsDirectory.resolve(fileName)
-                DesktopCourseGraphic.writePng(path, routeMap)
+                DesktopCourseGraphic.writeWebPng(path, routeMap.copy(title = "$categoryName course"))
                 DesktopDebugLog.info(
                     "PublicResults",
                     "Generated 2D course diagram race=${race.projectFile.raceData.race.name} " +
@@ -744,7 +769,7 @@ object DesktopPublicResultSiteExports {
         .overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:var(--line)}
         .overview>div{min-height:86px;padding:18px;background:var(--panel)}.overview span{display:block;margin-bottom:6px;color:var(--muted);font-size:13px}.overview strong{font-size:20px}
         .panel{padding:20px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
-        .series-race{display:grid;gap:16px;padding:24px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.race-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.race-heading h2{font-size:26px}.course-diagrams{padding:18px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe}.course-diagram-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px}.course-diagram-grid figure{margin:0}.course-diagram-grid img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
+        .series-race{display:grid;gap:16px;padding:24px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.race-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.race-heading h2{font-size:26px}.course-diagrams{padding:18px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe}.course-diagram-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,350px),700px));justify-content:start;gap:14px}.course-diagram-grid figure{margin:0}.course-diagram-grid img{display:block;width:100%;max-width:700px;height:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
         .panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}
         input[type=search]{width:min(280px,100%);height:40px;padding:0 12px;border:1px solid var(--line);border-radius:6px;font:inherit}
         table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);font-size:13px;font-weight:700}.number{text-align:right}.punches{color:var(--muted);font-size:13px}.result-row{cursor:pointer}.result-row:hover{background:#f8fbff}.result-row[aria-expanded=true]{background:#eef6fc}.expand-hint{display:block;margin-top:2px;color:var(--muted);font-size:12px}.split-row[hidden]{display:none}.split-detail{padding:14px 16px;background:#fbfcfe;border-bottom:1px solid var(--line)}.split-detail table{margin-top:8px;background:#fff}.split-detail th,.split-detail td{font-size:13px}.split-detail-title{margin:0 0 6px;color:var(--muted);font-size:13px;font-weight:700}

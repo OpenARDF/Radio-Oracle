@@ -958,6 +958,23 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun savedRouteMapIncludesTheFullImportedRouteLineString() {
+        val protectedInfo = protectedInfo(foxCount = 3).withIntermediateRoutePoints()
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile(foxCount = 3),
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        val routeMap = requireNotNull(summary.routeMaps.firstOrNull { it.title == "Saved route" })
+        val routeLine = routeMap.lineStrings.single()
+        assertEquals(protectedInfo.route.size, routeLine.points.size)
+        assertFalse(routeLine.dashed)
+    }
+
+    @Test
     fun exportsCourseAnalysisReportTextAndPdf() {
         val projectFile = projectFile(foxCount = 3).withSameCourseCategory("cat-m50", "M50")
         val protectedInfo = protectedInfo(foxCount = 3).withIntermediateRoutePoints()

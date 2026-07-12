@@ -83,6 +83,38 @@ class DesktopCourseGraphicTest {
     }
 
     @Test
+    fun webGraphicAddsTwelvePercentCourseObjectMargin() {
+        val routeMap = DesktopCourseRouteMap(
+            title = "Web course",
+            points = listOf(
+                DesktopCourseRouteMapPoint("S", 0.0, 1.0, DesktopCourseRouteMapPointType.Start),
+                DesktopCourseRouteMapPoint("F", 1.0, 0.0, DesktopCourseRouteMapPointType.Finish)
+            ),
+            routeLabels = listOf("S", "F"),
+            lineStrings = listOf(
+                DesktopCourseRouteMapLine(
+                    label = "",
+                    points = listOf(
+                        DesktopCourseRouteMapLinePoint(0.0, 1.0),
+                        DesktopCourseRouteMapLinePoint(1.0, 0.0)
+                    ),
+                    dashed = false
+                )
+            )
+        )
+
+        val padded = DesktopCourseGraphic.webRouteMap(routeMap)
+        val allFractions = padded.points.flatMap { listOf(it.xFraction, it.yFraction) } +
+            padded.lineStrings.flatMap { line ->
+                line.points.flatMap { point -> listOf(point.xFraction, point.yFraction) }
+            }
+
+        assertTrue(allFractions.all { it in 0.12..0.88 })
+        assertTrue(allFractions.any { it == 0.12 })
+        assertTrue(allFractions.any { it == 0.88 })
+    }
+
+    @Test
     fun exportsPngJpgAndPdfTogether() {
         val path = Files.createTempDirectory("radio-oracle-graphic-export").resolve("Sprint Layout.kml")
         Files.writeString(path, sampleKml())

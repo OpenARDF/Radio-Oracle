@@ -105,6 +105,7 @@ object DesktopCourseGraphic {
     private const val ImageMapHeight = 800
     private const val PointRadius = 8
     private const val GraphicFractionPadding = 0.06
+    private const val WebGraphicFractionPadding = 0.12
     private const val PdfMapLeft = 54.0
     private const val PdfMapBottom = 54.0
     private const val PdfMapWidth = 684.0
@@ -236,6 +237,13 @@ object DesktopCourseGraphic {
         path.parent?.let(Files::createDirectories)
         ImageIO.write(renderImage(routeMap, "png"), "png", path.toFile())
     }
+
+    internal fun writeWebPng(path: Path, routeMap: DesktopCourseRouteMap) {
+        writePng(path, routeMap.withFractionPadding(WebGraphicFractionPadding))
+    }
+
+    internal fun webRouteMap(routeMap: DesktopCourseRouteMap): DesktopCourseRouteMap =
+        routeMap.withFractionPadding(WebGraphicFractionPadding)
 
     private fun writeJpg(path: Path, routeMap: DesktopCourseRouteMap) {
         ImageIO.write(renderImage(routeMap, "jpg"), "jpg", path.toFile())
@@ -791,6 +799,30 @@ object DesktopCourseGraphic {
 
     private fun paddedFraction(fraction: Double): Double =
         GraphicFractionPadding + fraction.coerceIn(0.0, 1.0) * (1.0 - GraphicFractionPadding * 2.0)
+
+    private fun DesktopCourseRouteMap.withFractionPadding(padding: Double): DesktopCourseRouteMap {
+        fun padded(fraction: Double): Double =
+            padding + fraction.coerceIn(0.0, 1.0) * (1.0 - padding * 2.0)
+        return copy(
+            points = points.map { point ->
+                point.copy(xFraction = padded(point.xFraction), yFraction = padded(point.yFraction))
+            },
+            polygons = polygons.map { polygon ->
+                polygon.copy(
+                    points = polygon.points.map { point ->
+                        point.copy(xFraction = padded(point.xFraction), yFraction = padded(point.yFraction))
+                    }
+                )
+            },
+            lineStrings = lineStrings.map { line ->
+                line.copy(
+                    points = line.points.map { point ->
+                        point.copy(xFraction = padded(point.xFraction), yFraction = padded(point.yFraction))
+                    }
+                )
+            }
+        )
+    }
 
     private fun Path.fileStem(): String =
         fileName.toString().replace(Regex("""\.[^.]+$"""), "")
