@@ -30,6 +30,9 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlPoint
+import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
@@ -158,6 +161,13 @@ class DesktopSeriesSportIdentReadoutRouterTest {
             listOf(firstPath, secondPath).map { path ->
                 store.eventFiles.getValue(path).raceData.competitorData.single()
                     .competitorCategory.competitor.lastName
+            }
+        )
+        assertEquals(
+            listOf("M21", "M21"),
+            listOf(firstPath, secondPath).map { path ->
+                store.eventFiles.getValue(path).raceData.competitorData.single()
+                    .competitorCategory.category?.name
             }
         )
     }
@@ -334,18 +344,50 @@ class DesktopSeriesSportIdentReadoutRouterTest {
             raceName = raceId,
             startDateTimeIso = "2026-06-23T18:00"
         )
+        val controls = siCodes.mapIndexed { index, siCode ->
+            EventControl(
+                id = "control-$raceId-$siCode",
+                raceId = raceId,
+                label = "C${index + 1}",
+                siCode = siCode,
+                type = ControlPointType.CONTROL
+            )
+        }
+        val category = EventCategory(
+            id = "category-$raceId",
+            raceId = raceId,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            lengthMeters = 4_000,
+            climbMeters = 0,
+            order = 0,
+            differentProperties = false,
+            raceType = null,
+            raceBand = null,
+            timeLimitSeconds = null,
+            controlPointsString = ""
+        )
         return project.copy(
             raceData = project.raceData.copy(
                 race = project.raceData.race.copy(raceLevel = raceLevel),
-                controls = siCodes.mapIndexed { index, siCode ->
-                    EventControl(
-                        id = "control-$raceId-$siCode",
-                        raceId = raceId,
-                        label = "C${index + 1}",
-                        siCode = siCode,
-                        type = ControlPointType.CONTROL
+                controls = controls,
+                categories = listOf(
+                    EventCategoryData(
+                        category = category,
+                        controlPoints = controls.mapIndexed { index, control ->
+                            EventControlPoint(
+                                id = "category-control-$raceId-$index",
+                                categoryId = category.id,
+                                siCode = control.siCode,
+                                type = control.type,
+                                order = index,
+                                controlId = control.id
+                            )
+                        },
+                        competitors = emptyList()
                     )
-                }
+                )
             )
         )
     }

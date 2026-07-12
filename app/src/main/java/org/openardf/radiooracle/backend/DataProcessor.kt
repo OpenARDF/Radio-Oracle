@@ -73,6 +73,7 @@ import org.openardf.radiooracle.backend.sportident.EventSeriesReadoutRoute
 import org.openardf.radiooracle.backend.sportident.EventSeriesReadoutRouter
 import org.openardf.radiooracle.backend.sportident.SIPort.CardData
 import org.openardf.radiooracle.backend.sportident.SIReaderService
+import org.openardf.radiooracle.backend.shared.toEventRaceData
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import org.openardf.radiooracle.backend.wrappers.StatisticsWrapper
 import org.openardf.radiooracle.shared.device.SIReaderState
@@ -87,6 +88,7 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.StandardCategoryType
 import org.openardf.radiooracle.shared.files.DataFormat
 import org.openardf.radiooracle.shared.files.DataType
+import org.openardf.radiooracle.shared.event.PracticeCompetitorCategoryAssignment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -103,6 +105,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
 import java.time.Duration
+import java.time.LocalDateTime
 import java.util.UUID
 
 
@@ -555,6 +558,11 @@ class DataProcessor private constructor(context: Context) {
         appContext.get()?.let { ResultsProcessor.processCardData(cardData, race, it, this) }
 
     suspend fun processCardDataForCurrentRaceOrSeries(cardData: CardData, currentRace: Race): Boolean? {
+        if (currentRace.raceLevel == RaceLevel.PRACTICE && cardData.isBlankPracticeStart()) {
+            ensurePracticeCompetitorForCard(cardData, currentRace, startedInForest = true)
+            DebugLog.info("SI", "Practice card placed in forest si=${cardData.siNumber} race=${currentRace.id}")
+            return true
+        }
         val seriesMembers = eventSeriesReadoutMembersForRace(currentRace.id)
         if (seriesMembers.size < 2) {
             return processCardData(cardData, currentRace)
@@ -597,6 +605,92 @@ class DataProcessor private constructor(context: Context) {
             }
         }
     }
+
+    suspend fun ensurePracticeCompetitorForCard(
+        cardData: CardData,
+        sourceRace: Race,
+        startedInForest: Boolean = false
+    ): Competitor? {
+        if (sourceRace.raceLevel != RaceLevel.PRACTICE) {
+            return getCompetitorBySINumber(cardData.siNumber, sourceRace.id)
+        }
+        val sourceRaceData = getRaceData(sourceRace.id).toEventRaceData()
+        val sourceCategory = if (startedInForest) {
+            PracticeCompetitorCategoryAssignment.longestCourseCategory(sourceRaceData)
+        } else {
+            PracticeCompetitorCategoryAssignment.mostLikelyCategory(
+                sourceRaceData,
+                cardData.punchData.map { it.siCode }
+            )
+        }
+        val categoryName = sourceCategory?.category?.name
+        val seriesMembers = getEventSeriesForRace(sourceRace.id)
+            ?.orderedMembers()
+            ?.takeIf { it.size >= 2 }
+        val raceIds = seriesMembers?.map { it.localRaceId } ?: listOf(sourceRace.id)
+        val cardName = cardData.cardName?.trim().orEmpty()
+        val nameParts = cardName.split(Regex("\\s+"), limit = 2).filter { it.isNotBlank() }
+
+        raceIds.forEach { raceId ->
+            val race = getRace(raceId) ?: return@forEach
+            if (race.raceLevel != RaceLevel.PRACTICE) {
+                return@forEach
+            }
+            val existing = getCompetitorBySINumber(cardData.siNumber, raceId)
+            val existingResult = existing?.let { getResultByCompetitor(it.id) }
+            val startTime = if (startedInForest) {
+                Duration.ofSeconds(
+                    Duration.between(race.startDateTime, LocalDateTime.now()).seconds.coerceAtLeast(0L)
+                )
+            } else {
+                null
+            }
+            val eventRaceData = getRaceData(raceId).toEventRaceData()
+            val categoryData = categoryName?.let {
+                PracticeCompetitorCategoryAssignment.categoryNamedLike(eventRaceData, it)
+            } ?: PracticeCompetitorCategoryAssignment.longestCourseCategory(eventRaceData)
+            if (existing != null) {
+                val updatedStart = when {
+                    existingResult != null -> existing.drawnRelativeStartTime
+                    startedInForest -> existing.drawnRelativeStartTime ?: startTime
+                    else -> null
+                }
+                val updatedCategoryId = existing.categoryId ?: categoryData?.category?.id?.let(UUID::fromString)
+                if (updatedStart != existing.drawnRelativeStartTime || updatedCategoryId != existing.categoryId) {
+                    createOrUpdateCompetitor(
+                        existing.copy(
+                            categoryId = updatedCategoryId,
+                            isMan = if (existing.categoryId == null) categoryData?.category?.isMan ?: existing.isMan else existing.isMan,
+                            drawnRelativeStartTime = updatedStart
+                        )
+                    )
+                }
+                return@forEach
+            }
+
+            createOrUpdateCompetitor(
+                Competitor(
+                    id = UUID.randomUUID(),
+                    raceId = raceId,
+                    categoryId = categoryData?.category?.id?.let(UUID::fromString),
+                    firstName = nameParts.getOrNull(1).orEmpty().ifEmpty { "SI ${cardData.siNumber}" },
+                    lastName = nameParts.firstOrNull().orEmpty().ifEmpty { "Practice" },
+                    club = "",
+                    index = "",
+                    isMan = categoryData?.category?.isMan ?: false,
+                    birthYear = null,
+                    siNumber = cardData.siNumber,
+                    siRent = false,
+                    startNumber = getHighestStartNumberByRace(raceId) + 1,
+                    drawnRelativeStartTime = startTime
+                )
+            )
+        }
+        return getCompetitorBySINumber(cardData.siNumber, sourceRace.id)
+    }
+
+    private fun CardData.isBlankPracticeStart(): Boolean =
+        punchData.isEmpty() && startTime == null && finishTime == null
 
     private fun showSiReadoutToast(messageResId: Int, vararg formatArgs: Any) {
         appContext.get()?.let { context ->

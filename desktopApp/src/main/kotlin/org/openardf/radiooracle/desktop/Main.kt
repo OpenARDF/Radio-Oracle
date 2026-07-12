@@ -179,6 +179,7 @@ import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutSeverity
 import org.openardf.radiooracle.shared.event.EventProjectEditor
+import org.openardf.radiooracle.shared.event.PracticeCompetitorCategoryAssignment
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceDetails
@@ -1408,7 +1409,31 @@ fun main(args: Array<String>) = application {
                     "No unique series race matched SI card ${download.readout.siNumber}; keeping readout on the open Race File."
                 )
             }
-            val currentProject = projectSession.currentProject ?: return DesktopSportIdentAppendOutcome.DuplicateIgnored
+            var currentProject = projectSession.currentProject ?: return DesktopSportIdentAppendOutcome.DuplicateIgnored
+            if (
+                manifestPath != null &&
+                currentProject.raceData.race.raceLevel == RaceLevel.PRACTICE &&
+                currentProject.raceData.competitorData.firstOrNull {
+                    it.competitorCategory.competitor.siNumber == download.readout.siNumber
+                }?.competitorCategory?.competitor?.categoryId == null
+            ) {
+                val categoryName = PracticeCompetitorCategoryAssignment.mostLikelyCategory(
+                    currentProject.raceData,
+                    download.readout.punches.map { it.siCode }
+                )?.category?.name
+                if (categoryName != null) {
+                    saveOpenEventBeforeSeriesReadout("adding a Practice series competitor")
+                    val update = DesktopSeriesSportIdentReadoutRouter.addPracticeCompetitorAcrossSeries(
+                        store = DesktopEventSeriesFiles,
+                        manifestPath = manifestPath,
+                        readout = download.readout,
+                        categoryName = categoryName
+                    )
+                    reloadCurrentEventIfUpdated(update)
+                    currentProject = projectSession.currentProject
+                        ?: return DesktopSportIdentAppendOutcome.DuplicateIgnored
+                }
+            }
             val isDuplicate = currentProject.raceData.containsReadoutForSiNumber(download.readout.siNumber)
             val effectiveDuplicatePolicy = if (
                 isDuplicate &&

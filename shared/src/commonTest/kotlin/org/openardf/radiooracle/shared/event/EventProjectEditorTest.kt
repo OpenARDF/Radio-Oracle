@@ -3503,7 +3503,9 @@ class EventProjectEditorTest {
 
     @Test
     fun addsDownloadedPracticeReadoutByCreatingCompetitorWhenNoCompetitorMatches() {
-        val original = projectFile(raceLevel = RaceLevel.PRACTICE)
+        val short = categoryData("short", "Short", lengthMeters = 2_000, controlSiCodes = listOf(31))
+        val long = categoryData("long", "Long", lengthMeters = 4_000, controlSiCodes = listOf(31, 32))
+        val original = projectFile(raceLevel = RaceLevel.PRACTICE, categories = listOf(short, long))
 
         val updated = EventProjectEditor.addDownloadedSportIdentReadout(
             projectFile = original,
@@ -3511,7 +3513,7 @@ class EventProjectEditorTest {
             cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
             readout = sportIdentReadout(
                 siNumber = 2005010,
-                controlCodes = emptyList(),
+                controlCodes = listOf(31, 32),
                 cardHolder = SportIdentCardHolder(firstName = "Alice", lastName = "Runner", club = "OK Test")
             ),
             readoutDateTimeIso = "2026-05-31T12:00",
@@ -3526,11 +3528,12 @@ class EventProjectEditorTest {
         assertEquals("Runner", competitor.lastName)
         assertEquals("OK Test", competitor.club)
         assertEquals(2005010, competitor.siNumber)
-        assertEquals(null, competitor.categoryId)
+        assertEquals("long", competitor.categoryId)
+        assertEquals("Long", competitorData.competitorCategory.category?.name)
         assertEquals("practice-competitor-result-1", readout.result.competitorId)
         assertEquals("Runner Alice", readout.result.cardName)
         assertEquals(2005010, readout.result.siNumber)
-        assertEquals(ResultStatus.NO_RANKING, readout.result.resultStatus)
+        assertEquals(ResultStatus.OK, readout.result.resultStatus)
         assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
     }
 
@@ -3551,6 +3554,26 @@ class EventProjectEditorTest {
         assertEquals("SI 2005010", competitor.firstName)
         assertEquals("Practice", competitor.lastName)
         assertEquals(null, updated.raceData.competitorData.single().readoutData!!.result.cardName)
+    }
+
+    @Test
+    fun assignsLongestCourseToPunchlessNewPracticeCompetitor() {
+        val short = categoryData("short", "Short", lengthMeters = 2_000, controlSiCodes = listOf(31))
+        val long = categoryData("long", "Long", lengthMeters = 4_000, controlSiCodes = listOf(31, 32))
+
+        val updated = EventProjectEditor.addDownloadedSportIdentReadout(
+            projectFile = projectFile(raceLevel = RaceLevel.PRACTICE, categories = listOf(short, long)),
+            resultId = "result-1",
+            cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+            readout = sportIdentReadout(siNumber = 2005010, controlCodes = emptyList()),
+            readoutDateTimeIso = "2026-05-31T12:00",
+            punchIdFactory = { index, type -> "punch-$index-${type.name}" }
+        )
+
+        assertEquals(
+            "long",
+            updated.raceData.competitorData.single().competitorCategory.competitor.categoryId
+        )
     }
 
     @Test
@@ -4449,6 +4472,7 @@ class EventProjectEditorTest {
         id: String,
         name: String,
         order: Int = 0,
+        lengthMeters: Int = 0,
         controlSiCodes: List<Int> = emptyList(),
         competitors: List<EventCompetitor> = emptyList(),
         encryptedIdealOrder: String? = null,
@@ -4456,6 +4480,7 @@ class EventProjectEditorTest {
     ): EventCategoryData =
         EventCategoryData(
             category = category(id, name, order).copy(
+                lengthMeters = lengthMeters,
                 encryptedIdealOrder = encryptedIdealOrder,
                 encryptedCourseInfo = encryptedCourseInfo
             ),

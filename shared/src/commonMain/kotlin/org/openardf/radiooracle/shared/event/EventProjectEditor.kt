@@ -2960,7 +2960,16 @@ object EventProjectEditor {
         val shouldCreatePracticeCompetitor = existingMatchedCompetitorIndex == null &&
             !createNewReadout &&
             workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE
+        val shouldAssignPracticeCategory = existingMatchedCompetitorIndex != null &&
+            workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE &&
+            workingProjectFile.raceData.competitorData[existingMatchedCompetitorIndex]
+                .competitorCategory.competitor.categoryId == null
         val matchedProjectFile = when {
+            shouldAssignPracticeCategory ->
+                workingProjectFile.withPracticeCategoryForDownloadedReadout(
+                    competitorIndex = existingMatchedCompetitorIndex,
+                    readout = readout
+                )
             shouldCreatePracticeCompetitor ->
                 workingProjectFile.withPracticeCompetitorForDownloadedReadout(
                     competitorId = uniquePracticeCompetitorId(workingProjectFile, resultId),
@@ -3357,10 +3366,14 @@ object EventProjectEditor {
         val holder = readout.cardHolder
         val firstName = holder?.firstName?.trim().orEmpty()
         val lastName = holder?.lastName?.trim().orEmpty()
+        val categoryData = PracticeCompetitorCategoryAssignment.mostLikelyCategory(
+            raceData = raceData,
+            controlPunchCodes = readout.punches.map { it.siCode }
+        )
         val competitor = EventCompetitor(
             id = competitorId,
             raceId = raceData.race.id,
-            categoryId = null,
+            categoryId = categoryData?.category?.id,
             firstName = firstName.ifEmpty { "SI ${readout.siNumber}" },
             lastName = lastName.ifEmpty { "Practice" },
             club = holder?.club?.trim().orEmpty(),
@@ -3376,10 +3389,39 @@ object EventProjectEditor {
                 competitorData = raceData.competitorData + EventCompetitorData(
                     competitorCategory = EventCompetitorCategory(
                         competitor = competitor,
-                        category = null
+                        category = categoryData?.category
                     ),
                     readoutData = null
                 )
+            )
+        )
+    }
+
+    private fun EventProjectFile.withPracticeCategoryForDownloadedReadout(
+        competitorIndex: Int,
+        readout: SportIdentCardReadout
+    ): EventProjectFile {
+        val categoryData = PracticeCompetitorCategoryAssignment.mostLikelyCategory(
+            raceData,
+            readout.punches.map { it.siCode }
+        ) ?: return this
+        return copy(
+            raceData = raceData.copy(
+                competitorData = raceData.competitorData.mapIndexed { index, data ->
+                    if (index != competitorIndex) {
+                        data
+                    } else {
+                        data.copy(
+                            competitorCategory = data.competitorCategory.copy(
+                                competitor = data.competitorCategory.competitor.copy(
+                                    categoryId = categoryData.category.id,
+                                    isMan = categoryData.category.isMan
+                                ),
+                                category = categoryData.category
+                            )
+                        )
+                    }
+                }
             )
         )
     }

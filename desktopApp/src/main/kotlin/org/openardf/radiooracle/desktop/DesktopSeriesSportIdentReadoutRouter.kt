@@ -30,6 +30,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
+import org.openardf.radiooracle.shared.event.PracticeCompetitorCategoryAssignment
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import java.nio.file.Path
 import java.time.Duration
@@ -96,6 +97,19 @@ object DesktopSeriesSportIdentReadoutRouter {
         }
     }
 
+    fun addPracticeCompetitorAcrossSeries(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        readout: SportIdentCardReadout,
+        categoryName: String
+    ): DesktopSeriesPracticeInForestUpdate {
+        val members = loadSeriesMembers(store, manifestPath)
+            .filter { it.projectFile.raceData.race.raceLevel == RaceLevel.PRACTICE }
+        return writeChangedMembers(store, members) { projectFile ->
+            addPracticeCompetitor(projectFile, readout, categoryName)
+        }
+    }
+
     fun startPracticeCompetitorInForest(
         projectFile: EventProjectFile,
         readout: SportIdentCardReadout,
@@ -123,10 +137,16 @@ object DesktopSeriesSportIdentReadoutRouter {
                 }
             }
         } else {
+            val categoryData = PracticeCompetitorCategoryAssignment.longestCourseCategory(projectFile.raceData)
             projectFile.raceData.competitorData + EventCompetitorData(
                 competitorCategory = EventCompetitorCategory(
-                    competitor = practiceCompetitorForReadout(projectFile, readout, startSeconds),
-                    category = null
+                    competitor = practiceCompetitorForReadout(
+                        projectFile,
+                        readout,
+                        startSeconds,
+                        categoryData?.category?.id
+                    ),
+                    category = categoryData?.category
                 ),
                 readoutData = null
             )
@@ -163,6 +183,58 @@ object DesktopSeriesSportIdentReadoutRouter {
                 raceData = projectFile.raceData.copy(competitorData = updatedCompetitorData)
             )
         }
+    }
+
+    fun addPracticeCompetitor(
+        projectFile: EventProjectFile,
+        readout: SportIdentCardReadout,
+        categoryName: String
+    ): EventProjectFile {
+        if (projectFile.raceData.race.raceLevel != RaceLevel.PRACTICE) {
+            return projectFile
+        }
+        val existingIndex = projectFile.raceData.competitorData.indexOfFirst {
+            it.competitorCategory.competitor.siNumber == readout.siNumber
+        }
+        val categoryData = PracticeCompetitorCategoryAssignment.categoryNamedLike(
+            projectFile.raceData,
+            categoryName
+        ) ?: PracticeCompetitorCategoryAssignment.longestCourseCategory(projectFile.raceData)
+        if (existingIndex >= 0) {
+            val existingData = projectFile.raceData.competitorData[existingIndex]
+            if (existingData.competitorCategory.competitor.categoryId != null || categoryData == null) {
+                return projectFile
+            }
+            return projectFile.copy(
+                raceData = projectFile.raceData.copy(
+                    competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
+                        if (index != existingIndex) data else data.copy(
+                            competitorCategory = data.competitorCategory.copy(
+                                competitor = data.competitorCategory.competitor.copy(
+                                    categoryId = categoryData.category.id,
+                                    isMan = categoryData.category.isMan
+                                ),
+                                category = categoryData.category
+                            )
+                        )
+                    }
+                )
+            )
+        }
+        val competitor = practiceCompetitorForReadout(
+            projectFile = projectFile,
+            readout = readout,
+            startSeconds = null,
+            categoryId = categoryData?.category?.id
+        )
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                competitorData = projectFile.raceData.competitorData + EventCompetitorData(
+                    competitorCategory = EventCompetitorCategory(competitor, categoryData?.category),
+                    readoutData = null
+                )
+            )
+        )
     }
 
     private fun writeChangedMembers(
@@ -209,7 +281,8 @@ object DesktopSeriesSportIdentReadoutRouter {
     private fun practiceCompetitorForReadout(
         projectFile: EventProjectFile,
         readout: SportIdentCardReadout,
-        startSeconds: Long
+        startSeconds: Long?,
+        categoryId: String?
     ): EventCompetitor {
         val holder = readout.cardHolder
         val firstName = holder?.firstName?.trim().orEmpty()
@@ -217,7 +290,7 @@ object DesktopSeriesSportIdentReadoutRouter {
         return EventCompetitor(
             id = uniquePracticeCompetitorId(projectFile, readout.siNumber),
             raceId = projectFile.raceData.race.id,
-            categoryId = null,
+            categoryId = categoryId,
             firstName = firstName.ifEmpty { "SI ${readout.siNumber}" },
             lastName = lastName.ifEmpty { "Practice" },
             club = holder?.club?.trim().orEmpty(),

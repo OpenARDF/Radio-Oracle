@@ -319,7 +319,11 @@ object ResultsProcessor {
         }
 
         val competitor = if (!createNewReadout) {
-            dataProcessor.getCompetitorBySINumber(cardData.siNumber, race.id)
+            if (race.raceLevel == org.openardf.radiooracle.shared.domain.RaceLevel.PRACTICE) {
+                dataProcessor.ensurePracticeCompetitorForCard(cardData, race)
+            } else {
+                dataProcessor.getCompetitorBySINumber(cardData.siNumber, race.id)
+            }
         } else null
 
         val category = competitor?.categoryId?.let { dataProcessor.getCategory(it) }

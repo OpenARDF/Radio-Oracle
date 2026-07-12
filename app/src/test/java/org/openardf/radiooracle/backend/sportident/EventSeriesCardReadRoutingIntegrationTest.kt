@@ -141,6 +141,81 @@ class EventSeriesCardReadRoutingIntegrationTest {
     }
 
     @Test
+    fun unknownPracticeSeriesCardCreatesCategorizedCompetitorInEveryRace() = runBlocking {
+        val processor = DataProcessor.get()
+        val day1 = raceData("Practice Day 1", listOf(31, 32), siNumber = null)
+        val day2 = raceData("Practice Day 2", listOf(41, 42), siNumber = null)
+        val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
+        processor.saveRaceData(day1)
+        processor.saveRaceData(day2)
+        processor.saveEventSeries(
+            series,
+            listOf(
+                member(series.seriesId, "day-1", day1, 0),
+                member(series.seriesId, "day-2", day2, 1)
+            )
+        )
+
+        val selectionRequest = async { withTimeout(1_000) { processor.raceSelectionRequests.first() } }
+        assertEquals(
+            true,
+            processor.processCardDataForCurrentRaceOrSeries(
+                card(2002, listOf(41, 42)).copy(cardName = "Runner Alice"),
+                day1.race
+            )
+        )
+        assertEquals(day2.race.id, selectionRequest.await())
+
+        listOf(day1, day2).forEach { raceData ->
+            val competitor = processor.getCompetitorBySINumber(2002, raceData.race.id)!!
+            assertEquals("M21", processor.getCategory(competitor.categoryId!!)!!.name)
+            assertEquals("Alice", competitor.firstName)
+            assertEquals("Runner", competitor.lastName)
+        }
+        assertEquals(2002, processor.resultSummaries(day2.race.id).single().siNumber)
+    }
+
+    @Test
+    fun clearedPracticeSeriesCardStartsCategorizedCompetitorInForestWithoutResult() = runBlocking {
+        val processor = DataProcessor.get()
+        val day1 = raceData("Practice Day 1", listOf(31), siNumber = null, courseLength = 3_000)
+        val day2 = raceData("Practice Day 2", listOf(41), siNumber = null, courseLength = 3_000)
+        val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
+        processor.saveRaceData(day1)
+        processor.saveRaceData(day2)
+        processor.saveEventSeries(
+            series,
+            listOf(
+                member(series.seriesId, "day-1", day1, 0),
+                member(series.seriesId, "day-2", day2, 1)
+            )
+        )
+        val blankCard = CardData(
+            cardType = SI_CARD6,
+            siNumber = 2003,
+            cardName = "Runner Bob",
+            punchData = arrayListOf()
+        )
+
+        assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(blankCard, day1.race))
+
+        listOf(day1, day2).forEach { raceData ->
+            val competitor = processor.getCompetitorBySINumber(2003, raceData.race.id)!!
+            assertEquals("M21", processor.getCategory(competitor.categoryId!!)!!.name)
+            assertTrue(competitor.drawnRelativeStartTime != null)
+            assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(raceData.race.id))
+        }
+
+        val selectionRequest = async { withTimeout(1_000) { processor.raceSelectionRequests.first() } }
+        assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(card(2003, listOf(41)), day1.race))
+        assertEquals(day2.race.id, selectionRequest.await())
+        listOf(day1, day2).forEach { raceData ->
+            val competitor = processor.getCompetitorBySINumber(2003, raceData.race.id)!!
+            assertEquals(null, competitor.drawnRelativeStartTime)
+        }
+    }
+
+    @Test
     fun nonPracticeSeriesCardReadStoresResultInMatchedEventAndRequestsSelection() = runBlocking {
         val processor = DataProcessor.get()
         val day1 = raceData(
@@ -242,8 +317,9 @@ class EventSeriesCardReadRoutingIntegrationTest {
     private fun raceData(
         name: String,
         controls: List<Int>,
-        siNumber: Int,
-        raceLevel: RaceLevel = RaceLevel.PRACTICE
+        siNumber: Int?,
+        raceLevel: RaceLevel = RaceLevel.PRACTICE,
+        courseLength: Int = 0
     ): RaceData {
         val raceId = UUID.randomUUID()
         val categoryId = UUID.randomUUID()
@@ -253,7 +329,7 @@ class EventSeriesCardReadRoutingIntegrationTest {
             name = "M21",
             isMan = true,
             maxAge = null,
-            length = 0,
+            length = courseLength,
             climb = 0,
             order = 0,
             controlPointsString = controls.joinToString(",")
@@ -285,7 +361,7 @@ class EventSeriesCardReadRoutingIntegrationTest {
                 )
             ),
             aliases = emptyList(),
-            competitorData = listOf(
+            competitorData = if (siNumber == null) emptyList() else listOf(
                 CompetitorData(
                     competitorCategory = CompetitorCategory(
                         competitor = Competitor(
