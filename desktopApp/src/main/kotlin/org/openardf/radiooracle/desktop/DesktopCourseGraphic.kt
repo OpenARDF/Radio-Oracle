@@ -232,7 +232,8 @@ object DesktopCourseGraphic {
         )
     }
 
-    private fun writePng(path: Path, routeMap: DesktopCourseRouteMap) {
+    internal fun writePng(path: Path, routeMap: DesktopCourseRouteMap) {
+        path.parent?.let(Files::createDirectories)
         ImageIO.write(renderImage(routeMap, "png"), "png", path.toFile())
     }
 

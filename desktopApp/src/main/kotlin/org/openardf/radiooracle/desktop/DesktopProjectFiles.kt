@@ -228,6 +228,19 @@ object DesktopProjectFiles : ProjectFileStore {
             awardDisplayMode = awardDisplayMode
         )
 
+    fun exportPublicResultsSeriesSite(
+        directory: Path,
+        seriesName: String,
+        races: List<DesktopPublicResultSeriesRace>,
+        generatedAt: java.time.Instant = java.time.Instant.now()
+    ): DesktopPublicResultSiteExportPaths =
+        DesktopPublicResultSiteExports.exportSeries(
+            directory = directory,
+            seriesName = seriesName,
+            races = races,
+            generatedAt = generatedAt
+        )
+
     private fun writeText(path: Path, text: String) {
         path.parent?.let { Files.createDirectories(it) }
         Files.writeString(path, text, StandardCharsets.UTF_8)

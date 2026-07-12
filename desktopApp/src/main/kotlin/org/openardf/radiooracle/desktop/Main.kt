@@ -1230,6 +1230,62 @@ fun main(args: Array<String>) = application {
                 ?.let { path -> "$rootUrl${path.trim('/')}/" }
                 ?: rootUrl
 
+        fun publicResultSeriesRaces(): Pair<String, List<DesktopPublicResultSeriesRace>>? {
+            val manifestPath = currentSeriesManifestPath() ?: return null
+            val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+            val seriesFolder = requireNotNull(manifestPath.parent) {
+                "Race Series manifest has no parent folder."
+            }
+            val currentPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
+            val currentProject = projectSession.currentProject
+            val races = seriesFile.sortedEvents().mapNotNull { event ->
+                val eventPath = seriesFolder.resolve(event.eventFilePath).normalize()
+                if (!DesktopEventSeriesFiles.exists(eventPath)) {
+                    return@mapNotNull null
+                }
+                val project = if (eventPath.toAbsolutePath().normalize() == currentPath) {
+                    currentProject ?: DesktopEventSeriesFiles.readEvent(eventPath)
+                } else {
+                    DesktopEventSeriesFiles.readEvent(eventPath)
+                }
+                val courseInfo = when {
+                    protectedCoursePassword == null -> emptyMap()
+                    eventPath.toAbsolutePath().normalize() == currentPath -> protectedCourseInfoByCategoryId
+                    else -> runCatching {
+                        decryptedProtectedCourseState(project, requireNotNull(protectedCoursePassword))
+                            .protectedCourseInfoByCategoryId
+                    }.getOrElse { emptyMap() }
+                }
+                DesktopPublicResultSeriesRace(
+                    projectFile = project,
+                    protectedCourseInfoByCategoryId = courseInfo,
+                    awardDisplayMode = currentDesktopAwardDisplayMode()
+                )
+            }
+            return seriesFile.name to races
+        }
+
+        fun exportPublicResultsSiteForCurrentContext(
+            directory: Path,
+            currentProject: EventProjectFile
+        ): DesktopPublicResultSiteExportPaths {
+            val series = publicResultSeriesRaces()
+            return if (series == null) {
+                DesktopProjectFiles.exportPublicResultsSite(
+                    directory,
+                    currentProject,
+                    protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                    currentDesktopAwardDisplayMode()
+                )
+            } else {
+                DesktopProjectFiles.exportPublicResultsSeriesSite(
+                    directory = directory,
+                    seriesName = series.first,
+                    races = series.second
+                )
+            }
+        }
+
         fun regenerateLocalResultsWebPage(): String {
             val currentProject = requireNotNull(projectSession.currentProject) {
                 "Open or create a Race File before starting the local web server."
@@ -1238,12 +1294,7 @@ fun main(args: Array<String>) = application {
                 ?: Files.createTempDirectory("radio-oracle-local-results-web").also {
                     localResultsWebServerDirectory = it
                 }
-            val paths = DesktopProjectFiles.exportPublicResultsSite(
-                directory,
-                currentProject,
-                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
-                currentDesktopAwardDisplayMode()
-            )
+            val paths = exportPublicResultsSiteForCurrentContext(directory, currentProject)
             localResultsWebServerDirectory = paths.directory
             localResultsWebServerEventPath = paths.eventPath
             DesktopDebugLog.info(
@@ -3957,12 +4008,7 @@ fun main(args: Array<String>) = application {
             val currentProject = projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportPublicResultsSiteDirectory()?.let { directory ->
                 runCatching {
-                    val paths = DesktopProjectFiles.exportPublicResultsSite(
-                        directory,
-                        currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
-                        currentDesktopAwardDisplayMode()
-                    )
+                    val paths = exportPublicResultsSiteForCurrentContext(directory, currentProject)
                     publicResultSiteDirectory = paths.directory
                     publicResultSiteEventPath = paths.eventPath
                     publishedPublicResultSiteUrl = null

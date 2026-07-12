@@ -342,6 +342,51 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsSeriesRacesWithResultsOnOnePage() {
+        val directory = Files.createTempDirectory("rom-desktop-public-results-series")
+        val firstRace = raceDataWithSplitReadout()
+        val secondRace = raceDataWithSplitReadout().copy(
+            race = firstRace.race.copy(
+                id = "race-two",
+                name = "Second Series Race",
+                startDateTimeIso = "2026-06-01T10:00"
+            )
+        )
+        val raceWithoutResults = raceData().copy(
+            race = firstRace.race.copy(
+                id = "race-three",
+                name = "Unfinished Series Race",
+                startDateTimeIso = "2026-06-02T10:00"
+            )
+        )
+
+        val paths = DesktopProjectFiles.exportPublicResultsSeriesSite(
+            directory = directory,
+            seriesName = "Summer Series",
+            races = listOf(
+                DesktopPublicResultSeriesRace(EventProjectFile(raceData = firstRace)),
+                DesktopPublicResultSeriesRace(EventProjectFile(raceData = secondRace)),
+                DesktopPublicResultSeriesRace(EventProjectFile(raceData = raceWithoutResults))
+            ),
+            generatedAt = java.time.Instant.parse("2026-06-03T12:00:00Z")
+        )
+
+        val index = Files.readString(paths.indexHtml)
+        val manifest = Files.readString(paths.publicResultsJson)
+        val siteJs = Files.readString(paths.eventDirectory.resolve("assets").resolve("series-site.js"))
+        assertEquals("2026-05-31-summer-series-series", paths.eventPath)
+        assertTrue(index.contains("Summer Series"))
+        assertTrue(index.contains("series-races"))
+        assertTrue(manifest.contains("Desktop File Race"))
+        assertTrue(manifest.contains("Second Series Race"))
+        assertTrue(!manifest.contains("Unfinished Series Race"))
+        assertTrue(siteJs.contains("courseGraphicsHtml(race)"))
+        assertTrue(siteJs.indexOf("courseGraphicsHtml(race)") < siteJs.indexOf("race-results"))
+        assertTrue(siteJs.contains("Promise.all(manifest.races"))
+        assertTrue(Files.readString(paths.rootIndexHtml).contains("Summer Series"))
+    }
+
+    @Test
     fun exportsResultsTextFile() {
         val directory = Files.createTempDirectory("rom-desktop-results-text")
         val path = directory.resolve("results.txt")

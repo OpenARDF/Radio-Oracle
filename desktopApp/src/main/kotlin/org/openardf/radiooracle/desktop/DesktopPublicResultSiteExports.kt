@@ -68,8 +68,20 @@ data class DesktopPublicResultSiteExportPaths(
     val printableResultsHtml: Path
 )
 
+data class DesktopPublicResultSeriesRace(
+    val projectFile: EventProjectFile,
+    val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
+    val awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+)
+
 /** Writes the static public-results site that can be uploaded to Cloudflare Pages. */
 object DesktopPublicResultSiteExports {
+    private data class SeriesRaceExport(
+        val paths: DesktopPublicResultSiteExportPaths,
+        val projectFile: EventProjectFile,
+        val courseGraphicPaths: List<Path>
+    )
+
     private data class PublicResultSplit(
         val control: String,
         val status: String,
@@ -153,6 +165,123 @@ object DesktopPublicResultSiteExports {
             iofResultListXml = iofResultsPath,
             printableResultsHtml = printableResultsPath
         )
+    }
+
+    fun exportSeries(
+        directory: Path,
+        seriesName: String,
+        races: List<DesktopPublicResultSeriesRace>,
+        appVersion: String = "Desktop",
+        generatedAt: Instant = Instant.now()
+    ): DesktopPublicResultSiteExportPaths {
+        val racesWithResults = races.filter { EventResultDetails.from(it.projectFile.raceData).isNotEmpty() }
+        require(racesWithResults.isNotEmpty()) {
+            "The Race Series does not contain any races with results to publish."
+        }
+        val raceExports = racesWithResults.map { race ->
+            val paths = export(
+                directory = directory,
+                projectFile = race.projectFile,
+                appVersion = appVersion,
+                protectedCourseInfoByCategoryId = race.protectedCourseInfoByCategoryId,
+                awardDisplayMode = race.awardDisplayMode,
+                generatedAt = generatedAt
+            )
+            SeriesRaceExport(
+                paths = paths,
+                projectFile = race.projectFile,
+                courseGraphicPaths = exportCourseGraphics(paths, race)
+            )
+        }
+        val seriesPath = seriesPath(seriesName, racesWithResults.first().projectFile, generatedAt)
+        val seriesDirectory = directory.resolve(seriesPath)
+        val assetsDirectory = seriesDirectory.resolve("assets")
+        val dataDirectory = seriesDirectory.resolve("data")
+        listOf(seriesDirectory, assetsDirectory, dataDirectory).forEach(Files::createDirectories)
+        val indexPath = seriesDirectory.resolve("index.html")
+        val publicResultsPath = dataDirectory.resolve("series-results.json")
+        writeText(indexPath, seriesIndexHtml(seriesName))
+        writeText(assetsDirectory.resolve("site.css"), siteCss())
+        writeText(assetsDirectory.resolve("series-site.js"), seriesSiteJs())
+        writeText(publicResultsPath, seriesResultsJson(seriesName, raceExports, generatedAt))
+
+        val summary = PublishedEventSummary(
+            path = seriesPath,
+            name = seriesName,
+            start = racesWithResults.minOf { it.projectFile.raceData.race.startDateTimeIso },
+            generatedAt = generatedAt.toString(),
+            resultCount = racesWithResults.sumOf { EventResultDetails.from(it.projectFile.raceData).size }
+        )
+        val rootDataDirectory = directory.resolve("data")
+        Files.createDirectories(rootDataDirectory)
+        val events = mergedEventSummaries(rootDataDirectory.resolve("races.json"), summary)
+            .filterNot { event -> raceExports.any { it.paths.eventPath == event.path } }
+        writeText(rootDataDirectory.resolve("races.json"), eventsJson(events))
+        val rootIndexPath = directory.resolve("index.html")
+        writeText(rootIndexPath, rootIndexHtml(events))
+
+        val first = raceExports.first().paths
+        return DesktopPublicResultSiteExportPaths(
+            directory = directory,
+            eventDirectory = seriesDirectory,
+            eventPath = seriesPath,
+            rootIndexHtml = rootIndexPath,
+            indexHtml = indexPath,
+            publicResultsJson = publicResultsPath,
+            finalResultsJson = first.finalResultsJson,
+            liveResultsJson = first.liveResultsJson,
+            iofResultListXml = first.iofResultListXml,
+            printableResultsHtml = first.printableResultsHtml
+        )
+    }
+
+    private fun exportCourseGraphics(
+        paths: DesktopPublicResultSiteExportPaths,
+        race: DesktopPublicResultSeriesRace
+    ): List<Path> {
+        val categoryIdsWithResults = EventResultDetails.from(race.projectFile.raceData)
+            .mapNotNullTo(linkedSetOf()) { it.categoryId }
+        val graphicsDirectory = paths.eventDirectory.resolve("course-graphics")
+        val distinctCourses = categoryIdsWithResults
+            .mapNotNull { categoryId ->
+                race.protectedCourseInfoByCategoryId[categoryId]?.let { categoryId to it }
+            }
+            .distinctBy { it.second }
+        return distinctCourses.mapNotNull { (categoryId, courseInfo) ->
+            runCatching {
+                if (DesktopCourseAnalyzer.analysisUnavailableReason(
+                        race.projectFile,
+                        categoryId,
+                        courseInfo,
+                        courseInfo.idealOrder
+                    ) != null
+                ) {
+                    return@runCatching null
+                }
+                val summary = DesktopCourseAnalyzer.analyze(
+                    projectFile = race.projectFile,
+                    categoryId = categoryId,
+                    protectedCourseInfo = courseInfo,
+                    protectedIdealOrderText = courseInfo.idealOrder,
+                    magneticDeclinationProvider = DesktopMagneticDeclination::result
+                )
+                val routeMap = summary.routeMaps.firstOrNull() ?: return@runCatching null
+                val fileName = "course-${categoryId.safePathSegment()}.png"
+                val path = graphicsDirectory.resolve(fileName)
+                DesktopCourseGraphic.writePng(path, routeMap)
+                path
+            }.getOrNull()
+        }
+    }
+
+    private fun String.safePathSegment(): String =
+        lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "course" }
+
+    private fun seriesPath(seriesName: String, firstRace: EventProjectFile, generatedAt: Instant): String {
+        val date = firstRace.raceData.race.startDateTimeIso.take(10)
+            .takeIf { it.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
+            ?: generatedAt.toString().take(10)
+        return "$date-${seriesName.safePathSegment()}-series"
     }
 
     private fun eventPath(projectFile: EventProjectFile, generatedAt: Instant): String {
@@ -437,6 +566,135 @@ object DesktopPublicResultSiteExports {
         </html>
         """.trimIndent() + "\n"
 
+    private fun seriesIndexHtml(seriesName: String): String =
+        """
+        <!doctype html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>${htmlText(seriesName)} Results</title>
+          <link rel="stylesheet" href="assets/site.css">
+        </head>
+        <body>
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">Radio-Oracle Race Series results</p>
+              <h1>${htmlText(seriesName)}</h1>
+              <p id="series-meta" class="summary">Loading series results...</p>
+              <a class="parent-link" href="../">All published results</a>
+            </div>
+          </header>
+          <main id="series-races"></main>
+          <footer>Generated by Radio-Oracle.</footer>
+          <script src="assets/series-site.js"></script>
+        </body>
+        </html>
+        """.trimIndent() + "\n"
+
+    private fun seriesResultsJson(
+        seriesName: String,
+        races: List<SeriesRaceExport>,
+        generatedAt: Instant
+    ): String =
+        buildJsonObject {
+            put("seriesName", seriesName)
+            put("generatedAt", generatedAt.toString())
+            put(
+                "races",
+                buildJsonArray {
+                    races.forEach { race ->
+                        add(
+                            buildJsonObject {
+                                put("name", race.projectFile.raceData.race.name)
+                                put("start", race.projectFile.raceData.race.startDateTimeIso)
+                                put("dataUrl", "../${race.paths.eventPath}/data/public-results.json")
+                                put("downloadsUrl", "../${race.paths.eventPath}/downloads/")
+                                put(
+                                    "courseGraphics",
+                                    buildJsonArray {
+                                        race.courseGraphicPaths.forEach { graphicPath ->
+                                            add(JsonPrimitive("../${race.paths.eventPath}/course-graphics/${graphicPath.fileName}"))
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+            )
+        }.toString() + "\n"
+
+    private fun seriesSiteJs(): String =
+        """
+        function text(value){return String(value ?? "")}
+        function escapeHtml(value){return text(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;")}
+        function resultSearchText(result){
+          const splits=(result.splits || []).map(split=>`${'$'}{split.control} ${'$'}{split.status} ${'$'}{split.legTime} ${'$'}{split.cumulativeTime}`).join(" ");
+          return `${'$'}{result.place} ${'$'}{result.competitor} ${'$'}{result.status} ${'$'}{result.points} ${'$'}{result.runtime} ${'$'}{result.punches} ${'$'}{splits}`.toLowerCase()
+        }
+        function splitRowsHtml(result){
+          const splits=result.splits || [];
+          if(splits.length===0)return '<div class="empty-state">No split details available for this result.</div>';
+          return `<p class="split-detail-title">Splits for ${'$'}{escapeHtml(result.competitor)}</p><table><thead><tr><th>Control</th><th>Status</th><th>Leg</th><th>Total</th><th class="number">Leg place</th></tr></thead><tbody>${'$'}{splits.map(split=>`<tr><td>${'$'}{escapeHtml(split.control)}</td><td>${'$'}{escapeHtml(split.status)}</td><td>${'$'}{escapeHtml(split.legTime)}</td><td>${'$'}{escapeHtml(split.cumulativeTime)}</td><td class="number">${'$'}{escapeHtml(split.legPlace)}</td></tr>`).join("")}</tbody></table>`
+        }
+        function resultRowsHtml(raceIndex,categoryIndex,resultIndex,result){
+          const rowId=`split-${'$'}{raceIndex}-${'$'}{categoryIndex}-${'$'}{resultIndex}`;
+          return `<tr class="result-row" tabindex="0" role="button" aria-expanded="false" aria-controls="${'$'}{rowId}" data-split-target="${'$'}{rowId}"><td class="number">${'$'}{escapeHtml(result.place)}</td><td>${'$'}{escapeHtml(result.competitor)}<small class="expand-hint">Tap for splits</small></td><td>${'$'}{escapeHtml(result.status)}</td><td class="number">${'$'}{escapeHtml(result.points)}</td><td>${'$'}{escapeHtml(result.runtime)}</td><td class="punches">${'$'}{escapeHtml(result.punches)}</td></tr><tr id="${'$'}{rowId}" class="split-row" hidden><td colspan="6"><div class="split-detail">${'$'}{splitRowsHtml(result)}</div></td></tr>`
+        }
+        function resultsHtml(data,raceIndex,query=""){
+          const normalized=query.trim().toLowerCase();
+          const sections=data.categories.map((category,categoryIndex)=>{
+            const rows=category.results.filter(result=>resultSearchText(result).includes(normalized));
+            if(rows.length===0)return "";
+            return `<section class="category"><h3>${'$'}{escapeHtml(category.name)}</h3><table><thead><tr><th class="number">Place</th><th>Competitor</th><th>Status</th><th class="number">Points</th><th>Runtime</th><th>Punches</th></tr></thead><tbody>${'$'}{rows.map((result,resultIndex)=>resultRowsHtml(raceIndex,categoryIndex,resultIndex,result)).join("")}</tbody></table></section>`
+          }).join("");
+          return sections || '<div class="empty-state">No matching results.</div>'
+        }
+        function courseGraphicsHtml(race){
+          const graphics=race.courseGraphics || [];
+          if(graphics.length===0)return "";
+          return `<section class="course-diagrams" aria-label="2D course diagrams"><h3>2D Course Diagram${'$'}{graphics.length===1 ? "" : "s"}</h3><div class="course-diagram-grid">${'$'}{graphics.map((url,index)=>`<figure><img src="${'$'}{escapeHtml(url)}" alt="2D course diagram ${'$'}{index+1} for ${'$'}{escapeHtml(race.name)}"></figure>`).join("")}</div></section>`
+        }
+        function renderRace(root,race,data,raceIndex){
+          root.innerHTML=`<section class="series-race"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1}</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Start ${'$'}{escapeHtml(data.event.start)} | ${'$'}{data.resultCount} results</p></div><nav class="download-links" aria-label="${'$'}{escapeHtml(data.event.name)} downloads"><a href="${'$'}{escapeHtml(race.downloadsUrl)}printable-results.html">Printable HTML</a><a href="${'$'}{escapeHtml(race.downloadsUrl)}iof-result-list.xml">IOF XML</a></nav></div>${'$'}{courseGraphicsHtml(race)}<section class="panel"><div class="panel-heading"><div><h3>Results</h3><p>Category results, points, runtime, status, and punch order.</p></div><input type="search" placeholder="Filter this race" aria-label="Filter ${'$'}{escapeHtml(data.event.name)} results"></div><div class="race-results">${'$'}{resultsHtml(data,raceIndex)}</div></section></section>`;
+          const input=root.querySelector("input[type=search]");
+          input.addEventListener("input",event=>{root.querySelector(".race-results").innerHTML=resultsHtml(data,raceIndex,event.target.value)})
+        }
+        function toggleResultRow(row){
+          const splitRow=document.getElementById(row.dataset.splitTarget);
+          if(!splitRow)return;
+          const expanded=row.getAttribute("aria-expanded")==="true";
+          row.setAttribute("aria-expanded",String(!expanded));
+          splitRow.hidden=expanded
+        }
+        document.getElementById("series-races").addEventListener("click",event=>{
+          const row=event.target.closest(".result-row");
+          if(row)toggleResultRow(row)
+        });
+        document.getElementById("series-races").addEventListener("keydown",event=>{
+          if(event.key!=="Enter" && event.key!==" ")return;
+          const row=event.target.closest(".result-row");
+          if(!row)return;
+          event.preventDefault();toggleResultRow(row)
+        });
+        fetch("data/series-results.json",{cache:"no-store"}).then(response=>{
+          if(!response.ok)throw new Error(`Unable to load series: ${'$'}{response.status}`);
+          return response.json()
+        }).then(async manifest=>{
+          document.getElementById("series-meta").textContent=`${'$'}{manifest.races.length} races with results | Published ${'$'}{manifest.generatedAt}`;
+          const root=document.getElementById("series-races");
+          const raceData=await Promise.all(manifest.races.map(async race=>{
+            const response=await fetch(race.dataUrl,{cache:"no-store"});
+            if(!response.ok)throw new Error(`Unable to load ${'$'}{race.name}: ${'$'}{response.status}`);
+            return response.json()
+          }));
+          manifest.races.forEach((race,index)=>{
+            const section=document.createElement("div");root.appendChild(section);renderRace(section,race,raceData[index],index)
+          })
+        }).catch(error=>{document.getElementById("series-races").textContent=error.message})
+        """.trimIndent() + "\n"
+
     private fun siteCss(): String =
         """
         :root{--bg:#f4f6f8;--panel:#fff;--text:#111827;--muted:#5f6b7a;--line:#d8dee8;--accent:#1769aa;--accent-strong:#0f4f84}
@@ -454,11 +712,12 @@ object DesktopPublicResultSiteExports {
         .overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:var(--line)}
         .overview>div{min-height:86px;padding:18px;background:var(--panel)}.overview span{display:block;margin-bottom:6px;color:var(--muted);font-size:13px}.overview strong{font-size:20px}
         .panel{padding:20px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+        .series-race{display:grid;gap:16px;padding:24px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.race-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.race-heading h2{font-size:26px}.course-diagrams{padding:18px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe}.course-diagram-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px}.course-diagram-grid figure{margin:0}.course-diagram-grid img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
         .panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}
         input[type=search]{width:min(280px,100%);height:40px;padding:0 12px;border:1px solid var(--line);border-radius:6px;font:inherit}
         table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);font-size:13px;font-weight:700}.number{text-align:right}.punches{color:var(--muted);font-size:13px}.result-row{cursor:pointer}.result-row:hover{background:#f8fbff}.result-row[aria-expanded=true]{background:#eef6fc}.expand-hint{display:block;margin-top:2px;color:var(--muted);font-size:12px}.split-row[hidden]{display:none}.split-detail{padding:14px 16px;background:#fbfcfe;border-bottom:1px solid var(--line)}.split-detail table{margin-top:8px;background:#fff}.split-detail th,.split-detail td{font-size:13px}.split-detail-title{margin:0 0 6px;color:var(--muted);font-size:13px;font-weight:700}
         footer{width:min(1180px,calc(100% - 32px));margin:0 auto 32px;font-size:13px}
-        @media (max-width:760px){.page-header,.panel-heading{display:block}.download-links{justify-content:flex-start;margin-top:18px}.overview{grid-template-columns:1fr}input[type=search]{margin-top:12px}}
+        @media (max-width:760px){.page-header,.panel-heading,.race-heading{display:block}.download-links{justify-content:flex-start;margin-top:18px}.overview{grid-template-columns:1fr}input[type=search]{margin-top:12px}.series-race{padding:14px}}
         """.trimIndent() + "\n"
 
     private fun siteJs(): String =
