@@ -25,7 +25,6 @@
 package org.openardf.radiooracle.shared.files
 
 import org.openardf.radiooracle.shared.domain.ResultStatus
-import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventAwardCategoryDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
@@ -152,7 +151,7 @@ object HtmlResultExports {
         append("</td><td>")
         appendHtml(DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false))
         append("</td><td class=\"splits\">")
-        appendHtml(readoutData.punches.toSplitText(controlLabelsByCode))
+        appendHtml(readoutData.punches.toResultSplitText(controlLabelsByCode))
         append("</td></tr>")
     }
 
@@ -233,12 +232,13 @@ object HtmlResultExports {
             ResultStatus.ERROR -> "ERR"
         }
 
-    private fun List<EventAliasPunch>.toSplitText(controlLabelsByCode: Map<Int, String>): String =
-        filter { it.punch.punchType == SIRecordType.CONTROL }
-            .joinToString(separator = " ") { aliasPunch ->
-                val code = controlLabelsByCode[aliasPunch.punch.siCode] ?: aliasPunch.alias?.name ?: aliasPunch.punch.siCode.toString()
-                val splitTime = DurationFormatter.secondsToFormattedString(aliasPunch.punch.splitSeconds, useMinutes = false)
-                "$code - $splitTime"
+    private fun List<EventAliasPunch>.toResultSplitText(
+        controlLabelsByCode: Map<Int, String>
+    ): String =
+        ResultSplitRows.from(this, controlLabelsByCode)
+            .joinToString(separator = " ") { split ->
+                val splitTime = DurationFormatter.secondsToFormattedString(split.splitSeconds, useMinutes = false)
+                "${split.label} - $splitTime"
             }
 
     private fun StringBuilder.appendHtml(value: String) {

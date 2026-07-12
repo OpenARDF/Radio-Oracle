@@ -17837,6 +17837,11 @@ private fun ControlDetailsPanel(
             raceType = raceType,
             warningReasonsByControlId = warningReasonsByControlId
         )
+        Text(
+            text = "Finish stations are read automatically from the SI card. Do not add the finish station's SI code as a Fox, Beacon, or Control.",
+            color = DesktopPalette.Disconnected,
+            fontSize = 13.sp
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),

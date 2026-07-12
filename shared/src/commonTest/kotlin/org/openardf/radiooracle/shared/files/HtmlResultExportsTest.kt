@@ -61,7 +61,7 @@ class HtmlResultExportsTest {
         assertTrue(html.contains("<td>OK &amp; Test</td>"))
         assertTrue(html.contains("<td class=\"num\">2</td>"))
         assertTrue(html.contains("<td>00:45:00</td>"))
-        assertTrue(html.contains("31 - 00:10:00 32 - 00:25:00"))
+        assertTrue(html.contains("31 - 00:10:00 32 - 00:25:00 Finish - 00:10:00"))
         assertTrue(html.contains("Generated with Radio-Oracle 1.0"))
     }
 
@@ -83,7 +83,7 @@ class HtmlResultExportsTest {
             )
         )
 
-        assertTrue(html.contains("F1 - 00:10:00 32 - 00:25:00"))
+        assertTrue(html.contains("F1 - 00:10:00 32 - 00:25:00 Finish - 00:10:00"))
     }
 
     private fun raceData(
@@ -167,21 +167,26 @@ class HtmlResultExportsTest {
             ),
             punches = listOf(
                 punch(code = 31, splitSeconds = 600),
-                punch(code = 32, splitSeconds = 1_500)
+                punch(code = 32, splitSeconds = 1_500),
+                punch(code = 0, splitSeconds = 600, punchType = SIRecordType.FINISH)
             )
         )
 
-    private fun punch(code: Int, splitSeconds: Long): EventAliasPunch =
+    private fun punch(
+        code: Int,
+        splitSeconds: Long,
+        punchType: SIRecordType = SIRecordType.CONTROL
+    ): EventAliasPunch =
         EventAliasPunch(
             punch = EventPunch(
-                id = "punch-$code",
+                id = "punch-${punchType.name}-$code",
                 raceId = "race",
                 resultId = "result",
                 cardNumber = 123456,
                 siCode = code,
                 siTimeSeconds = 36_000 + splitSeconds,
                 originalSiTimeSeconds = 36_000 + splitSeconds,
-                punchType = SIRecordType.CONTROL,
+                punchType = punchType,
                 order = code,
                 punchStatus = PunchStatus.VALID,
                 splitSeconds = splitSeconds

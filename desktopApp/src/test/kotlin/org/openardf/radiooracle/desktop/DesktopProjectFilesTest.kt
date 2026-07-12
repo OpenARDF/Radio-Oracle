@@ -312,7 +312,9 @@ class DesktopProjectFilesTest {
         assertTrue(publicJson.contains("\"runtime\": \"00:20:00\""))
         assertTrue(publicJson.contains("\"splits\": ["))
         assertTrue(publicJson.contains("\"control\": \"31\""))
+        assertTrue(publicJson.contains("\"control\": \"Finish\""))
         assertTrue(publicJson.contains("\"legTime\": \"00:05:00\""))
+        assertTrue(publicJson.contains("\"legTime\": \"00:15:00\""))
         assertTrue(publicJson.contains("\"cumulativeTime\": \"00:20:00\""))
         assertTrue(Files.readString(paths.iofResultListXml).contains("<ResultList"))
     }

@@ -25,7 +25,6 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventProjectFile
-import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventAwardCategoryDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventAwardDetails
@@ -35,11 +34,11 @@ import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
-import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.files.FinalResultJsonExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
+import org.openardf.radiooracle.shared.files.ResultSplitRows
 import org.openardf.radiooracle.shared.time.DurationFormatter
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -288,33 +287,18 @@ object DesktopPublicResultSiteExports {
             return emptyList()
         }
         var cumulativeSeconds = 0L
-        return punches
-            .filter { it.punch.punchType == SIRecordType.CONTROL || it.punch.punchType == SIRecordType.FINISH }
-            .map { aliasPunch ->
-                cumulativeSeconds += aliasPunch.punch.splitSeconds
+        return ResultSplitRows.from(punches, controlLabelsByCode, useControlLabels = useAliases)
+            .map { split ->
+                cumulativeSeconds += split.splitSeconds
                 PublicResultSplit(
-                    control = aliasPunch.publicControlLabel(controlLabelsByCode, useAliases),
-                    status = aliasPunch.punch.punchStatus.publicStatusLabel(),
-                    legSeconds = aliasPunch.punch.splitSeconds,
-                    legTime = DurationFormatter.secondsToFormattedString(aliasPunch.punch.splitSeconds, useMinutes = false),
+                    control = split.label,
+                    status = split.punchStatus.publicStatusLabel(),
+                    legSeconds = split.splitSeconds,
+                    legTime = DurationFormatter.secondsToFormattedString(split.splitSeconds, useMinutes = false),
                     cumulativeTime = DurationFormatter.secondsToFormattedString(cumulativeSeconds, useMinutes = false)
                 )
             }
     }
-
-    private fun EventAliasPunch.publicControlLabel(
-        controlLabelsByCode: Map<Int, String>,
-        useAliases: Boolean
-    ): String =
-        when (punch.punchType) {
-            SIRecordType.FINISH -> "Finish"
-            SIRecordType.CONTROL -> if (useAliases) {
-                controlLabelsByCode[punch.siCode] ?: alias?.name ?: punch.siCode.toString()
-            } else {
-                punch.siCode.toString()
-            }
-            else -> punch.punchType.name
-        }
 
     private fun PunchStatus.publicStatusLabel(): String =
         when (this) {

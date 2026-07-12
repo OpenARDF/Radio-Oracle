@@ -217,8 +217,8 @@ object TextResultExports {
             .joinToString(separator = " ") { controlLabelsByCode[it.punch.siCode] ?: it.alias?.name ?: it.punch.siCode.toString() }
 
     private fun List<EventAliasPunch>.toSplitText(): String =
-        filter { it.punch.punchType != SIRecordType.START }
-            .joinToString(separator = " ") {
-                DurationFormatter.secondsToFormattedString(it.punch.splitSeconds, useMinutes = false)
+        ResultSplitRows.from(this)
+            .joinToString(separator = " ") { split ->
+                DurationFormatter.secondsToFormattedString(split.splitSeconds, useMinutes = false)
             }
 }

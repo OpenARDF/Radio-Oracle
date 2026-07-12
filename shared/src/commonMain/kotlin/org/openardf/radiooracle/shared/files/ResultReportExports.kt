@@ -211,7 +211,7 @@ object ResultReportExports {
             pointsText = result.points.toString(),
             runTimeText = DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false),
             controlsText = readoutData.punches.toControlText(controlLabelsByCode),
-            splitsText = readoutData.punches.toSplitText(controlLabelsByCode)
+            splitsText = readoutData.punches.toResultSplitText(controlLabelsByCode)
         )
     }
 
@@ -391,12 +391,11 @@ object ResultReportExports {
         filter { it.punch.punchType == SIRecordType.CONTROL }
             .joinToString(separator = " ") { controlLabelsByCode[it.punch.siCode] ?: it.alias?.name ?: it.punch.siCode.toString() }
 
-    private fun List<EventAliasPunch>.toSplitText(controlLabelsByCode: Map<Int, String>): String =
-        filter { it.punch.punchType == SIRecordType.CONTROL }
-            .joinToString(separator = " ") { aliasPunch ->
-                val code = controlLabelsByCode[aliasPunch.punch.siCode] ?: aliasPunch.alias?.name ?: aliasPunch.punch.siCode.toString()
-                val splitTime = DurationFormatter.secondsToFormattedString(aliasPunch.punch.splitSeconds, useMinutes = false)
-                "$code - $splitTime"
+    private fun List<EventAliasPunch>.toResultSplitText(controlLabelsByCode: Map<Int, String>): String =
+        ResultSplitRows.from(this, controlLabelsByCode)
+            .joinToString(separator = " ") { split ->
+                val splitTime = DurationFormatter.secondsToFormattedString(split.splitSeconds, useMinutes = false)
+                "${split.label} - $splitTime"
             }
 
     private fun kilometersText(meters: Int): String =

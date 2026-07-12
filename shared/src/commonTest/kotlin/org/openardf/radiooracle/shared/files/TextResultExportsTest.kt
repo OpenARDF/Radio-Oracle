@@ -57,7 +57,7 @@ class TextResultExportsTest {
         assertTrue(text.contains("Category M21\tLimit: 120\tLength: 5.0 km\tControls: 31 32"))
         assertTrue(text.contains("1.\tRUNNER Alice\tIDX\t00:45:00\t2\t31 32"))
         assertTrue(text.contains("Splits"))
-        assertTrue(text.contains("1.\tRUNNER Alice\tIDX\t00:45:00\t2\t31 32\t00:10:00 00:25:00"))
+        assertTrue(text.contains("1.\tRUNNER Alice\tIDX\t00:45:00\t2\t31 32\t00:10:00 00:25:00 00:10:00"))
         assertTrue(text.contains("Generated with Radio-Oracle 1.0"))
     }
 
@@ -181,21 +181,26 @@ class TextResultExportsTest {
             ),
             punches = listOf(
                 punch(code = 31, splitSeconds = 600),
-                punch(code = 32, splitSeconds = 1_500)
+                punch(code = 32, splitSeconds = 1_500),
+                punch(code = 0, splitSeconds = 600, punchType = SIRecordType.FINISH)
             )
         )
 
-    private fun punch(code: Int, splitSeconds: Long): EventAliasPunch =
+    private fun punch(
+        code: Int,
+        splitSeconds: Long,
+        punchType: SIRecordType = SIRecordType.CONTROL
+    ): EventAliasPunch =
         EventAliasPunch(
             punch = EventPunch(
-                id = "punch-$code",
+                id = "punch-${punchType.name}-$code",
                 raceId = "race",
                 resultId = "result",
                 cardNumber = 123456,
                 siCode = code,
                 siTimeSeconds = 36_000 + splitSeconds,
                 originalSiTimeSeconds = 36_000 + splitSeconds,
-                punchType = SIRecordType.CONTROL,
+                punchType = punchType,
                 order = code,
                 punchStatus = PunchStatus.VALID,
                 splitSeconds = splitSeconds

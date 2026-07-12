@@ -66,7 +66,7 @@ class ResultReportExportsTest {
         assertEquals("2", row.pointsText)
         assertEquals("00:45:00", row.runTimeText)
         assertEquals("Fox 1 32", row.controlsText)
-        assertEquals("Fox 1 - 00:10:00 32 - 00:25:00", row.splitsText)
+        assertEquals("Fox 1 - 00:10:00 32 - 00:25:00 Finish - 00:10:00", row.splitsText)
     }
 
     @Test
@@ -80,7 +80,7 @@ class ResultReportExportsTest {
         assertTrue(html.contains("<td>7</td>"))
         assertTrue(html.contains("<td>123456</td>"))
         assertTrue(html.contains("<td>Fox 1 32</td>"))
-        assertTrue(html.contains("Fox 1 - 00:10:00 32 - 00:25:00"))
+        assertTrue(html.contains("Fox 1 - 00:10:00 32 - 00:25:00 Finish - 00:10:00"))
         assertTrue(html.contains("Generated with Radio-Oracle 1.0"))
     }
 
@@ -98,7 +98,7 @@ class ResultReportExportsTest {
         assertTrue(xml.contains("<BibNumber>7</BibNumber>"))
         assertTrue(xml.contains("<SiNumber>123456</SiNumber>"))
         assertTrue(xml.contains("<Controls>Fox 1 32</Controls>"))
-        assertTrue(xml.contains("<Splits>Fox 1 - 00:10:00 32 - 00:25:00</Splits>"))
+        assertTrue(xml.contains("<Splits>Fox 1 - 00:10:00 32 - 00:25:00 Finish - 00:10:00</Splits>"))
     }
 
     @Test
@@ -189,21 +189,26 @@ class ResultReportExportsTest {
             ),
             punches = listOf(
                 punch(code = 31, splitSeconds = 600),
-                punch(code = 32, splitSeconds = 1_500)
+                punch(code = 32, splitSeconds = 1_500),
+                punch(code = 0, splitSeconds = 600, punchType = SIRecordType.FINISH)
             )
         )
 
-    private fun punch(code: Int, splitSeconds: Long): EventAliasPunch =
+    private fun punch(
+        code: Int,
+        splitSeconds: Long,
+        punchType: SIRecordType = SIRecordType.CONTROL
+    ): EventAliasPunch =
         EventAliasPunch(
             punch = EventPunch(
-                id = "punch-$code",
+                id = "punch-${punchType.name}-$code",
                 raceId = "race",
                 resultId = "result",
                 cardNumber = 123456,
                 siCode = code,
                 siTimeSeconds = 36_000 + splitSeconds,
                 originalSiTimeSeconds = 36_000 + splitSeconds,
-                punchType = SIRecordType.CONTROL,
+                punchType = punchType,
                 order = code,
                 punchStatus = PunchStatus.VALID,
                 splitSeconds = splitSeconds
