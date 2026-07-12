@@ -312,6 +312,10 @@ internal fun protectedCourseStateCategories(raceData: EventRaceData): List<Event
     }
 }
 
+/** Returns every stored container that may hold encrypted course data, including name-overlapping mappings. */
+internal fun protectedCourseDataContainers(raceData: EventRaceData): List<EventCategoryData> =
+    raceData.categories + raceData.courseMappings
+
 /** Normalizes names for matching active categories to their inactive course-mapping counterparts. */
 private fun String.protectedCourseStateCategoryMatchText(): String =
     StandardCategoryRules.normalizedCategoryName(this).uppercase()
@@ -332,7 +336,7 @@ internal fun decryptedProtectedCourseState(
     projectFile: EventProjectFile,
     password: String
 ): DesktopProtectedCourseState {
-    val courseCategories = protectedCourseStateCategories(projectFile.raceData)
+    val courseCategories = protectedCourseDataContainers(projectFile.raceData)
     return DesktopProtectedCourseState(
         protectedIdealOrderByCategoryId = courseCategories.associate { categoryData ->
             val encryptedValue = categoryData.category.encryptedIdealOrder
@@ -357,6 +361,25 @@ internal fun publicResultsNeedCourseUnlock(
     !isProtectedCourseOrderUnlocked && projectFiles.any { projectFile ->
         EventResultDetails.from(projectFile.raceData).isNotEmpty() && projectFile.hasProtectedCategoryData()
     }
+
+internal fun protectedCourseInfoForResultCategory(
+    projectFile: EventProjectFile,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    resultCategoryId: String,
+    resultCategoryName: String
+): ProtectedCourseInfo? =
+    protectedCourseInfoByCategoryId[resultCategoryId]
+        ?: protectedCourseDataContainers(projectFile.raceData)
+            .firstNotNullOfOrNull { categoryData ->
+                categoryData.category.id
+                    .takeIf {
+                        StandardCategoryRules.categoryNamesEquivalent(
+                            categoryData.category.name,
+                            resultCategoryName
+                        )
+                    }
+                    ?.let(protectedCourseInfoByCategoryId::get)
+            }
 
 internal fun decryptedPublicResultsCourseState(
     projectFiles: List<EventProjectFile>,
@@ -395,13 +418,11 @@ internal fun loadPublicResultSeriesRaces(
         } else {
             DesktopEventSeriesFiles.readEvent(eventPath)
         }
-        val courseInfo = when {
-            protectedCoursePassword == null -> emptyMap()
-            isCurrentEvent -> currentProtectedCourseInfoByCategoryId
-            else -> runCatching {
-                decryptedProtectedCourseState(project, protectedCoursePassword).protectedCourseInfoByCategoryId
-            }.getOrElse { emptyMap() }
-        }
+        val courseInfo = protectedCoursePassword?.let { password ->
+            runCatching {
+                decryptedProtectedCourseState(project, password).protectedCourseInfoByCategoryId
+            }.getOrElse { if (isCurrentEvent) currentProtectedCourseInfoByCategoryId else emptyMap() }
+        }.orEmpty()
         DesktopPublicResultSeriesRace(project, courseInfo, awardDisplayMode)
     }
     return seriesFile.name to races
@@ -23302,7 +23323,7 @@ private fun EventProjectFile.hasLockedProtectedCourseData(isProtectedCourseOrder
         raceData.categories.any { it.category.encryptedCourseInfo?.isNotBlank() == true }
 
 private fun EventProjectFile.hasProtectedCategoryData(): Boolean =
-    raceData.categories.any {
+    protectedCourseDataContainers(raceData).any {
         it.category.encryptedIdealOrder?.isNotBlank() == true ||
             it.category.encryptedCourseInfo?.isNotBlank() == true
     }

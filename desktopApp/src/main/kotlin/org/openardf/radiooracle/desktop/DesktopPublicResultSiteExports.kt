@@ -239,23 +239,44 @@ object DesktopPublicResultSiteExports {
         paths: DesktopPublicResultSiteExportPaths,
         race: DesktopPublicResultSeriesRace
     ): List<Path> {
-        val categoryIdsWithResults = EventResultDetails.from(race.projectFile.raceData)
-            .mapNotNullTo(linkedSetOf()) { it.categoryId }
-        val graphicsDirectory = paths.eventDirectory.resolve("course-graphics")
-        val distinctCourses = categoryIdsWithResults
-            .mapNotNull { categoryId ->
-                race.protectedCourseInfoByCategoryId[categoryId]?.let { categoryId to it }
+        val resultCategories = EventResultDetails.from(race.projectFile.raceData)
+            .mapNotNull { result ->
+                result.categoryId?.let { categoryId -> categoryId to result.categoryName }
             }
-            .distinctBy { it.second }
-        return distinctCourses.mapNotNull { (categoryId, courseInfo) ->
+            .distinct()
+        val graphicsDirectory = paths.eventDirectory.resolve("course-graphics")
+        val distinctCourses = resultCategories
+            .mapNotNull { (categoryId, categoryName) ->
+                val courseInfo = protectedCourseInfoForResultCategory(
+                    projectFile = race.projectFile,
+                    protectedCourseInfoByCategoryId = race.protectedCourseInfoByCategoryId,
+                    resultCategoryId = categoryId,
+                    resultCategoryName = categoryName
+                )
+                if (courseInfo == null && race.protectedCourseInfoByCategoryId.isNotEmpty()) {
+                    DesktopDebugLog.warn(
+                        "PublicResults",
+                        "No unlocked course matched result category=$categoryName categoryId=$categoryId " +
+                            "race=${race.projectFile.raceData.race.name}."
+                    )
+                }
+                courseInfo?.let { Triple(categoryId, categoryName, it) }
+            }
+            .distinctBy { it.third }
+        return distinctCourses.mapNotNull { (categoryId, categoryName, courseInfo) ->
             runCatching {
-                if (DesktopCourseAnalyzer.analysisUnavailableReason(
-                        race.projectFile,
-                        categoryId,
-                        courseInfo,
-                        courseInfo.idealOrder
-                    ) != null
-                ) {
+                val unavailableReason = DesktopCourseAnalyzer.analysisUnavailableReason(
+                    race.projectFile,
+                    categoryId,
+                    courseInfo,
+                    courseInfo.idealOrder
+                )
+                if (unavailableReason != null) {
+                    DesktopDebugLog.warn(
+                        "PublicResults",
+                        "Skipped 2D course diagram race=${race.projectFile.raceData.race.name} " +
+                            "category=$categoryName reason=$unavailableReason"
+                    )
                     return@runCatching null
                 }
                 val summary = DesktopCourseAnalyzer.analyze(
@@ -269,7 +290,18 @@ object DesktopPublicResultSiteExports {
                 val fileName = "course-${categoryId.safePathSegment()}.png"
                 val path = graphicsDirectory.resolve(fileName)
                 DesktopCourseGraphic.writePng(path, routeMap)
+                DesktopDebugLog.info(
+                    "PublicResults",
+                    "Generated 2D course diagram race=${race.projectFile.raceData.race.name} " +
+                        "category=$categoryName path=$path"
+                )
                 path
+            }.onFailure { error ->
+                DesktopDebugLog.error(
+                    "PublicResults",
+                    "2D course diagram failed race=${race.projectFile.raceData.race.name} " +
+                        "category=$categoryName: ${error.message ?: error::class.simpleName}"
+                )
             }.getOrNull()
         }
     }

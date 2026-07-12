@@ -450,6 +450,45 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun matchesResultCategoryToProtectedCourseMappingWhenIdsDiffer() {
+        val raceData = raceDataWithReadout()
+        val activeCategory = raceData.categories.single()
+        val mappingCategoryId = "course-mapping-m21"
+        val protectedInfo = ProtectedCourseInfo(sourceName = "mapped-m21.kml")
+        val password = "mapping-password"
+        val projectFile = EventProjectFile(
+            raceData = raceData.copy(
+                categories = listOf(
+                    activeCategory.copy(
+                        category = activeCategory.category.copy(encryptedCourseInfo = null)
+                    )
+                ),
+                courseMappings = listOf(
+                    activeCategory.copy(
+                        category = activeCategory.category.copy(
+                            id = mappingCategoryId,
+                            encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(protectedInfo, password)
+                        )
+                    )
+                )
+            )
+        )
+
+        assertTrue(publicResultsNeedCourseUnlock(listOf(projectFile), false))
+        val decryptedCourseInfo = decryptedProtectedCourseState(projectFile, password).protectedCourseInfoByCategoryId
+        assertEquals(protectedInfo, decryptedCourseInfo.getValue(mappingCategoryId))
+        assertEquals(
+            protectedInfo,
+            protectedCourseInfoForResultCategory(
+                projectFile = projectFile,
+                protectedCourseInfoByCategoryId = decryptedCourseInfo,
+                resultCategoryId = activeCategory.category.id,
+                resultCategoryName = activeCategory.category.name
+            )
+        )
+    }
+
+    @Test
     fun exportsResultsTextFile() {
         val directory = Files.createTempDirectory("rom-desktop-results-text")
         val path = directory.resolve("results.txt")
