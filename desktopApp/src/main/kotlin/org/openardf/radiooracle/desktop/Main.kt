@@ -350,6 +350,63 @@ internal fun decryptedProtectedCourseState(
     )
 }
 
+internal fun publicResultsNeedCourseUnlock(
+    projectFiles: List<EventProjectFile>,
+    isProtectedCourseOrderUnlocked: Boolean
+): Boolean =
+    !isProtectedCourseOrderUnlocked && projectFiles.any { projectFile ->
+        EventResultDetails.from(projectFile.raceData).isNotEmpty() && projectFile.hasProtectedCategoryData()
+    }
+
+internal fun decryptedPublicResultsCourseState(
+    projectFiles: List<EventProjectFile>,
+    currentProject: EventProjectFile,
+    password: String
+): DesktopProtectedCourseState {
+    val trimmedPassword = password.trim()
+    require(trimmedPassword.isNotEmpty()) { "Race Password cannot be blank." }
+    projectFiles
+        .filter(EventProjectFile::hasProtectedCategoryData)
+        .forEach { project -> decryptedProtectedCourseState(project, trimmedPassword) }
+    return decryptedProtectedCourseState(currentProject, trimmedPassword)
+}
+
+internal fun loadPublicResultSeriesRaces(
+    manifestPath: Path,
+    currentPath: Path?,
+    currentProject: EventProjectFile?,
+    protectedCoursePassword: String?,
+    currentProtectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    awardDisplayMode: EventAwardDisplayMode
+): Pair<String, List<DesktopPublicResultSeriesRace>> {
+    val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+    val seriesFolder = requireNotNull(manifestPath.parent) {
+        "Race Series manifest has no parent folder."
+    }
+    val normalizedCurrentPath = currentPath?.toAbsolutePath()?.normalize()
+    val races = seriesFile.sortedEvents().mapNotNull { event ->
+        val eventPath = seriesFolder.resolve(event.eventFilePath).normalize()
+        if (!DesktopEventSeriesFiles.exists(eventPath)) {
+            return@mapNotNull null
+        }
+        val isCurrentEvent = eventPath.toAbsolutePath().normalize() == normalizedCurrentPath
+        val project = if (isCurrentEvent) {
+            currentProject ?: DesktopEventSeriesFiles.readEvent(eventPath)
+        } else {
+            DesktopEventSeriesFiles.readEvent(eventPath)
+        }
+        val courseInfo = when {
+            protectedCoursePassword == null -> emptyMap()
+            isCurrentEvent -> currentProtectedCourseInfoByCategoryId
+            else -> runCatching {
+                decryptedProtectedCourseState(project, protectedCoursePassword).protectedCourseInfoByCategoryId
+            }.getOrElse { emptyMap() }
+        }
+        DesktopPublicResultSeriesRace(project, courseInfo, awardDisplayMode)
+    }
+    return seriesFile.name to races
+}
+
 private enum class DesktopSportIdentAppendOutcome {
     Added,
     PracticeInForestStarted,
@@ -1230,40 +1287,17 @@ fun main(args: Array<String>) = application {
                 ?.let { path -> "$rootUrl${path.trim('/')}/" }
                 ?: rootUrl
 
-        fun publicResultSeriesRaces(): Pair<String, List<DesktopPublicResultSeriesRace>>? {
-            val manifestPath = currentSeriesManifestPath() ?: return null
-            val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
-            val seriesFolder = requireNotNull(manifestPath.parent) {
-                "Race Series manifest has no parent folder."
-            }
-            val currentPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
-            val currentProject = projectSession.currentProject
-            val races = seriesFile.sortedEvents().mapNotNull { event ->
-                val eventPath = seriesFolder.resolve(event.eventFilePath).normalize()
-                if (!DesktopEventSeriesFiles.exists(eventPath)) {
-                    return@mapNotNull null
-                }
-                val project = if (eventPath.toAbsolutePath().normalize() == currentPath) {
-                    currentProject ?: DesktopEventSeriesFiles.readEvent(eventPath)
-                } else {
-                    DesktopEventSeriesFiles.readEvent(eventPath)
-                }
-                val courseInfo = when {
-                    protectedCoursePassword == null -> emptyMap()
-                    eventPath.toAbsolutePath().normalize() == currentPath -> protectedCourseInfoByCategoryId
-                    else -> runCatching {
-                        decryptedProtectedCourseState(project, requireNotNull(protectedCoursePassword))
-                            .protectedCourseInfoByCategoryId
-                    }.getOrElse { emptyMap() }
-                }
-                DesktopPublicResultSeriesRace(
-                    projectFile = project,
-                    protectedCourseInfoByCategoryId = courseInfo,
+        fun publicResultSeriesRaces(): Pair<String, List<DesktopPublicResultSeriesRace>>? =
+            currentSeriesManifestPath()?.let { manifestPath ->
+                loadPublicResultSeriesRaces(
+                    manifestPath = manifestPath,
+                    currentPath = projectSession.currentPath,
+                    currentProject = projectSession.currentProject,
+                    protectedCoursePassword = protectedCoursePassword,
+                    currentProtectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                     awardDisplayMode = currentDesktopAwardDisplayMode()
                 )
             }
-            return seriesFile.name to races
-        }
 
         fun exportPublicResultsSiteForCurrentContext(
             directory: Path,
@@ -2468,33 +2502,16 @@ fun main(args: Array<String>) = application {
                 return false
             }
 
-            val decrypted = runCatching {
-                currentProject.raceData.categories.associate { categoryData ->
-                    val encryptedValue = categoryData.category.encryptedIdealOrder
-                    categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
-                        ""
-                    } else {
-                        DesktopProtectedCourseOrder.decrypt(encryptedValue, trimmedPassword)
-                    }
-                }
-            }.getOrElse { error ->
-                projectStatusText = error.message ?: "Course order unlock failed."
-                return false
-            }
-            val decryptedCourseInfo = runCatching {
-                currentProject.raceData.categories.mapNotNull { categoryData ->
-                    categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
-                        categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, trimmedPassword)
-                    }
-                }.toMap()
+            val protectedState = runCatching {
+                decryptedProtectedCourseState(currentProject, trimmedPassword)
             }.getOrElse { error ->
                 projectStatusText = error.message ?: "Course data unlock failed."
                 return false
             }
 
             protectedCoursePassword = trimmedPassword
-            protectedIdealOrderByCategoryId = decrypted
-            protectedCourseInfoByCategoryId = decryptedCourseInfo
+            protectedIdealOrderByCategoryId = protectedState.protectedIdealOrderByCategoryId
+            protectedCourseInfoByCategoryId = protectedState.protectedCourseInfoByCategoryId
             projectStatusText = "Course order unlocked."
             return true
         }
@@ -4023,6 +4040,18 @@ fun main(args: Array<String>) = application {
                     DesktopDebugLog.error("PublicResults", projectStatusText)
                 }
             }
+        }
+
+        fun requestGeneratePublicResultsSite() {
+            val projects = publicResultSeriesRaces()?.second?.map(DesktopPublicResultSeriesRace::projectFile)
+                ?: listOfNotNull(projectSession.currentProject)
+            if (publicResultsNeedCourseUnlock(projects, protectedCoursePassword != null)) {
+                pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.GeneratePublicResultsSite
+                projectStatusText =
+                    "Unlock course data to include 2D course diagrams, or publish without diagrams."
+                return
+            }
+            generatePublicResultsSite()
         }
 
         fun startPublicResultsSitePreview() {
@@ -5942,7 +5971,7 @@ fun main(args: Array<String>) = application {
                     true
                 }
                 DesktopNavAction.GeneratePublicResultsSite -> {
-                    generatePublicResultsSite()
+                    requestGeneratePublicResultsSite()
                     true
                 }
                 DesktopNavAction.PublishPublicResultsSite -> {
@@ -6479,47 +6508,31 @@ fun main(args: Array<String>) = application {
         }
 
         pendingCourseKmlKmzUnlockAction?.let { unlockAction ->
-            CourseKmlKmzUnlockDialog(
-                title = when (unlockAction) {
-                    CourseKmlKmzUnlockAction.Import -> "Unlock course order"
-                    CourseKmlKmzUnlockAction.ImportGpx -> "Unlock course order"
-                    CourseKmlKmzUnlockAction.ImportControls -> "Unlock control locations"
-                    CourseKmlKmzUnlockAction.ImportControlsGpx -> "Unlock control locations"
-                    CourseKmlKmzUnlockAction.Export -> "Export protected controls/routes"
-                    CourseKmlKmzUnlockAction.ExportGpx -> "Export protected controls/routes"
-                    CourseKmlKmzUnlockAction.ExportOverlays -> "Export course overlays"
-                    CourseKmlKmzUnlockAction.GenerateStartList -> "Unlock course data for Start List"
-                },
-                description = when (unlockAction) {
-                    CourseKmlKmzUnlockAction.Import ->
-                        "KML/KMZ controls/route data includes coordinates and route details that require the Race Password."
-                    CourseKmlKmzUnlockAction.ImportGpx ->
-                        "GPX controls/route data includes coordinates and route details that require the Race Password."
-                    CourseKmlKmzUnlockAction.ImportControls ->
-                        "KML/KMZ control-location data includes coordinates that require the Race Password."
-                    CourseKmlKmzUnlockAction.ImportControlsGpx ->
-                        "GPX control-location data includes coordinates that require the Race Password."
-                    CourseKmlKmzUnlockAction.Export ->
-                        "Controls/route KML/KMZ export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
-                    CourseKmlKmzUnlockAction.ExportGpx ->
-                        "Controls/route GPX export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
-                    CourseKmlKmzUnlockAction.ExportOverlays ->
-                        "Course overlay export uses protected course coordinates to create plain OpenOrienteering Mapper files for map production."
-                    CourseKmlKmzUnlockAction.GenerateStartList ->
-                        "Start List generation can use protected ideal-route first foxes to avoid starting similar competitors on the same first fox."
-                },
-                confirmLabel = when (unlockAction) {
-                    CourseKmlKmzUnlockAction.Import -> "Unlock and Import"
-                    CourseKmlKmzUnlockAction.ImportGpx -> "Unlock and Import"
-                    CourseKmlKmzUnlockAction.ImportControls -> "Unlock and Import"
-                    CourseKmlKmzUnlockAction.ImportControlsGpx -> "Unlock and Import"
-                    CourseKmlKmzUnlockAction.Export -> "Export"
-                    CourseKmlKmzUnlockAction.ExportGpx -> "Export"
-                    CourseKmlKmzUnlockAction.ExportOverlays -> "Export"
-                    CourseKmlKmzUnlockAction.GenerateStartList -> "Unlock and Generate"
-                },
+            PendingCourseUnlockDialog(
+                action = unlockAction,
                 onUnlock = { password ->
-                    if (unlockProtectedCourseOrder(password)) {
+                    val unlocked = if (unlockAction == CourseKmlKmzUnlockAction.GeneratePublicResultsSite) {
+                        val currentProject = projectSession.currentProject
+                        val projects = publicResultSeriesRaces()?.second?.map(DesktopPublicResultSeriesRace::projectFile)
+                            ?: listOfNotNull(currentProject)
+                        runCatching {
+                            decryptedPublicResultsCourseState(projects, requireNotNull(currentProject), password)
+                        }.fold(
+                            onSuccess = { state ->
+                                protectedCoursePassword = password.trim()
+                                protectedIdealOrderByCategoryId = state.protectedIdealOrderByCategoryId
+                                protectedCourseInfoByCategoryId = state.protectedCourseInfoByCategoryId
+                                true
+                            },
+                            onFailure = { error ->
+                                projectStatusText = error.message ?: "Course data unlock failed."
+                                false
+                            }
+                        )
+                    } else {
+                        unlockProtectedCourseOrder(password)
+                    }
+                    if (unlocked) {
                         val unlockedPassword = password.trim()
                         pendingCourseKmlKmzUnlockAction = null
                         when (unlockAction) {
@@ -6539,6 +6552,7 @@ fun main(args: Array<String>) = application {
                                     drawStartListWithCurrentCourseData(request.interval, request.options)
                                 }
                             }
+                            CourseKmlKmzUnlockAction.GeneratePublicResultsSite -> generatePublicResultsSite()
                         }
                         true
                     } else {
@@ -6548,6 +6562,10 @@ fun main(args: Array<String>) = application {
                 onCancel = {
                     pendingCourseKmlKmzUnlockAction = null
                     pendingProtectedStartListDrawRequest = null
+                },
+                onPublishWithoutDiagrams = {
+                    pendingCourseKmlKmzUnlockAction = null
+                    generatePublicResultsSite()
                 }
             )
         }
@@ -7648,12 +7666,75 @@ private fun UnsavedNewEventFileDialog(
 }
 
 @Composable
+private fun PendingCourseUnlockDialog(
+    action: CourseKmlKmzUnlockAction,
+    onUnlock: (String) -> Boolean,
+    onCancel: () -> Unit,
+    onPublishWithoutDiagrams: () -> Unit
+) {
+    val title = when (action) {
+        CourseKmlKmzUnlockAction.Import,
+        CourseKmlKmzUnlockAction.ImportGpx -> "Unlock course order"
+        CourseKmlKmzUnlockAction.ImportControls,
+        CourseKmlKmzUnlockAction.ImportControlsGpx -> "Unlock control locations"
+        CourseKmlKmzUnlockAction.Export,
+        CourseKmlKmzUnlockAction.ExportGpx -> "Export protected controls/routes"
+        CourseKmlKmzUnlockAction.ExportOverlays -> "Export course overlays"
+        CourseKmlKmzUnlockAction.GenerateStartList -> "Unlock course data for Start List"
+        CourseKmlKmzUnlockAction.GeneratePublicResultsSite -> "Include 2D course diagrams"
+    }
+    val description = when (action) {
+        CourseKmlKmzUnlockAction.Import ->
+            "KML/KMZ controls/route data includes coordinates and route details that require the Race Password."
+        CourseKmlKmzUnlockAction.ImportGpx ->
+            "GPX controls/route data includes coordinates and route details that require the Race Password."
+        CourseKmlKmzUnlockAction.ImportControls ->
+            "KML/KMZ control-location data includes coordinates that require the Race Password."
+        CourseKmlKmzUnlockAction.ImportControlsGpx ->
+            "GPX control-location data includes coordinates that require the Race Password."
+        CourseKmlKmzUnlockAction.Export ->
+            "Controls/route KML/KMZ export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
+        CourseKmlKmzUnlockAction.ExportGpx ->
+            "Controls/route GPX export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
+        CourseKmlKmzUnlockAction.ExportOverlays ->
+            "Course overlay export uses protected course coordinates to create plain OpenOrienteering Mapper files for map production."
+        CourseKmlKmzUnlockAction.GenerateStartList ->
+            "Start List generation can use protected ideal-route first foxes to avoid starting similar competitors on the same first fox."
+        CourseKmlKmzUnlockAction.GeneratePublicResultsSite ->
+            "The published results can include 2D diagrams for courses with results. Enter the Race Password to include them, or continue without diagrams."
+    }
+    val confirmLabel = when (action) {
+        CourseKmlKmzUnlockAction.Import,
+        CourseKmlKmzUnlockAction.ImportGpx,
+        CourseKmlKmzUnlockAction.ImportControls,
+        CourseKmlKmzUnlockAction.ImportControlsGpx -> "Unlock and Import"
+        CourseKmlKmzUnlockAction.Export,
+        CourseKmlKmzUnlockAction.ExportGpx,
+        CourseKmlKmzUnlockAction.ExportOverlays -> "Export"
+        CourseKmlKmzUnlockAction.GenerateStartList -> "Unlock and Generate"
+        CourseKmlKmzUnlockAction.GeneratePublicResultsSite -> "Unlock and Include Diagrams"
+    }
+    val publishesResults = action == CourseKmlKmzUnlockAction.GeneratePublicResultsSite
+    CourseKmlKmzUnlockDialog(
+        title = title,
+        description = description,
+        confirmLabel = confirmLabel,
+        onUnlock = onUnlock,
+        onCancel = onCancel,
+        alternateLabel = "Publish Without Diagrams".takeIf { publishesResults },
+        onAlternate = onPublishWithoutDiagrams.takeIf { publishesResults }
+    )
+}
+
+@Composable
 private fun CourseKmlKmzUnlockDialog(
     title: String,
     description: String,
     confirmLabel: String,
     onUnlock: (String) -> Boolean,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    alternateLabel: String? = null,
+    onAlternate: (() -> Unit)? = null
 ) {
     var passwordDraft by remember { mutableStateOf("") }
     fun submitPassword() {
@@ -7693,8 +7774,15 @@ private fun CourseKmlKmzUnlockDialog(
             }
         },
         dismissButton = {
-            Button(onClick = onCancel) {
-                Text("Cancel")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (alternateLabel != null && onAlternate != null) {
+                    Button(onClick = onAlternate) {
+                        Text(alternateLabel)
+                    }
+                }
+                Button(onClick = onCancel) {
+                    Text("Cancel")
+                }
             }
         }
     )
@@ -10910,7 +10998,8 @@ private enum class CourseKmlKmzUnlockAction {
     Export,
     ExportGpx,
     ExportOverlays,
-    GenerateStartList
+    GenerateStartList,
+    GeneratePublicResultsSite
 }
 
 private data class PendingProtectedStartListDrawRequest(

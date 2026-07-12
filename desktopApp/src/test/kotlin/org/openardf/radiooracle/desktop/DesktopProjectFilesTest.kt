@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
@@ -42,6 +43,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
@@ -384,6 +386,67 @@ class DesktopProjectFilesTest {
         assertTrue(siteJs.indexOf("courseGraphicsHtml(race)") < siteJs.indexOf("race-results"))
         assertTrue(siteJs.contains("Promise.all(manifest.races"))
         assertTrue(Files.readString(paths.rootIndexHtml).contains("Summer Series"))
+    }
+
+    @Test
+    fun promptsForLockedCourseDataOnlyWhenPublishingResultsThatCouldUseIt() {
+        fun withLockedCourseData(raceData: EventRaceData): EventProjectFile =
+            EventProjectFile(
+                raceData = raceData.copy(
+                    categories = raceData.categories.map { categoryData ->
+                        categoryData.copy(
+                            category = categoryData.category.copy(encryptedCourseInfo = "locked-course-data")
+                        )
+                    }
+                )
+            )
+
+        val lockedRaceWithResults = withLockedCourseData(raceDataWithReadout())
+        val unlockedRaceWithResults = EventProjectFile(raceData = raceDataWithReadout())
+        val lockedRaceWithoutResults = withLockedCourseData(
+            raceDataWithReadout().copy(competitorData = emptyList())
+        )
+
+        assertTrue(publicResultsNeedCourseUnlock(listOf(lockedRaceWithResults), false))
+        assertTrue(publicResultsNeedCourseUnlock(listOf(unlockedRaceWithResults, lockedRaceWithResults), false))
+        assertFalse(publicResultsNeedCourseUnlock(listOf(lockedRaceWithResults), true))
+        assertFalse(publicResultsNeedCourseUnlock(listOf(lockedRaceWithoutResults), false))
+        assertFalse(publicResultsNeedCourseUnlock(listOf(unlockedRaceWithResults), false))
+    }
+
+    @Test
+    fun reusesProtectedCourseDecryptionForSeriesPublication() {
+        val password = "series-password"
+        val protectedInfo = ProtectedCourseInfo(sourceName = "series-course.kml")
+        fun encryptedProject(raceName: String): EventProjectFile {
+            val raceData = raceDataWithReadout()
+            return EventProjectFile(
+                raceData = raceData.copy(
+                    race = raceData.race.copy(name = raceName),
+                    categories = raceData.categories.map { categoryData ->
+                        categoryData.copy(
+                            category = categoryData.category.copy(
+                                encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(
+                                    protectedInfo,
+                                    password
+                                )
+                            )
+                        )
+                    }
+                )
+            )
+        }
+        val first = encryptedProject("First Series Race")
+        val second = encryptedProject("Second Series Race")
+
+        val state = decryptedPublicResultsCourseState(listOf(first, second), first, password)
+
+        assertEquals("series-course.kml", state.protectedCourseInfoByCategoryId.getValue("category").sourceName)
+        assertTrue(
+            runCatching {
+                decryptedPublicResultsCourseState(listOf(first, second), first, "wrong-password")
+            }.isFailure
+        )
     }
 
     @Test
