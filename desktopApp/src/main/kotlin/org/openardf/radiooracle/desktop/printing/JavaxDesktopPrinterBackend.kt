@@ -34,7 +34,7 @@ import javax.print.SimpleDoc
 class JavaxDesktopPrinterBackend : DesktopPrinterBackend {
     override fun listPrinters(): List<DesktopPrinterTarget> {
         val defaultPrinter = PrintServiceLookup.lookupDefaultPrintService()
-        return PrintServiceLookup.lookupPrintServices(textFlavor, null)
+        return compatiblePrintServices()
             .map { service ->
                 DesktopPrinterTarget(
                     name = service.name,
@@ -46,16 +46,25 @@ class JavaxDesktopPrinterBackend : DesktopPrinterBackend {
 
     override fun printPlainText(printerName: String?, text: String): String {
         val service = findPrinter(printerName)
-        val bytes = text.toByteArray(StandardCharsets.UTF_8)
-        val doc = SimpleDoc(ByteArrayInputStream(bytes), textFlavor, null)
+        val mode = selectDesktopPrintMode { flavor -> service.isDocFlavorSupported(flavor) }
+            ?: error("System printer '${service.name}' does not support Radio-Oracle ticket output.")
+        val doc = when (mode) {
+            DesktopPrintMode.PLAIN_TEXT -> {
+                val bytes = text.toByteArray(StandardCharsets.UTF_8)
+                SimpleDoc(ByteArrayInputStream(bytes), textFlavor, null)
+            }
+
+            DesktopPrintMode.PRINTABLE ->
+                SimpleDoc(DesktopPlainTextPrintable(text), printableFlavor, null)
+        }
         service.createPrintJob().print(doc, null)
         return service.name
     }
 
     private fun findPrinter(printerName: String?): PrintService {
-        val services = PrintServiceLookup.lookupPrintServices(textFlavor, null).toList()
+        val services = compatiblePrintServices()
         if (services.isEmpty()) {
-            error("No system printers that accept plain text were found.")
+            error("No compatible system printers were found.")
         }
         if (printerName.isNullOrBlank()) {
             return PrintServiceLookup.lookupDefaultPrintService()
@@ -66,7 +75,26 @@ class JavaxDesktopPrinterBackend : DesktopPrinterBackend {
             ?: error("System printer '$printerName' was not found.")
     }
 
+    private fun compatiblePrintServices(): List<PrintService> =
+        PrintServiceLookup.lookupPrintServices(null, null)
+            .filter { service ->
+                selectDesktopPrintMode { flavor -> service.isDocFlavorSupported(flavor) } != null
+            }
+
     private companion object {
         val textFlavor: DocFlavor = DocFlavor.INPUT_STREAM.TEXT_PLAIN_UTF_8
+        val printableFlavor: DocFlavor = DocFlavor.SERVICE_FORMATTED.PRINTABLE
     }
 }
+
+internal enum class DesktopPrintMode {
+    PLAIN_TEXT,
+    PRINTABLE
+}
+
+internal fun selectDesktopPrintMode(isFlavorSupported: (DocFlavor) -> Boolean): DesktopPrintMode? =
+    when {
+        isFlavorSupported(DocFlavor.INPUT_STREAM.TEXT_PLAIN_UTF_8) -> DesktopPrintMode.PLAIN_TEXT
+        isFlavorSupported(DocFlavor.SERVICE_FORMATTED.PRINTABLE) -> DesktopPrintMode.PRINTABLE
+        else -> null
+    }
