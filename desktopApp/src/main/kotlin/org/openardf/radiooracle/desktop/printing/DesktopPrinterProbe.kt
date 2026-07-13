@@ -24,10 +24,16 @@
 
 package org.openardf.radiooracle.desktop.printing
 
+import java.io.FileOutputStream
+import java.io.OutputStream
+import java.nio.file.Path
+
 fun main(args: Array<String>) {
     val requestedPrinter = args.firstOrNull()?.takeUnless { it.isBlank() }
         ?: System.getenv("RADIO_ORACLE_PRINTER")
     val shouldPrint = System.getenv("RADIO_ORACLE_PRINT_TEST") == "1"
+    val bluetoothSerialPort = System.getenv("RADIO_ORACLE_BLUETOOTH_PRINTER_PORT")
+        ?.takeUnless { it.isBlank() }
     val printer = DesktopTicketPrinter()
     val printers = printer.listPrinters()
 
@@ -47,6 +53,19 @@ fun main(args: Array<String>) {
     if (!shouldPrint) {
         println("Set RADIO_ORACLE_PRINT_TEST=1 to submit a test ticket.")
         println("Set RADIO_ORACLE_DESKTOP_PRINT_MODE=escpos to require raw ESC/POS output.")
+        println(
+            "Set RADIO_ORACLE_BLUETOOTH_PRINTER_PORT=/dev/cu.<name> with RADIO_ORACLE_PRINT_TEST=1 " +
+                "to send the same ticket directly over a paired Bluetooth serial port."
+        )
+        return
+    }
+
+    if (bluetoothSerialPort != null) {
+        val safePort = validatedBluetoothSerialPrinterPort(bluetoothSerialPort)
+        val bytesWritten = FileOutputStream(safePort.toFile()).use { output ->
+            writeDesktopEscPosSampleTicket(output)
+        }
+        println("Sent $bytesWritten ESC/POS bytes to $safePort.")
         return
     }
 
@@ -61,7 +80,25 @@ fun main(args: Array<String>) {
     println(result.summary())
 }
 
-private val testTicketText = """
+internal fun writeDesktopEscPosSampleTicket(output: OutputStream): Int {
+    val bytes = DesktopEscPosTicketEncoder.encode(testTicketText)
+    output.write(bytes)
+    output.flush()
+    return bytes.size
+}
+
+internal fun validatedBluetoothSerialPrinterPort(rawPath: String): Path {
+    val normalizedPath = Path.of(rawPath).normalize()
+    require(normalizedPath.parent == Path.of("/dev")) {
+        "Bluetooth printer serial port must be directly under /dev."
+    }
+    require(normalizedPath.fileName.toString().startsWith("cu.")) {
+        "Bluetooth printer serial port must use a /dev/cu.* endpoint."
+    }
+    return normalizedPath
+}
+
+internal val testTicketText = """
     [C]<b>Radio-Oracle</b>
     [L]
     [L]Desktop printer test

@@ -24,10 +24,37 @@
 
 package org.openardf.radiooracle.desktop.printing
 
+import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class DesktopTicketPrinterTest {
+    @Test
+    fun bluetoothSerialProbeWritesProductionEncodedSampleTicket() {
+        val output = ByteArrayOutputStream()
+
+        val bytesWritten = writeDesktopEscPosSampleTicket(output)
+
+        assertArrayEquals(DesktopEscPosTicketEncoder.encode(testTicketText), output.toByteArray())
+        assertEquals(output.size(), bytesWritten)
+    }
+
+    @Test
+    fun bluetoothSerialProbeAcceptsOnlyDeviceCalloutEndpoints() {
+        assertEquals(
+            "/dev/cu.BlueToothPrinter",
+            validatedBluetoothSerialPrinterPort("/dev/cu.BlueToothPrinter").toString()
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            validatedBluetoothSerialPrinterPort("/tmp/thermal-printer")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            validatedBluetoothSerialPrinterPort("/dev/cu.fake/../../tmp/thermal-printer")
+        }
+    }
+
     @Test
     fun listsPrintersFromBackend() {
         val printer = DesktopTicketPrinter(

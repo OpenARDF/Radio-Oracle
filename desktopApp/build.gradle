@@ -462,7 +462,7 @@ tasks.register("desktopAutomation", JavaExec) {
 
 tasks.register("desktopPrinterProbe", JavaExec) {
     group = "verification"
-    description = "Lists desktop system printers and optionally submits a system or raw ESC/POS test ticket."
+    description = "Lists desktop printers and optionally sends a system, raw queue, or Bluetooth serial ESC/POS test ticket."
 
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
