@@ -53,6 +53,55 @@ class JavaxDesktopPrinterBackendTest {
     }
 
     @Test
+    fun prefersRawEscPosForThermalPrinterWhenQueueSupportsIt() {
+        val mode = selectDesktopPrintMode(
+            isFlavorSupported = { flavor ->
+                flavor == DocFlavor.BYTE_ARRAY.AUTOSENSE ||
+                    flavor == DocFlavor.INPUT_STREAM.TEXT_PLAIN_UTF_8
+            },
+            preferEscPos = true
+        )
+
+        assertEquals(DesktopPrintMode.ESC_POS, mode)
+    }
+
+    @Test
+    fun preservesSystemTransportWhenEscPosIsNotPreferred() {
+        val mode = selectDesktopPrintMode(
+            isFlavorSupported = { flavor ->
+                flavor == DocFlavor.BYTE_ARRAY.AUTOSENSE ||
+                    flavor == DocFlavor.INPUT_STREAM.TEXT_PLAIN_UTF_8
+            },
+            preferEscPos = false
+        )
+
+        assertEquals(DesktopPrintMode.PLAIN_TEXT, mode)
+    }
+
+    @Test
+    fun acceptsRawOnlyThermalQueue() {
+        val mode = selectDesktopPrintMode { flavor ->
+            flavor == DocFlavor.INPUT_STREAM.AUTOSENSE
+        }
+
+        assertEquals(DesktopPrintMode.ESC_POS, mode)
+    }
+
+    @Test
+    fun recognizesCommonThermalPrinterQueueNames() {
+        assertEquals(true, isLikelyThermalPrinterName("POS-80 USB Receipt Printer"))
+        assertEquals(true, isLikelyThermalPrinterName("EPSON TM-T20III"))
+        assertEquals(false, isLikelyThermalPrinterName("EPSON ET-2720 Series"))
+    }
+
+    @Test
+    fun parsesDesktopPrintModeOverride() {
+        assertEquals(DesktopPrintPreference.AUTO, DesktopPrintPreference.fromEnvironment(null))
+        assertEquals(DesktopPrintPreference.SYSTEM, DesktopPrintPreference.fromEnvironment("system"))
+        assertEquals(DesktopPrintPreference.ESC_POS, DesktopPrintPreference.fromEnvironment("escpos"))
+    }
+
+    @Test
     fun rejectsPrinterThatSupportsNeitherTicketTransport() {
         assertEquals(null, selectDesktopPrintMode { false })
     }

@@ -28,7 +28,9 @@ import org.openardf.radiooracle.shared.printing.FinishTicketPlainTextFormatter
 
 data class DesktopPrinterTarget(
     val name: String,
-    val isDefault: Boolean
+    val isDefault: Boolean,
+    val supportsRawEscPos: Boolean = false,
+    val isLikelyThermal: Boolean = false
 )
 
 data class DesktopPrintResult(
@@ -41,6 +43,14 @@ data class DesktopPrintResult(
 interface DesktopPrinterBackend {
     fun listPrinters(): List<DesktopPrinterTarget>
     fun printPlainText(printerName: String?, text: String): String
+
+    fun printTicket(
+        printerName: String?,
+        markedUpText: String,
+        plainText: String,
+        charactersPerLine: Int
+    ): String =
+        printPlainText(printerName, plainText)
 }
 
 /** Desktop finish-ticket printer facade. Transport-specific backends stay outside shared ticket rendering. */
@@ -56,7 +66,12 @@ class DesktopTicketPrinter(
         charactersPerLine: Int = DEFAULT_CHARACTERS_PER_LINE
     ): DesktopPrintResult {
         val plainText = FinishTicketPlainTextFormatter.format(markedUpTicketText, charactersPerLine)
-        val selectedPrinterName = backend.printPlainText(printerName, plainText)
+        val selectedPrinterName = backend.printTicket(
+            printerName,
+            markedUpTicketText,
+            plainText,
+            charactersPerLine
+        )
         return DesktopPrintResult(selectedPrinterName, plainText)
     }
 

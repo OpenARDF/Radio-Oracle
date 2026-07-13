@@ -36,6 +36,7 @@ object DesktopTicketPrinterSelector {
             return requested
         }
 
+        printers.firstOrNull { it.supportsRawEscPos && it.isLikelyThermal }?.let { return it.name }
         printers.firstOrNull { it.name == preferredName }?.let { return it.name }
         printers.firstOrNull { it.isDefault && it.name !in ignoredNames }?.let { return it.name }
         return printers.firstOrNull { it.name !in ignoredNames }?.name

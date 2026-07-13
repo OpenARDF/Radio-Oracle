@@ -60,6 +60,8 @@ class DesktopTicketPrinterTest {
         assertEquals("EPSON_ET_2720_Series", result.printerName)
         assertEquals("      Radio-Oracle\nRunner          00:10:00\n", result.plainText)
         assertEquals("EPSON_ET_2720_Series", backend.printedPrinterName)
+        assertEquals("[C]<b>Radio-Oracle</b>\n[L]Runner[R]00:10:00\n", backend.printedMarkedUpText)
+        assertEquals(24, backend.printedCharactersPerLine)
         assertEquals(result.plainText, backend.printedText)
     }
 
@@ -74,6 +76,24 @@ class DesktopTicketPrinterTest {
         )
 
         assertEquals("EPSON ET-2720 Series", selected)
+    }
+
+    @Test
+    fun selectsRawThermalPrinterBeforePreferredOfficePrinter() {
+        val selected = DesktopTicketPrinterSelector.selectPrinterName(
+            printers = listOf(
+                DesktopPrinterTarget("EPSON ET-2720 Series", isDefault = true),
+                DesktopPrinterTarget(
+                    "POS-80 USB Receipt Printer",
+                    isDefault = false,
+                    supportsRawEscPos = true,
+                    isLikelyThermal = true
+                )
+            ),
+            requestedName = null
+        )
+
+        assertEquals("POS-80 USB Receipt Printer", selected)
     }
 
     @Test
@@ -134,6 +154,8 @@ class DesktopTicketPrinterTest {
     ) : DesktopPrinterBackend {
         var printedPrinterName: String? = null
         var printedText: String? = null
+        var printedMarkedUpText: String? = null
+        var printedCharactersPerLine: Int? = null
 
         override fun listPrinters(): List<DesktopPrinterTarget> =
             printers
@@ -142,6 +164,17 @@ class DesktopTicketPrinterTest {
             printedPrinterName = printerName
             printedText = text
             return printerName ?: printers.first().name
+        }
+
+        override fun printTicket(
+            printerName: String?,
+            markedUpText: String,
+            plainText: String,
+            charactersPerLine: Int
+        ): String {
+            printedMarkedUpText = markedUpText
+            printedCharactersPerLine = charactersPerLine
+            return printPlainText(printerName, plainText)
         }
     }
 }

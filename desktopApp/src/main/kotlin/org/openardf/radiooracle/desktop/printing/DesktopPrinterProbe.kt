@@ -38,12 +38,15 @@ fun main(args: Array<String>) {
     } else {
         printers.forEach { target ->
             val defaultText = if (target.isDefault) " default" else ""
-            println("- ${target.name}$defaultText")
+            val thermalText = if (target.isLikelyThermal) " thermal" else ""
+            val rawText = if (target.supportsRawEscPos) " raw-escpos" else ""
+            println("- ${target.name}$defaultText$thermalText$rawText")
         }
     }
 
     if (!shouldPrint) {
-        println("Set RADIO_ORACLE_PRINT_TEST=1 to submit a plain-text test ticket.")
+        println("Set RADIO_ORACLE_PRINT_TEST=1 to submit a test ticket.")
+        println("Set RADIO_ORACLE_DESKTOP_PRINT_MODE=escpos to require raw ESC/POS output.")
         return
     }
 
@@ -65,7 +68,7 @@ private val testTicketText = """
     [L]Ticket transport: system printer
     
     [L]Start[R]10:00:00[R] 
-    [L]1 (31)OK[R]10:05:00[R]00:05:00
+    [L]1 (31)[R]10:05:00[R]00:05:00
     [L]Finish[R]10:10:00[R]00:10:00
     
     [R]<b>Run time: 00:10:00 OK</b>
