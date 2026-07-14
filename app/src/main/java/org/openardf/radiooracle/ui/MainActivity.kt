@@ -301,14 +301,11 @@ class MainActivity : AppCompatActivity() {
                                     newState.siReaderState.stationId,
                                     stationModeLabel
                                 )
-                            siStatusTextView.setBackgroundResource(R.color.yellow_warning)
                         } else if (newState.siReaderState.stationId != null) {
                             siStatusTextView.text =
                                 getString(R.string.si_connected, newState.siReaderState.stationId)
-                            siStatusTextView.setBackgroundResource(R.color.green_ok)
                         } else {
                             siStatusTextView.text = getString(R.string.si_connected)
-                            siStatusTextView.setBackgroundResource(R.color.green_ok)
                         }
                     }
                     //Race not selected - warn user
@@ -335,14 +332,12 @@ class MainActivity : AppCompatActivity() {
                                 getString(R.string.si_connected_but_no_race_no_station)
                         }
                         DebugLog.warn("SI", "Readout not ready: ${readiness.reason} ${readiness.message}")
-                        siStatusTextView.setBackgroundResource(R.color.yellow_warning)
                     }
                 }
 
                 SIReaderStatus.DISCONNECTED -> {
                     lastSiStationModeWarningKey = null
                     siStatusTextView.setText(R.string.si_disconnected)
-                    siStatusTextView.setBackgroundResource(R.color.grey)
                 }
 
                 SIReaderStatus.READING -> {
@@ -358,7 +353,6 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         siStatusTextView.text = getString(R.string.si_reading)
                     }
-                    siStatusTextView.setBackgroundResource(R.color.orange_reading)
                 }
 
                 SIReaderStatus.ERROR -> {
@@ -372,7 +366,6 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         siStatusTextView.text = getString(R.string.si_card_error)
                     }
-                    siStatusTextView.setBackgroundResource(R.color.red_error)
                 }
 
                 SIReaderStatus.CARD_READ -> {
@@ -386,7 +379,6 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         siStatusTextView.text = getString(R.string.si_card_read)
                     }
-                    siStatusTextView.setBackgroundResource(R.color.green_ok)
                 }
             }
         }
