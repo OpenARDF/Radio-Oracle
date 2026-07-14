@@ -36,6 +36,7 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
+import android.provider.Settings
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
@@ -70,6 +71,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var siStatusTextView: TextView
     private lateinit var dataProcessor: DataProcessor
     private var lastSiStationModeWarningKey: String? = null
+    private var keepScreenOpen = false
 
     companion object {
         private const val KEY_RESULTS_SCORING_REVISION = "results_scoring_revision"
@@ -110,11 +112,50 @@ class MainActivity : AppCompatActivity() {
     //Apply preferences based on Shared preferences values
     private fun setPreferences() {
         val sharedPref = PreferenceManager.getDefaultSharedPreferences(baseContext)
-        val keepOpen = sharedPref.getBoolean(getString(R.string.key_keep_screen_open), false)
-        if (keepOpen) {
+        applyKeepScreenOpenPreference(
+            sharedPref.getBoolean(getString(R.string.key_keep_screen_open), false)
+        )
+    }
+
+    internal fun applyKeepScreenOpenPreference(enabled: Boolean) {
+        keepScreenOpen = enabled
+        if (enabled) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            holdCurrentScreenBrightness()
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            releaseScreenBrightnessOverride()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (keepScreenOpen) {
+            holdCurrentScreenBrightness()
+        }
+    }
+
+    override fun onPause() {
+        releaseScreenBrightnessOverride()
+        super.onPause()
+    }
+
+    private fun holdCurrentScreenBrightness() {
+        val systemBrightness = Settings.System.getInt(
+            contentResolver,
+            Settings.System.SCREEN_BRIGHTNESS,
+            -1
+        ).takeIf { it >= 0 }
+        val brightness = ScreenBrightnessOverride.fromSystemSetting(systemBrightness) ?: return
+
+        window.attributes = window.attributes.apply {
+            screenBrightness = brightness
+        }
+    }
+
+    private fun releaseScreenBrightnessOverride() {
+        window.attributes = window.attributes.apply {
+            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         }
     }
 

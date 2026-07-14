@@ -320,7 +320,7 @@
 
     <!--Preferences:general-->
     <string name="preferences_general_keep_screen_open">Prevent System From Locking Screen</string>
-    <string name="preferences_general_keep_screen_open_hint">When selected, the screen won\'t automatically turn off.</string>
+    <string name="preferences_general_keep_screen_open_hint">When selected, the screen remains on and the backlight stays at its current level.</string>
     <string name="preferences_general_show_log" tools:ignore="UnusedResources">Show Log</string>
     <string name="preferences_general_language">Language</string>
     <string name="preferences_general_language_hint">Manually select a language of the app. The app needs to be restarted after.</string>

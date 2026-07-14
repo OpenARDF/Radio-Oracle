@@ -186,7 +186,7 @@
     <string name="preferences_general">Obecné</string>
     <string name="preferences_prints">Tisk</string>
     <string name="preferences_general_keep_screen_open">Zabránit systému v zamykání obrazovky</string>
-    <string name="preferences_general_keep_screen_open_hint">Obrazovka se nevypne automaticky po vypršení časového limitu.</string>
+    <string name="preferences_general_keep_screen_open_hint">Obrazovka zůstane zapnutá a jas podsvícení zůstane na aktuální úrovni.</string>
     <string name="preferences_general_show_log">Zobrazit log</string>
     <string name="preferences_general_language">Jazyk</string>
     <string name="preferences_general_language_hint">Manuálně vybrat jazyk. Aplikace musí být restartována pro projevení změn.\n[%1$s]</string>

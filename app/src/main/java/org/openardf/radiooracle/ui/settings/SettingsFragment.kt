@@ -35,6 +35,7 @@ import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.ui.MainActivity
 
 
 class SettingsFragment : PreferenceFragmentCompat() {
@@ -63,11 +64,14 @@ class SettingsFragment : PreferenceFragmentCompat() {
         findPreference<CheckBoxPreference>(requireContext().getString(R.string.key_keep_screen_open))
             ?.setOnPreferenceChangeListener { _, keepOpen ->
 
+                val enabled = keepOpen as Boolean
+
                 editor.putBoolean(
                     requireContext().getString(R.string.key_keep_screen_open),
-                    keepOpen as Boolean
+                    enabled
                 )
                 editor.apply()
+                (requireActivity() as? MainActivity)?.applyKeepScreenOpenPreference(enabled)
                 true
             }
 
