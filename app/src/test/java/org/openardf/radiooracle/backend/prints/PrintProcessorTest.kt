@@ -26,11 +26,15 @@ package org.openardf.radiooracle.backend.prints
 
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
+import org.openardf.radiooracle.backend.room.entity.Result
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -42,6 +46,25 @@ import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class PrintProcessorTest {
+    @Test
+    fun finishTicketUsesRaceOwnedByResult() = runTest {
+        val resultRaceId = UUID.fromString("00000000-0000-0000-0000-000000000002")
+        val dataProcessor = mock(DataProcessor::class.java)
+        `when`(dataProcessor.getRace(resultRaceId)).thenReturn(
+            race(id = resultRaceId, name = "Series Day 2")
+        )
+        val processor = PrintProcessor(RuntimeEnvironment.getApplication(), dataProcessor)
+        val resultData = ResultData(
+            result = Result().copy(raceId = resultRaceId),
+            punches = emptyList(),
+            competitorCategory = null
+        )
+
+        val formatted = processor.formatFinishTicket(resultData)
+
+        assertTrue(formatted?.startsWith("[C]<b>Series Day 2</b>\n") == true)
+    }
+
     @Test
     fun printResultsFailsInsteadOfThrowingWhenReadyFlagHasNoPrinter() = runTest {
         val processor = PrintProcessor(RuntimeEnvironment.getApplication(), mock(DataProcessor::class.java))
@@ -55,10 +78,13 @@ class PrintProcessorTest {
         assertEquals(PrintAttemptResult.FAILED, result)
     }
 
-    private fun race(): Race =
+    private fun race(
+        id: UUID = UUID.fromString("00000000-0000-0000-0000-000000000001"),
+        name: String = "Test Race"
+    ): Race =
         Race(
-            id = UUID.fromString("00000000-0000-0000-0000-000000000001"),
-            name = "Test Race",
+            id = id,
+            name = name,
             apiKey = "",
             startDateTime = LocalDateTime.of(2026, 1, 1, 9, 0),
             raceType = RaceType.CLASSIC,

@@ -1015,8 +1015,8 @@ class DataProcessor private constructor(context: Context) {
         printProcessor.disablePrinter()
     }
 
-    suspend fun printFinishTicket(resultData: ResultData, race: Race): PrintAttemptResult =
-        printProcessor.printFinishTicket(resultData, race)
+    suspend fun printFinishTicket(resultData: ResultData): PrintAttemptResult =
+        printProcessor.printFinishTicket(resultData)
 
 
     suspend fun printResults(results: List<ResultWrapper>, race: Race): PrintAttemptResult =

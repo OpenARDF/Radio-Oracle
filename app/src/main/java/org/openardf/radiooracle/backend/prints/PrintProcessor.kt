@@ -201,8 +201,51 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         }
     }
 
-    suspend fun printFinishTicket(resultData: ResultData, race: Race): PrintAttemptResult {
-        val context = appContext.get()!!
+    suspend fun printFinishTicket(resultData: ResultData): PrintAttemptResult {
+        val formatted = formatFinishTicket(resultData) ?: return PrintAttemptResult.FAILED
+
+        val context = appContext.get() ?: return PrintAttemptResult.FAILED
+        val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
+        val doublePrint =
+            sharedPref.getBoolean(
+                context.getString(R.string.key_prints_double_print),
+                false
+            )
+        val doublePrintDelay =
+            sharedPref.getInt(
+                context.getString(R.string.key_prints_double_print_delay),
+                2
+            )
+
+        logInfo(
+            "Printing finish ticket result=${resultData.result.id} si=${resultData.result.siNumber} " +
+                "race=${resultData.result.raceId} doublePrint=$doublePrint delaySeconds=$doublePrintDelay"
+        )
+        val firstPrint = print(formatted)
+        if (firstPrint != PrintAttemptResult.PRINTED) {
+            return firstPrint
+        }
+        if (doublePrint) {
+            delay(doublePrintDelay * 1000L)
+            return print(formatted)
+        }
+        return PrintAttemptResult.PRINTED
+    }
+
+    internal suspend fun formatFinishTicket(resultData: ResultData): String? {
+        val context = appContext.get()
+        if (context == null) {
+            logError("Finish ticket formatting failed because application context is unavailable")
+            return null
+        }
+        val race = dataProcessor.getRace(resultData.result.raceId)
+        if (race == null) {
+            logError(
+                "Finish ticket formatting failed because race=${resultData.result.raceId} " +
+                    "was not found for result=${resultData.result.id}"
+            )
+            return null
+        }
         val competitor = resultData.competitorCategory?.competitor
         val category = resultData.competitorCategory?.category?.name ?: "?"
         val punches = getPunchesFormatted(resultData.punches, race.raceType)
@@ -219,7 +262,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
                     dataProcessor.useMinuteTimeFormat()
                 )
 
-        val formatted = "[C]<b>${race.name}</b>\n" +
+        return "[C]<b>${race.name}</b>\n" +
                 "[L]\n" +
                 "[L]${getMaxCompetitorName(resultData)}\n" +
                 "[L]$siNumber\n" +
@@ -229,32 +272,6 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
                 "[R]<b>$runTime</b>\n" +
                 "$score\n" +
                 "$status\n"
-
-        val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
-        val doublePrint =
-            sharedPref.getBoolean(
-                context.getString(R.string.key_prints_double_print),
-                false
-            )
-        val doublePrintDelay =
-            sharedPref.getInt(
-                context.getString(R.string.key_prints_double_print_delay),
-                2
-            )
-
-        logInfo(
-            "Printing finish ticket result=${resultData.result.id} si=${resultData.result.siNumber} " +
-                "doublePrint=$doublePrint delaySeconds=$doublePrintDelay"
-        )
-        val firstPrint = print(formatted)
-        if (firstPrint != PrintAttemptResult.PRINTED) {
-            return firstPrint
-        }
-        if (doublePrint) {
-            delay(doublePrintDelay * 1000L)
-            return print(formatted)
-        }
-        return PrintAttemptResult.PRINTED
     }
 
     private fun getMaxCompetitorName(resultData: ResultData): String {

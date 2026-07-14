@@ -790,7 +790,7 @@ class AppCommandReceiver : BroadcastReceiver() {
                 "si=${resultData.result.siNumber} race=${race.id}"
         )
         Log.i(TAG, "printing finish ticket source=$source result=${resultData.result.id} race=${race.id}")
-        val printResult = dataProcessor.printFinishTicket(resultData, race)
+        val printResult = dataProcessor.printFinishTicket(resultData)
         DebugLog.info(TAG, "Command print finish ticket outcome=$printResult result=${resultData.result.id}")
         Log.i(TAG, "print finish ticket outcome=$printResult result=${resultData.result.id}")
     }

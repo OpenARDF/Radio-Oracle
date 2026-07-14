@@ -224,17 +224,12 @@ class ReadoutDetailFragment : Fragment() {
                 }
 
                 R.id.readout_detail_menu_print_ticket -> {
-                    selectedRaceViewModel.getCurrentRace()?.let { race ->
-                        viewLifecycleOwner.lifecycleScope.launch {
-                            val printResult = withContext(Dispatchers.IO) {
-                                dataProcessor.printFinishTicket(
-                                    resultData,
-                                    race
-                                )
-                            }
-                            if (printResult == PrintAttemptResult.NEEDS_SETUP) {
-                                findNavController().navigate(R.id.printsFragment)
-                            }
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        val printResult = withContext(Dispatchers.IO) {
+                            dataProcessor.printFinishTicket(resultData)
+                        }
+                        if (printResult == PrintAttemptResult.NEEDS_SETUP) {
+                            findNavController().navigate(R.id.printsFragment)
                         }
                     }
                     true

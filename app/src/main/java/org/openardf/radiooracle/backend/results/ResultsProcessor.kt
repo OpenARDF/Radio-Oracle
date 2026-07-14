@@ -378,17 +378,14 @@ object ResultsProcessor {
                 "categoryMatched=${category != null} shouldPrint=$shouldPrintFinishTicket"
         )
         if (shouldPrintFinishTicket) {
-            dataProcessor.getRace(result.raceId)?.let { race ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    val printResult = dataProcessor.printFinishTicket(
-                        dataProcessor.getResultData(result.id),
-                        race
-                    )
-                    DebugLog.info(
-                        "Printer",
-                        "Automatic finish-ticket print result result=${result.id} outcome=$printResult"
-                    )
-                }
+            CoroutineScope(Dispatchers.IO).launch {
+                val printResult = dataProcessor.printFinishTicket(
+                    dataProcessor.getResultData(result.id)
+                )
+                DebugLog.info(
+                    "Printer",
+                    "Automatic finish-ticket print result result=${result.id} outcome=$printResult"
+                )
             }
         }
 
