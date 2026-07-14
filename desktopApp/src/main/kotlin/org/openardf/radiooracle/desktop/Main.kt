@@ -14466,6 +14466,8 @@ private fun cloudflarePagesSettingsDisabledReason(
     when {
         rawDraftSettings.projectName.isBlank() -> "Enter a Cloudflare Pages project name."
         rawDraftSettings.branch.isBlank() -> "Enter a Cloudflare Pages branch."
+        rawDraftSettings.accountId.isBlank() -> "Enter the Cloudflare account ID."
+        rawDraftSettings.apiToken.isBlank() -> "Enter a Cloudflare Pages API token."
         draftSettings == savedSettings -> "Cloudflare Pages publishing settings are already saved."
         else -> null
     }
