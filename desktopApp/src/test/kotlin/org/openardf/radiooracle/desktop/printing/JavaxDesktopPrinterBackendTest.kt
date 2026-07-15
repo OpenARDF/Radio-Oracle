@@ -30,6 +30,7 @@ import java.awt.print.Paper
 import java.awt.print.Printable
 import javax.print.DocFlavor
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Test
 
 class JavaxDesktopPrinterBackendTest {
@@ -133,6 +134,61 @@ class JavaxDesktopPrinterBackendTest {
             assertEquals(Printable.NO_SUCH_PAGE, printable.print(graphics, pageFormat, 1))
         } finally {
             graphics.dispose()
+        }
+    }
+
+    @Test
+    fun printableUsesReceiptMarginsForNarrowMedia() {
+        val source = pageFormat(
+            width = 226.0,
+            height = 720.0,
+            imageableX = 72.0,
+            imageableY = 72.0,
+            imageableWidth = 82.0,
+            imageableHeight = 576.0
+        )
+
+        val adjusted = desktopPrintablePageFormat(source)
+
+        assertNotSame(source, adjusted)
+        assertEquals(6.0, adjusted.imageableX, 0.001)
+        assertEquals(6.0, adjusted.imageableY, 0.001)
+        assertEquals(214.0, adjusted.imageableWidth, 0.001)
+        assertEquals(708.0, adjusted.imageableHeight, 0.001)
+        assertEquals(72.0, source.imageableX, 0.001)
+    }
+
+    @Test
+    fun printablePreservesDriverMarginsForOfficeMedia() {
+        val source = pageFormat(
+            width = 612.0,
+            height = 792.0,
+            imageableX = 72.0,
+            imageableY = 72.0,
+            imageableWidth = 468.0,
+            imageableHeight = 648.0
+        )
+
+        val adjusted = desktopPrintablePageFormat(source)
+
+        assertNotSame(source, adjusted)
+        assertEquals(source.imageableX, adjusted.imageableX, 0.001)
+        assertEquals(source.imageableY, adjusted.imageableY, 0.001)
+        assertEquals(source.imageableWidth, adjusted.imageableWidth, 0.001)
+        assertEquals(source.imageableHeight, adjusted.imageableHeight, 0.001)
+    }
+
+    private fun pageFormat(
+        width: Double,
+        height: Double,
+        imageableX: Double,
+        imageableY: Double,
+        imageableWidth: Double,
+        imageableHeight: Double
+    ): PageFormat = PageFormat().apply {
+        paper = Paper().apply {
+            setSize(width, height)
+            setImageableArea(imageableX, imageableY, imageableWidth, imageableHeight)
         }
     }
 }

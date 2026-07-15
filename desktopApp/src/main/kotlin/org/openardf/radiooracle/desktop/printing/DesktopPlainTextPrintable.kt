@@ -28,6 +28,7 @@ import java.awt.Font
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.print.PageFormat
+import java.awt.print.Paper
 import java.awt.print.Printable
 import kotlin.math.floor
 
@@ -92,3 +93,30 @@ internal class DesktopPlainTextPrintable(text: String) : Printable {
         const val MinimumFontSize = 5f
     }
 }
+
+/**
+ * Java printer drivers commonly apply letter-sized margins even to receipt rolls. Reduce those
+ * margins only when the selected driver reports narrow media, leaving normal office pages alone.
+ */
+internal fun desktopPrintablePageFormat(pageFormat: PageFormat): PageFormat {
+    val adjusted = pageFormat.clone() as PageFormat
+    if (adjusted.width > MaximumReceiptWidthPoints || adjusted.width <= 0.0 || adjusted.height <= 0.0) {
+        return adjusted
+    }
+
+    val paper = adjusted.paper.clone() as Paper
+    val horizontalMargin = ReceiptMarginPoints.coerceAtMost(paper.width / 4.0)
+    val verticalMargin = ReceiptMarginPoints.coerceAtMost(paper.height / 4.0)
+    paper.setImageableArea(
+        horizontalMargin,
+        verticalMargin,
+        (paper.width - horizontalMargin * 2.0).coerceAtLeast(1.0),
+        (paper.height - verticalMargin * 2.0).coerceAtLeast(1.0)
+    )
+    adjusted.paper = paper
+    return adjusted
+}
+
+private const val PointsPerInch = 72.0
+private const val MaximumReceiptWidthPoints = 4.0 * PointsPerInch
+private const val ReceiptMarginPoints = 6.0

@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop.printing
 
+import java.awt.print.PrinterJob
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import javax.print.DocFlavor
@@ -98,6 +99,11 @@ class JavaxDesktopPrinterBackend(
         plainText: String,
         charactersPerLine: Int = DEFAULT_CHARACTERS_PER_LINE
     ) {
+        if (mode == DesktopPrintMode.PRINTABLE) {
+            printWithNativeGraphics(service, plainText)
+            return
+        }
+
         val doc = when (mode) {
             DesktopPrintMode.ESC_POS -> {
                 val bytes = DesktopEscPosTicketEncoder.encode(markedUpText, charactersPerLine)
@@ -115,10 +121,17 @@ class JavaxDesktopPrinterBackend(
                 SimpleDoc(ByteArrayInputStream(bytes), textFlavor, null)
             }
 
-            DesktopPrintMode.PRINTABLE ->
-                SimpleDoc(DesktopPlainTextPrintable(plainText), printableFlavor, null)
+            DesktopPrintMode.PRINTABLE -> error("Printable jobs use the native graphics path.")
         }
         service.createPrintJob().print(doc, null)
+    }
+
+    private fun printWithNativeGraphics(service: PrintService, plainText: String) {
+        val job = PrinterJob.getPrinterJob()
+        job.printService = service
+        val pageFormat = desktopPrintablePageFormat(job.defaultPage())
+        job.setPrintable(DesktopPlainTextPrintable(plainText), pageFormat)
+        job.print()
     }
 
     private fun findPrinter(printerName: String?): PrintService {
