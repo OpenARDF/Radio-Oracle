@@ -31,6 +31,17 @@
             android:title="@string/preferences_general_language"
             app:iconSpaceReserved="false" />
 
+        <ListPreference
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:defaultValue="@string/preferences_screen_orientation_portrait_value"
+            android:entries="@array/preferences_screen_orientation_options"
+            android:entryValues="@array/preferences_screen_orientation_values"
+            android:key="@string/key_screen_orientation"
+            android:title="@string/preferences_screen_orientation"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

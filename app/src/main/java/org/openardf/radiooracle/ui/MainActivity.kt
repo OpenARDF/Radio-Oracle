@@ -115,6 +115,12 @@ class MainActivity : AppCompatActivity() {
         applyKeepScreenOpenPreference(
             sharedPref.getBoolean(getString(R.string.key_keep_screen_open), false)
         )
+
+        val screenOrientation = sharedPref.getString(
+            getString(R.string.key_screen_orientation),
+            getString(R.string.preferences_screen_orientation_portrait_value)
+        )
+        requestedOrientation = ScreenOrientationPreference.requestedOrientation(screenOrientation)
     }
 
     internal fun applyKeepScreenOpenPreference(enabled: Boolean) {

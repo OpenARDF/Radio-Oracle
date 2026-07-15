@@ -324,6 +324,21 @@
     <string name="preferences_general_show_log" tools:ignore="UnusedResources">Show Log</string>
     <string name="preferences_general_language">Language</string>
     <string name="preferences_general_language_hint">Manually select a language of the app. The app needs to be restarted after.</string>
+    <string name="preferences_screen_orientation">Screen Orientation</string>
+    <string name="preferences_screen_orientation_portrait">Portrait</string>
+    <string name="preferences_screen_orientation_landscape">Landscape</string>
+    <string name="preferences_screen_orientation_portrait_value" translatable="false">portrait</string>
+    <string name="preferences_screen_orientation_landscape_value" translatable="false">landscape</string>
+
+    <string-array name="preferences_screen_orientation_options">
+        <item>@string/preferences_screen_orientation_portrait</item>
+        <item>@string/preferences_screen_orientation_landscape</item>
+    </string-array>
+
+    <string-array name="preferences_screen_orientation_values">
+        <item>@string/preferences_screen_orientation_portrait_value</item>
+        <item>@string/preferences_screen_orientation_landscape_value</item>
+    </string-array>
 
     <string name="lang_en" translatable="false">English</string>
     <string name="lang_cz" translatable="false">Čeština</string>

@@ -2,6 +2,7 @@
 <resources>
     <string name="key_keep_screen_open" translatable="false">keep_screen_open</string>
     <string name="key_app_language" translatable="false">app_language</string>
+    <string name="key_screen_orientation" translatable="false">screen_orientation</string>
 
     <!--CATEGORIES-->
 

@@ -36,6 +36,7 @@ import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.ui.MainActivity
+import org.openardf.radiooracle.ui.ScreenOrientationPreference
 
 
 class SettingsFragment : PreferenceFragmentCompat() {
@@ -84,6 +85,21 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 code.toString()
             )
             editor.apply()
+            true
+        }
+
+        val screenOrientationPref =
+            findPreference<ListPreference>(requireContext().getString(R.string.key_screen_orientation))
+
+        screenOrientationPref?.setOnPreferenceChangeListener { _, value ->
+            val orientation = value.toString()
+            editor.putString(
+                requireContext().getString(R.string.key_screen_orientation),
+                orientation
+            )
+            editor.apply()
+            requireActivity().requestedOrientation =
+                ScreenOrientationPreference.requestedOrientation(orientation)
             true
         }
 
