@@ -89,6 +89,7 @@ import org.openardf.radiooracle.shared.domain.StandardCategoryType
 import org.openardf.radiooracle.shared.files.DataFormat
 import org.openardf.radiooracle.shared.files.DataType
 import org.openardf.radiooracle.shared.event.PracticeCompetitorCategoryAssignment
+import org.openardf.radiooracle.shared.event.toDisplayLabel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -418,13 +419,29 @@ class DataProcessor private constructor(context: Context) {
     }
 
     //EVENT SERIES
-    fun getEventSeries() = ardfRepository.getEventSeries()
+    fun getEventSeries(): Flow<List<EventSeriesData>> =
+        ardfRepository.getEventSeries().map { seriesList ->
+            seriesList.map { seriesData -> canonicalEventSeriesData(seriesData) }
+        }
 
     suspend fun getEventSeries(seriesId: String) =
-        ardfRepository.getEventSeries(seriesId)
+        ardfRepository.getEventSeries(seriesId)?.let { canonicalEventSeriesData(it) }
 
     suspend fun getEventSeriesForRace(raceId: UUID) =
-        ardfRepository.getEventSeriesForRace(raceId)
+        ardfRepository.getEventSeriesForRace(raceId)?.let { canonicalEventSeriesData(it) }
+
+    private suspend fun canonicalEventSeriesData(seriesData: EventSeriesData): EventSeriesData =
+        seriesData.copy(
+            members = seriesData.members.map { member ->
+                getRace(member.localRaceId)?.let { race ->
+                    member.copy(
+                        displayName = race.name,
+                        startDateTimeIso = race.startDateTime.toString(),
+                        formatLabel = race.raceType.toDisplayLabel()
+                    )
+                } ?: member
+            }
+        )
 
     suspend fun getSeriesResultWrapperFlowForRace(raceId: UUID): Flow<List<ResultWrapper>>? {
         val seriesData = getEventSeriesForRace(raceId) ?: return null
@@ -432,10 +449,16 @@ class DataProcessor private constructor(context: Context) {
         if (members.size < 2) {
             return null
         }
+        val raceNameById = members.associate { member -> member.localRaceId to member.displayName }
         val memberFlows = members.map { member ->
             ResultsProcessor.getResultWrapperFlowByRace(member.localRaceId, this).map { wrappers ->
                 wrappers.map { wrapper ->
-                    wrapper.copy(displayLabel = seriesResultDisplayLabel(member.displayName, wrapper))
+                    val resultRaceId = wrapper.competitorData
+                        .firstNotNullOfOrNull { it.readoutData?.result?.raceId }
+                        ?: member.localRaceId
+                    val raceName = raceNameById[resultRaceId]
+                        ?: raceNameById.getValue(member.localRaceId)
+                    wrapper.copy(displayLabel = seriesResultDisplayLabel(raceName, wrapper))
                 }
             }
         }

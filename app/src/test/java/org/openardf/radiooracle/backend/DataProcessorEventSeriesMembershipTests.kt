@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.backend
 
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -32,11 +33,19 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.openardf.radiooracle.backend.room.ARDFRepository
+import org.openardf.radiooracle.backend.room.entity.Category
+import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.Race
+import org.openardf.radiooracle.backend.room.entity.Result
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
 import org.openardf.radiooracle.backend.room.enums.RaceBand
 import org.openardf.radiooracle.backend.room.enums.RaceLevel
 import org.openardf.radiooracle.backend.room.enums.RaceType
+import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import java.time.Duration
@@ -114,6 +123,47 @@ class DataProcessorEventSeriesMembershipTests {
         assertEquals("New Name", processor.getEventSeries(created.series.seriesId)?.series?.name)
     }
 
+    @Test
+    fun seriesResultLabelsFollowResultRaceInsteadOfStaleMemberName() = runBlocking {
+        val processor = DataProcessor.get()
+        val classic = raceDataWithResult(
+            id = UUID.fromString("55555555-5555-5555-5555-555555555555"),
+            name = "2m Classic"
+        )
+        val sprint = raceDataWithResult(
+            id = UUID.fromString("66666666-6666-6666-6666-666666666666"),
+            name = "Sprint Practice"
+        )
+        processor.saveRaceData(classic)
+        processor.saveRaceData(sprint)
+
+        val created = processor.createEventSeriesFromRace(classic.race.id, "Practice Series")
+        val complete = processor.addRaceToEventSeries(sprint.race.id, created.series.seriesId)
+        processor.saveEventSeries(
+            complete.series,
+            complete.orderedMembers().map { member ->
+                member.copy(
+                    displayName = if (member.localRaceId == classic.race.id) {
+                        "Sprint Practice"
+                    } else {
+                        "2m Classic"
+                    }
+                )
+            }
+        )
+
+        val selectorMembers = processor.getEventSeries().first().single().orderedMembers()
+        val wrappers = processor.getSeriesResultWrapperFlowForRace(classic.race.id)!!.first()
+
+        assertEquals(listOf("2m Classic", "Sprint Practice"), selectorMembers.map { it.displayName })
+        assertEquals(listOf(classic.race.id, sprint.race.id), selectorMembers.map { it.localRaceId })
+        assertEquals(listOf("2m Classic - M21", "Sprint Practice - M21"), wrappers.map { it.displayLabel })
+        assertEquals(
+            listOf(classic.race.id, sprint.race.id),
+            wrappers.map { it.competitorData.single().readoutData!!.result.raceId }
+        )
+    }
+
     private fun raceData(id: UUID, name: String): RaceData =
         RaceData(
             race = Race(
@@ -131,4 +181,47 @@ class DataProcessorEventSeriesMembershipTests {
             competitorData = emptyList(),
             unmatchedReadoutData = emptyList()
         )
+
+    private fun raceDataWithResult(id: UUID, name: String): RaceData {
+        val category = Category(
+            id = UUID.randomUUID(),
+            raceId = id,
+            name = "M21",
+            isMan = true,
+            maxAge = null,
+            length = 5_000,
+            climb = 100,
+            order = 0,
+            controlPointsString = ""
+        )
+        val competitor = Competitor(
+            id = UUID.randomUUID(),
+            raceId = id,
+            categoryId = category.id,
+            firstName = "Test",
+            lastName = "Runner",
+            club = "",
+            index = "",
+            startNumber = 1
+        )
+        val result = Result().copy(
+            id = UUID.randomUUID(),
+            raceId = id,
+            competitorId = competitor.id,
+            resultStatus = ResultStatus.OK,
+            runTime = Duration.ofMinutes(30)
+        )
+        return RaceData(
+            race = raceData(id, name).race,
+            categories = listOf(CategoryData(category, emptyList(), listOf(competitor))),
+            aliases = emptyList(),
+            competitorData = listOf(
+                CompetitorData(
+                    competitorCategory = CompetitorCategory(competitor, category),
+                    readoutData = ReadoutData(result, emptyList())
+                )
+            ),
+            unmatchedReadoutData = emptyList()
+        )
+    }
 }

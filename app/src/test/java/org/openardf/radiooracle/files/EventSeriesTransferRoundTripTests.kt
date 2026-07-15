@@ -112,10 +112,22 @@ class EventSeriesTransferRoundTripTests {
         DataProcessor.get().saveEventSeriesImport(androidImport)
 
         val upload = DataProcessor.get().desktopUploadForSeries(androidImport.series.seriesId)
+        val returnedFingerprint = packageFingerprint(upload.bytes)
 
         assertEquals("Desktop Round Trip.zip", upload.fileName)
         assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, upload.contentType)
-        assertEquals(desktopFingerprint, packageFingerprint(upload.bytes))
+        assertEquals(desktopFingerprint.seriesId, returnedFingerprint.seriesId)
+        assertEquals(desktopFingerprint.name, returnedFingerprint.name)
+        assertEquals(
+            desktopFingerprint.events.map { Triple(it.seriesEventId, it.eventFilePath, it.order) },
+            returnedFingerprint.events.map { Triple(it.seriesEventId, it.eventFilePath, it.order) }
+        )
+        assertEquals(desktopFingerprint.events.map { it.raceName }, returnedFingerprint.events.map { it.raceName })
+        assertTrue(returnedFingerprint.events.all { event ->
+            event.displayName == event.raceName &&
+                event.startDateTimeIso == event.raceStartDateTimeIso &&
+                event.formatLabel == "Classic"
+        })
     }
 
     @Test
