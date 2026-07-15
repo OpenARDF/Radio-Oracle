@@ -24,8 +24,11 @@
 
 package org.openardf.radiooracle.backend.prints
 
+import android.app.Application
+import android.content.Context
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -46,6 +49,21 @@ import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class PrintProcessorTest {
+    @Test
+    fun retainsApplicationContextInsteadOfTransientActivityContext() {
+        val application: Application = RuntimeEnvironment.getApplication()
+        val activityContext = mock(Context::class.java)
+        `when`(activityContext.applicationContext).thenReturn(application)
+
+        val processor = PrintProcessor(activityContext, mock(DataProcessor::class.java))
+
+        val retainedContext = processor.javaClass.getDeclaredField("appContext").run {
+            isAccessible = true
+            get(processor)
+        }
+        assertSame(application, retainedContext)
+    }
+
     @Test
     fun finishTicketUsesRaceOwnedByResult() = runTest {
         val resultRaceId = UUID.fromString("00000000-0000-0000-0000-000000000002")

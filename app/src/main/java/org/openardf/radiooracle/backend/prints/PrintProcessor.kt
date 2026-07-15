@@ -50,7 +50,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.lang.ref.WeakReference
 import java.text.Normalizer
 
 enum class PrintAttemptResult {
@@ -61,7 +60,7 @@ enum class PrintAttemptResult {
 
 
 class PrintProcessor(context: Context, private val dataProcessor: DataProcessor) {
-    private val appContext: WeakReference<Context> = WeakReference(context)
+    private val appContext: Context = context.applicationContext ?: context
     private var printerReady: Boolean = false
     private var printer: EscPosPrinter? = null
 
@@ -70,7 +69,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
             return PrinterSetupStatus.READY
         }
 
-        val context = appContext.get() ?: return PrinterSetupStatus.FAILED
+        val context = appContext
         val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
         val enabled = sharedPref.getBoolean(
             context.getString(R.string.key_prints_enabled), false
@@ -99,8 +98,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         if (!bluetoothAdapter.isEnabled) {
             logWarn("Bluetooth adapter is disabled")
             makeToast(
-                appContext.get()?.getString(R.string.prints_bluetooth_disabled)
-                    ?: "Bluetooth disabled"
+                appContext.getString(R.string.prints_bluetooth_disabled)
             )
             return PrinterSetupStatus.NEEDS_SETUP
         }
@@ -131,13 +129,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     private suspend fun print(formatted: String): PrintAttemptResult {
-        val context = appContext.get()
-        if (context == null) {
-            printerReady = false
-            printer = null
-            logError("Print failed because application context is unavailable")
-            return PrintAttemptResult.FAILED
-        }
+        val context = appContext
 
         val setupStatus = preparePrinter()
         if (setupStatus != PrinterSetupStatus.READY) {
@@ -178,8 +170,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
         } catch (e: Exception) {
             logError("ESC/POS print failed: ${e.message ?: e::class.simpleName}")
             makeToast(
-                appContext.get()?.getString(R.string.prints_error, e.message)
-                    ?: "Failed to print"
+                appContext.getString(R.string.prints_error, e.message)
             )
             printerReady = false
             printer = null
@@ -193,10 +184,9 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     private fun makeToast(message: String) {
-        val context = appContext.get() ?: return
         CoroutineScope(Dispatchers.Main).launch {
             Toast.makeText(
-                context, message, Toast.LENGTH_LONG
+                appContext, message, Toast.LENGTH_LONG
             ).show()
         }
     }
@@ -204,7 +194,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     suspend fun printFinishTicket(resultData: ResultData): PrintAttemptResult {
         val formatted = formatFinishTicket(resultData) ?: return PrintAttemptResult.FAILED
 
-        val context = appContext.get() ?: return PrintAttemptResult.FAILED
+        val context = appContext
         val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
         val doublePrint =
             sharedPref.getBoolean(
@@ -233,11 +223,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     internal suspend fun formatFinishTicket(resultData: ResultData): String? {
-        val context = appContext.get()
-        if (context == null) {
-            logError("Finish ticket formatting failed because application context is unavailable")
-            return null
-        }
+        val context = appContext
         val race = dataProcessor.getRace(resultData.result.raceId)
         if (race == null) {
             logError(
@@ -295,7 +281,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
             SIRecordType.START -> {
                 return "[L]${
                     formatTimeRow(
-                        appContext.get()?.getString(R.string.general_start) ?: "Start",
+                        appContext.getString(R.string.general_start),
                         aliasPunch.punch.siTime.getTimeString(),
                         null
                     )
@@ -305,7 +291,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
             SIRecordType.FINISH -> {
                 return "[L]${
                     formatTimeRow(
-                        appContext.get()?.getString(R.string.general_finish) ?: "Finish",
+                        appContext.getString(R.string.general_finish),
                         aliasPunch.punch.siTime.getTimeString(),
                             TimeProcessor.durationToFormattedString(
                                 aliasPunch.punch.split, dataProcessor.useMinuteTimeFormat()
@@ -347,7 +333,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     private fun shouldUseAliases(): Boolean {
-        val context = appContext.get() ?: return true
+        val context = appContext
         val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
         return sharedPref.getBoolean(context.getString(R.string.key_results_use_aliases), true)
     }

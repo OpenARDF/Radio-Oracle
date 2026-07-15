@@ -104,7 +104,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.lang.ref.WeakReference
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -116,11 +115,11 @@ import java.util.UUID
 class DataProcessor private constructor(context: Context) {
 
     private val ardfRepository = ARDFRepository.get()
-    private var appContext: WeakReference<Context> = WeakReference(context)
+    private val appContext: Context = context.applicationContext ?: context
 
     var currentState = MutableLiveData<AppState>()
     var fileProcessor: FileProcessor? = null
-    var printProcessor = PrintProcessor(context, this)
+    var printProcessor = PrintProcessor(appContext, this)
     private val _raceSelectionRequests = MutableSharedFlow<UUID>(extraBufferCapacity = 1)
     val raceSelectionRequests: SharedFlow<UUID> = _raceSelectionRequests.asSharedFlow()
 
@@ -128,7 +127,7 @@ class DataProcessor private constructor(context: Context) {
         private var INSTANCE: DataProcessor? = null
         fun initialize(context: Context) {
             if (INSTANCE == null) {
-                INSTANCE = DataProcessor(context)
+                INSTANCE = DataProcessor(context.applicationContext ?: context)
             }
         }
 
@@ -147,11 +146,10 @@ class DataProcessor private constructor(context: Context) {
         )
     }
 
-    fun getContext(): Context? = appContext.get()
+    fun getContext(): Context? = appContext
 
     fun getAppVersion(): String {
-        val packageInfo =
-            appContext.get()!!.packageManager.getPackageInfo(appContext.get()!!.packageName, 0)
+        val packageInfo = appContext.packageManager.getPackageInfo(appContext.packageName, 0)
         return packageInfo.versionName ?: "Unknown Version"
     }
 
@@ -246,8 +244,7 @@ class DataProcessor private constructor(context: Context) {
      * The control points are duplicated as well
      */
     suspend fun duplicateCategory(categoryData: CategoryData) {
-        categoryData.category.name += "_" + (appContext.get()?.getString(R.string.general_copy)
-            ?: "_Copy")
+        categoryData.category.name += "_" + appContext.getString(R.string.general_copy)
         categoryData.category.order = getHighestCategoryOrder(categoryData.category.raceId) + 1
 
         //Adjust the IDs
@@ -578,7 +575,7 @@ class DataProcessor private constructor(context: Context) {
     }
 
     suspend fun processCardData(cardData: CardData, race: Race) =
-        appContext.get()?.let { ResultsProcessor.processCardData(cardData, race, it, this) }
+        ResultsProcessor.processCardData(cardData, race, appContext, this)
 
     suspend fun processCardDataForCurrentRaceOrSeries(cardData: CardData, currentRace: Race): Boolean? {
         if (currentRace.raceLevel == RaceLevel.PRACTICE && cardData.isBlankPracticeStart()) {
@@ -716,10 +713,12 @@ class DataProcessor private constructor(context: Context) {
         punchData.isEmpty() && startTime == null && finishTime == null
 
     private fun showSiReadoutToast(messageResId: Int, vararg formatArgs: Any) {
-        appContext.get()?.let { context ->
-            CoroutineScope(Dispatchers.Main).launch {
-                Toast.makeText(context, context.getString(messageResId, *formatArgs), Toast.LENGTH_LONG).show()
-            }
+        CoroutineScope(Dispatchers.Main).launch {
+            Toast.makeText(
+                appContext,
+                appContext.getString(messageResId, *formatArgs),
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -1008,26 +1007,20 @@ class DataProcessor private constructor(context: Context) {
 
     //SportIdent manipulation
     fun connectDevice(usbDevice: UsbDevice) {
-        val context = getContext();
-        context?.let { context ->
-            DebugLog.info("SI", "Starting reader service for USB ${usbDevice.vendorId}:${usbDevice.productId}")
-            Intent(context, SIReaderService::class.java).also {
-                it.action = SIReaderService.ReaderServiceActions.START.toString()
-                it.putExtra(SIReaderService.USB_DEVICE, usbDevice)
-                appContext.get()?.startService(it)
-            }
+        DebugLog.info("SI", "Starting reader service for USB ${usbDevice.vendorId}:${usbDevice.productId}")
+        Intent(appContext, SIReaderService::class.java).also {
+            it.action = SIReaderService.ReaderServiceActions.START.toString()
+            it.putExtra(SIReaderService.USB_DEVICE, usbDevice)
+            appContext.startService(it)
         }
     }
 
     fun detachDevice(usbDevice: UsbDevice) {
-        val context = getContext();
-        context?.let { context ->
-            DebugLog.info("SI", "Stopping reader service for USB ${usbDevice.vendorId}:${usbDevice.productId}")
-            Intent(context, SIReaderService::class.java).also {
-                it.action = SIReaderService.ReaderServiceActions.STOP.toString()
-                it.putExtra(SIReaderService.USB_DEVICE, usbDevice)
-                context.startService(it)
-            }
+        DebugLog.info("SI", "Stopping reader service for USB ${usbDevice.vendorId}:${usbDevice.productId}")
+        Intent(appContext, SIReaderService::class.java).also {
+            it.action = SIReaderService.ReaderServiceActions.STOP.toString()
+            it.putExtra(SIReaderService.USB_DEVICE, usbDevice)
+            appContext.startService(it)
         }
     }
 
@@ -1049,103 +1042,102 @@ class DataProcessor private constructor(context: Context) {
 
     //Enums manipulation
     fun raceTypeToString(raceType: RaceType): String {
-        val raceTypeStrings = appContext.get()?.resources?.getStringArray(R.array.race_types_array)
-        return raceTypeStrings?.getOrNull(raceType.value) ?: ""
+        val raceTypeStrings = appContext.resources.getStringArray(R.array.race_types_array)
+        return raceTypeStrings.getOrNull(raceType.value) ?: ""
     }
 
     fun raceTypeStringToEnum(string: String): RaceType {
-        val raceTypeStrings = appContext.get()?.resources?.getStringArray(R.array.race_types_array)
-        val idx = raceTypeStrings?.indexOf(string) ?: -1
+        val raceTypeStrings = appContext.resources.getStringArray(R.array.race_types_array)
+        val idx = raceTypeStrings.indexOf(string)
         return if (idx >= 0) RaceType.getByValue(idx) else RaceType.entries.first()
     }
 
     fun raceLevelToString(raceLevel: RaceLevel): String {
         val raceLevelStrings =
-            appContext.get()?.resources?.getStringArray(R.array.race_levels_array)
-        return raceLevelStrings?.getOrNull(raceLevel.value) ?: ""
+            appContext.resources.getStringArray(R.array.race_levels_array)
+        return raceLevelStrings.getOrNull(raceLevel.value) ?: ""
     }
 
     fun raceLevelStringToEnum(string: String): RaceLevel {
         val raceLevelStrings =
-            appContext.get()?.resources?.getStringArray(R.array.race_levels_array)
-        val idx = raceLevelStrings?.indexOf(string) ?: -1
+            appContext.resources.getStringArray(R.array.race_levels_array)
+        val idx = raceLevelStrings.indexOf(string)
         return if (idx >= 0) RaceLevel.getByValue(idx) else RaceLevel.entries.first()
     }
 
     fun raceBandToString(raceBand: RaceBand): String {
-        val raceBandStrings = appContext.get()?.resources?.getStringArray(R.array.race_bands_array)
-        return raceBandStrings?.getOrNull(raceBand.value) ?: ""
+        val raceBandStrings = appContext.resources.getStringArray(R.array.race_bands_array)
+        return raceBandStrings.getOrNull(raceBand.value) ?: ""
     }
 
     fun raceBandStringToEnum(string: String): RaceBand {
-        val raceBandStrings = appContext.get()?.resources?.getStringArray(R.array.race_bands_array)
-        val idx = raceBandStrings?.indexOf(string) ?: -1
+        val raceBandStrings = appContext.resources.getStringArray(R.array.race_bands_array)
+        val idx = raceBandStrings.indexOf(string)
         return if (idx >= 0) RaceBand.getByValue(idx) else RaceBand.entries.first()
     }
 
     fun resultStatusToString(resultStatus: ResultStatus): String {
         val raceStatusStrings =
-            appContext.get()?.resources?.getStringArray(R.array.result_status_array)
-        return raceStatusStrings?.getOrNull(resultStatus.value) ?: ""
+            appContext.resources.getStringArray(R.array.result_status_array)
+        return raceStatusStrings.getOrNull(resultStatus.value) ?: ""
     }
 
     fun resultStatusStringToEnum(string: String): ResultStatus {
         val raceStatusStrings =
-            appContext.get()?.resources?.getStringArray(R.array.result_status_array)
-        val idx = raceStatusStrings?.indexOf(string) ?: -1
+            appContext.resources.getStringArray(R.array.result_status_array)
+        val idx = raceStatusStrings.indexOf(string)
         return if (idx >= 0) ResultStatus.getByValue(idx) else ResultStatus.entries.first()
     }
 
     fun resultStatusToShortString(resultStatus: ResultStatus): String {
         val raceStatusStrings =
-            appContext.get()?.resources?.getStringArray(R.array.result_status_short_array)
-        return raceStatusStrings?.getOrNull(resultStatus.value) ?: ""
+            appContext.resources.getStringArray(R.array.result_status_short_array)
+        return raceStatusStrings.getOrNull(resultStatus.value) ?: ""
     }
 
     fun resultStatusShortStringToEnum(string: String): ResultStatus {
         val raceStatusStrings =
-            appContext.get()?.resources?.getStringArray(R.array.result_status_short_array)
-        val idx = raceStatusStrings?.indexOf(string) ?: -1
+            appContext.resources.getStringArray(R.array.result_status_short_array)
+        val idx = raceStatusStrings.indexOf(string)
         return if (idx >= 0) ResultStatus.getByValue(idx) else ResultStatus.entries.first()
     }
 
     fun genderToString(isMan: Boolean?): String {
-        val ctx = appContext.get()
         return when (isMan) {
-            false -> ctx?.resources?.getString(R.string.general_gender_woman) ?: "Women"
-            true -> ctx?.resources?.getString(R.string.general_gender_man) ?: "Men"
+            false -> appContext.getString(R.string.general_gender_woman)
+            true -> appContext.getString(R.string.general_gender_man)
             null -> "Men"
         }
     }
 
     fun providerTypeFromString(string: String): ProviderType {
         val providerStrings =
-            appContext.get()?.resources?.getStringArray(R.array.result_service_types)
-        val idx = providerStrings?.indexOf(string) ?: -1
+            appContext.resources.getStringArray(R.array.result_service_types)
+        val idx = providerStrings.indexOf(string)
         return if (idx >= 0) ProviderType.getByValue(idx) else ProviderType.entries.first()
     }
 
     fun providerTypeToString(providerType: ProviderType): String {
         val providerTypes =
-            appContext.get()?.resources?.getStringArray(R.array.result_service_types)
-        return providerTypes?.getOrNull(providerType.value) ?: ""
+            appContext.resources.getStringArray(R.array.result_service_types)
+        return providerTypes.getOrNull(providerType.value) ?: ""
     }
 
     fun resultServiceStatusToString(status: ResultServiceStatus): CharSequence {
         val resultServiceStatus =
-            appContext.get()?.resources?.getStringArray(R.array.result_service_status)
-        return resultServiceStatus?.getOrNull(status.value) ?: ""
+            appContext.resources.getStringArray(R.array.result_service_status)
+        return resultServiceStatus.getOrNull(status.value) ?: ""
     }
 
     fun punchStatusToShortString(punchStatus: PunchStatus): String {
-        val arr = appContext.get()?.resources?.getStringArray(R.array.punch_status_array_short)
-        return arr?.getOrNull(punchStatus.ordinal) ?: ""
+        val arr = appContext.resources.getStringArray(R.array.punch_status_array_short)
+        return arr.getOrNull(punchStatus.ordinal) ?: ""
     }
 
     fun shortStringToPunchStatus(string: String): PunchStatus {
         val punchStatusStrings =
-            appContext.get()?.resources?.getStringArray(R.array.punch_status_array_short)
-        val idx = punchStatusStrings?.indexOf(string) ?: -1
+            appContext.resources.getStringArray(R.array.punch_status_array_short)
+        val idx = punchStatusStrings.indexOf(string)
         return if (idx >= 0) PunchStatus.getByValue(idx) else PunchStatus.entries.first()
     }
 
@@ -1153,8 +1145,8 @@ class DataProcessor private constructor(context: Context) {
      * @return false for woman, true for man
      */
     fun genderFromString(string: String): Boolean {
-        val genderStrings = appContext.get()?.resources?.getStringArray(R.array.genders)
-        return when (genderStrings?.indexOf(string)) {
+        val genderStrings = appContext.resources.getStringArray(R.array.genders)
+        return when (genderStrings.indexOf(string)) {
             0 -> false
             1 -> true
             else -> true
@@ -1162,13 +1154,13 @@ class DataProcessor private constructor(context: Context) {
     }
 
     fun dataFormatFromString(string: String): DataFormat {
-        val dataStrings = appContext.get()?.resources?.getStringArray(R.array.data_formats)!!
+        val dataStrings = appContext.resources.getStringArray(R.array.data_formats)
         val index = dataStrings.indexOf(string).or(0)
         return DataFormat.getByValue(index)!!
     }
 
     fun dataTypeFromString(string: String): DataType {
-        val dataStrings = appContext.get()?.resources?.getStringArray(R.array.data_types)!!
+        val dataStrings = appContext.resources.getStringArray(R.array.data_types)
         val index = dataStrings.indexOf(string).or(0)
         return DataType.getByValue(index)!!
     }

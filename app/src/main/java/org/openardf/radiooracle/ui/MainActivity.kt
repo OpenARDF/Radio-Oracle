@@ -170,8 +170,8 @@ class MainActivity : AppCompatActivity() {
         setPreferences()
 
         //Initialize singletons
-        ARDFRepository.initialize(this)
-        DataProcessor.initialize(this)
+        ARDFRepository.initialize(applicationContext)
+        DataProcessor.initialize(applicationContext)
         DebugLog.initialize(applicationContext)
         DebugLog.info("App", "MainActivity created")
         dataProcessor = DataProcessor.get()
