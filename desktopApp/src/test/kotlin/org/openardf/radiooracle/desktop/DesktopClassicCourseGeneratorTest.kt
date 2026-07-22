@@ -197,6 +197,35 @@ class DesktopClassicCourseGeneratorTest {
     }
 
     @Test
+    fun ignoresPointPlacemarksThatDoNotMatchTheSharedFoxLabelRules() {
+        val path = Files.createTempFile("classic-course-points-extra-waypoint", ".kml")
+        Files.writeString(
+            path,
+            coursePointsKml(extraPlacemark = pointPlacemark("CORRIDOR EXIT", -94.97, 39.0, 100.0))
+        )
+
+        val result = DesktopClassicCourseGenerator.generate(path, elevationLookup = { null })
+
+        assertEquals(listOf("FOX1", "FOX2", "FOX3", "FOX4", "FOX5"), result.foxes.map { it.label })
+    }
+
+    @Test
+    fun reportsTooManyRecognizedFoxPointsWithTheirLabels() {
+        val path = Files.createTempFile("classic-course-points-extra-fox", ".kml")
+        Files.writeString(
+            path,
+            coursePointsKml(extraPlacemark = pointPlacemark("Fox 6", -94.97, 39.0, 100.0))
+        )
+
+        val error = runCatching { DesktopClassicCourseGenerator.generate(path) }.exceptionOrNull()
+        val message = error?.message.orEmpty()
+
+        assertTrue(message.contains("contains 6 fox point candidates"))
+        assertTrue(message.contains("allows no more than 5"))
+        assertTrue(message.contains("\"Fox 6\""))
+    }
+
+    @Test
     fun rejectsSprintCoursePointsWhenClassicGeneratorSelected() {
         val path = Files.createTempFile("Sprint Practice", ".kml")
         Files.writeString(path, sprintCoursePointsKml())

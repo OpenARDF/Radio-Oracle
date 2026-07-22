@@ -159,7 +159,8 @@ class DesktopFoxoringCourseGeneratorTest {
 
         val error = runCatching { DesktopFoxoringCourseGenerator.generate(path) }.exceptionOrNull()
 
-        assertTrue(error?.message.orEmpty().contains("between 5 and 12 fox points"))
+        assertTrue(error?.message.orEmpty().contains("contains 13 fox point candidates"))
+        assertTrue(error?.message.orEmpty().contains("allows no more than 12"))
     }
 
     @Test

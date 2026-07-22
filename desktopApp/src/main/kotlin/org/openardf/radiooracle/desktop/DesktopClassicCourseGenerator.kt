@@ -24,7 +24,9 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import org.openardf.radiooracle.shared.event.CourseRuleRequirement
 import org.openardf.radiooracle.shared.event.EventCourseRuleCatalog
 import java.nio.charset.StandardCharsets
@@ -390,7 +392,7 @@ object DesktopClassicCourseGenerator {
                 point.name.isBeaconLabel() -> beaconPoints += coursePoint
                 point.name.isSpectatorLabel() ->
                     throw IllegalArgumentException("${config.generatorTitle} does not accept spectator/separator points.")
-                else -> foxPoints += coursePoint
+                ControlRoleLabelRules.inferredRole(point.name) == ControlPointType.CONTROL -> foxPoints += coursePoint
             }
         }
         require(startPoints.size == 1) {
@@ -402,8 +404,13 @@ object DesktopClassicCourseGenerator {
         require(beaconPoints.size <= 1) {
             "Course points file must contain no more than one Beacon point."
         }
-        require(foxPoints.size in config.minimumFoxes..config.maximumFoxes) {
-            "Course points file must contain between ${config.minimumFoxes} and ${config.maximumFoxes} fox points."
+        require(foxPoints.size >= config.minimumFoxes) {
+            "Course points file contains only ${foxPoints.size} fox point candidates " +
+                "(${foxPoints.quotedLabels()}); ${config.generatorTitle} requires at least ${config.minimumFoxes}."
+        }
+        require(foxPoints.size <= config.maximumFoxes) {
+            "Course points file contains ${foxPoints.size} fox point candidates " +
+                "(${foxPoints.quotedLabels()}); ${config.generatorTitle} allows no more than ${config.maximumFoxes}."
         }
         return ClassifiedClassicCoursePoints(
             start = startPoints.single(),
@@ -412,6 +419,9 @@ object DesktopClassicCourseGenerator {
             foxes = foxPoints
         )
     }
+
+    private fun List<ClassicCoursePoint>.quotedLabels(): String =
+        joinToString { point -> "\"${point.label}\"" }.ifBlank { "none" }
 
     private fun classifySprintCoursePoints(
         points: List<CourseControlPoint>,
