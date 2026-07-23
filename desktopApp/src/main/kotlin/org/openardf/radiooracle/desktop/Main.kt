@@ -454,7 +454,11 @@ private val CategoryGenderColumn = FixedTableColumn("Gender", 92.dp)
 private val CategoryLengthColumn = FixedTableColumn("Length (m)", 96.dp)
 private val CategoryClimbColumn = FixedTableColumn("Climb (m)", 92.dp)
 private val CategoryAssignedControlsColumn = FixedTableColumn("Assigned Controls", 320.dp)
-private val CategoryCompetitorCountColumn = FixedTableColumn("Competitors", 100.dp)
+private val CategoryCompetitorCountColumn = FixedTableColumn(
+    title = "Competitors",
+    width = 100.dp,
+    headerTextAlign = TextAlign.Center
+)
 
 private fun categoryTableColumns(
     showGenderColumn: Boolean,
@@ -18125,25 +18129,19 @@ private fun ControlDetailsPanel(
             adapter = rememberScrollbarAdapter(horizontalScrollState),
             modifier = Modifier.fillMaxWidth()
         )
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
-            verticalAlignment = Alignment.Top
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                orderedControls.forEach { control ->
-                    key(control.id) {
+            orderedControls.forEach { control ->
+                key(control.id) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         ControlDeleteButton(control, onRemoveControl)
-                    }
-                }
-            }
-            Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
-                Column(
-                    modifier = Modifier.width(tableWidth),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    orderedControls.forEach { control ->
-                        key(control.id) {
+                        Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                             val warningReasons = warningReasonsByControlId[control.id].orEmpty()
                             ControlDetailRow(
                                 control = control,
@@ -22309,7 +22307,7 @@ private fun CategoryDetailRow(
         )
         Box(
             modifier = Modifier.width(tableColumns.last().width),
-            contentAlignment = Alignment.CenterStart
+            contentAlignment = Alignment.Center
         ) {
             Text(
                 text = category.assignedCompetitorCount.toString(),
