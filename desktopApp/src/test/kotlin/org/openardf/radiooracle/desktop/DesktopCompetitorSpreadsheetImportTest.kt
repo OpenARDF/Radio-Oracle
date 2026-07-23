@@ -26,6 +26,8 @@ package org.openardf.radiooracle.desktop
 
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import org.junit.Assert.assertEquals
@@ -116,6 +118,45 @@ class DesktopCompetitorSpreadsheetImportTest {
         assertEquals("Fala", competitor.lastName)
         assertEquals(8400555, competitor.siNumber)
         assertEquals("M-21", competitor.categoryName)
+    }
+
+    @Test
+    fun extractsBirthYearFromDisplayedDatesAndExcelDateSerials() {
+        val excelBirthDate = LocalDate.of(1967, 8, 19)
+        val excelSerial = ChronoUnit.DAYS.between(
+            LocalDate.of(1899, 12, 30),
+            excelBirthDate
+        )
+        val rows = listOf(
+            listOf("Given", "Family", "Born", "Sprint Category"),
+            listOf("ISO", "Date", "1991-01-12", "M-21"),
+            listOf("US", "Date", "04/15/1978", "M-40"),
+            listOf("Written", "Date", "July 4, 1959", "M-60"),
+            listOf("Excel", "Date", "$excelSerial.75", "M-50"),
+            listOf("Plain", "Year", "2001", "M-21")
+        )
+        val mapping = DesktopSpreadsheetCompetitorColumnMapping(
+            competitorColumns = mapOf(
+                DesktopSpreadsheetCompetitorField.FIRST_NAME to ref("Given"),
+                DesktopSpreadsheetCompetitorField.LAST_NAME to ref("Family"),
+                DesktopSpreadsheetCompetitorField.BIRTH_YEAR to ref("Born")
+            ),
+            competitions = listOf(
+                DesktopSpreadsheetCompetitionColumnMapping(
+                    competitionName = "Sprint",
+                    categoryColumn = ref("Sprint Category")
+                )
+            )
+        )
+
+        val competitors = DesktopEventRegSpreadsheetParser.parseMappedRows(
+            rows = rows,
+            headerRowIndex = 0,
+            eventName = "Birth Dates",
+            mapping = mapping
+        ).competitions.single().competitors
+
+        assertEquals(listOf(1991, 1978, 1959, 1967, 2001), competitors.map { it.birthYear })
     }
 
     @Test
@@ -319,6 +360,12 @@ class DesktopCompetitorSpreadsheetImportTest {
 
     private fun sampleWorkbookBytes(): ByteArray {
         val output = ByteArrayOutputStream()
+        val workbookCompetitorValues = competitorValues().toMutableList().apply {
+            this[allHeaders().indexOf("Born")] = ChronoUnit.DAYS.between(
+                LocalDate.of(1899, 12, 30),
+                LocalDate.of(1991, 1, 1)
+            ).toString()
+        }
         ZipOutputStream(output).use { zip ->
             zip.writeEntry(
                 "xl/workbook.xml",
@@ -358,15 +405,19 @@ class DesktopCompetitorSpreadsheetImportTest {
                     listOf(
                         listOf("Radio Championships Registration"),
                         allHeaders(),
-                        competitorValues()
-                    )
+                        workbookCompetitorValues
+                    ),
+                    numericCells = setOf(2 to allHeaders().indexOf("Born"))
                 )
             )
         }
         return output.toByteArray()
     }
 
-    private fun worksheetXml(rows: List<List<String>>): String =
+    private fun worksheetXml(
+        rows: List<List<String>>,
+        numericCells: Set<Pair<Int, Int>> = emptySet()
+    ): String =
         buildString {
             append(
                 """<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>"""
@@ -374,9 +425,14 @@ class DesktopCompetitorSpreadsheetImportTest {
             rows.forEachIndexed { rowIndex, row ->
                 append("""<row r="${rowIndex + 1}">""")
                 row.forEachIndexed { columnIndex, value ->
-                    append(
-                        """<c r="${columnLetters(columnIndex)}${rowIndex + 1}" t="inlineStr"><is><t>${xmlEscape(value)}</t></is></c>"""
-                    )
+                    val reference = "${columnLetters(columnIndex)}${rowIndex + 1}"
+                    if (rowIndex to columnIndex in numericCells) {
+                        append("""<c r="$reference"><v>$value</v></c>""")
+                    } else {
+                        append(
+                            """<c r="$reference" t="inlineStr"><is><t>${xmlEscape(value)}</t></is></c>"""
+                        )
+                    }
                 }
                 append("</row>")
             }

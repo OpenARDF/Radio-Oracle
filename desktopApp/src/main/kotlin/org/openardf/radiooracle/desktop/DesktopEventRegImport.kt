@@ -47,6 +47,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.LocalDate
 import java.util.UUID
 import java.util.prefs.Preferences
 import java.util.zip.ZipInputStream
@@ -944,8 +945,29 @@ object DesktopEventRegSpreadsheetParser {
 
     private fun String.birthYear(): Int? {
         val trimmed = trim()
-        return Regex("^\\d{4}").find(trimmed)?.value?.toIntOrNull()
+        if (trimmed.isBlank()) {
+            return null
+        }
+        val displayedYear = Regex("(?<!\\d)\\d{4}(?!\\d)")
+            .findAll(trimmed)
+            .mapNotNull { match -> match.value.toIntOrNull() }
+            .firstOrNull { year -> year in MinimumBirthYear..MaximumBirthYear }
+        if (displayedYear != null) {
+            return displayedYear
+        }
+        val excelSerial = trimmed.toDoubleOrNull()
+            ?.takeIf { serial -> serial in MinimumExcelBirthDateSerial..MaximumExcelBirthDateSerial }
+            ?: return null
+        return runCatching {
+            ExcelDateEpoch.plusDays(excelSerial.toLong()).year
+        }.getOrNull()?.takeIf { year -> year in MinimumBirthYear..MaximumBirthYear }
     }
+
+    private val ExcelDateEpoch: LocalDate = LocalDate.of(1899, 12, 30)
+    private const val MinimumBirthYear: Int = 1800
+    private const val MaximumBirthYear: Int = 2200
+    private const val MinimumExcelBirthDateSerial: Double = 1_000.0
+    private const val MaximumExcelBirthDateSerial: Double = 120_000.0
 
     private fun String.sexIsMan(): Boolean? =
         when (trim().uppercase()) {
