@@ -162,6 +162,9 @@ import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventAwardScope
 import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
+import org.openardf.radiooracle.shared.event.EventCategoryCompetitorSync
+import org.openardf.radiooracle.shared.event.EventCategoryCompetitorSyncOutcome
+import org.openardf.radiooracle.shared.event.EventCategoryCompetitorSyncPlan
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
@@ -437,11 +440,21 @@ private enum class DesktopSportIdentAppendOutcome {
     DuplicateCreatedNew
 }
 
+private sealed interface DesktopCategoryListEdit {
+    data class Add(val name: String) : DesktopCategoryListEdit
+
+    data class Sync(
+        val missingCategoryIds: Set<String>,
+        val emptyCategoryIds: Set<String>
+    ) : DesktopCategoryListEdit
+}
+
 private val CategoryNameColumn = FixedTableColumn("Name", 150.dp)
 private val CategoryGenderColumn = FixedTableColumn("Gender", 92.dp)
 private val CategoryLengthColumn = FixedTableColumn("Length (m)", 96.dp)
 private val CategoryClimbColumn = FixedTableColumn("Climb (m)", 92.dp)
 private val CategoryAssignedControlsColumn = FixedTableColumn("Assigned Controls", 320.dp)
+private val CategoryCompetitorCountColumn = FixedTableColumn("Competitors", 100.dp)
 
 private fun categoryTableColumns(
     showGenderColumn: Boolean,
@@ -457,6 +470,7 @@ private fun categoryTableColumns(
             add(CategoryClimbColumn)
         }
         add(CategoryAssignedControlsColumn)
+        add(CategoryCompetitorCountColumn)
     }
 
 private fun showCategoryPhysicalStatsInSetup(raceLevel: RaceLevel): Boolean =
@@ -470,7 +484,8 @@ private val CategoryTableColumnHints = mapOf(
     "Gender" to "Category gender used for exports and age/gender result grouping.",
     "Length (m)" to "Course length for this category in meters. This public value is used in exports and result displays.",
     "Climb (m)" to "Total climb for this category in meters. This public value is used in exports and result displays.",
-    "Assigned Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use the picker to insert Public labels. Manual entries may use SI codes, defined control labels, or Public label values; put labels containing spaces in single or double quotes, such as 'Fox 1'."
+    "Assigned Controls" to "Ordered controls for this category. Separate entries with spaces, commas, or semicolons. Use the picker to insert Public labels. Manual entries may use SI codes, defined control labels, or Public label values; put labels containing spaces in single or double quotes, such as 'Fox 1'.",
+    "Competitors" to "Number of competitors currently assigned to this category."
 )
 private val CategoryMenBackground = Color(0xFFE8F3FF)
 private val CategoryWomenBackground = Color(0xFFFFECEC)
@@ -5069,18 +5084,13 @@ fun main(args: Array<String>) = application {
                             registrationImport = registrationImport,
                             targets = targets
                         )
-                        val documentation = DesktopSpreadsheetCompetitorImporter.writeDocumentationCsvs(
-                            plan = plan,
-                            outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
-                        )
-                        plan to documentation
+                        plan
                     }
                 }
-                result.onSuccess { (plan, documentation) ->
+                result.onSuccess { plan ->
                     DesktopCompetitorSpreadsheetImportPreferences.rememberProfile(draft.toProfile())
                     pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(
-                        plan = plan,
-                        documentation = documentation
+                        plan = plan
                     )
                     competitorSpreadsheetImportDraft = null
                     projectStatusText = "Review spreadsheet competitor import before applying it."
@@ -5221,6 +5231,41 @@ fun main(args: Array<String>) = application {
                 }
                 isImportingEventRegCompetitorCsvs = false
             }
+        }
+
+        fun applyCategoryListEdit(edit: DesktopCategoryListEdit): Boolean {
+            val result = runCatching {
+                var syncOutcome: EventCategoryCompetitorSyncOutcome? = null
+                projectFile = projectSession.updateCurrentProject { currentProject ->
+                    when (edit) {
+                        is DesktopCategoryListEdit.Add ->
+                            EventProjectEditor.addCategory(currentProject, UUID.randomUUID().toString(), edit.name)
+                        is DesktopCategoryListEdit.Sync ->
+                            EventCategoryCompetitorSync.apply(
+                                projectFile = currentProject,
+                                missingCategoryIdsToSync = edit.missingCategoryIds,
+                                emptyCategoryIdsToRemove = edit.emptyCategoryIds
+                            ).also { outcome ->
+                                syncOutcome = outcome
+                            }.projectFile
+                    }
+                }
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                projectStatusText = when (edit) {
+                    is DesktopCategoryListEdit.Add ->
+                        "Created category without course data. Add assigned controls or import KML/KMZ or GPX course data before Race Ops."
+                    is DesktopCategoryListEdit.Sync -> {
+                        val outcome = requireNotNull(syncOutcome)
+                        "Unsaved changes. Category sync added ${outcome.addedCategoryCount}, " +
+                            "repaired ${outcome.repairedAssignmentCount} competitor assignments, " +
+                            "and removed ${outcome.removedCategoryCount} empty categories."
+                    }
+                }
+            }
+            result.onFailure { error ->
+                projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
+            }
+            return result.isSuccess
         }
 
         fun saveAsCurrentProject(suggestedFileName: String? = null): Boolean {
@@ -7121,19 +7166,7 @@ fun main(args: Array<String>) = application {
                     projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
                 }
             },
-            onAddCategory = { name ->
-                val result = runCatching {
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.addCategory(currentProject, UUID.randomUUID().toString(), name)
-                    }
-                    hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = "Created category without course data. Add assigned controls or import KML/KMZ or GPX course data before Race Ops."
-                }
-                result.onFailure { error ->
-                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
-                }
-                result.isSuccess
-            },
+            onEditCategories = ::applyCategoryListEdit,
             onRemoveCategory = { categoryId, deleteCompetitors ->
                 runCatching {
                     var removalResult: DesktopCategoryRemovalResult? = null
@@ -11308,7 +11341,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateCategoryGender: (String, Boolean) -> Unit = { _, _ -> },
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit = { _, _, _ -> },
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit = { _, _, _ -> },
-    onAddCategory: (String) -> Boolean = { false },
+    onEditCategories: (DesktopCategoryListEdit) -> Boolean = { false },
     onRemoveCategory: (String, Boolean) -> Unit = { _, _ -> },
     onRenameCompetitor: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorNumbers: (String, String, String) -> Unit = { _, _, _ -> },
@@ -11644,7 +11677,7 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateCategoryGender = onUpdateCategoryGender,
                                     onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
                                     onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
-                                    onAddCategory = onAddCategory,
+                                    onEditCategories = onEditCategories,
                                     onRemoveCategory = onRemoveCategory,
                                     onRenameCompetitor = onRenameCompetitor,
                                     onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
@@ -12929,7 +12962,7 @@ private fun SectionWorkspace(
     onUpdateCategoryGender: (String, Boolean) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
-    onAddCategory: (String) -> Boolean,
+    onEditCategories: (DesktopCategoryListEdit) -> Boolean,
     onRemoveCategory: (String, Boolean) -> Unit,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
@@ -13081,7 +13114,7 @@ private fun SectionWorkspace(
             onUpdateCategoryGender = onUpdateCategoryGender,
             onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
             onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
-            onAddCategory = onAddCategory,
+            onEditCategories = onEditCategories,
             onRemoveCategory = onRemoveCategory,
             onUnlockProtectedCourseOrder = onUnlockProtectedCourseOrder,
             onUpdateProtectedIdealOrder = onUpdateProtectedIdealOrder,
@@ -13389,7 +13422,7 @@ private fun SetupSectionWorkspaceContent(
     onUpdateCategoryGender: (String, Boolean) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
-    onAddCategory: (String) -> Boolean,
+    onEditCategories: (DesktopCategoryListEdit) -> Boolean,
     onRemoveCategory: (String, Boolean) -> Unit,
     onUnlockProtectedCourseOrder: (String) -> Boolean,
     onUpdateProtectedIdealOrder: (String, String) -> Unit,
@@ -13435,11 +13468,12 @@ private fun SetupSectionWorkspaceContent(
             categories = EventCategoryDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
             controls = EventControlDetails.from(projectFile.raceData),
             raceLevel = projectFile.raceData.race.raceLevel,
+            syncPlan = EventCategoryCompetitorSync.plan(projectFile.raceData),
             onRenameCategory = onRenameCategory,
             onUpdateCategoryGender = onUpdateCategoryGender,
             onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
             onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
-            onAddCategory = onAddCategory,
+            onEditCategories = onEditCategories,
             onRemoveCategory = onRemoveCategory
         )
     }
@@ -21492,11 +21526,12 @@ private fun CategoryDetailsPanel(
     categories: List<EventCategoryDetails>,
     controls: List<EventControlDetails>,
     raceLevel: RaceLevel,
+    syncPlan: EventCategoryCompetitorSyncPlan,
     onRenameCategory: (String, String) -> Unit,
     onUpdateCategoryGender: (String, Boolean) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
-    onAddCategory: (String) -> Boolean,
+    onEditCategories: (DesktopCategoryListEdit) -> Boolean,
     onRemoveCategory: (String, Boolean) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
@@ -21509,14 +21544,21 @@ private fun CategoryDetailsPanel(
     val tableWidth = fixedTableWidth(tableColumns)
     val orderedCategories = rememberEditableRowOrder(categories) { it.id }
     var categoryNameDraft by remember { mutableStateOf("") }
+    var isSyncDialogVisible by remember { mutableStateOf(false) }
     fun addCategory() {
-        val didAdd = onAddCategory(categoryNameDraft)
+        val didAdd = onEditCategories(DesktopCategoryListEdit.Add(categoryNameDraft))
         if (didAdd) {
             categoryNameDraft = ""
         }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (syncPlan.hasMismatch) {
+            CategoryCompetitorSyncNotice(
+                plan = syncPlan,
+                onSync = { isSyncDialogVisible = true }
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -21588,6 +21630,179 @@ private fun CategoryDetailsPanel(
             }
         }
     }
+    if (isSyncDialogVisible) {
+        CategoryCompetitorSyncDialog(
+            plan = syncPlan,
+            onApply = { missingCategoryIds, emptyCategoryIds ->
+                isSyncDialogVisible = false
+                onEditCategories(
+                    DesktopCategoryListEdit.Sync(
+                        missingCategoryIds = missingCategoryIds,
+                        emptyCategoryIds = emptyCategoryIds
+                    )
+                )
+            },
+            onCancel = { isSyncDialogVisible = false }
+        )
+    }
+}
+
+@Composable
+private fun CategoryCompetitorSyncNotice(
+    plan: EventCategoryCompetitorSyncPlan,
+    onSync: () -> Unit
+) {
+    val missingCompetitorCount = plan.missingCategories.sumOf { it.competitorCount }
+    val warningParts = buildList {
+        if (plan.missingCategories.isNotEmpty()) {
+            add(
+                "$missingCompetitorCount competitor${if (missingCompetitorCount == 1) "" else "s"} " +
+                    "${if (missingCompetitorCount == 1) "uses" else "use"} " +
+                    "${plan.missingCategories.size} categor${if (plan.missingCategories.size == 1) "y" else "ies"} " +
+                    "not present in the Categories list"
+            )
+        }
+        if (plan.emptyCategories.isNotEmpty()) {
+            add(
+                "${plan.emptyCategories.size} categor${if (plan.emptyCategories.size == 1) "y has" else "ies have"} " +
+                    "no assigned competitors"
+            )
+        }
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = DesktopPalette.WarningBackground
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Category/competitor mismatch: ${warningParts.joinToString("; ")}.",
+                modifier = Modifier.weight(1f),
+                color = DesktopPalette.Warning,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Button(
+                onClick = onSync,
+                enabled = plan.hasMismatch
+            ) {
+                ButtonLabel("Sync to Competitors")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryCompetitorSyncDialog(
+    plan: EventCategoryCompetitorSyncPlan,
+    onApply: (Set<String>, Set<String>) -> Unit,
+    onCancel: () -> Unit
+) {
+    var selectedMissingCategoryIds by remember(plan) {
+        mutableStateOf(plan.missingCategories.map { it.categoryId }.toSet())
+    }
+    var selectedEmptyCategoryIds by remember(plan) {
+        mutableStateOf(emptySet<String>())
+    }
+    val canApply = selectedMissingCategoryIds.isNotEmpty() || selectedEmptyCategoryIds.isNotEmpty()
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Sync Categories to Competitors") },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (plan.missingCategories.isNotEmpty()) {
+                    Text(
+                        text = "Add or repair categories needed by competitors",
+                        fontWeight = FontWeight.Bold
+                    )
+                    plan.missingCategories.forEach { missing ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = missing.categoryId in selectedMissingCategoryIds,
+                                onCheckedChange = { selected ->
+                                    selectedMissingCategoryIds = if (selected) {
+                                        selectedMissingCategoryIds + missing.categoryId
+                                    } else {
+                                        selectedMissingCategoryIds - missing.categoryId
+                                    }
+                                }
+                            )
+                            Text(
+                                if (missing.existingEquivalentCategoryId == null) {
+                                    "Add ${missing.categoryName} for ${missing.competitorCount} competitor" +
+                                        if (missing.competitorCount == 1) "" else "s"
+                                } else {
+                                    "Repair ${missing.competitorCount} competitor assignment" +
+                                        "${if (missing.competitorCount == 1) "" else "s"} to ${missing.categoryName}"
+                                }
+                            )
+                        }
+                    }
+                }
+                if (plan.emptyCategories.isNotEmpty()) {
+                    Text(
+                        text = "Remove categories with no competitors",
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Removal is optional and is not selected by default.",
+                        color = DesktopPalette.Disconnected,
+                        fontSize = 12.sp
+                    )
+                    plan.emptyCategories.forEach { empty ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = empty.categoryId in selectedEmptyCategoryIds,
+                                onCheckedChange = { selected ->
+                                    selectedEmptyCategoryIds = if (selected) {
+                                        selectedEmptyCategoryIds + empty.categoryId
+                                    } else {
+                                        selectedEmptyCategoryIds - empty.categoryId
+                                    }
+                                }
+                            )
+                            Text(
+                                text = buildString {
+                                    append("Remove ")
+                                    append(empty.categoryName)
+                                    if (empty.hasCourseData) {
+                                        append(" — also removes its course data")
+                                    }
+                                },
+                                color = if (empty.hasCourseData) DesktopPalette.Error else DesktopPalette.Black
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onApply(selectedMissingCategoryIds, selectedEmptyCategoryIds)
+                },
+                enabled = canApply
+            ) {
+                Text("Apply Sync")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -21998,6 +22213,12 @@ private fun CategoryDetailRow(
     }
     val inferredIsMan = StandardCategoryRules.inferIsManFromName(category.name)
     val displayIsMan = inferredIsMan ?: category.isMan
+    val rowTextColor = if (category.assignedCompetitorCount == 0) {
+        DesktopPalette.Error
+    } else {
+        DesktopPalette.Black
+    }
+    val rowTextStyle = LocalTextStyle.current.copy(color = rowTextColor)
     var columnIndex = 1
     Row(
         modifier = Modifier
@@ -22018,7 +22239,8 @@ private fun CategoryDetailRow(
                 }
                 .commitOnEnter(::applyCategoryNameDraft),
             singleLine = true,
-            label = { Text("Category") }
+            label = { Text("Category", color = rowTextColor) },
+            textStyle = rowTextStyle
         )
         if (showGenderColumn) {
             val genderColumn = tableColumns[columnIndex++]
@@ -22026,14 +22248,18 @@ private fun CategoryDetailRow(
                 CategoryGenderPicker(
                     isMan = category.isMan,
                     onGenderChange = { isMan -> onUpdateCategoryGender(category.id, isMan) },
-                    modifier = Modifier.width(genderColumn.width)
+                    modifier = Modifier.width(genderColumn.width),
+                    textColor = rowTextColor
                 )
             } else {
                 Box(
                     modifier = Modifier.width(genderColumn.width),
                     contentAlignment = Alignment.CenterStart
                 ) {
-                    Text(if (inferredIsMan) "Men" else "Women")
+                    Text(
+                        text = if (inferredIsMan) "Men" else "Women",
+                        color = rowTextColor
+                    )
                 }
             }
         }
@@ -22048,7 +22274,8 @@ private fun CategoryDetailRow(
                     .width(tableColumns[columnIndex++].width)
                     .commitOnEnter { applyPhysicalStats() },
                 singleLine = true,
-                label = { Text("Length M") }
+                label = { Text("Length M", color = rowTextColor) },
+                textStyle = rowTextStyle
             )
             TextField(
                 value = climbMetersDraft,
@@ -22060,7 +22287,8 @@ private fun CategoryDetailRow(
                     .width(tableColumns[columnIndex++].width)
                     .commitOnEnter { applyPhysicalStats() },
                 singleLine = true,
-                label = { Text("Climb M") }
+                label = { Text("Climb M", color = rowTextColor) },
+                textStyle = rowTextStyle
             )
             columnIndex
         } else {
@@ -22076,8 +22304,19 @@ private fun CategoryDetailRow(
                 controlPointsDraft = text
                 onUpdateCategoryControlPoints(category.id, text, shouldCheckRequiredControls)
             },
-            modifier = Modifier.width(tableColumns[assignedControlsColumnIndex].width)
+            modifier = Modifier.width(tableColumns[assignedControlsColumnIndex].width),
+            textColor = rowTextColor
         )
+        Box(
+            modifier = Modifier.width(tableColumns.last().width),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = category.assignedCompetitorCount.toString(),
+                color = rowTextColor,
+                fontWeight = if (category.assignedCompetitorCount == 0) FontWeight.Bold else FontWeight.Normal
+            )
+        }
     }
 }
 
@@ -22085,7 +22324,8 @@ private fun CategoryDetailRow(
 private fun CategoryGenderPicker(
     isMan: Boolean,
     onGenderChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    textColor: Color = DesktopPalette.Black
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
@@ -22094,7 +22334,7 @@ private fun CategoryGenderPicker(
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = if (isMan) Color(0xFFD5EAFE) else Color(0xFFFFD8D8),
-                contentColor = DesktopPalette.Black
+                contentColor = textColor
             )
         ) {
             ButtonLabel(if (isMan) "Men" else "Women")
@@ -22136,7 +22376,8 @@ private fun AssignedControlsEditor(
     controls: List<EventControlDetails>,
     onControlPointsDraftChange: (String) -> Unit,
     onControlPointsCommit: (String, Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    textColor: Color = DesktopPalette.Black
 ) {
     var expanded by remember { mutableStateOf(false) }
     var hasPendingTextEdit by remember { mutableStateOf(false) }
@@ -22183,13 +22424,15 @@ private fun AssignedControlsEditor(
                     }
                 },
             singleLine = true,
-            label = { Text("Assigned") }
+            label = { Text("Assigned", color = textColor) },
+            textStyle = LocalTextStyle.current.copy(color = textColor)
         )
         Box(modifier = Modifier.width(76.dp)) {
             Button(
                 onClick = { expanded = true },
                 enabled = availablePublicLabelControls.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(contentColor = textColor)
             ) {
                 ButtonLabel("Pick")
             }
