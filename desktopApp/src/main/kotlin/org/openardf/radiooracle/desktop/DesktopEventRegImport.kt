@@ -491,6 +491,96 @@ data class SpreadsheetDownload(
         isXlsx() || isCsvLike()
 }
 
+data class DesktopSpreadsheetColumnRef(
+    val heading: String,
+    val occurrence: Int = 0
+) {
+    val isBlank: Boolean
+        get() = heading.isBlank()
+}
+
+enum class DesktopSpreadsheetCompetitorField(
+    val displayLabel: String,
+    val required: Boolean,
+    val headingAliases: List<String>
+) {
+    FIRST_NAME("First name", true, listOf("First", "First Name")),
+    LAST_NAME("Last name", true, listOf("Last", "Last Name")),
+    CLUB("Club", false, listOf("Club")),
+    SI_NUMBER("SI number", false, listOf("E-Punch ID", "SI Card#", "SI", "SI Number")),
+    START_NUMBER("Start number", false, listOf("Start Number", "Start #")),
+    BIB_NUMBER("Bib number", false, listOf("Bib#", "Bib", "Bib Number")),
+    CALL_SIGN("Call sign", false, listOf("Call--Call", "Call", "Call Sign")),
+    BIRTH_YEAR("Birth year", false, listOf("YearBorn", "Birth Year", "Year Born")),
+    PERSON_ID("Person / confirmation ID", false, listOf("ConfNum", "Confirmation Number", "Person ID")),
+    SEX("Sex / gender", false, listOf("Sex", "Gender")),
+    SI_RENT("SI rental", false, listOf("RentPunch", "Rent SI?", "SI Rent")),
+    EMAIL("Email", false, listOf("email", "e-mail", "email address")),
+    CELL_PHONE("Cell phone", false, listOf("cellphone", "cell phone", "mobile", "phone")),
+    USA_CHAMP_ELIGIBLE(
+        "USA championship eligibility",
+        false,
+        listOf(
+            "National--Champ Eligibility",
+            "National Champ Eligibility",
+            "National Championship Eligibility",
+            "Nat'l Champ Eligibility",
+            "USA--Champ Eligibility",
+            "USA Champ Eligibility",
+            "USA Championship Eligibility",
+            "US Champ Eligibility",
+            "Elig US Ch?",
+            "Elig US Ch",
+            "US Championship Eligible"
+        )
+    ),
+    REGION2_CHAMP_ELIGIBLE(
+        "Region 2 championship eligibility",
+        false,
+        listOf(
+            "Regional--Champ Eligibility",
+            "Regional Champ Eligibility",
+            "Regional Championship Eligibility",
+            "Reg Champ Eligibility",
+            "Region2--Champ Eligibility",
+            "Region 2--Champ Eligibility",
+            "Region2 Champ Eligibility",
+            "Region 2 Champ Eligibility",
+            "Region 2 Championship Eligibility",
+            "Elig R2 Ch?",
+            "Elig R2 Ch",
+            "Region 2 Championship Eligible"
+        )
+    )
+}
+
+data class DesktopSpreadsheetCompetitionColumnMapping(
+    val competitionName: String,
+    val categoryColumn: DesktopSpreadsheetColumnRef? = null,
+    val courseColumn: DesktopSpreadsheetColumnRef? = null,
+    val startTimeColumn: DesktopSpreadsheetColumnRef? = null
+)
+
+data class DesktopSpreadsheetCompetitorColumnMapping(
+    val competitorColumns: Map<DesktopSpreadsheetCompetitorField, DesktopSpreadsheetColumnRef> = emptyMap(),
+    val competitions: List<DesktopSpreadsheetCompetitionColumnMapping> = emptyList()
+) {
+    fun column(field: DesktopSpreadsheetCompetitorField): DesktopSpreadsheetColumnRef? =
+        competitorColumns[field]
+
+    fun withColumn(
+        field: DesktopSpreadsheetCompetitorField,
+        column: DesktopSpreadsheetColumnRef?
+    ): DesktopSpreadsheetCompetitorColumnMapping =
+        copy(
+            competitorColumns = if (column == null || column.isBlank) {
+                competitorColumns - field
+            } else {
+                competitorColumns + (field to column)
+            }
+        )
+}
+
 object DesktopEventRegSpreadsheetParser {
     fun parse(download: SpreadsheetDownload, fallbackEventName: String): DesktopEventRegRegistration {
         val rowCandidates = if (download.isXlsx()) {
@@ -526,12 +616,30 @@ object DesktopEventRegSpreadsheetParser {
             "Spreadsheet is missing First and Last columns."
         }
         val headers = rows[headerIndex].map { it.trim() }
-        val bodyRows = rows.drop(headerIndex + 1).filter { row -> row.any { it.isNotBlank() } }
-        val columns = SpreadsheetColumns(headers)
+        return parseMappedRows(
+            rows = rows,
+            headerRowIndex = headerIndex,
+            eventName = eventName,
+            mapping = suggestedColumnMapping(headers)
+        )
+    }
 
-        val competitionColumns = spreadsheetCompetitionColumns(headers)
+    fun parseMappedRows(
+        rows: List<List<String>>,
+        headerRowIndex: Int,
+        eventName: String,
+        mapping: DesktopSpreadsheetCompetitorColumnMapping
+    ): DesktopEventRegRegistration {
+        require(headerRowIndex in rows.indices) {
+            "Select a valid spreadsheet header row."
+        }
+        val headers = rows[headerRowIndex].map { it.trim() }
+        val bodyRows = rows.drop(headerRowIndex + 1).filter { row -> row.any { it.isNotBlank() } }
+        val columns = SpreadsheetColumns(headers, mapping)
+
+        val competitionColumns = resolveCompetitionColumns(headers, mapping.competitions)
         require(competitionColumns.isNotEmpty()) {
-            "Spreadsheet has no competition class or course columns."
+            "Map at least one competition category/class or course column."
         }
 
         val competitions = competitionColumns.mapNotNull { column ->
@@ -582,20 +690,32 @@ object DesktopEventRegSpreadsheetParser {
         }
 
         return DesktopEventRegRegistration(
-            eventName = eventName.ifBlank { "Google Sheets Registration" },
+            eventName = eventName.ifBlank { "Spreadsheet Registration" },
             competitions = competitions
         )
     }
 
-    private fun spreadsheetCompetitionColumns(headers: List<String>): List<SpreadsheetCompetitionColumn> {
+    fun suggestedColumnMapping(headers: List<String>): DesktopSpreadsheetCompetitorColumnMapping {
+        val competitorColumns = DesktopSpreadsheetCompetitorField.entries.mapNotNull { field ->
+            headers.columnRefOfFirstHeader(*field.headingAliases.toTypedArray())?.let { field to it }
+        }.toMap()
+        return DesktopSpreadsheetCompetitorColumnMapping(
+            competitorColumns = competitorColumns,
+            competitions = suggestedCompetitionColumns(headers)
+        )
+    }
+
+    private fun suggestedCompetitionColumns(
+        headers: List<String>
+    ): List<DesktopSpreadsheetCompetitionColumnMapping> {
         val classColumns = headers.mapIndexedNotNull { index, header ->
             val name = header.trim().removeSuffix(" Class")
             if (header.endsWith(" Class") && name.isNotBlank()) {
-                SpreadsheetCompetitionColumn(
+                DesktopSpreadsheetCompetitionColumnMapping(
                     competitionName = name,
-                    classIndex = index,
-                    courseIndex = headers.indexOfFirstHeader("$name Crs"),
-                    startIndex = headers.indexOfFirstHeader("$name Start")
+                    categoryColumn = headers.columnRefAt(index),
+                    courseColumn = headers.columnRefOfFirstHeader("$name Crs"),
+                    startTimeColumn = headers.columnRefOfFirstHeader("$name Start")
                 )
             } else {
                 null
@@ -605,11 +725,10 @@ object DesktopEventRegSpreadsheetParser {
         val courseOnlyColumns = headers.mapIndexedNotNull { index, header ->
             val name = header.trim().removeSuffix(" Crs")
             if (header.endsWith(" Crs") && name.isNotBlank() && name.lowercase() !in classNames) {
-                SpreadsheetCompetitionColumn(
+                DesktopSpreadsheetCompetitionColumnMapping(
                     competitionName = name,
-                    classIndex = null,
-                    courseIndex = index,
-                    startIndex = headers.indexOfFirstHeader("$name Start")
+                    courseColumn = headers.columnRefAt(index),
+                    startTimeColumn = headers.columnRefOfFirstHeader("$name Start")
                 )
             } else {
                 null
@@ -621,11 +740,10 @@ object DesktopEventRegSpreadsheetParser {
             val name = modifierCompetitionName(header)
             if (name != null && name.lowercase() !in usedNames) {
                 usedNames += name.lowercase()
-                SpreadsheetCompetitionColumn(
+                DesktopSpreadsheetCompetitionColumnMapping(
                     competitionName = name,
-                    classIndex = null,
-                    courseIndex = index,
-                    startIndex = headers.indexOfFirstHeader("$name Start")
+                    courseColumn = headers.columnRefAt(index),
+                    startTimeColumn = headers.columnRefOfFirstHeader("$name Start")
                 )
             } else {
                 null
@@ -633,6 +751,27 @@ object DesktopEventRegSpreadsheetParser {
         }
         return classColumns + courseOnlyColumns + modifierColumns
     }
+
+    private fun resolveCompetitionColumns(
+        headers: List<String>,
+        mappings: List<DesktopSpreadsheetCompetitionColumnMapping>
+    ): List<SpreadsheetCompetitionColumn> =
+        mappings.map { mapping ->
+            require(mapping.competitionName.isNotBlank()) {
+                "Every competition mapping needs a race/competition name."
+            }
+            val categoryIndex = headers.indexOfColumn(mapping.categoryColumn)
+            val courseIndex = headers.indexOfColumn(mapping.courseColumn)
+            require(categoryIndex != null || courseIndex != null) {
+                "Competition ${mapping.competitionName} needs a mapped category/class or course column."
+            }
+            SpreadsheetCompetitionColumn(
+                competitionName = mapping.competitionName.trim(),
+                classIndex = categoryIndex,
+                courseIndex = courseIndex,
+                startIndex = headers.indexOfColumn(mapping.startTimeColumn)
+            )
+        }
 
     private fun modifierCompetitionName(header: String): String? =
         when (header.normalizedHeader()) {
@@ -708,12 +847,13 @@ object DesktopEventRegSpreadsheetParser {
             return -1
         }
         val headers = rows[headerIndex].map { it.trim() }
-        val competitionColumns = spreadsheetCompetitionColumns(headers)
+        val mapping = suggestedColumnMapping(headers)
+        val competitionColumns = resolveCompetitionColumns(headers, mapping.competitions)
         if (competitionColumns.isEmpty()) {
             return -1
         }
         val bodyRows = rows.drop(headerIndex + 1).filter { row -> row.any { it.isNotBlank() } }
-        val columns = SpreadsheetColumns(headers)
+        val columns = SpreadsheetColumns(headers, mapping)
         val competitorCells = competitionColumns.sumOf { column ->
             bodyRows.count { row ->
                 val categoryName = spreadsheetCategoryName(
@@ -773,6 +913,26 @@ object DesktopEventRegSpreadsheetParser {
         return indexOfFirst { it.normalizedHeader() in normalizedCandidates }.takeIf { it >= 0 }
     }
 
+    private fun List<String>.columnRefOfFirstHeader(vararg candidates: String): DesktopSpreadsheetColumnRef? =
+        indexOfFirstHeader(*candidates)?.let { index -> columnRefAt(index) }
+
+    private fun List<String>.columnRefAt(index: Int): DesktopSpreadsheetColumnRef {
+        val heading = getOrNull(index).orEmpty().trim()
+        val normalized = heading.normalizedHeader()
+        val occurrence = take(index).count { it.normalizedHeader() == normalized }
+        return DesktopSpreadsheetColumnRef(heading = heading, occurrence = occurrence)
+    }
+
+    private fun List<String>.indexOfColumn(column: DesktopSpreadsheetColumnRef?): Int? {
+        if (column == null || column.isBlank) {
+            return null
+        }
+        val normalized = column.heading.normalizedHeader()
+        return indices
+            .filter { index -> getOrNull(index).orEmpty().normalizedHeader() == normalized }
+            .getOrNull(column.occurrence)
+    }
+
     private fun List<String>.getOrBlank(index: Int?): String =
         index?.let { getOrNull(it) }?.trim().orEmpty()
 
@@ -812,51 +972,32 @@ object DesktopEventRegSpreadsheetParser {
         val startIndex: Int?
     )
 
-    private class SpreadsheetColumns(headers: List<String>) {
-        val firstNameIndex = requireNotNull(headers.indexOfFirstHeader("First", "First Name")) {
-            "Spreadsheet is missing a First column."
+    private class SpreadsheetColumns(
+        private val headers: List<String>,
+        private val mapping: DesktopSpreadsheetCompetitorColumnMapping
+    ) {
+        val firstNameIndex = requireNotNull(headers.indexOfColumn(mapping.column(DesktopSpreadsheetCompetitorField.FIRST_NAME))) {
+            "Map a valid First name column."
         }
-        val lastNameIndex = requireNotNull(headers.indexOfFirstHeader("Last", "Last Name")) {
-            "Spreadsheet is missing a Last column."
+        val lastNameIndex = requireNotNull(headers.indexOfColumn(mapping.column(DesktopSpreadsheetCompetitorField.LAST_NAME))) {
+            "Map a valid Last name column."
         }
-        val clubIndex = headers.indexOfFirstHeader("Club")
-        val siNumberIndex = headers.indexOfFirstHeader("E-Punch ID", "SI Card#", "SI", "SI Number")
-        val bibNumberIndex = headers.indexOfFirstHeader("Bib#", "Bib", "Bib Number")
-        val callSignIndex = headers.indexOfFirstHeader("Call--Call", "Call", "Call Sign")
-        val birthYearIndex = headers.indexOfFirstHeader("YearBorn", "Birth Year", "Year Born")
-        val sexIndex = headers.indexOfFirstHeader("Sex", "Gender")
-        val personIdIndex = headers.indexOfFirstHeader("ConfNum", "Confirmation Number", "Person ID")
-        val siRentIndex = headers.indexOfFirstHeader("RentPunch", "Rent SI?", "SI Rent")
-        val startNumberIndex = headers.indexOfFirstHeader("Start Number", "Start #")
-        val emailIndex = headers.indexOfFirstHeader("email", "e-mail", "email address")
-        val cellPhoneIndex = headers.indexOfFirstHeader("cellphone", "cell phone", "mobile", "phone")
-        val usaChampEligibilityIndex = headers.indexOfFirstHeader(
-            "National--Champ Eligibility",
-            "National Champ Eligibility",
-            "National Championship Eligibility",
-            "Nat'l Champ Eligibility",
-            "USA--Champ Eligibility",
-            "USA Champ Eligibility",
-            "USA Championship Eligibility",
-            "US Champ Eligibility",
-            "Elig US Ch?",
-            "Elig US Ch",
-            "US Championship Eligible"
-        )
-        val region2ChampEligibilityIndex = headers.indexOfFirstHeader(
-            "Regional--Champ Eligibility",
-            "Regional Champ Eligibility",
-            "Regional Championship Eligibility",
-            "Reg Champ Eligibility",
-            "Region2--Champ Eligibility",
-            "Region 2--Champ Eligibility",
-            "Region2 Champ Eligibility",
-            "Region 2 Champ Eligibility",
-            "Region 2 Championship Eligibility",
-            "Elig R2 Ch?",
-            "Elig R2 Ch",
-            "Region 2 Championship Eligible"
-        )
+        val clubIndex = index(DesktopSpreadsheetCompetitorField.CLUB)
+        val siNumberIndex = index(DesktopSpreadsheetCompetitorField.SI_NUMBER)
+        val bibNumberIndex = index(DesktopSpreadsheetCompetitorField.BIB_NUMBER)
+        val callSignIndex = index(DesktopSpreadsheetCompetitorField.CALL_SIGN)
+        val birthYearIndex = index(DesktopSpreadsheetCompetitorField.BIRTH_YEAR)
+        val sexIndex = index(DesktopSpreadsheetCompetitorField.SEX)
+        val personIdIndex = index(DesktopSpreadsheetCompetitorField.PERSON_ID)
+        val siRentIndex = index(DesktopSpreadsheetCompetitorField.SI_RENT)
+        val startNumberIndex = index(DesktopSpreadsheetCompetitorField.START_NUMBER)
+        val emailIndex = index(DesktopSpreadsheetCompetitorField.EMAIL)
+        val cellPhoneIndex = index(DesktopSpreadsheetCompetitorField.CELL_PHONE)
+        val usaChampEligibilityIndex = index(DesktopSpreadsheetCompetitorField.USA_CHAMP_ELIGIBLE)
+        val region2ChampEligibilityIndex = index(DesktopSpreadsheetCompetitorField.REGION2_CHAMP_ELIGIBLE)
+
+        private fun index(field: DesktopSpreadsheetCompetitorField): Int? =
+            headers.indexOfColumn(mapping.column(field))
     }
 }
 
@@ -1491,22 +1632,34 @@ private fun RaceType.toDisplayText(raceBand: RaceBand?): String =
         else -> name.lowercase().replaceFirstChar { it.titlecase() }
     }
 
-private object XlsxWorkbookReader {
+data class DesktopXlsxWorksheet(
+    val name: String,
+    val rows: List<List<String>>
+)
+
+internal object XlsxWorkbookReader {
     fun readRows(bytes: ByteArray): List<List<String>> {
-        return readSheets(bytes).firstOrNull()
+        return readWorksheets(bytes).firstOrNull()?.rows
             ?: error("XLSX workbook is missing worksheets.")
     }
 
-    fun readSheets(bytes: ByteArray): List<List<List<String>>> {
+    fun readSheets(bytes: ByteArray): List<List<List<String>>> =
+        readWorksheets(bytes).map { it.rows }
+
+    fun readWorksheets(bytes: ByteArray): List<DesktopXlsxWorksheet> {
         val entries = unzip(bytes)
         val sharedStrings = entries["xl/sharedStrings.xml"]?.let(::readSharedStrings).orEmpty()
-        val sheetEntries = worksheetEntryNames(entries).ifEmpty {
+        val sheetEntries = worksheetEntries(entries).ifEmpty {
             entries.keys
                 .filter { it.matches(Regex("xl/worksheets/sheet\\d+\\.xml")) }
                 .sortedBy { path -> Regex("\\d+").find(path)?.value?.toIntOrNull() ?: Int.MAX_VALUE }
+                .mapIndexed { index, path -> "Sheet ${index + 1}" to path }
         }
-        val sheets = sheetEntries.mapNotNull { entryName ->
-            entries[entryName]?.let { readSheetRows(it, sharedStrings) }?.takeIf { it.isNotEmpty() }
+        val sheets = sheetEntries.mapNotNull { (sheetName, entryName) ->
+            entries[entryName]
+                ?.let { readSheetRows(it, sharedStrings) }
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { rows -> DesktopXlsxWorksheet(sheetName, rows) }
         }
         if (sheets.isEmpty()) {
             error("XLSX workbook is missing worksheets.")
@@ -1537,7 +1690,7 @@ private object XlsxWorkbookReader {
         }
     }
 
-    private fun worksheetEntryNames(entries: Map<String, ByteArray>): List<String> {
+    private fun worksheetEntries(entries: Map<String, ByteArray>): List<Pair<String, String>> {
         val workbookXml = entries["xl/workbook.xml"] ?: return emptyList()
         val relationshipXml = entries["xl/_rels/workbook.xml.rels"] ?: return emptyList()
         val targetsById = readWorkbookRelationships(relationshipXml)
@@ -1549,7 +1702,9 @@ private object XlsxWorkbookReader {
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
                 "id"
             ).ifBlank { sheet.getAttribute("r:id") }
-            targetsById[relationshipId]?.let(::workbookTargetEntryName)
+            targetsById[relationshipId]?.let { target ->
+                sheet.getAttribute("name").ifBlank { "Sheet ${index + 1}" } to workbookTargetEntryName(target)
+            }
         }
     }
 

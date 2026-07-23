@@ -751,7 +751,6 @@ fun main(args: Array<String>) = application {
         var eventSeriesValidationEventPath by remember { mutableStateOf<Path?>(null) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isGoogleSheetImportDialogVisible by remember { mutableStateOf(false) }
-        var isCompetitorSpreadsheetImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
         var pendingProtectedStartListDrawRequest by remember { mutableStateOf<PendingProtectedStartListDrawRequest?>(null) }
@@ -784,6 +783,9 @@ fun main(args: Array<String>) = application {
         var isImportingCourseKmlKmz by remember { mutableStateOf(false) }
         var pendingSpreadsheetCompetitorImportReview by remember {
             mutableStateOf<PendingSpreadsheetCompetitorImportReview?>(null)
+        }
+        var competitorSpreadsheetImportDraft by remember {
+            mutableStateOf<DesktopCompetitorSpreadsheetImportDraft?>(null)
         }
         val siPortMutex = remember { Mutex() }
         val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
@@ -4877,9 +4879,34 @@ fun main(args: Array<String>) = application {
             isGoogleSheetImportDialogVisible = true
         }
 
+        fun chooseCompetitorSpreadsheetWorkbook() {
+            if (isImportingCompetitorSpreadsheet) {
+                return
+            }
+            val selectedPath = DesktopFileDialogs.chooseImportCompetitorSpreadsheet() ?: return
+            isImportingCompetitorSpreadsheet = true
+            projectStatusText = "Loading competitor spreadsheet..."
+            appCoroutineScope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) {
+                        DesktopCompetitorSpreadsheetImportDraft.load(selectedPath)
+                    }
+                }
+                result.onSuccess { draft ->
+                    competitorSpreadsheetImportDraft = draft
+                    projectStatusText =
+                        "Loaded ${selectedPath.fileName}; select a worksheet and map its columns."
+                }.onFailure { error ->
+                    projectStatusText =
+                        "Spreadsheet competitor import failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("SpreadsheetCompetitors", projectStatusText)
+                }
+                isImportingCompetitorSpreadsheet = false
+            }
+        }
+
         fun showCompetitorSpreadsheetImportDialog() {
-            googleSheetImportUrl = DesktopEventRegImportPreferences.lastGoogleSheetUrl()
-            isCompetitorSpreadsheetImportDialogVisible = true
+            chooseCompetitorSpreadsheetWorkbook()
         }
 
         fun showEventRegCompetitorCsvImportDialog() {
@@ -5017,14 +5044,16 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun importCompetitorSpreadsheet(url: String) {
+        fun importCompetitorSpreadsheet(draft: DesktopCompetitorSpreadsheetImportDraft) {
             if (isImportingCompetitorSpreadsheet) {
                 return
             }
-            val trimmedUrl = url.trim()
+            if (!draft.canImport) {
+                projectStatusText = "Spreadsheet competitor import mapping is incomplete."
+                return
+            }
             isImportingCompetitorSpreadsheet = true
-            projectStatusText = "Importing spreadsheet competitors..."
-            DesktopEventRegImportPreferences.rememberGoogleSheetUrl(trimmedUrl)
+            projectStatusText = "Preparing spreadsheet competitor import review..."
             val targets = runCatching {
                 spreadsheetCompetitorImportTargets()
             }.getOrElse { error ->
@@ -5035,8 +5064,9 @@ fun main(args: Array<String>) = application {
             appCoroutineScope.launch {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
+                        val registrationImport = draft.toRegistrationImport()
                         val plan = DesktopSpreadsheetCompetitorImporter.buildPlan(
-                            url = trimmedUrl,
+                            registrationImport = registrationImport,
                             targets = targets
                         )
                         val documentation = DesktopSpreadsheetCompetitorImporter.writeDocumentationCsvs(
@@ -5047,11 +5077,12 @@ fun main(args: Array<String>) = application {
                     }
                 }
                 result.onSuccess { (plan, documentation) ->
+                    DesktopCompetitorSpreadsheetImportPreferences.rememberProfile(draft.toProfile())
                     pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(
                         plan = plan,
                         documentation = documentation
                     )
-                    isCompetitorSpreadsheetImportDialogVisible = false
+                    competitorSpreadsheetImportDraft = null
                     projectStatusText = "Review spreadsheet competitor import before applying it."
                 }.onFailure { error ->
                     projectStatusText = "Spreadsheet competitor import failed: ${error.message ?: error::class.simpleName}"
@@ -5110,7 +5141,6 @@ fun main(args: Array<String>) = application {
                 }
                 syncProjectState()
                 pendingSpreadsheetCompetitorImportReview = null
-                isCompetitorSpreadsheetImportDialogVisible = false
                 val added = appliedMappings.sumOf { it.outcome.importedCount }
                 val updated = appliedMappings.sumOf { it.outcome.updatedCount }
                 val deleted = appliedMappings.sumOf { it.outcome.deletedCount }
@@ -6355,25 +6385,20 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
-        if (isCompetitorSpreadsheetImportDialogVisible) {
-            val spreadsheetReview = pendingSpreadsheetCompetitorImportReview
-            if (spreadsheetReview == null) {
-                EventRegImportDialog(
-                    title = "Import Competitor Spreadsheet",
-                    urlLabel = "Spreadsheet URL",
-                    idleDescription = "Reviews spreadsheet competitions, maps them to the current race or series Race Files, and synchronizes competitor lists and categories after confirmation.",
-                    importingDescription = "Downloading spreadsheet and preparing import review...",
-                    url = googleSheetImportUrl,
-                    isImporting = isImportingCompetitorSpreadsheet,
-                    onUrlChange = { googleSheetImportUrl = it },
-                    onImport = { importCompetitorSpreadsheet(googleSheetImportUrl) },
-                    onCancel = {
-                        if (!isImportingCompetitorSpreadsheet) {
-                            isCompetitorSpreadsheetImportDialogVisible = false
-                        }
+        competitorSpreadsheetImportDraft?.let { draft ->
+            DesktopCompetitorSpreadsheetImportDialog(
+                draft = draft,
+                isPreparingReview = isImportingCompetitorSpreadsheet,
+                onDraftChange = { competitorSpreadsheetImportDraft = it },
+                onChooseDifferentFile = { chooseCompetitorSpreadsheetWorkbook() },
+                onContinue = { importCompetitorSpreadsheet(draft) },
+                onCancel = {
+                    if (!isImportingCompetitorSpreadsheet) {
+                        competitorSpreadsheetImportDraft = null
+                        projectStatusText = "Spreadsheet competitor import canceled. No changes applied."
                     }
-                )
-            }
+                }
+            )
         }
         if (isEventRegCompetitorCsvImportDialogVisible) {
             EventRegImportDialog(

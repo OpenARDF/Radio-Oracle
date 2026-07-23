@@ -437,6 +437,21 @@ object DesktopFileDialogs {
     fun chooseImportCsvFiles(title: String): List<Path> =
         chooseFiles(title, DesktopProjectFilePaths.CSV_EXTENSION)
 
+    fun chooseImportCompetitorSpreadsheet(): Path? {
+        val chooser = JFileChooser(DesktopCompetitorSpreadsheetImportPreferences.preferredDirectory().toFile())
+        chooser.dialogTitle = "Import Competitor Spreadsheet"
+        chooser.fileSelectionMode = JFileChooser.FILES_ONLY
+        chooser.fileFilter = FileNameExtensionFilter("Excel workbook (*.xlsx)", "xlsx")
+        chooser.isAcceptAllFileFilterUsed = false
+        chooser.approveButtonText = "Select"
+        if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) {
+            return null
+        }
+        return chooser.selectedFile
+            ?.toPath()
+            ?.also(DesktopCompetitorSpreadsheetImportPreferences::rememberFile)
+    }
+
     fun chooseImportIofXml(title: String): Path? =
         chooseFile(title, FileDialog.LOAD, DesktopProjectFilePaths.XML_EXTENSION)
 
