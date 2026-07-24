@@ -64,7 +64,7 @@ import org.openardf.radiooracle.backend.files.EventFileTransferUploads
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
-import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
@@ -588,7 +588,7 @@ class RaceSelectionFragment : Fragment() {
             intent.type = "text/json"
             intent.putExtra(Intent.EXTRA_TITLE, "race.ardfjs")
         } else {
-            intent.type = EVENT_SERIES_PACKAGE_CONTENT_TYPE
+            intent.type = EVENT_SERIES_ARCHIVE_CONTENT_TYPE
             intent.putExtra(Intent.EXTRA_TITLE, EventFileTransferPayloads.seriesPackageFileName(seriesName))
         }
         getResult.launch(intent)

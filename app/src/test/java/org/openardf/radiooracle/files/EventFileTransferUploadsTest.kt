@@ -29,7 +29,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.openardf.radiooracle.backend.files.EventFileTransferUploads
 import org.openardf.radiooracle.shared.event.EVENT_FILE_TRANSFER_CONTENT_TYPE
-import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_CONTENT_TYPE
 
 class EventFileTransferUploadsTest {
     @Test
@@ -57,8 +57,8 @@ class EventFileTransferUploadsTest {
             bytes = bytes
         )
 
-        assertEquals("Championship Week.zip", upload.fileName)
-        assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, upload.contentType)
+        assertEquals("Championship Week.roseries", upload.fileName)
+        assertEquals(EVENT_SERIES_ARCHIVE_CONTENT_TYPE, upload.contentType)
         assertArrayEquals(bytes, upload.bytes)
     }
 }

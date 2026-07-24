@@ -68,9 +68,32 @@ fun openStartupProject(
     }
 
     return runCatching {
-        session.open(path)
+        val openPath = when {
+            DesktopProjectFilePaths.isEventSeriesArchiveName(path.fileName.toString()) -> {
+                val workspace = DesktopEventSeriesArchiveWorkspaces.open(path)
+                DesktopEventSeriesActions.eventPathToOpenFromManifest(
+                    store = DesktopEventSeriesFiles,
+                    manifestPath = workspace.manifestPath,
+                    lastSeriesEventStore = DesktopLastSeriesEventPreferences
+                )
+            }
+
+            DesktopProjectFilePaths.isEventSeriesManifestName(path.fileName.toString()) ->
+                DesktopEventSeriesActions.eventPathToOpenFromManifest(
+                    store = DesktopEventSeriesFiles,
+                    manifestPath = path,
+                    lastSeriesEventStore = DesktopLastSeriesEventPreferences
+                )
+
+            else -> path
+        }
+        session.open(openPath)
         onOpened(path)
-        "Opened ${path.fileName}"
+        if (openPath == path) {
+            "Opened ${path.fileName}"
+        } else {
+            "Opened ${path.fileName}: ${openPath.fileName}"
+        }
     }.getOrElse { error ->
         "Open failed: ${error.message ?: error::class.simpleName}"
     }

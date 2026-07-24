@@ -36,7 +36,7 @@ import org.openardf.radiooracle.backend.files.DesktopFileReceiveUrlValidator
 import org.openardf.radiooracle.backend.files.EventFileTransferDownloader
 import org.openardf.radiooracle.backend.files.EventFileTransferException
 import org.openardf.radiooracle.backend.files.EventFileTransferUrlValidator
-import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_CONTENT_TYPE
 import java.net.InetAddress
 import java.nio.charset.StandardCharsets
 import java.util.Base64
@@ -106,7 +106,7 @@ class EventFileTransferUrlValidatorTest {
         server.enqueue(
             MockResponse()
                 .setResponseCode(200)
-                .setHeader("Content-Type", EVENT_SERIES_PACKAGE_CONTENT_TYPE)
+                .setHeader("Content-Type", EVENT_SERIES_ARCHIVE_CONTENT_TYPE)
                 .setHeader("Content-Disposition", "attachment; filename=\"Series.zip\"")
                 .setBody(okio.Buffer().write(bytes))
         )
@@ -117,7 +117,7 @@ class EventFileTransferUrlValidatorTest {
             )
 
             assertEquals("Series.zip", download.fileName)
-            assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, download.contentType)
+            assertEquals(EVENT_SERIES_ARCHIVE_CONTENT_TYPE, download.contentType)
             assertTrue(download.isZip)
             assertEquals(bytes.toList(), download.bytes.toList())
         } finally {
@@ -136,7 +136,7 @@ class EventFileTransferUrlValidatorTest {
                 rawUrl = server.url("/radio-oracle/file-receive?token=abc123").toString(),
                 upload = DesktopFileTransferUpload(
                     fileName = "Series.zip",
-                    contentType = EVENT_SERIES_PACKAGE_CONTENT_TYPE,
+                    contentType = EVENT_SERIES_ARCHIVE_CONTENT_TYPE,
                     bytes = bytes
                 )
             )
@@ -144,7 +144,7 @@ class EventFileTransferUrlValidatorTest {
             val request = server.takeRequest(1, TimeUnit.SECONDS)
                 ?: throw AssertionError("Upload request was not received.")
             assertEquals("POST", request.method)
-            assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, request.getHeader("Content-Type"))
+            assertEquals(EVENT_SERIES_ARCHIVE_CONTENT_TYPE, request.getHeader("Content-Type"))
             assertEquals(
                 Base64.getUrlEncoder().withoutPadding()
                     .encodeToString("Series.zip".toByteArray(StandardCharsets.UTF_8)),

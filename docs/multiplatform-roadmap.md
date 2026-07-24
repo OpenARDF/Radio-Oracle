@@ -223,7 +223,7 @@ should be treated as current project foundation rather than future work.
   race data.
 - Desktop Race Series workflows support validation, clean export, competitor
   matching reports, start-fairness summaries, and start-fairness optimization.
-- Android can store, list, import, export, and transfer Race Series packages.
+- Android can store, list, import, export, and transfer `.roseries` archives.
 - The shared balanced-thirds start-list engine is used by series-aware start
   balancing tools.
 

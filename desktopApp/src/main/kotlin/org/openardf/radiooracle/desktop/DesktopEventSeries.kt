@@ -67,9 +67,18 @@ interface EventSeriesStore {
 /** Desktop filesystem adapter for Radio-Oracle Race Series manifests. */
 object DesktopEventSeriesFiles : EventSeriesStore {
     override fun read(path: Path): EventSeriesFile =
-        EventSeriesFileJson.decode(Files.readString(path, StandardCharsets.UTF_8))
+        DesktopEventSeriesArchiveWorkspaces.workspaceFor(path)
+            ?.takeIf { it.isManifestPath(path) }
+            ?.readSeries()
+            ?: EventSeriesFileJson.decode(Files.readString(path, StandardCharsets.UTF_8))
 
     override fun write(path: Path, seriesFile: EventSeriesFile) {
+        DesktopEventSeriesArchiveWorkspaces.workspaceFor(path)
+            ?.takeIf { it.isManifestPath(path) }
+            ?.let { workspace ->
+                workspace.writeSeries(seriesFile)
+                return
+            }
         path.parent?.let { Files.createDirectories(it) }
         Files.writeString(path, EventSeriesFileJson.encode(seriesFile), StandardCharsets.UTF_8)
     }
@@ -115,20 +124,32 @@ object DesktopLastSeriesEventPreferences : DesktopLastSeriesEventStore {
 
     override fun lastEventPath(manifestPath: Path): Path? =
         runCatching {
-            preferences.get(lastEventKey(manifestPath), null)
+            val rememberedValue = preferences.get(lastEventKey(manifestPath), null)
                 ?.takeIf { it.isNotBlank() }
-                ?.let(Path::of)
+            val workspace = DesktopEventSeriesArchiveWorkspaces.workspaceFor(manifestPath)
+            if (workspace == null) {
+                rememberedValue?.let(Path::of)
+            } else {
+                workspace.archive.seriesFile.events
+                    .firstOrNull { it.seriesEventId == rememberedValue }
+                    ?.let(workspace::memberPath)
+            }
         }.getOrNull()
 
     override fun rememberEventPath(manifestPath: Path, eventPath: Path) {
         runCatching {
-            preferences.put(lastEventKey(manifestPath), eventPath.toAbsolutePath().normalize().toString())
+            val workspace = DesktopEventSeriesArchiveWorkspaces.workspaceFor(manifestPath)
+            val rememberedValue = workspace
+                ?.seriesEventIdForPath(eventPath)
+                ?: eventPath.toAbsolutePath().normalize().toString()
+            preferences.put(lastEventKey(manifestPath), rememberedValue)
         }
     }
 
     private fun lastEventKey(manifestPath: Path): String {
+        val stablePath = DesktopEventSeriesArchiveWorkspaces.containerPathFor(manifestPath) ?: manifestPath
         val digest = MessageDigest.getInstance("SHA-256")
-            .digest(manifestPath.toAbsolutePath().normalize().toString().toByteArray(StandardCharsets.UTF_8))
+            .digest(stablePath.toAbsolutePath().normalize().toString().toByteArray(StandardCharsets.UTF_8))
         return LAST_SERIES_EVENT_KEY_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
     }
 }
@@ -362,6 +383,11 @@ object DesktopEventSeriesActions {
     fun manifestFileDisplayStem(manifestPath: Path): String {
         val fileName = manifestPath.fileName.toString()
         return when {
+            fileName.endsWith(
+                org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_FILE_SUFFIX,
+                ignoreCase = true
+            ) ->
+                fileName.dropLast(org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_FILE_SUFFIX.length)
             fileName.endsWith(EVENT_SERIES_NAMED_FILE_SUFFIX, ignoreCase = true) ->
                 fileName.dropLast(EVENT_SERIES_NAMED_FILE_SUFFIX.length)
             fileName == EVENT_SERIES_FILE_NAME ->
@@ -1120,7 +1146,13 @@ object DesktopEventSeriesActions {
     fun removeCurrentEvent(seriesFile: EventSeriesFile, eventProjectFile: EventProjectFile): DesktopEventSeriesLinkResult {
         val link = eventProjectFile.seriesLink ?: return DesktopEventSeriesLinkResult(seriesFile, eventProjectFile)
         val updatedSeriesFile = if (link.seriesId == seriesFile.seriesId) {
-            seriesFile.copy(events = seriesFile.events.filterNot { it.seriesEventId == link.seriesEventId })
+            seriesFile.copy(
+                events = seriesFile.events.filterNot { it.seriesEventId == link.seriesEventId },
+                competitorMatchOverrides = seriesFile.competitorMatchOverrides.filter { override ->
+                    override.fromSeriesEventId != link.seriesEventId &&
+                        override.toSeriesEventId != link.seriesEventId
+                }
+            )
         } else {
             seriesFile
         }

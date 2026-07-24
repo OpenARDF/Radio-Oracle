@@ -46,10 +46,19 @@ import java.nio.file.Path
 object DesktopProjectFiles : ProjectFileStore {
     /** Reads and decodes a Race File from the supplied desktop filesystem path. */
     override fun read(path: Path): EventProjectFile =
-        EventProjectFileJson.decode(Files.readString(path, StandardCharsets.UTF_8))
+        DesktopEventSeriesArchiveWorkspaces.workspaceFor(path)
+            ?.takeIf { it.seriesEventIdForPath(path) != null }
+            ?.readMember(path)
+            ?: EventProjectFileJson.decode(Files.readString(path, StandardCharsets.UTF_8))
 
     /** Encodes and writes a Race File, creating parent directories when needed. */
     override fun write(path: Path, projectFile: EventProjectFile) {
+        DesktopEventSeriesArchiveWorkspaces.workspaceFor(path)
+            ?.takeIf { it.seriesEventIdForPath(path) != null }
+            ?.let { workspace ->
+                workspace.writeMember(path, projectFile)
+                return
+            }
         path.parent?.let { Files.createDirectories(it) }
         Files.writeString(path, EventProjectFileJson.encode(projectFile), StandardCharsets.UTF_8)
     }

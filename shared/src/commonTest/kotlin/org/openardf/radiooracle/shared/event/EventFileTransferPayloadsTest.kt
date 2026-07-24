@@ -33,11 +33,12 @@ class EventFileTransferPayloadsTest {
     @Test
     fun detectsSeriesPackageByFileExtension() {
         assertTrue(EventFileTransferPayloads.isSeriesPackage("Championship.ZIP", null))
+        assertTrue(EventFileTransferPayloads.isSeriesPackage("Championship.ROSERIES", null))
     }
 
     @Test
     fun detectsSeriesPackageByContentType() {
-        assertTrue(EventFileTransferPayloads.isSeriesPackage(null, EVENT_SERIES_PACKAGE_CONTENT_TYPE))
+        assertTrue(EventFileTransferPayloads.isSeriesPackage(null, EVENT_SERIES_ARCHIVE_CONTENT_TYPE))
         assertTrue(EventFileTransferPayloads.isSeriesPackage(null, "application/x-zip-compressed"))
     }
 
@@ -63,11 +64,11 @@ class EventFileTransferPayloadsTest {
     @Test
     fun buildsSeriesPackageTransferMetadata() {
         assertEquals(
-            "Championship Week.zip",
+            "Championship Week.roseries",
             EventFileTransferPayloads.fileNameForRaceOrSeries("Day 1", "Championship / Week")
         )
         assertEquals(
-            EVENT_SERIES_PACKAGE_CONTENT_TYPE,
+            EVENT_SERIES_ARCHIVE_CONTENT_TYPE,
             EventFileTransferPayloads.contentTypeForRaceOrSeries("Championship / Week")
         )
     }

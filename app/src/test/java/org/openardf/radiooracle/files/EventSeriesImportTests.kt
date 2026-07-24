@@ -84,7 +84,7 @@ class EventSeriesImportTests {
             )
         }
 
-        assertEquals("Race Series package does not contain a series manifest.", error.message)
+        assertEquals("Race Series archive does not contain a series manifest.", error.message)
     }
 
     @Test
@@ -101,7 +101,7 @@ class EventSeriesImportTests {
             )
         }
 
-        assertEquals("Race Series package contains more than one manifest.", error.message)
+        assertEquals("Race Series archive contains more than one series manifest.", error.message)
     }
 
     @Test

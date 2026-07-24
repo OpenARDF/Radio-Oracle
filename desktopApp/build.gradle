@@ -62,6 +62,11 @@ compose.desktop {
             description = "Desktop race administration shell for Radio-Oracle."
             vendor = "OpenARDF"
             modules("jdk.httpserver", "java.net.http")
+            fileAssociation(
+                "application/vnd.openardf.radio-oracle-series+zip",
+                "roseries",
+                "Radio-Oracle Series File"
+            )
 
             macOS {
                 bundleID = "org.openardf.radiooracle.desktop"

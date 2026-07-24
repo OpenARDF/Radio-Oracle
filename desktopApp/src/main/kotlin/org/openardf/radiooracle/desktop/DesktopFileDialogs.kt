@@ -37,6 +37,8 @@ import javax.swing.filechooser.FileNameExtensionFilter
 import javax.swing.filechooser.FileFilter
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_NAMED_FILE_SUFFIX
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_FILE_SUFFIX
+import org.openardf.radiooracle.shared.event.isEventSeriesArchiveFileName
 import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 
 /** Race File path helpers shared by desktop file dialogs and tests. */
@@ -55,6 +57,7 @@ object DesktopProjectFilePaths {
     const val KML_EXTENSION = ".kml"
     const val TXT_EXTENSION = ".txt"
     const val ZIP_EXTENSION = ".zip"
+    const val SERIES_ARCHIVE_EXTENSION = EVENT_SERIES_ARCHIVE_FILE_SUFFIX
 
     /** Returns a path with the standard Radio-Oracle desktop Race File extension. */
     fun withProjectExtension(path: Path): Path =
@@ -110,11 +113,24 @@ object DesktopProjectFilePaths {
     fun isEventSeriesManifestName(fileName: String): Boolean =
         isEventSeriesFileName(fileName)
 
+    fun isEventSeriesArchiveName(fileName: String): Boolean =
+        isEventSeriesArchiveFileName(fileName)
+
     fun isAndroidRaceBackupJsonFileName(fileName: String): Boolean =
         fileName.endsWith(ANDROID_RACE_BACKUP_JSON_EXTENSION, ignoreCase = true)
 
     fun isOpenableEventFileName(fileName: String): Boolean =
-        isProjectFileName(fileName) || isAndroidRaceBackupJsonFileName(fileName) || isEventSeriesManifestName(fileName)
+        isProjectFileName(fileName) ||
+            isAndroidRaceBackupJsonFileName(fileName) ||
+            isEventSeriesManifestName(fileName) ||
+            isEventSeriesArchiveName(fileName)
+
+    fun withSeriesArchiveExtension(path: Path): Path =
+        if (isEventSeriesArchiveName(path.fileName.toString())) {
+            path
+        } else {
+            path.resolveSibling("${path.fileName}$SERIES_ARCHIVE_EXTENSION")
+        }
 
     fun withCsvExtension(path: Path): Path =
         if (path.fileName.toString().endsWith(CSV_EXTENSION)) {
@@ -226,7 +242,7 @@ object DesktopFileOverwriteConfirmation {
 object DesktopEventFileChooserFilters {
     fun openableEventFiles(): FileFilter =
         EventFileFilter(
-            description = "Radio-Oracle Race Files (*.json, *.rom.json, *.ardfjs, *.series.radio-oracle.json)",
+            description = "Radio-Oracle Race and Series Files (*.json, *.rom.json, *.ardfjs, *.roseries)",
             acceptsFileName = DesktopProjectFilePaths::isOpenableEventFileName
         )
 
@@ -294,7 +310,15 @@ object DesktopFileDialogs {
 
     /** Lets the user choose an existing Race Series manifest, returning null when cancelled. */
     fun chooseOpenEventSeries(): Path? =
-        chooseSeriesManifest("Open Radio-Oracle Race Series")
+        chooseSeriesFile("Open Radio-Oracle Race Series")
+
+    /** Lets the user choose a destination for a new live `.roseries` container. */
+    fun chooseSaveEventSeries(defaultFileName: String): Path? =
+        chooseSaveFile(
+            title = "Save Radio-Oracle Series File",
+            extension = DesktopProjectFilePaths.SERIES_ARCHIVE_EXTENSION,
+            defaultFileName = defaultFileName
+        ) { DesktopProjectFilePaths.withSeriesArchiveExtension(it) }
 
     /** Lets the user choose a save location, returning null when cancelled. */
     fun chooseSaveProject(raceName: String? = null, suggestedFileName: String? = null): Path? =
@@ -331,10 +355,10 @@ object DesktopFileDialogs {
 
     fun chooseExportAndroidEventSeriesPackage(defaultFileName: String): Path? =
         chooseSaveFile(
-            title = "Save Android Series File",
-            extension = DesktopProjectFilePaths.ZIP_EXTENSION,
+            title = "Save Radio-Oracle Series File",
+            extension = DesktopProjectFilePaths.SERIES_ARCHIVE_EXTENSION,
             defaultFileName = defaultFileName
-        ) { DesktopProjectFilePaths.withZipExtension(it) }
+        ) { DesktopProjectFilePaths.withSeriesArchiveExtension(it) }
 
     fun chooseExportFinalResultsJson(): Path? =
         chooseSaveFile("Export Final Results JSON", DesktopProjectFilePaths.FINAL_RESULTS_JSON_EXTENSION) {
@@ -747,12 +771,19 @@ object DesktopFileDialogs {
         return chooser.selectedFile?.toPath()?.also(DesktopEventFileLocations::rememberEventFileDirectory)
     }
 
-    private fun chooseSeriesManifest(title: String): Path? {
+    private fun chooseSeriesFile(title: String): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
         val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
-        dialog.filenameFilter = navigableFilenameFilter { name -> DesktopProjectFilePaths.isEventSeriesManifestName(name) }
+        dialog.filenameFilter = navigableFilenameFilter { name ->
+            DesktopProjectFilePaths.isEventSeriesManifestName(name) ||
+                DesktopProjectFilePaths.isEventSeriesArchiveName(name)
+        }
         dialog.directory = directory.toString()
-        dialog.file = listOf("*$EVENT_SERIES_NAMED_FILE_SUFFIX", EVENT_SERIES_FILE_NAME).joinToString(";")
+        dialog.file = listOf(
+            "*$EVENT_SERIES_ARCHIVE_FILE_SUFFIX",
+            "*$EVENT_SERIES_NAMED_FILE_SUFFIX",
+            EVENT_SERIES_FILE_NAME
+        ).joinToString(";")
         dialog.isVisible = true
 
         val selectedDirectory = dialog.directory ?: return null

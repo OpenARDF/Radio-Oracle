@@ -24,20 +24,16 @@
 
 package org.openardf.radiooracle.desktop
 
-import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
-import org.openardf.radiooracle.shared.event.EventSeriesPackageEntryKind
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EventSeriesArchive
+import org.openardf.radiooracle.shared.event.EventSeriesArchiveZipCodec
 import org.openardf.radiooracle.shared.event.EventSeriesPackageContents
-import org.openardf.radiooracle.shared.event.EventSeriesPackageEventFile
-import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 data class DesktopEventSeriesPackage(
     val fileName: String,
-    val contentType: String = EVENT_SERIES_PACKAGE_CONTENT_TYPE,
+    val contentType: String = EVENT_SERIES_ARCHIVE_CONTENT_TYPE,
     val bytes: ByteArray
 ) {
     val byteCount: Long get() = bytes.size.toLong()
@@ -67,84 +63,49 @@ object DesktopEventSeriesPackageFiles {
             "Cannot send Race Series because required Race Files are missing: ${missing.joinToString()}"
         }
 
-        val content = EventSeriesPackageContents.build(
+        val archive = EventSeriesArchive(
             seriesFile = seriesFile,
-            eventFiles = members.map { event ->
+            membersBySeriesEventId = members.associate { event ->
                 val source = seriesFolder.resolve(event.eventFilePath).normalize()
-                EventSeriesPackageEventFile(event, store.readEvent(source))
+                event.seriesEventId to store.readEvent(source)
             },
-            manifestEntryPath = manifestPath.fileName.toString(),
-            packageFileNameStem = seriesFile.name
+            manifestEntryPath = manifestPath.fileName.toString()
         )
-        val bytes = ByteArrayOutputStream().use { output ->
-            ZipOutputStream(output).use { zip ->
-                content.entries.forEach { entry ->
-                    zip.writeTextEntry(entry.path, entry.text)
-                }
-            }
-            output.toByteArray()
-        }
+        val content = archive.packageContent()
 
         return DesktopEventSeriesPackage(
             fileName = content.fileName,
-            bytes = bytes
+            bytes = EventSeriesArchiveZipCodec.encode(archive)
         )
     }
 
     fun unpack(path: Path, targetRoot: Path): DesktopEventSeriesPackageImportResult {
-        val targetDirectory = uniqueDirectory(targetRoot, path.fileName.toString().removeSuffix(".zip"))
+        val archive = Files.newInputStream(path).use(EventSeriesArchiveZipCodec::read)
+        val targetDirectory = uniqueDirectory(
+            targetRoot,
+            EventSeriesPackageContents.safePackageFileStem(path.fileName.toString())
+        )
         Files.createDirectories(targetDirectory)
 
-        var manifestPath: Path? = null
-        val eventFilePaths = mutableListOf<Path>()
-        ZipInputStream(Files.newInputStream(path).buffered()).use { zip ->
-            while (true) {
-                val entry = zip.nextEntry ?: break
-                if (!entry.isDirectory) {
-                    val packageEntry = EventSeriesPackageContents.classifyEntryPath(entry.name)
-                    if (packageEntry.kind != EventSeriesPackageEntryKind.IGNORED) {
-                        val targetPath = targetDirectory.resolve(Path.of(packageEntry.path)).normalize()
-                        require(targetPath.startsWith(targetDirectory)) {
-                            "Race Series package contains an unsafe path: ${entry.name}"
-                        }
-                        targetPath.parent?.let(Files::createDirectories)
-                        Files.write(targetPath, zip.readBytes())
-                        when (packageEntry.kind) {
-                            EventSeriesPackageEntryKind.MANIFEST -> {
-                                require(manifestPath == null) {
-                                    "Race Series package contains more than one manifest."
-                                }
-                                manifestPath = targetPath
-                            }
-
-                            EventSeriesPackageEntryKind.EVENT_FILE -> {
-                                eventFilePaths.add(targetPath)
-                            }
-
-                            EventSeriesPackageEntryKind.IGNORED -> Unit
-                        }
-                    }
-                }
-                zip.closeEntry()
+        val manifestPath = targetDirectory.resolve(Path.of(archive.manifestEntryPath)).normalize()
+        require(manifestPath.startsWith(targetDirectory)) {
+            "Race Series archive contains an unsafe manifest path."
+        }
+        DesktopEventSeriesFiles.write(manifestPath, archive.seriesFile)
+        val manifestFolder = requireNotNull(manifestPath.parent)
+        val eventFilePaths = archive.seriesFile.sortedEvents().map { event ->
+            val eventPath = manifestFolder.resolve(event.eventFilePath).normalize()
+            require(eventPath.startsWith(targetDirectory)) {
+                "Race Series archive contains an unsafe Race File path: ${event.eventFilePath}"
             }
+            DesktopProjectFiles.write(eventPath, archive.member(event.seriesEventId))
+            eventPath
         }
 
         return DesktopEventSeriesPackageImportResult(
-            manifestPath = requireNotNull(manifestPath) {
-                "Race Series package does not contain a series manifest."
-            },
+            manifestPath = manifestPath,
             eventFilePaths = eventFilePaths
         )
-    }
-
-    private fun ZipOutputStream.writeTextEntry(path: String, text: String) {
-        writeBytesEntry(path, text.toByteArray(Charsets.UTF_8))
-    }
-
-    private fun ZipOutputStream.writeBytesEntry(path: String, bytes: ByteArray) {
-        putNextEntry(ZipEntry(path.replace('\\', '/')))
-        write(bytes)
-        closeEntry()
     }
 
     private fun uniqueDirectory(root: Path, stem: String): Path {

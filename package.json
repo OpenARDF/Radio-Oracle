@@ -60,6 +60,14 @@
   "jdeploy": {
     "jar": "desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar",
     "title": "Radio-Oracle",
-    "javaVersion": "17"
+    "javaVersion": "17",
+    "documentTypes": [
+      {
+        "extension": "roseries",
+        "mimetype": "application/vnd.openardf.radio-oracle-series+zip",
+        "editor": true,
+        "custom": true
+      }
+    ]
   }
 }

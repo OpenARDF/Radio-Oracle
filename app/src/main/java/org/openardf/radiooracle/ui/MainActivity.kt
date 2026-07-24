@@ -36,10 +36,12 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
@@ -58,9 +60,11 @@ import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.databinding.ActivityMainBinding
 import org.openardf.radiooracle.shared.device.SIReadoutReadinessRules
 import org.openardf.radiooracle.shared.device.SIReaderStatus
+import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import java.util.Locale
 
@@ -72,6 +76,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dataProcessor: DataProcessor
     private var lastSiStationModeWarningKey: String? = null
     private var keepScreenOpen = false
+    private var consumedSeriesArchiveUri: String? = null
 
     companion object {
         private const val KEY_RESULTS_SCORING_REVISION = "results_scoring_revision"
@@ -229,6 +234,7 @@ class MainActivity : AppCompatActivity() {
 
         //Set the observer for the SI text view
         setStationObserver()
+        handleOpenedSeriesArchive(intent)
     }
 
     private fun refreshStoredResultsForCurrentScoringRules() {
@@ -274,10 +280,59 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
 
         if (intent != null) {
+            setIntent(intent)
             val device: UsbDevice? = intent.parcelableExtraCompat(UsbManager.EXTRA_DEVICE)
             if (device != null) {
                 DebugLog.info("USB", "USB attach intent for device ${device.vendorId}:${device.productId}")
                 dataProcessor.connectDevice(device)
+            }
+            handleOpenedSeriesArchive(intent)
+        }
+    }
+
+    private fun handleOpenedSeriesArchive(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val uri = intent.data ?: return
+        val displayName = runCatching {
+            contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment
+        val contentType = runCatching { contentResolver.getType(uri) }.getOrNull()
+        if (!EventFileTransferPayloads.isSeriesPackage(displayName, contentType)) return
+        if (consumedSeriesArchiveUri == uri.toString()) return
+        consumedSeriesArchiveUri = uri.toString()
+
+        lifecycleScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val imported = dataProcessor.importEventSeriesPackage(uri)
+                        ?: throw IllegalArgumentException(getString(R.string.event_series_import_invalid))
+                    dataProcessor.saveEventSeriesImport(imported)
+                    imported
+                }
+            }.onSuccess { imported ->
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(
+                        R.string.event_series_import_success,
+                        imported.series.name,
+                        imported.memberImports.size
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+            }.onFailure { error ->
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(R.string.event_series_import_title)
+                    .setMessage(error.message ?: getString(R.string.event_series_import_invalid))
+                    .setPositiveButton(R.string.general_ok, null)
+                    .show()
             }
         }
     }

@@ -1052,7 +1052,7 @@ class DesktopAutomationCliTest {
         assertTrue(result.stdout.contains("\"path\":\"Race Series > Races\""))
         assertTrue(result.stdout.contains("\"path\":\"Race Series > Races > Add Race To Series...\""))
         assertTrue(result.stdout.contains("\"action\":\"AddEventToSeries\""))
-        assertTrue(result.stdout.contains("\"path\":\"Race Series > Export Series...\""))
+        assertTrue(result.stdout.contains("\"path\":\"Race Series > Export Legacy Series Folder...\""))
         assertTrue(result.stdout.contains("\"action\":\"ExportEventSeries\""))
         assertFalse(result.stdout.contains("Open Series Event"))
         assertFalse(result.stdout.contains("Race Series > Series Validation > Validate Series"))
@@ -1148,7 +1148,7 @@ class DesktopAutomationCliTest {
     fun navSelectReportsAndroidEventSeriesActionsUnderRaceSeries() {
         val sendResult = runAutomation("nav-select", "Race Series > Android... > Send Series To Android")
         val receiveResult = runAutomation("nav-select", "Race Series > Android... > Receive Series From Android")
-        val exportResult = runAutomation("nav-select", "Race Series > Android... > Save Android Series File...")
+        val exportResult = runAutomation("nav-select", "Race Series > Android... > Save Series File...")
 
         assertEquals(0, sendResult.exitCode)
         assertTrue(sendResult.stdout.contains("\"action\":\"SendEventSeriesToAndroid\""))

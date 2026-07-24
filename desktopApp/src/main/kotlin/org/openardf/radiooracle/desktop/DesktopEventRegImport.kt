@@ -36,7 +36,6 @@ import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
-import org.openardf.radiooracle.shared.files.EventCsvExports
 import java.io.ByteArrayInputStream
 import java.io.StringReader
 import java.net.URI
@@ -68,30 +67,6 @@ data class DesktopEventRegImportResult(
     val sourceUrl: String,
     val outputDirectory: Path,
     val generatedFiles: List<DesktopEventRegGeneratedFile>
-)
-
-data class DesktopEventRegGeneratedCompetitorFile(
-    val competitionName: String,
-    val path: Path,
-    val competitorCount: Int
-)
-
-data class DesktopEventRegCompetitorCsvImportResult(
-    val sourceUrl: String,
-    val outputDirectory: Path,
-    val generatedFiles: List<DesktopEventRegGeneratedCompetitorFile>
-)
-
-data class DesktopCompetitorImportDocumentationFile(
-    val competitionName: String,
-    val kind: String,
-    val path: Path,
-    val rowCount: Int
-)
-
-data class DesktopCompetitorImportDocumentation(
-    val outputDirectory: Path,
-    val files: List<DesktopCompetitorImportDocumentationFile>
 )
 
 data class DesktopEventRegRegistration(
@@ -175,52 +150,6 @@ object DesktopEventRegImporter {
                 download = fetchSpreadsheet(normalizedUrl),
                 fallbackEventName = fallbackEventName
             )
-        )
-    }
-
-    fun importCompetitorCsvsFromWebsite(
-        url: String,
-        outputDirectory: Path,
-        startDateTimeIso: String,
-        fetchHtml: (String) -> String = ::fetchHtml,
-        idFactory: () -> String = { UUID.randomUUID().toString() }
-    ): DesktopEventRegCompetitorCsvImportResult {
-        val import = websiteRegistration(
-            url = url,
-            fetchHtml = fetchHtml
-        )
-        val projects = DesktopEventRegProjectBuilder.buildProjects(
-            registration = import.registration,
-            startDateTimeIso = startDateTimeIso,
-            idFactory = idFactory
-        )
-
-        require(projects.isNotEmpty()) {
-            "No competition columns with registered competitors were found."
-        }
-
-        Files.createDirectories(outputDirectory)
-        val generatedFiles = projects.map { generatedProject ->
-            val path = uniqueCsvPath(
-                outputDirectory.resolve(
-                    DesktopProjectFilePaths.defaultCsvFileName(
-                        generatedProject.projectFile.raceData.race.name,
-                        "competitors"
-                    )
-                )
-            )
-            Files.writeString(path, EventCsvExports.competitors(generatedProject.projectFile.raceData), StandardCharsets.UTF_8)
-            DesktopEventRegGeneratedCompetitorFile(
-                competitionName = generatedProject.competitionName,
-                path = path,
-                competitorCount = generatedProject.competitorCount
-            )
-        }
-
-        return DesktopEventRegCompetitorCsvImportResult(
-            sourceUrl = import.sourceUrl,
-            outputDirectory = outputDirectory,
-            generatedFiles = generatedFiles
         )
     }
 
@@ -447,12 +376,6 @@ object DesktopEventRegImporter {
         val basePath = DesktopProjectFilePaths.withProjectExtension(initialPath)
         val baseStem = basePath.fileName.toString().removeSuffix(DesktopProjectFilePaths.PROJECT_EXTENSION)
         return uniquePath(basePath, baseStem, DesktopProjectFilePaths.PROJECT_EXTENSION)
-    }
-
-    private fun uniqueCsvPath(initialPath: Path): Path {
-        val basePath = DesktopProjectFilePaths.withCsvExtension(initialPath)
-        val baseStem = basePath.fileName.toString().removeSuffix(DesktopProjectFilePaths.CSV_EXTENSION)
-        return uniquePath(basePath, baseStem, DesktopProjectFilePaths.CSV_EXTENSION)
     }
 
     private fun uniquePath(basePath: Path, baseStem: String, extension: String): Path {
@@ -1210,44 +1133,6 @@ object DesktopSpreadsheetCompetitorImporter {
         )
     }
 
-    fun writeDocumentationCsvs(
-        plan: DesktopSpreadsheetCompetitorImportPlan,
-        outputDirectory: Path,
-        idFactory: () -> String = { UUID.randomUUID().toString() }
-    ): DesktopCompetitorImportDocumentation {
-        Files.createDirectories(outputDirectory)
-        val files = plan.mappings.flatMap { mapping ->
-            val project = documentationProject(plan.eventName, mapping, idFactory)
-            val categoryPath = uniqueDocumentationCsvPath(
-                outputDirectory.resolve(
-                    DesktopProjectFilePaths.defaultCsvFileName(project.raceData.race.name, "categories")
-                )
-            )
-            Files.writeString(categoryPath, EventCsvExports.categories(project.raceData), StandardCharsets.UTF_8)
-            val competitorPath = uniqueDocumentationCsvPath(
-                outputDirectory.resolve(
-                    DesktopProjectFilePaths.defaultCsvFileName(project.raceData.race.name, "competitors")
-                )
-            )
-            Files.writeString(competitorPath, EventCsvExports.competitors(project.raceData), StandardCharsets.UTF_8)
-            listOf(
-                DesktopCompetitorImportDocumentationFile(
-                    competitionName = mapping.competitionName,
-                    kind = "categories",
-                    path = categoryPath,
-                    rowCount = project.raceData.categories.size
-                ),
-                DesktopCompetitorImportDocumentationFile(
-                    competitionName = mapping.competitionName,
-                    kind = "competitors",
-                    path = competitorPath,
-                    rowCount = mapping.competitorCount
-                )
-            )
-        }
-        return DesktopCompetitorImportDocumentation(outputDirectory, files)
-    }
-
     fun applyMapping(
         mapping: DesktopSpreadsheetCompetitorImportMapping,
         competitorIdFactory: () -> String = { UUID.randomUUID().toString() },
@@ -1397,25 +1282,6 @@ object DesktopSpreadsheetCompetitorImporter {
         )
     }
 
-    private fun documentationProject(
-        eventName: String,
-        mapping: DesktopSpreadsheetCompetitorImportMapping,
-        idFactory: () -> String
-    ): EventProjectFile {
-        val raceId = idFactory()
-        val project = EventProjectFactory.createEmptyProject(
-            raceId = raceId,
-            raceName = "$eventName - ${mapping.competitionName}",
-            startDateTimeIso = "1970-01-01T00:00"
-        ).withRaceFormat(mapping.competitionName)
-        return syncCompetitors(
-            projectFile = project,
-            rows = mapping.rows,
-            competitorIdFactory = idFactory,
-            categoryIdFactory = idFactory
-        ).projectFile
-    }
-
     private fun EventProjectFile.withRaceFormat(competitionName: String): EventProjectFile {
         val format = competitionName.eventRegRaceFormat()
         return copy(
@@ -1426,18 +1292,6 @@ object DesktopSpreadsheetCompetitorImporter {
                 )
             )
         )
-    }
-
-    private fun uniqueDocumentationCsvPath(initialPath: Path): Path {
-        val basePath = DesktopProjectFilePaths.withCsvExtension(initialPath)
-        val baseStem = basePath.fileName.toString().removeSuffix(DesktopProjectFilePaths.CSV_EXTENSION)
-        var path = basePath
-        var counter = 2
-        while (Files.exists(path)) {
-            path = basePath.resolveSibling("$baseStem $counter${DesktopProjectFilePaths.CSV_EXTENSION}")
-            counter++
-        }
-        return path
     }
 
     private fun suppressDuplicateDefaultSelections(

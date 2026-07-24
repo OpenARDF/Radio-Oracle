@@ -52,7 +52,7 @@ class EventSeriesPackageContentsTest {
             )
         )
 
-        assertEquals("Championship Week.zip", content.fileName)
+        assertEquals("Championship Week.roseries", content.fileName)
         assertEquals(
             listOf(EVENT_SERIES_FILE_NAME, "events/day-1.rom.json", "events/day-2.rom.json"),
             content.entries.map { it.path }

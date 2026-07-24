@@ -35,7 +35,7 @@ import org.openardf.radiooracle.backend.files.EventSeriesImport
 import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
-import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
@@ -114,8 +114,8 @@ class EventSeriesTransferRoundTripTests {
         val upload = DataProcessor.get().desktopUploadForSeries(androidImport.series.seriesId)
         val returnedFingerprint = packageFingerprint(upload.bytes)
 
-        assertEquals("Desktop Round Trip.zip", upload.fileName)
-        assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, upload.contentType)
+        assertEquals("Desktop Round Trip.roseries", upload.fileName)
+        assertEquals(EVENT_SERIES_ARCHIVE_CONTENT_TYPE, upload.contentType)
         assertEquals(desktopFingerprint.seriesId, returnedFingerprint.seriesId)
         assertEquals(desktopFingerprint.name, returnedFingerprint.name)
         assertEquals(
@@ -149,8 +149,8 @@ class EventSeriesTransferRoundTripTests {
             "Selected member must be one of the local Android race ids.",
             androidImport.races.any { it.race.id == selectedMember.localRaceId }
         )
-        assertEquals("Championship.zip", upload.fileName)
-        assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, upload.contentType)
+        assertEquals("Championship.roseries", upload.fileName)
+        assertEquals(EVENT_SERIES_ARCHIVE_CONTENT_TYPE, upload.contentType)
         assertEquals(upload.fileName, seriesUpload.fileName)
         assertEquals(upload.contentType, seriesUpload.contentType)
         assertEquals(unzipTextEntries(upload.bytes), unzipTextEntries(seriesUpload.bytes))
@@ -197,8 +197,8 @@ class EventSeriesTransferRoundTripTests {
         val returnedSeries = EventSeriesFileJson.decode(returnedManifest)
         val returnedEventFile = EventProjectFileJson.decode(requireNotNull(uploadEntries["events/solo-day.rom.json"]))
 
-        assertEquals("Solo Series.zip", upload.fileName)
-        assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, upload.contentType)
+        assertEquals("Solo Series.roseries", upload.fileName)
+        assertEquals(EVENT_SERIES_ARCHIVE_CONTENT_TYPE, upload.contentType)
         assertEquals(upload.fileName, seriesUpload.fileName)
         assertEquals(upload.contentType, seriesUpload.contentType)
         assertEquals(uploadEntries, unzipTextEntries(seriesUpload.bytes))

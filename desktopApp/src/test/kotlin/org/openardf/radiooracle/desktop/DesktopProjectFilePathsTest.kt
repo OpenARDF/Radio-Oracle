@@ -78,6 +78,7 @@ class DesktopProjectFilePathsTest {
         assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("event.ARDFJS"))
         assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("series.radio-oracle.json"))
         assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("Championship Week.series.radio-oracle.json"))
+        assertTrue(DesktopProjectFilePaths.isOpenableEventFileName("Championship Week.roseries"))
         assertFalse(DesktopProjectFilePaths.isOpenableEventFileName("event.csv"))
     }
 

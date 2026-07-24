@@ -71,7 +71,7 @@ enum class DesktopNavAction {
     ImportGoogleSheet,
     ImportIofEntryListXml,
     ExportIofEntryListXml,
-    ImportEventRegCompetitorsCsv,
+    ImportEventRegCompetitors,
     ImportCompetitorsSpreadsheet,
     SaveEventFile,
     CloseEventFile,
@@ -459,7 +459,7 @@ object DesktopNavigation {
                                     "setup.competitors.import-eventreg",
                                     "Import EventReg Website...",
                                     workflow,
-                                    DesktopNavAction.ImportEventRegCompetitorsCsv
+                                    DesktopNavAction.ImportEventRegCompetitors
                                 ),
                                 action(
                                     "setup.competitors.import-iof-entry-list",
@@ -744,7 +744,7 @@ object DesktopNavigation {
                     workflow,
                     DesktopSection.SeriesValidation
                 ),
-                action("series.export", "Export Series...", workflow, DesktopNavAction.ExportEventSeries),
+                action("series.export", "Export Legacy Series Folder...", workflow, DesktopNavAction.ExportEventSeries),
                 group(
                     "series.android",
                     "Android...",
@@ -765,7 +765,7 @@ object DesktopNavigation {
                         ),
                         action(
                             "series.android.export",
-                            "Save Android Series File...",
+                            "Save Series File...",
                             workflow,
                             DesktopNavAction.ExportAndroidEventSeriesPackage
                         )
@@ -1593,15 +1593,15 @@ object DesktopNavigation {
         "series.settings" to
             "Use Series Settings to review series metadata.",
         "series.export" to
-            "Use Export Series to copy only the manifest and manifest-listed Race Files to a clean backup folder.",
+            "Use Export Legacy Series Folder to copy the manifest and its Race Files to a compatibility folder.",
         "series.android" to
             "Use Android to share Race Series with Android devices or save an Android-compatible Race Series ZIP.",
         "series.android.send" to
             "Use Send Series To Android to share the open Race Series over local Wi-Fi.",
         "series.android.receive" to
-            "Use Receive Series From Android to accept a Race Series package over local Wi-Fi.",
+            "Use Receive Series From Android to accept a .roseries file over local Wi-Fi.",
         "series.android.export" to
-            "Use Save Android Series File to write an Android-compatible Race Series ZIP package."
+            "Use Save Series File to write a portable .roseries file for backup, Android, or another desktop."
     )
 
     private fun eventFileActions(workflow: DesktopWorkflow): List<DesktopNavItem> =

@@ -100,7 +100,7 @@
     <string name="event_series_import_menu">Import Series</string>
     <string name="event_series_import_progress">Importing Race Series...</string>
     <string name="event_series_import_success">Imported series: %1$s (%2$d races)</string>
-    <string name="event_series_import_invalid">Invalid Race Series package.</string>
+    <string name="event_series_import_invalid">Invalid Radio-Oracle Series File.</string>
     <string name="event_series_export">Export Race Series</string>
     <string name="event_series_export_progress">Exporting Race Series...</string>
     <string name="event_series_export_success">Race Series exported successfully</string>

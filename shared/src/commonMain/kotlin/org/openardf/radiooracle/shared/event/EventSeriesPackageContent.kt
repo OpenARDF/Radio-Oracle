@@ -24,7 +24,8 @@
 
 package org.openardf.radiooracle.shared.event
 
-const val EVENT_SERIES_PACKAGE_CONTENT_TYPE = "application/zip"
+@Deprecated("Use EVENT_SERIES_ARCHIVE_CONTENT_TYPE.")
+const val EVENT_SERIES_PACKAGE_CONTENT_TYPE = EVENT_SERIES_ARCHIVE_CONTENT_TYPE
 
 data class EventSeriesPackageEventFile(
     val event: EventSeriesEvent,
@@ -59,47 +60,36 @@ object EventSeriesPackageContents {
         manifestEntryPath: String = EVENT_SERIES_FILE_NAME,
         packageFileNameStem: String = seriesFile.name
     ): EventSeriesPackageContent {
-        val eventsById = eventFiles.associateBy { it.event.seriesEventId }
-        val sortedEvents = seriesFile.sortedEvents()
-        require(sortedEvents.isNotEmpty()) {
+        require(seriesFile.events.isNotEmpty()) {
             "Race Series package requires at least one race."
         }
+        val eventsById = eventFiles.associateBy { it.event.seriesEventId }
+        val sortedEvents = seriesFile.sortedEvents()
         require(eventFiles.size == sortedEvents.size && sortedEvents.all { it.seriesEventId in eventsById }) {
             "Race Series package must include one Race File for each manifest race."
         }
-
-        val entries = buildList {
-            add(
-                EventSeriesPackageTextEntry(
-                    path = normalizedPackagePath(manifestEntryPath),
-                    text = EventSeriesFileJson.encode(seriesFile)
-                )
-            )
-            sortedEvents.forEach { event ->
-                val eventFile = requireNotNull(eventsById[event.seriesEventId]) {
-                    "Missing Race File for '${event.displayName}'."
-                }
-                add(
-                    EventSeriesPackageTextEntry(
-                        path = normalizedPackagePath(event.eventFilePath),
-                        text = EventProjectFileJson.encode(eventFile.projectFile)
-                    )
-                )
-            }
-        }
-        return EventSeriesPackageContent(
-            fileName = "${safePackageFileStem(packageFileNameStem)}.zip",
-            entries = entries
-        )
+        return EventSeriesArchive(
+            seriesFile = seriesFile,
+            membersBySeriesEventId = sortedEvents.associate { event ->
+                event.seriesEventId to requireNotNull(eventsById[event.seriesEventId]).projectFile
+            },
+            manifestEntryPath = manifestEntryPath
+        ).packageContent(packageFileNameStem)
     }
 
-    fun safePackageFileStem(name: String): String =
-        name
-            .substringBeforeLast(".zip")
+    fun safePackageFileStem(name: String): String {
+        val nameWithoutExtension = when {
+            name.endsWith(EVENT_SERIES_ARCHIVE_FILE_SUFFIX, ignoreCase = true) ->
+                name.dropLast(EVENT_SERIES_ARCHIVE_FILE_SUFFIX.length)
+            name.endsWith(".zip", ignoreCase = true) -> name.dropLast(".zip".length)
+            else -> name
+        }
+        return nameWithoutExtension
             .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
             .ifBlank { "event-series" }
+    }
 
     fun normalizedPackagePath(path: String): String {
         val packagePath = path.replace('\\', '/')

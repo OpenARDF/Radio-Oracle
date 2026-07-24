@@ -35,9 +35,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
-import org.openardf.radiooracle.shared.files.EventCsvImports
 import java.nio.file.Files
-import java.util.UUID
 
 class DesktopEventRegImportTest {
     @Test
@@ -601,75 +599,6 @@ class DesktopEventRegImportTest {
         assertEquals(100, mapping.confidence)
         assertEquals(listOf("1 invalid rows skipped."), mapping.warnings)
         assertEquals(listOf("M21"), mapping.preview?.createdCategoryNames)
-    }
-
-    @Test
-    fun writesCategoryAndCompetitorDocumentationCsvsForImportPlan() {
-        val outputDirectory = Files.createTempDirectory("radio-oracle-competitor-doc-test")
-        val target = DesktopSpreadsheetCompetitorImportTarget(
-            targetId = "race-sprint",
-            displayName = "Sprint Race",
-            path = null,
-            projectFile = eventProject("race-sprint", "Sprint Race", RaceType.SPRINT, RaceBand.NONE)
-        )
-        val plan = DesktopSpreadsheetCompetitorImporter.buildPlan(
-            url = "https://docs.google.com/spreadsheets/d/test-spreadsheet-id/edit",
-            targets = listOf(target),
-            fetchSpreadsheet = {
-                SpreadsheetDownload(
-                    bytes = sprintOnlyGoogleSheetCsv().toByteArray(),
-                    contentType = "text/csv",
-                    fileName = "Sprint Registration.csv"
-                )
-            }
-        )
-
-        val documentation = DesktopSpreadsheetCompetitorImporter.writeDocumentationCsvs(
-            plan = plan,
-            outputDirectory = outputDirectory,
-            idFactory = {
-                UUID.randomUUID().toString()
-            }
-        )
-
-        assertEquals(outputDirectory, documentation.outputDirectory)
-        assertEquals(listOf("categories", "competitors"), documentation.files.map { it.kind })
-        documentation.files.forEach { file ->
-            assertTrue(Files.isRegularFile(file.path))
-        }
-        assertTrue(Files.readString(documentation.files.first { it.kind == "categories" }.path).contains("M21"))
-        assertTrue(Files.readString(documentation.files.first { it.kind == "competitors" }.path).contains("Fala"))
-    }
-
-    @Test
-    fun generatesOneCompetitorCsvPerCompetitionWithEventFileStem() {
-        val outputDirectory = Files.createTempDirectory("radio-oracle-eventreg-competitors-test")
-        val ids = generateSequence(1) { it + 1 }.map { "id-$it" }.iterator()
-
-        val result = DesktopEventRegImporter.importCompetitorCsvsFromWebsite(
-            url = "https://eventreg.example.test/reglist",
-            outputDirectory = outputDirectory,
-            startDateTimeIso = "2026-06-05T09:00",
-            fetchHtml = { sampleRegistrationHtml() },
-            idFactory = { ids.next() }
-        )
-
-        assertEquals(4, result.generatedFiles.size)
-        assertEquals(
-            listOf(
-                "Sample Radio Championships - Sprint competitors.csv",
-                "Sample Radio Championships - FoxO competitors.csv",
-                "Sample Radio Championships - 2m competitors.csv",
-                "Sample Radio Championships - SprMod-NC competitors.csv"
-            ),
-            result.generatedFiles.map { it.path.fileName.toString() }
-        )
-
-        val sprintCsv = Files.readString(result.generatedFiles.first { it.competitionName == "Sprint" }.path)
-        val sprintRows = EventCsvImports.parseAndroidCompetitorRows(sprintCsv).rows
-        assertEquals(listOf("Fala", "Kerns"), sprintRows.map { it.lastName })
-        assertEquals(listOf("M21", "W65"), sprintRows.map { it.categoryName })
-        assertEquals(listOf(true, false), sprintRows.map { it.isMan })
     }
 
     private fun sampleGoogleSheetCsv(): String =

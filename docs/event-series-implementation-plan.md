@@ -2,22 +2,24 @@
 
 ## Summary
 
-Race Series support is an opt-in championship and multi-day layer above existing `.rom.json` Race Files. Individual Race Files remain the source of truth for race-day operation. A series manifest inside the series folder owns membership, race order, and cross-race metadata. When the open Race File is tied to a series, Radio-Oracle exposes a contextual Series workflow for cross-race navigation, validation, export, competitor matching, and start fairness tools.
+Race Series support is an opt-in championship and multi-day layer above existing Race Files. A `.roseries` ZIP-compatible container owns the series manifest and all member Race Files. When a contained Race File is open, Radio-Oracle exposes a contextual Series workflow for cross-race navigation, validation, export, competitor matching, and start fairness tools.
 
 ## Core Model
 
-- Persist a lightweight `series.radio-oracle.json` manifest for each series.
-- Treat the manifest as authoritative: folder contents alone do not define membership.
+- Persist a complete shared `EventSeriesArchive` aggregate through the `.roseries` container.
+- Treat the contained `series.radio-oracle.json` manifest as authoritative.
 - Record series ID/name, ordered race entries, relative Race File paths, display names/dates/formats, and competitor-match overrides.
 - Allow optional Race File `seriesLink` metadata with `seriesId` and `seriesEventId`.
 - Use `seriesLink` only as recognition and safety metadata. The manifest remains the source of truth.
-- Keep Race Files portable and independently usable outside a series.
+- Keep Race Files exportable and independently usable outside a series.
+- Route desktop and Android package reads/writes through the same shared aggregate and ZIP codec.
+- Preserve the legacy folder-plus-manifest adapter for existing data and automation.
 
 ## Desktop Workflow
 
 - Manage current-race membership from Race File > Settings > Race Series.
 - Support create, link, change link, remove link, and validate link actions.
-- Update both the Race File backlink and the manifest when linking or unlinking, or fail clearly before creating a half-linked state.
+- Update the Race File backlink, manifest, and container as one archive transaction.
 - Show the Series bottom workflow only when the current Race File has a valid series context.
 - Keep normal single-race workflows unchanged when no series context is active.
 - Use the Series workflow for Races, Start Fairness, Competitor Matching, Series Validation, Series Settings, and Export Series.
@@ -36,7 +38,8 @@ Race Series support is an opt-in championship and multi-day layer above existing
 
 ## Export And Documentation
 
-- Add `Export Series...` to create a clean backup copy.
+- Use `.roseries` as the normal save, Android transfer, and packaged export format.
+- Retain `Export Legacy Series Folder...` to create a folder backup copy.
 - Copy only `series.radio-oracle.json` and manifest-listed Race Files.
 - Preserve relative paths where practical.
 - Leave behind unrelated folder clutter such as drafts, backups, logs, and stale files.
@@ -61,4 +64,4 @@ Race Series support is an opt-in championship and multi-day layer above existing
 ## Deferred Scope
 
 - Championship scoring, overall standings, point rules, eligibility rules, absent-result handling, and tie-break behavior are later work.
-- Android remains focused on individual Race Files until a specific Android series workflow is planned.
+- Android uses Room as its crash-safe operational store and the shared `.roseries` aggregate for document import, export, and desktop transfer. Direct document-provider replacement remains an explicit checkpoint rather than a rewrite after every punch or result.

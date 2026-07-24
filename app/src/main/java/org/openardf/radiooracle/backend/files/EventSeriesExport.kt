@@ -30,15 +30,12 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.shared.toEventRaceData
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventSeriesArchive
+import org.openardf.radiooracle.shared.event.EventSeriesArchiveZipCodec
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesLink
-import org.openardf.radiooracle.shared.event.EventSeriesPackageContents
-import org.openardf.radiooracle.shared.event.EventSeriesPackageEventFile
-import java.io.ByteArrayOutputStream
 import java.util.UUID
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 /** Writes Android-local Race Series data as a desktop-importable series package. */
 object EventSeriesExport {
@@ -56,34 +53,22 @@ object EventSeriesExport {
             events = members.map { member -> member.toEventSeriesEvent() }
         )
 
-        return ByteArrayOutputStream().use { output ->
-            ZipOutputStream(output).use { zip ->
-                val eventFiles = members.map { member ->
-                    val raceData = raceDataById[member.localRaceId]
-                        ?: throw IllegalArgumentException("Missing race data for '${member.displayName}'.")
-                    EventSeriesPackageEventFile(
-                        event = member.toEventSeriesEvent(),
-                        projectFile =
-                            EventProjectFile(
-                                raceData = raceData.toEventRaceData(),
-                                seriesLink = EventSeriesLink(
-                                    seriesId = member.seriesId,
-                                    seriesEventId = member.seriesEventId
-                                )
-                            )
+        val archive = EventSeriesArchive(
+            seriesFile = seriesFile,
+            membersBySeriesEventId = members.associate { member ->
+                val raceData = raceDataById[member.localRaceId]
+                    ?: throw IllegalArgumentException("Missing race data for '${member.displayName}'.")
+                member.seriesEventId to EventProjectFile(
+                    raceData = raceData.toEventRaceData(),
+                    seriesLink = EventSeriesLink(
+                        seriesId = member.seriesId,
+                        seriesEventId = member.seriesEventId
                     )
-                }
-                EventSeriesPackageContents.build(
-                    seriesFile = seriesFile,
-                    eventFiles = eventFiles,
-                    manifestEntryPath = EVENT_SERIES_FILE_NAME,
-                    packageFileNameStem = seriesData.series.name
-                ).entries.forEach { entry ->
-                    zip.writeTextEntry(entry.path, entry.text)
-                }
-            }
-            output.toByteArray()
-        }
+                )
+            },
+            manifestEntryPath = EVENT_SERIES_FILE_NAME
+        )
+        return EventSeriesArchiveZipCodec.encode(archive)
     }
 
     private fun EventSeriesMember.toEventSeriesEvent(): EventSeriesEvent =
@@ -95,10 +80,4 @@ object EventSeriesExport {
             startDateTimeIso = startDateTimeIso,
             formatLabel = formatLabel
         )
-
-    private fun ZipOutputStream.writeTextEntry(path: String, text: String) {
-        putNextEntry(ZipEntry(path))
-        write(text.toByteArray(Charsets.UTF_8))
-        closeEntry()
-    }
 }

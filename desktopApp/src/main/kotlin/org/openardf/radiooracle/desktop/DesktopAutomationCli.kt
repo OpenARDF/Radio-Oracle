@@ -1223,7 +1223,7 @@ object DesktopAutomationCli {
     private fun eventSeriesPackageFingerprint(args: List<String>, out: PrintStream, err: PrintStream): Int {
         val packageText = args.getOrNull(0)
         if (packageText.isNullOrBlank()) {
-            err.println("event-series-package-fingerprint requires a Race Series package ZIP path.")
+            err.println("event-series-package-fingerprint requires a .roseries or legacy ZIP path.")
             return 64
         }
         return runCatching {
@@ -1260,7 +1260,7 @@ object DesktopAutomationCli {
             )
             0
         }.getOrElse { error ->
-            err.println("Race Series package fingerprint failed: ${error.message ?: error::class.simpleName}")
+            err.println("Radio-Oracle Series File fingerprint failed: ${error.message ?: error::class.simpleName}")
             66
         }
     }
@@ -2105,8 +2105,8 @@ object DesktopAutomationCli {
                                           Validate a series manifest and linked Race Files; fail when issues exist with --require-clean.
           event-series-export <manifest-path> <target-folder>
                                           Copy the manifest and only manifest-listed Race Files to a clean folder.
-          event-series-package-fingerprint <zip-path>
-                                          Print a stable semantic fingerprint for a Race Series package ZIP.
+          event-series-package-fingerprint <archive-path>
+                                          Print a stable semantic fingerprint for a .roseries or legacy ZIP archive.
           event-series-match <manifest-path> <current-race-file-path>
                                           Print competitor matching diagnostics for the current series race.
           event-series-start-fairness <manifest-path> <current-race-file-path>

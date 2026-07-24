@@ -53,7 +53,7 @@ class DesktopNavigationTest {
     private val androidEventSeriesMenuLabels = listOf(
         "Send Series To Android",
         "Receive Series From Android",
-        "Save Android Series File..."
+        "Save Series File..."
     )
 
     @Test
@@ -160,7 +160,7 @@ class DesktopNavigationTest {
         )
         assertEquals(
             DesktopNavAction.ExportEventSeries,
-            roots.first { it.label == "Export Series..." }.action
+            roots.first { it.label == "Export Legacy Series Folder..." }.action
         )
         assertEquals(
             androidEventSeriesMenuLabels,
@@ -213,7 +213,7 @@ class DesktopNavigationTest {
                 "Start Fairness",
                 "Competitor Matching",
                 "Series Validation",
-                "Export Series...",
+                "Export Legacy Series Folder...",
                 "Android...",
                 "Series Settings"
             ),
@@ -1068,7 +1068,7 @@ class DesktopNavigationTest {
             DesktopNavAction.ImportCompetitorsSpreadsheet,
             competitorImportItems.first { it.label == "Import Spreadsheet..." }.action
         )
-        assertEquals(DesktopNavAction.ImportEventRegCompetitorsCsv, competitorImportItems.first { it.label == "Import EventReg Website..." }.action)
+        assertEquals(DesktopNavAction.ImportEventRegCompetitors, competitorImportItems.first { it.label == "Import EventReg Website..." }.action)
         assertTrue(competitorImportItems.first { it.label == "Import EventReg Website..." }.requiresEventFile)
         assertEquals(DesktopNavAction.ImportIofEntryListXml, competitorImportItems.first { it.label == "Import IOF EntryList XML..." }.action)
         assertEquals(DesktopNavAction.ExportCompetitorsCsv, competitorExportItems.first { it.label == "Export Competitors CSV..." }.action)
@@ -1227,7 +1227,7 @@ class DesktopNavigationTest {
             seriesAndroidActions.first { it.action == DesktopNavAction.ReceiveEventSeriesFromAndroid }.label
         )
         assertEquals(
-            "Save Android Series File...",
+            "Save Series File...",
             seriesAndroidActions.first { it.action == DesktopNavAction.ExportAndroidEventSeriesPackage }.label
         )
     }

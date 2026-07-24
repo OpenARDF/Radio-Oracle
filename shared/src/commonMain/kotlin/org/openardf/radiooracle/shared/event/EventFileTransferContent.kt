@@ -28,9 +28,13 @@ const val EVENT_FILE_TRANSFER_CONTENT_TYPE = "application/vnd.openardf.radioorac
 
 object EventFileTransferPayloads {
     fun isSeriesPackage(fileName: String?, contentType: String?): Boolean =
-        fileName?.trim()?.endsWith(".zip", ignoreCase = true) == true ||
+        fileName?.trim()?.let { name ->
+            isEventSeriesArchiveFileName(name) || name.endsWith(".zip", ignoreCase = true)
+        } == true ||
             contentType?.lowercase()?.let { type ->
-                type == EVENT_SERIES_PACKAGE_CONTENT_TYPE || type.contains("zip")
+                type == EVENT_SERIES_ARCHIVE_CONTENT_TYPE ||
+                    type == LEGACY_EVENT_SERIES_ARCHIVE_CONTENT_TYPE ||
+                    type.contains("zip")
             } == true
 
     fun fileNameForRaceOrSeries(raceName: String, seriesName: String?): String =
@@ -44,14 +48,14 @@ object EventFileTransferPayloads {
         if (seriesName == null) {
             EVENT_FILE_TRANSFER_CONTENT_TYPE
         } else {
-            EVENT_SERIES_PACKAGE_CONTENT_TYPE
+            EVENT_SERIES_ARCHIVE_CONTENT_TYPE
         }
 
     fun singleEventFileName(eventName: String): String =
         "${safeEventFileStem(eventName)}.ardfjs"
 
     fun seriesPackageFileName(seriesName: String): String =
-        "${EventSeriesPackageContents.safePackageFileStem(seriesName)}.zip"
+        "${EventSeriesPackageContents.safePackageFileStem(seriesName)}$EVENT_SERIES_ARCHIVE_FILE_SUFFIX"
 
     private fun safeEventFileStem(name: String): String =
         name

@@ -42,7 +42,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
-import org.openardf.radiooracle.shared.event.EVENT_SERIES_PACKAGE_CONTENT_TYPE
+import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesFileJson
@@ -1215,8 +1215,8 @@ class DesktopEventSeriesTest {
 
         val packageFile = DesktopEventSeriesPackageFiles.packageForManifest(store, manifestPath)
 
-        assertEquals("Championship.zip", packageFile.fileName)
-        assertEquals(EVENT_SERIES_PACKAGE_CONTENT_TYPE, packageFile.contentType)
+        assertEquals("Championship.roseries", packageFile.fileName)
+        assertEquals(EVENT_SERIES_ARCHIVE_CONTENT_TYPE, packageFile.contentType)
         assertEquals(
             setOf(
                 "Championship Week.series.radio-oracle.json",
@@ -1237,7 +1237,7 @@ class DesktopEventSeriesTest {
 
         val packageFile = DesktopEventSeriesPackageFiles.packageForManifest(store, manifestPath)
 
-        assertEquals("Championship.zip", packageFile.fileName)
+        assertEquals("Championship.roseries", packageFile.fileName)
         assertEquals(setOf("Championship.series.radio-oracle.json", "day-1.rom.json"), zipEntryNames(packageFile.bytes))
     }
 
@@ -1272,7 +1272,7 @@ class DesktopEventSeriesTest {
             zip.write(EventSeriesFileJson.encode(seriesFile()).toByteArray())
             zip.closeEntry()
             zip.putNextEntry(ZipEntry("day-1.rom.json"))
-            zip.write("""{"appName":"Radio-Oracle","raceData":{}}""".toByteArray())
+            zip.write(EventProjectFileJson.encode(projectFile("Day 1")).toByteArray())
             zip.closeEntry()
             zip.putNextEntry(ZipEntry("readme.txt"))
             zip.write("ignored".toByteArray())

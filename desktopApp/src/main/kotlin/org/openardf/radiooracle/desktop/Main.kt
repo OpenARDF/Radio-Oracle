@@ -193,6 +193,8 @@ import org.openardf.radiooracle.shared.event.EventReadoutDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.EventResultDetails
+import org.openardf.radiooracle.shared.event.EventSeriesArchive
+import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
 import org.openardf.radiooracle.shared.event.EventSeriesSupport
 import org.openardf.radiooracle.shared.event.EventSeriesValidationIssue
@@ -770,7 +772,7 @@ fun main(args: Array<String>) = application {
         var eventSeriesValidationEventPath by remember { mutableStateOf<Path?>(null) }
         var isEventRegImportDialogVisible by remember { mutableStateOf(false) }
         var isGoogleSheetImportDialogVisible by remember { mutableStateOf(false) }
-        var isEventRegCompetitorCsvImportDialogVisible by remember { mutableStateOf(false) }
+        var isEventRegCompetitorImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
         var pendingProtectedStartListDrawRequest by remember { mutableStateOf<PendingProtectedStartListDrawRequest?>(null) }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
@@ -798,7 +800,7 @@ fun main(args: Array<String>) = application {
         var isImportingEventRegWebsite by remember { mutableStateOf(false) }
         var isImportingGoogleSheet by remember { mutableStateOf(false) }
         var isImportingCompetitorSpreadsheet by remember { mutableStateOf(false) }
-        var isImportingEventRegCompetitorCsvs by remember { mutableStateOf(false) }
+        var isImportingEventRegCompetitors by remember { mutableStateOf(false) }
         var isImportingCourseKmlKmz by remember { mutableStateOf(false) }
         var pendingSpreadsheetCompetitorImportReview by remember {
             mutableStateOf<PendingSpreadsheetCompetitorImportReview?>(null)
@@ -831,6 +833,7 @@ fun main(args: Array<String>) = application {
                 activeLocalResultsWebServerRefreshJob?.cancel()
                 activeLocalResultsWebServer?.stop()
                 activePublicResultSitePreviewServer?.stop()
+                DesktopEventSeriesArchiveWorkspaces.closeAll()
             }
         }
 
@@ -941,7 +944,9 @@ fun main(args: Array<String>) = application {
                 runCatching {
                     val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
                     eventSeriesUiContext = EventSeriesUiContext(
-                        manifestPath = manifestPath,
+                        manifestPath =
+                            DesktopEventSeriesArchiveWorkspaces.containerPathFor(manifestPath)
+                                ?: manifestPath,
                         seriesName = seriesFile.name
                     )
                     seriesEventSummaries = DesktopEventSeriesActions.eventSummaries(
@@ -1268,7 +1273,8 @@ fun main(args: Array<String>) = application {
                 hasUnsavedEventDefinitionChanges = false
                 isEventDefinitionSaveDialogVisible = false
                 syncProjectState()
-                DesktopLastEventFilePreferences.rememberEventFile(path)
+                val persistedPath = DesktopEventSeriesArchiveWorkspaces.containerPathFor(path) ?: path
+                DesktopLastEventFilePreferences.rememberEventFile(persistedPath)
                 runCatching {
                     DesktopEventSeriesActions.rememberOpenedSeriesEvent(
                         store = DesktopEventSeriesFiles,
@@ -1281,8 +1287,13 @@ fun main(args: Array<String>) = application {
                         "Could not remember last opened Race Series member: ${error.message ?: error::class.simpleName}"
                     )
                 }
-                projectStatusText = "Opened ${path.fileName}"
-                DesktopDebugLog.info("EventFile", "Opened ${path.fileName}")
+                val workspace = DesktopEventSeriesArchiveWorkspaces.workspaceFor(path)
+                projectStatusText = if (workspace == null) {
+                    "Opened ${path.fileName}"
+                } else {
+                    "Opened ${workspace.containerPath.fileName}: ${path.fileName}"
+                }
+                DesktopDebugLog.info("EventFile", projectStatusText)
             }.onFailure { error ->
                 projectStatusText = "Open failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("EventFile", "Open failed: ${error.message ?: error::class.simpleName}")
@@ -2082,9 +2093,16 @@ fun main(args: Array<String>) = application {
                 hasUnsavedEventDefinitionChanges = false
                 isEventDefinitionSaveDialogVisible = false
                 syncProjectState()
-                projectSession.currentPath?.let(DesktopLastEventFilePreferences::rememberEventFile)
+                projectSession.currentPath?.let { savedPath ->
+                    DesktopLastEventFilePreferences.rememberEventFile(
+                        DesktopEventSeriesArchiveWorkspaces.containerPathFor(savedPath) ?: savedPath
+                    )
+                }
+                val savedDisplayPath = projectSession.currentPath?.let { savedPath ->
+                    DesktopEventSeriesArchiveWorkspaces.containerPathFor(savedPath) ?: savedPath
+                }
                 projectStatusText = buildString {
-                    append("Saved ${projectSession.currentPath?.fileName ?: "Race File"}")
+                    append("Saved ${savedDisplayPath?.fileName ?: "Race File"}")
                     if (seriesRefreshWarning != null) {
                         append(". ")
                         append(seriesRefreshWarning)
@@ -2114,6 +2132,10 @@ fun main(args: Array<String>) = application {
                 projectStatusText = "Race Series creation failed: Race File has no parent folder."
                 return
             }
+            val defaultContainerName =
+                "${org.openardf.radiooracle.shared.event.EventSeriesPackageContents.safePackageFileStem(currentProject.raceData.race.name)}" +
+                    org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_FILE_SUFFIX
+            val containerPath = DesktopFileDialogs.chooseSaveEventSeries(defaultContainerName) ?: return
             runCatching {
                 val result = DesktopEventSeriesActions.createSeriesWithEvent(
                     seriesFolder = seriesFolder,
@@ -2122,14 +2144,32 @@ fun main(args: Array<String>) = application {
                     eventPath = currentPath,
                     eventProjectFile = currentProject
                 )
-                DesktopEventSeriesFiles.write(result.manifestPath, result.seriesFile)
-                projectFile = projectSession.updateCurrentProject { result.eventProjectFile }
-                projectSession.save()
+                val archiveEvent = result.seriesFile.events.single().copy(
+                    eventFilePath = DesktopProjectFilePaths.defaultProjectFileName(
+                        result.eventProjectFile.raceData.race.name
+                    )
+                )
+                val archive = EventSeriesArchive(
+                    seriesFile = result.seriesFile.copy(events = listOf(archiveEvent)),
+                    membersBySeriesEventId = mapOf(
+                        archiveEvent.seriesEventId to result.eventProjectFile
+                    )
+                )
+                val workspace = DesktopEventSeriesArchiveWorkspaces.create(
+                    containerPath,
+                    archive,
+                    replaceExisting = true
+                )
+                val memberPath = workspace.memberPath(archiveEvent)
+                projectFile = projectSession.open(memberPath)
                 syncProjectState()
-                projectStatusText = "Created Race Series ${result.manifestPath.fileName} and linked this Race File."
+                DesktopLastEventFilePreferences.rememberEventFile(containerPath)
+                projectStatusText =
+                    "Created ${containerPath.fileName} and copied the active Race File into the new series. " +
+                        "The original standalone Race File remains as a safety copy."
                 DesktopDebugLog.info(
                     "EventSeries",
-                    "Created ${result.manifestPath.fileName} for ${currentPath.fileName} " +
+                    "Created ${containerPath.fileName} for ${currentPath.fileName} " +
                         "seriesId=${result.seriesFile.seriesId} " +
                         "seriesEventId=${result.eventProjectFile.seriesLink?.seriesEventId.orEmpty()}"
                 )
@@ -2151,6 +2191,47 @@ fun main(args: Array<String>) = application {
             }
             val manifestPath = DesktopFileDialogs.chooseOpenEventSeries() ?: return
             runCatching {
+                if (DesktopProjectFilePaths.isEventSeriesArchiveName(manifestPath.fileName.toString())) {
+                    val existingWorkspace = DesktopEventSeriesArchiveWorkspaces.workspaceFor(currentPath)
+                    require(existingWorkspace == null || existingWorkspace.containerPath == manifestPath.toAbsolutePath().normalize()) {
+                        "Move a Race File out of its current series before adding it to another series."
+                    }
+                    if (existingWorkspace != null) {
+                        projectStatusText = "This Race File already belongs to ${existingWorkspace.containerPath.fileName}."
+                        return@runCatching
+                    }
+                    val workspace = DesktopEventSeriesArchiveWorkspaces.open(manifestPath)
+                    val existingIds = workspace.archive.seriesFile.events.mapTo(hashSetOf()) { it.seriesEventId }
+                    val baseSeriesEventId = currentProject.raceData.race.id
+                    var seriesEventId = baseSeriesEventId
+                    var idIndex = 2
+                    while (seriesEventId in existingIds) {
+                        seriesEventId = "$baseSeriesEventId-$idIndex"
+                        idIndex += 1
+                    }
+                    val eventFilePath = uniqueArchiveEventFilePath(
+                        workspace.archive,
+                        DesktopProjectFilePaths.defaultProjectFileName(currentProject.raceData.race.name)
+                    )
+                    val nextOrder = (workspace.archive.seriesFile.events.maxOfOrNull { it.order } ?: -1) + 1
+                    val race = currentProject.raceData.race
+                    val event = EventSeriesEvent(
+                        seriesEventId = seriesEventId,
+                        eventFilePath = eventFilePath,
+                        order = nextOrder,
+                        displayName = race.name,
+                        startDateTimeIso = race.startDateTimeIso,
+                        formatLabel = race.raceType.name
+                    )
+                    workspace.addMember(event, currentProject)
+                    projectFile = projectSession.open(workspace.memberPath(event))
+                    syncProjectState()
+                    DesktopLastEventFilePreferences.rememberEventFile(workspace.containerPath)
+                    projectStatusText =
+                        "Added this Race File to ${workspace.containerPath.fileName}. The original standalone file remains unchanged."
+                    recordActivity(projectStatusText)
+                    return@runCatching
+                }
                 val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
                 val seriesFolder = requireNotNull(manifestPath.parent) {
                     "Race Series manifest has no parent folder."
@@ -2180,12 +2261,47 @@ fun main(args: Array<String>) = application {
         }
 
         fun removeCurrentEventFromSeries() {
+            if (
+                (projectSession.hasUnsavedChanges || hasUnsavedEventDefinitionChanges) &&
+                !saveCurrentProject()
+            ) {
+                return
+            }
             val currentProject = projectSession.currentProject ?: run {
                 projectStatusText = "Open or create a Race File before removing a series link."
                 return
             }
             val manifestPath = currentSeriesManifestPath() ?: run {
                 projectStatusText = "Series manifest not found near this Race File; no link was removed."
+                return
+            }
+            val workspace = DesktopEventSeriesArchiveWorkspaces.workspaceFor(manifestPath)
+            if (workspace != null) {
+                val link = currentProject.seriesLink ?: run {
+                    projectStatusText = "This Race File is not linked to the open series."
+                    return
+                }
+                val standalonePath = DesktopFileDialogs.chooseSaveProject(
+                    raceName = currentProject.raceData.race.name
+                ) ?: return
+                runCatching {
+                    val removal = workspace.removeMember(link.seriesEventId, standalonePath)
+                    projectFile = projectSession.open(standalonePath)
+                    if (removal.remainingArchive == null) {
+                        DesktopEventSeriesArchiveWorkspaces.close(workspace)
+                    }
+                    syncProjectState()
+                    DesktopLastEventFilePreferences.rememberEventFile(standalonePath)
+                    projectStatusText = if (removal.remainingArchive == null) {
+                        "Saved ${standalonePath.fileName} and removed the now-empty ${workspace.containerPath.fileName}."
+                    } else {
+                        "Removed this race from ${workspace.containerPath.fileName} and saved it as ${standalonePath.fileName}."
+                    }
+                    recordActivity(projectStatusText)
+                }.onFailure { error ->
+                    projectStatusText = "Remove Race from Series failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("EventSeries", projectStatusText)
+                }
                 return
             }
             runCatching {
@@ -2250,6 +2366,37 @@ fun main(args: Array<String>) = application {
             }
             val eventPath = DesktopFileDialogs.chooseEventSeriesMemberEventFile() ?: return
             runCatching {
+                val workspace = DesktopEventSeriesArchiveWorkspaces.workspaceFor(manifestPath)
+                if (workspace != null) {
+                    val eventProjectFile = DesktopProjectFiles.read(eventPath)
+                    val existingIds = workspace.archive.seriesFile.events.mapTo(hashSetOf()) { it.seriesEventId }
+                    val baseSeriesEventId = eventProjectFile.raceData.race.id
+                    var seriesEventId = baseSeriesEventId
+                    var idIndex = 2
+                    while (seriesEventId in existingIds) {
+                        seriesEventId = "$baseSeriesEventId-$idIndex"
+                        idIndex += 1
+                    }
+                    val eventFilePath = uniqueArchiveEventFilePath(
+                        workspace.archive,
+                        eventPath.fileName.toString()
+                    )
+                    val race = eventProjectFile.raceData.race
+                    val event = EventSeriesEvent(
+                        seriesEventId = seriesEventId,
+                        eventFilePath = eventFilePath,
+                        order = (workspace.archive.seriesFile.events.maxOfOrNull { it.order } ?: -1) + 1,
+                        displayName = race.name,
+                        startDateTimeIso = race.startDateTimeIso,
+                        formatLabel = race.raceType.name
+                    )
+                    workspace.addMember(event, eventProjectFile)
+                    refreshSeriesEventSummaries()
+                    projectStatusText =
+                        "Added ${eventPath.fileName} to ${workspace.containerPath.fileName}; series now has ${workspace.archive.memberCount} races."
+                    recordActivity(projectStatusText)
+                    return@runCatching
+                }
                 val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
                 val seriesFolder = requireNotNull(manifestPath.parent) {
                     "Race Series manifest has no parent folder."
@@ -2316,10 +2463,10 @@ fun main(args: Array<String>) = application {
                 )
                 val targetPath = DesktopFileDialogs.chooseExportAndroidEventSeriesPackage(packageFile.fileName) ?: return
                 Files.write(targetPath, packageFile.bytes)
-                projectStatusText = "Saved Android Race Series file to ${targetPath.fileName} (${packageFile.byteCount} bytes)."
+                projectStatusText = "Saved Radio-Oracle Series File to ${targetPath.fileName} (${packageFile.byteCount} bytes)."
                 recordActivity(projectStatusText)
             }.onFailure { error ->
-                projectStatusText = "Save Android Race Series file failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Save Race Series file failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -2360,6 +2507,27 @@ fun main(args: Array<String>) = application {
                 return false
             }
             return runCatching {
+                val workspace = DesktopEventSeriesArchiveWorkspaces.workspaceFor(manifestPath)
+                if (workspace != null) {
+                    val safeStem =
+                        org.openardf.radiooracle.shared.event.EventSeriesPackageContents.safePackageFileStem(
+                            trimmedFileNameStem
+                        )
+                    val targetPath = requireNotNull(workspace.containerPath.parent)
+                        .resolve(
+                            "$safeStem${org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_FILE_SUFFIX}"
+                        )
+                    if (targetPath.toAbsolutePath().normalize() == workspace.containerPath) {
+                        projectStatusText = "Race Series file already has that name."
+                        return@runCatching true
+                    }
+                    val updatedPath = workspace.renameContainer(targetPath)
+                    refreshSeriesEventSummaries()
+                    DesktopLastEventFilePreferences.rememberEventFile(updatedPath)
+                    projectStatusText = "Renamed Race Series file to ${updatedPath.fileName}."
+                    recordActivity(projectStatusText)
+                    return@runCatching true
+                }
                 val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
                 val updatedManifestPath = DesktopEventSeriesActions.renameSeriesManifestFile(
                     store = DesktopEventSeriesFiles,
@@ -4283,14 +4451,7 @@ fun main(args: Array<String>) = application {
                 target = currentCompetitorImportTarget(),
                 warnings = warnings
             )
-            val documentation = DesktopSpreadsheetCompetitorImporter.writeDocumentationCsvs(
-                plan = plan,
-                outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
-            )
-            pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(
-                plan = plan,
-                documentation = documentation
-            )
+            pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(plan)
         }
 
         fun importCompetitorsCsv() {
@@ -4838,6 +4999,22 @@ fun main(args: Array<String>) = application {
         }
 
         fun openOrImportSelectedEventFile(path: Path) {
+            if (DesktopProjectFilePaths.isEventSeriesArchiveName(path.fileName.toString())) {
+                runCatching {
+                    val workspace = DesktopEventSeriesArchiveWorkspaces.open(path)
+                    DesktopEventSeriesActions.eventPathToOpenFromManifest(
+                        store = DesktopEventSeriesFiles,
+                        manifestPath = workspace.manifestPath,
+                        lastSeriesEventStore = DesktopLastSeriesEventPreferences
+                    )
+                }.onSuccess { eventPath ->
+                    openOrImportSelectedEventFile(eventPath)
+                }.onFailure { error ->
+                    projectStatusText = "Open Race Series failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("EventSeries", projectStatusText)
+                }
+                return
+            }
             if (DesktopProjectFilePaths.isEventSeriesManifestName(path.fileName.toString())) {
                 runCatching {
                     DesktopEventSeriesActions.eventPathToOpenFromManifest(
@@ -4930,7 +5107,7 @@ fun main(args: Array<String>) = application {
 
         fun showEventRegCompetitorCsvImportDialog() {
             eventRegImportUrl = DesktopEventRegImportPreferences.lastRegistrationUrl()
-            isEventRegCompetitorCsvImportDialogVisible = true
+            isEventRegCompetitorImportDialogVisible = true
         }
 
         fun spreadsheetCompetitorImportTargets(): List<DesktopSpreadsheetCompetitorImportTarget> {
@@ -5171,7 +5348,7 @@ fun main(args: Array<String>) = application {
                             "$updated competitors updated.",
                             "$deleted competitors removed by sync.",
                             "$removedCategories empty categories removed."
-                        ) + review.documentationLines() + warningLines
+                        ) + warningLines
                     )
                 )
                 projectStatusText =
@@ -5186,19 +5363,19 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun importEventRegCompetitorCsvs(url: String) {
-            if (isImportingEventRegCompetitorCsvs) {
+        fun importEventRegCompetitors(url: String) {
+            if (isImportingEventRegCompetitors) {
                 return
             }
             val trimmedUrl = url.trim()
-            isImportingEventRegCompetitorCsvs = true
+            isImportingEventRegCompetitors = true
             projectStatusText = "Importing EventReg website..."
             DesktopEventRegImportPreferences.rememberRegistrationUrl(trimmedUrl)
             val targets = runCatching {
                 spreadsheetCompetitorImportTargets()
             }.getOrElse { error ->
                 projectStatusText = "EventReg competitor import failed: ${error.message ?: error::class.simpleName}"
-                isImportingEventRegCompetitorCsvs = false
+                isImportingEventRegCompetitors = false
                 return
             }
             appCoroutineScope.launch {
@@ -5211,29 +5388,22 @@ fun main(args: Array<String>) = application {
                             registrationImport = registrationImport,
                             targets = targets
                         )
-                        val documentation = DesktopSpreadsheetCompetitorImporter.writeDocumentationCsvs(
-                            plan = plan,
-                            outputDirectory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
-                        )
-                        plan to documentation
+                        plan
                     }
                 }
-                result.onSuccess { (plan, documentation) ->
-                    pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(
-                        plan = plan,
-                        documentation = documentation
-                    )
+                result.onSuccess { plan ->
+                    pendingSpreadsheetCompetitorImportReview = PendingSpreadsheetCompetitorImportReview.create(plan)
                     projectStatusText = "Review EventReg competitor import before applying it."
-                    isEventRegCompetitorCsvImportDialogVisible = false
+                    isEventRegCompetitorImportDialogVisible = false
                     DesktopDebugLog.info(
                         "EventReg",
-                        "Prepared ${plan.mappings.size} EventReg competitor mappings from ${plan.sourceUrl}; generated ${documentation.files.size} documentation CSV files."
+                        "Prepared ${plan.mappings.size} EventReg competitor mappings from ${plan.sourceUrl}."
                     )
                 }.onFailure { error ->
                     projectStatusText = "EventReg competitor import failed: ${error.message ?: error::class.simpleName}"
                     DesktopDebugLog.error("EventReg", projectStatusText)
                 }
-                isImportingEventRegCompetitorCsvs = false
+                isImportingEventRegCompetitors = false
             }
         }
 
@@ -5279,9 +5449,20 @@ fun main(args: Array<String>) = application {
             )
                 ?: return false
             return runCatching {
-                projectSession.saveAs(path)
-                val seriesRefreshWarning = projectSession.currentProject?.let { savedProject ->
-                    refreshSavedEventSeriesMetadata(savedProject, path)
+                val currentPath = projectSession.currentPath
+                val currentWorkspace = currentPath?.let(DesktopEventSeriesArchiveWorkspaces::workspaceFor)
+                val seriesRefreshWarning = if (currentWorkspace == null) {
+                    projectSession.saveAs(path)
+                    projectSession.currentProject?.let { savedProject ->
+                        refreshSavedEventSeriesMetadata(savedProject, path)
+                    }
+                } else {
+                    val standaloneProject = EventProjectEditor.removeSeriesLink(
+                        requireNotNull(projectSession.currentProject)
+                    )
+                    DesktopProjectFiles.write(path, standaloneProject)
+                    projectSession.open(path)
+                    null
                 }
                 hasUnsavedEventDefinitionChanges = false
                 isEventDefinitionSaveDialogVisible = false
@@ -5289,6 +5470,10 @@ fun main(args: Array<String>) = application {
                 DesktopLastEventFilePreferences.rememberEventFile(path)
                 projectStatusText = buildString {
                     append("Saved ${path.fileName}")
+                    if (currentWorkspace != null) {
+                        append(" as a standalone copy; the original race remains in ")
+                        append(currentWorkspace.containerPath.fileName)
+                    }
                     if (seriesRefreshWarning != null) {
                         append(". ")
                         append(seriesRefreshWarning)
@@ -5305,7 +5490,16 @@ fun main(args: Array<String>) = application {
         fun exportEventFileCopy() {
             DesktopFileDialogs.chooseExportProject()?.let { path ->
                 runCatching {
-                    projectSession.exportCopy(path)
+                    val currentPath = projectSession.currentPath
+                    val currentProject = requireNotNull(projectSession.currentProject)
+                    if (
+                        currentPath != null &&
+                        DesktopEventSeriesArchiveWorkspaces.workspaceFor(currentPath) != null
+                    ) {
+                        DesktopProjectFiles.write(path, EventProjectEditor.removeSeriesLink(currentProject))
+                    } else {
+                        projectSession.exportCopy(path)
+                    }
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
                     DesktopDebugLog.info("EventFile", "Exported copy ${path.fileName}")
@@ -5372,7 +5566,7 @@ fun main(args: Array<String>) = application {
                             val message = when (reason) {
                                 DesktopEventFileTransferStopReason.Downloaded ->
                                     if (isSeriesTransfer) {
-                                        "Race Series package downloaded by Android. Transfer stopped."
+                                        "Radio-Oracle Series File downloaded by Android. Transfer stopped."
                                     } else {
                                         "Race File downloaded by Android. Transfer stopped."
                                     }
@@ -5453,13 +5647,25 @@ fun main(args: Array<String>) = application {
                         DesktopAndroidFileReceiveResultDialogState.savedOnly(
                             fileName = result.fileName,
                             path = result.path,
-                            reason = "The current desktop Race File has unsaved changes, so the received Race Series package was not loaded."
+                            reason = "The current desktop Race File has unsaved changes, so the received Radio-Oracle Series File was not loaded."
                         )
                     } else {
                         runCatching {
                             clearAssignedControlsWarning()
                             lockProtectedCourseOrder()
-                            val unpacked = DesktopEventSeriesPackageFiles.unpack(
+                            val archiveWorkspace = if (
+                                DesktopProjectFilePaths.isEventSeriesArchiveName(result.path.fileName.toString())
+                            ) {
+                                DesktopEventSeriesArchiveWorkspaces.open(result.path)
+                            } else {
+                                null
+                            }
+                            val unpacked = archiveWorkspace?.let {
+                                DesktopEventSeriesPackageImportResult(
+                                    manifestPath = it.manifestPath,
+                                    eventFilePaths = it.memberPaths
+                                )
+                            } ?: DesktopEventSeriesPackageFiles.unpack(
                                 path = result.path,
                                 targetRoot = result.path.parent ?: DesktopAndroidFileReceiveLocations.receiveDirectory()
                             )
@@ -5473,15 +5679,21 @@ fun main(args: Array<String>) = application {
                             hasUnsavedEventDefinitionChanges = false
                             isEventDefinitionSaveDialogVisible = false
                             hasUnsavedChanges = projectSession.hasUnsavedChanges
-                            DesktopLastEventFilePreferences.rememberEventFile(eventPath)
+                            DesktopLastEventFilePreferences.rememberEventFile(
+                                archiveWorkspace?.containerPath ?: eventPath
+                            )
                             syncProjectState()
                             projectStatusText =
-                                "Imported Race Series from Android to ${unpacked.manifestPath.parent} with ${unpacked.eventFilePaths.size} Race Files."
+                                if (archiveWorkspace == null) {
+                                    "Imported legacy Race Series from Android to ${unpacked.manifestPath.parent} with ${unpacked.eventFilePaths.size} Race Files."
+                                } else {
+                                    "Opened ${archiveWorkspace.containerPath.fileName} from Android with ${unpacked.eventFilePaths.size} Race Files."
+                                }
                             DesktopDebugLog.info("EventSeries", projectStatusText)
                             DesktopAndroidFileReceiveResultDialogState.loaded(
                                 fileName = result.fileName,
-                                path = unpacked.manifestPath,
-                                loadedMessage = "The received Race Series package is now open."
+                                path = archiveWorkspace?.containerPath ?: unpacked.manifestPath,
+                                loadedMessage = "The received Radio-Oracle Series File is now open."
                             )
                         }.getOrElse { error ->
                             projectStatusText =
@@ -5683,7 +5895,7 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ImportEventRegWebsite,
                 DesktopNavAction.ImportGoogleSheet,
                 DesktopNavAction.ImportDemFile -> true
-                DesktopNavAction.ImportEventRegCompetitorsCsv,
+                DesktopNavAction.ImportEventRegCompetitors,
                 DesktopNavAction.ImportCompetitorsSpreadsheet -> projectFile != null
                 DesktopNavAction.ShowDebugLogHelp,
                 DesktopNavAction.ShowAbout -> true
@@ -5720,7 +5932,7 @@ fun main(args: Array<String>) = application {
                         "There are no Race File changes to save."
                     }
                 DesktopNavAction.CloseEventFile,
-                DesktopNavAction.ImportEventRegCompetitorsCsv,
+                DesktopNavAction.ImportEventRegCompetitors,
                 DesktopNavAction.ImportCompetitorsSpreadsheet,
                 DesktopNavAction.ImportIofEntryListXml,
                 DesktopNavAction.ExportIofEntryListXml,
@@ -5878,7 +6090,7 @@ fun main(args: Array<String>) = application {
                     showGoogleSheetImportDialog()
                     true
                 }
-                DesktopNavAction.ImportEventRegCompetitorsCsv -> {
+                DesktopNavAction.ImportEventRegCompetitors -> {
                     showEventRegCompetitorCsvImportDialog()
                     true
                 }
@@ -6449,18 +6661,18 @@ fun main(args: Array<String>) = application {
                 }
             )
         }
-        if (isEventRegCompetitorCsvImportDialogVisible) {
+        if (isEventRegCompetitorImportDialogVisible) {
             EventRegImportDialog(
                 title = "Import EventReg Competitors",
-                idleDescription = "Creates one competitor CSV file for each competition class column with registered competitors.",
-                importingDescription = "Downloading registration table and generating competitor CSV files...",
+                idleDescription = "Reviews registered competitors for import into the selected Race Files.",
+                importingDescription = "Downloading registration table and preparing competitor import...",
                 url = eventRegImportUrl,
-                isImporting = isImportingEventRegCompetitorCsvs,
+                isImporting = isImportingEventRegCompetitors,
                 onUrlChange = { eventRegImportUrl = it },
-                onImport = { importEventRegCompetitorCsvs(eventRegImportUrl) },
+                onImport = { importEventRegCompetitors(eventRegImportUrl) },
                 onCancel = {
-                    if (!isImportingEventRegCompetitorCsvs) {
-                        isEventRegCompetitorCsvImportDialogVisible = false
+                    if (!isImportingEventRegCompetitors) {
+                        isEventRegCompetitorImportDialogVisible = false
                     }
                 }
             )
@@ -9749,13 +9961,6 @@ private fun SpreadsheetCompetitorImportReviewPanel(
                 fontSize = 13.sp,
                 color = Color.DarkGray
             )
-            review.documentation?.let { documentation ->
-                Text(
-                    "Documentation CSV files: ${documentation.files.size} in ${documentation.outputDirectory}.",
-                    fontSize = 13.sp,
-                    color = Color.DarkGray
-                )
-            }
         }
         if (duplicateTargets.isNotEmpty()) {
             Text(
@@ -10761,6 +10966,30 @@ private fun DesktopCourseKmlImportSummary.defaultDuplicateRouteChoices(): Map<St
 private fun String.courseMappingSelectionKey(): String =
     StandardCategoryRules.normalizedCategoryName(this).uppercase()
 
+private fun uniqueArchiveEventFilePath(
+    archive: EventSeriesArchive,
+    preferredFileName: String
+): String {
+    val safeFileName = Path.of(preferredFileName).fileName.toString()
+        .takeIf(DesktopProjectFilePaths::isProjectFileName)
+        ?: DesktopProjectFilePaths.defaultProjectFileName(preferredFileName)
+    val extension = if (safeFileName.endsWith(".rom.json", ignoreCase = true)) {
+        ".rom.json"
+    } else {
+        DesktopProjectFilePaths.PROJECT_EXTENSION
+    }
+    val stem = safeFileName.dropLast(extension.length)
+    val usedPaths = archive.seriesFile.events
+        .mapTo(hashSetOf()) { it.eventFilePath.lowercase() }
+    var candidate = safeFileName
+    var index = 2
+    while (candidate.lowercase() in usedPaths) {
+        candidate = "$stem $index$extension"
+        index += 1
+    }
+    return candidate
+}
+
 private fun newCategoryCsvCourseMappingNames(
     projectFile: EventProjectFile,
     rows: List<CategoryCsvImportRow>
@@ -10824,7 +11053,6 @@ private data class CourseKmlKmzImportPreview(
 private data class PendingSpreadsheetCompetitorImportReview(
     val plan: DesktopSpreadsheetCompetitorImportPlan,
     val selectedCompetitionNames: Set<String>,
-    val documentation: DesktopCompetitorImportDocumentation?,
     val selectedRowActionKeys: Set<String>,
     val selectedRemovalActionKeys: Set<String>,
     val selectedEmptyCategoryRemovalKeys: Set<String>,
@@ -10957,11 +11185,6 @@ private data class PendingSpreadsheetCompetitorImportReview(
             ?.filterTo(mutableSetOf()) { categoryName -> isEmptyCourseCategoryRemovalSelected(mapping, categoryName) }
             ?: emptySet()
 
-    fun documentationLines(): List<String> =
-        documentation?.let { docs ->
-            listOf("${docs.files.size} documentation CSV files generated in ${docs.outputDirectory}.")
-        }.orEmpty()
-
     private fun DesktopSpreadsheetCompetitorImportMapping?.defaultRowActionKeys(): Set<String> =
         this?.preview?.let { preview ->
             (preview.addedCompetitors + preview.updatedCompetitors)
@@ -11002,15 +11225,11 @@ private data class PendingSpreadsheetCompetitorImportReview(
         if (selected) this + key else this - key
 
     companion object {
-        fun create(
-            plan: DesktopSpreadsheetCompetitorImportPlan,
-            documentation: DesktopCompetitorImportDocumentation? = null
-        ): PendingSpreadsheetCompetitorImportReview {
+        fun create(plan: DesktopSpreadsheetCompetitorImportPlan): PendingSpreadsheetCompetitorImportReview {
             val selectedMappings = plan.selectedMappings
             return PendingSpreadsheetCompetitorImportReview(
                 plan = plan,
                 selectedCompetitionNames = plan.selectedMappings.mapTo(mutableSetOf()) { it.competitionName },
-                documentation = documentation,
                 selectedRowActionKeys = selectedMappings.flatMapTo(mutableSetOf()) { mapping ->
                     mapping.preview?.let { preview ->
                         (preview.addedCompetitors + preview.updatedCompetitors)
@@ -12221,9 +12440,12 @@ internal fun desktopParentSeriesText(seriesContext: EventSeriesUiContext?): Stri
         ?.let { "Parent Series: $it" }
 
 internal fun desktopEventFileFolderText(eventFilePath: Path?, workingFolder: Path): String {
-    val directory = eventFilePath?.parent ?: workingFolder
+    val persistedEventPath = eventFilePath?.let { path ->
+        DesktopEventSeriesArchiveWorkspaces.containerPathFor(path) ?: path
+    }
+    val directory = persistedEventPath?.parent ?: workingFolder
     val directoryText = directory.toAbsolutePath().normalize().toString()
-    return if (eventFilePath == null) {
+    return if (persistedEventPath == null) {
         "Race File Folder: $directoryText (first save default)"
     } else {
         "Race File Folder: $directoryText"
@@ -15892,7 +16114,7 @@ private fun EventSeriesSettingsPanel(
     val canApplyFileName = trimmedFileName.isNotBlank() && trimmedFileName != currentFileNameStem
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = "Manifest: ${seriesContext.manifestPath}",
+            text = "Series File: ${seriesContext.manifestPath}",
             color = DesktopPalette.Disconnected,
             fontSize = 12.sp,
             maxLines = 1,
