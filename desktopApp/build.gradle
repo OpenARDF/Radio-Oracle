@@ -31,6 +31,8 @@ plugins {
 import java.util.jar.JarFile
 import java.util.Locale
 import java.time.Instant
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 kotlin {
     jvmToolchain(17)
@@ -65,12 +67,44 @@ compose.desktop {
             fileAssociation(
                 "application/vnd.openardf.radio-oracle-series+zip",
                 "roseries",
-                "Radio-Oracle Series File"
+                "Radio-Oracle Series File",
+                desktopPackagingIconDir.file("Radio-Oracle-Series.png").asFile,
+                desktopPackagingIconDir.file("Radio-Oracle-Series.ico").asFile,
+                desktopPackagingIconDir.file("Radio-Oracle-Series.icns").asFile
             )
 
             macOS {
                 bundleID = "org.openardf.radiooracle.desktop"
                 iconFile.set(desktopPackagingIconDir.file("Radio-Oracle.icns").asFile)
+                infoPlist {
+                    extraKeysRawXml = """
+                        <key>UTExportedTypeDeclarations</key>
+                        <array>
+                            <dict>
+                                <key>UTTypeIdentifier</key>
+                                <string>org.openardf.radiooracle.series</string>
+                                <key>UTTypeDescription</key>
+                                <string>Radio-Oracle Series File</string>
+                                <key>UTTypeConformsTo</key>
+                                <array>
+                                    <string>public.zip-archive</string>
+                                    <string>public.data</string>
+                                </array>
+                                <key>UTTypeTagSpecification</key>
+                                <dict>
+                                    <key>public.filename-extension</key>
+                                    <array>
+                                        <string>roseries</string>
+                                    </array>
+                                    <key>public.mime-type</key>
+                                    <string>application/vnd.openardf.radio-oracle-series+zip</string>
+                                </dict>
+                                <key>UTTypeIconFile</key>
+                                <string>Radio-Oracle-Series.icns</string>
+                            </dict>
+                        </array>
+                    """.stripIndent()
+                }
             }
             windows {
                 iconFile.set(desktopPackagingIconDir.file("Radio-Oracle.ico").asFile)
@@ -85,6 +119,7 @@ compose.desktop {
 def desktopMainClass = "org.openardf.radiooracle.desktop.MainKt"
 def desktopAppName = "Radio-Oracle"
 def desktopDistributableDir = layout.buildDirectory.dir("compose/binaries/main/app")
+def macOSSeriesDocumentIcon = desktopPackagingIconDir.file("Radio-Oracle-Series.icns")
 def desktopJdeployBundleDir = layout.buildDirectory.dir("jdeploy")
 def desktopJdeployLibsDir = desktopJdeployBundleDir.map { it.dir("libs") }
 def desktopJdeployJarName = "Radio-Oracle-jdeploy.jar"
@@ -226,6 +261,20 @@ tasks.named("compileKotlin") {
     dependsOn(tasks.named("generateDesktopBuildInfo"))
 }
 
+def runDesktopPackagingCommand = { List<String> command ->
+    def process = new ProcessBuilder(command)
+            .redirectErrorStream(true)
+            .start()
+    def output = process.inputStream.getText("UTF-8")
+    def exitCode = process.waitFor()
+    if (exitCode != 0) {
+        throw new GradleException(
+                "Desktop packaging command failed (${exitCode}): ${command.join(" ")}\n${output}".trim()
+        )
+    }
+    output
+}
+
 tasks.matching { task ->
     task.name in [
             "createDistributable",
@@ -235,6 +284,64 @@ tasks.matching { task ->
 }.configureEach {
     dependsOn(tasks.named("jar"))
     outputs.upToDateWhen { false }
+}
+
+tasks.matching { task ->
+    task.name == "createDistributable"
+}.configureEach {
+    doLast {
+        if (!System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("mac")) {
+            return
+        }
+
+        def appBundle = new File(desktopDistributableDir.get().asFile, "${desktopAppName}.app")
+        def infoPlist = new File(appBundle, "Contents/Info.plist")
+        def appResources = new File(appBundle, "Contents/Resources")
+        def packagedSeriesIcon = new File(appResources, "Radio-Oracle-Series.icns")
+        def sourceSeriesIcon = macOSSeriesDocumentIcon.asFile
+
+        if (!infoPlist.isFile()) {
+            throw new GradleException("Expected macOS Info.plist at ${infoPlist.absolutePath}")
+        }
+        if (!sourceSeriesIcon.isFile()) {
+            throw new GradleException("Expected series document icon at ${sourceSeriesIcon.absolutePath}")
+        }
+        appResources.mkdirs()
+        Files.copy(
+                sourceSeriesIcon.toPath(),
+                packagedSeriesIcon.toPath(),
+                StandardCopyOption.REPLACE_EXISTING
+        )
+
+        // Compose currently writes the MIME value as a scalar and adds the
+        // association icon after jpackage signs the bundle. Normalize the
+        // document declaration and then sign the completed bundle so macOS
+        // Launch Services will accept it as the owner of .roseries files.
+        runDesktopPackagingCommand([
+                "/usr/bin/plutil",
+                "-replace",
+                "CFBundleDocumentTypes.0.CFBundleTypeMIMETypes",
+                "-json",
+                "[\"application/vnd.openardf.radio-oracle-series+zip\"]",
+                infoPlist.absolutePath
+        ])
+        runDesktopPackagingCommand([
+                "/usr/bin/plutil",
+                "-replace",
+                "CFBundleDocumentTypes.0.LSItemContentTypes",
+                "-json",
+                "[\"org.openardf.radiooracle.series\"]",
+                infoPlist.absolutePath
+        ])
+        runDesktopPackagingCommand([
+                "/usr/bin/codesign",
+                "--force",
+                "--deep",
+                "--sign",
+                "-",
+                appBundle.absolutePath
+        ])
+    }
 }
 
 tasks.matching { task ->
@@ -267,6 +374,29 @@ tasks.register("verifyDesktopDistributable") {
             if (!launcher.isFile() || !launcher.canExecute()) {
                 throw new GradleException("Expected executable macOS launcher at ${launcher.absolutePath}")
             }
+            def infoPlist = new File(appBundle, "Contents/Info.plist")
+            def documentIcon = new File(appBundle, "Contents/Resources/Radio-Oracle-Series.icns")
+            if (!documentIcon.isFile()) {
+                throw new GradleException("Expected macOS series document icon at ${documentIcon.absolutePath}")
+            }
+            def documentTypes = runDesktopPackagingCommand([
+                    "/usr/libexec/PlistBuddy",
+                    "-c",
+                    "Print :CFBundleDocumentTypes:0",
+                    infoPlist.absolutePath
+            ])
+            if (!documentTypes.contains("org.openardf.radiooracle.series") ||
+                    !documentTypes.contains("Radio-Oracle-Series.icns")) {
+                throw new GradleException("macOS .roseries document declaration is incomplete:\n${documentTypes}")
+            }
+            runDesktopPackagingCommand([
+                    "/usr/bin/codesign",
+                    "--verify",
+                    "--deep",
+                    "--strict",
+                    "--verbose=2",
+                    appBundle.absolutePath
+            ])
         }
     }
 }

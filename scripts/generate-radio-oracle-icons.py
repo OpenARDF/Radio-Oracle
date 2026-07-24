@@ -14,11 +14,16 @@ RES = ROOT / "app" / "src" / "main" / "res"
 DESKTOP_RESOURCE = ROOT / "desktopApp" / "src" / "main" / "resources" / "radio-oracle-logo.png"
 PACKAGING_DIR = ROOT / "desktopApp" / "packaging" / "icons"
 MAC_ICONSET_DIR = PACKAGING_DIR / "Radio-Oracle.iconset"
+MAC_SERIES_ICONSET_DIR = PACKAGING_DIR / "Radio-Oracle-Series.iconset"
 ROOT_ICON = ROOT / "icon.png"
 JDEPLOY_BUNDLE_ICON = ROOT / "jdeploy-bundle" / "icon.png"
 MAC_ICON = PACKAGING_DIR / "Radio-Oracle.icns"
+MAC_SERIES_ICON = PACKAGING_DIR / "Radio-Oracle-Series.icns"
 WINDOWS_ICON = PACKAGING_DIR / "Radio-Oracle.ico"
+WINDOWS_SERIES_ICON = PACKAGING_DIR / "Radio-Oracle-Series.ico"
 LINUX_ICON = PACKAGING_DIR / "Radio-Oracle.png"
+LINUX_SERIES_ICON = PACKAGING_DIR / "Radio-Oracle-Series.png"
+WINDOWS_ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
 
 BG_TOP = (12, 54, 67)
 BG_BOTTOM = (13, 104, 91)
@@ -204,6 +209,43 @@ def render_foreground(size: int) -> Image.Image:
     return img.resize((size, size), Image.Resampling.LANCZOS)
 
 
+def render_series_document_icon(size: int) -> Image.Image:
+    """Precompose a framed series-document icon for desktop file associations."""
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    icon_size = round(size * 0.82)
+    icon_x = (size - icon_size) // 2
+    icon_y = round(size * 0.08)
+    icon = render_full_icon(icon_size, rounded=True)
+
+    shadow_alpha = icon.getchannel("A").filter(
+        ImageFilter.GaussianBlur(radius=max(1, round(size * 0.025)))
+    )
+    shadow_alpha = shadow_alpha.point(lambda alpha: round(alpha * 0.42))
+    shadow = Image.new("RGBA", icon.size, (0, 0, 0, 0))
+    shadow.putalpha(shadow_alpha)
+    canvas.alpha_composite(
+        shadow,
+        (icon_x, icon_y + round(size * 0.025)),
+    )
+    canvas.alpha_composite(icon, (icon_x, icon_y))
+
+    frame = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    frame_draw = ImageDraw.Draw(frame, "RGBA")
+    frame_draw.rounded_rectangle(
+        [
+            icon_x,
+            icon_y,
+            icon_x + icon_size - 1,
+            icon_y + icon_size - 1,
+        ],
+        radius=round(icon_size * 0.21),
+        outline=(235, 255, 252, 105),
+        width=max(1, round(size * 0.008)),
+    )
+    canvas.alpha_composite(frame)
+    return canvas
+
+
 def save_webp(path: Path, image: Image.Image) -> None:
     image.save(path, "WEBP", quality=95, method=6)
 
@@ -241,17 +283,11 @@ def write_ico(path: Path, images: list[tuple[int, Image.Image]]) -> None:
     path.write_bytes(header + entries + payload)
 
 
-def write_icns(path: Path, chunks: list[tuple[str, Image.Image]]) -> None:
-    body = bytearray()
-    for icon_type, image in chunks:
-        temp_path = path.with_name(f".{icon_type}.png")
-        image.save(temp_path, "PNG")
-        png_data = temp_path.read_bytes()
-        temp_path.unlink()
-        body.extend(icon_type.encode("ascii"))
-        body.extend(struct.pack(">I", 8 + len(png_data)))
-        body.extend(png_data)
-    path.write_bytes(b"icns" + struct.pack(">I", 8 + len(body)) + body)
+def windows_icon_images(master: Image.Image) -> list[tuple[int, Image.Image]]:
+    return [
+        (size, master.resize((size, size), Image.Resampling.LANCZOS))
+        for size in WINDOWS_ICON_SIZES
+    ]
 
 
 def write_macos_icns(path: Path, iconset_dir: Path, fallback_master: Image.Image) -> None:
@@ -267,24 +303,18 @@ def write_macos_icns(path: Path, iconset_dir: Path, fallback_master: Image.Image
         except subprocess.CalledProcessError:
             pass
 
-    write_icns(
-        path,
-        [
-            ("icp4", fallback_master.resize((16, 16), Image.Resampling.LANCZOS)),
-            ("icp5", fallback_master.resize((32, 32), Image.Resampling.LANCZOS)),
-            ("icp6", fallback_master.resize((64, 64), Image.Resampling.LANCZOS)),
-            ("ic07", fallback_master.resize((128, 128), Image.Resampling.LANCZOS)),
-            ("ic08", fallback_master.resize((256, 256), Image.Resampling.LANCZOS)),
-            ("ic09", fallback_master.resize((512, 512), Image.Resampling.LANCZOS)),
-            ("ic10", fallback_master.resize((1024, 1024), Image.Resampling.LANCZOS)),
-        ],
-    )
+    # Pillow emits the modern ic07-ic14 chunk set, including the ic11
+    # 16-point Retina representation Finder uses in list view. Writing PNG
+    # payloads into the older icp4-icp6 chunks produces a valid-looking ICNS
+    # whose small representations decode as colored noise on current macOS.
+    fallback_master.save(path, "ICNS")
 
 
-def write_desktop_packaging_icons(master: Image.Image, mac_master: Image.Image) -> None:
-    PACKAGING_DIR.mkdir(parents=True, exist_ok=True)
-    MAC_ICONSET_DIR.mkdir(parents=True, exist_ok=True)
-
+def write_iconset(
+    iconset_dir: Path,
+    master: Image.Image,
+) -> None:
+    iconset_dir.mkdir(parents=True, exist_ok=True)
     iconset_sizes = {
         "icon_16x16.png": 16,
         "icon_16x16@2x.png": 32,
@@ -298,17 +328,23 @@ def write_desktop_packaging_icons(master: Image.Image, mac_master: Image.Image) 
         "icon_512x512@2x.png": 1024,
     }
     for filename, size in iconset_sizes.items():
-        mac_master.resize((size, size), Image.Resampling.LANCZOS).save(MAC_ICONSET_DIR / filename)
+        master.resize((size, size), Image.Resampling.LANCZOS).save(iconset_dir / filename)
 
+
+def write_desktop_packaging_icons(
+    master: Image.Image,
+    mac_master: Image.Image,
+    series_master: Image.Image,
+) -> None:
+    PACKAGING_DIR.mkdir(parents=True, exist_ok=True)
+    write_iconset(MAC_ICONSET_DIR, mac_master)
+    write_iconset(MAC_SERIES_ICONSET_DIR, series_master)
     write_macos_icns(MAC_ICON, MAC_ICONSET_DIR, mac_master)
-    write_ico(
-        WINDOWS_ICON,
-        [(16, master.resize((16, 16), Image.Resampling.LANCZOS)),
-         (32, master.resize((32, 32), Image.Resampling.LANCZOS)),
-         (48, master.resize((48, 48), Image.Resampling.LANCZOS)),
-         (256, master.resize((256, 256), Image.Resampling.LANCZOS))],
-    )
+    write_macos_icns(MAC_SERIES_ICON, MAC_SERIES_ICONSET_DIR, series_master)
+    write_ico(WINDOWS_ICON, windows_icon_images(master))
+    write_ico(WINDOWS_SERIES_ICON, windows_icon_images(series_master))
     master.resize((512, 512), Image.Resampling.LANCZOS).save(LINUX_ICON)
+    series_master.resize((512, 512), Image.Resampling.LANCZOS).save(LINUX_SERIES_ICON)
 
 
 def main() -> None:
@@ -346,6 +382,7 @@ def main() -> None:
     write_desktop_packaging_icons(
         render_full_icon(1024),
         mac_master=render_full_icon(1024, rounded=True),
+        series_master=render_series_document_icon(1024),
     )
 
 

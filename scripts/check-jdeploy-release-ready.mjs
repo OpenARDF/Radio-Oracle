@@ -49,6 +49,38 @@ function requireNotIncludes(label, text, unexpected) {
   }
 }
 
+function requireIconSignature(iconPath, signature) {
+  const icon = readFileSync(iconPath);
+  if (icon.length < signature.length || !icon.subarray(0, signature.length).equals(signature)) {
+    fail(`desktop packaging icon has the wrong native format: ${iconPath}`);
+  }
+  return icon;
+}
+
+function requireIcnsChunkTypes(iconPath, expectedTypes) {
+  const icon = requireIconSignature(iconPath, Buffer.from("icns"));
+  const declaredLength = icon.readUInt32BE(4);
+  requireEqual(`${iconPath} declared length`, declaredLength, icon.length);
+
+  const chunkTypes = new Set();
+  let offset = 8;
+  while (offset + 8 <= icon.length) {
+    const type = icon.toString("ascii", offset, offset + 4);
+    const length = icon.readUInt32BE(offset + 4);
+    if (length < 8 || offset + length > icon.length) {
+      fail(`${iconPath} has an invalid ${type} chunk length`);
+    }
+    chunkTypes.add(type);
+    offset += length;
+  }
+  requireEqual(`${iconPath} parsed length`, offset, icon.length);
+  for (const type of expectedTypes) {
+    if (!chunkTypes.has(type)) {
+      fail(`${iconPath} must contain the modern ${type} representation`);
+    }
+  }
+}
+
 function gradleCommand() {
   return platform() === "win32" ? resolve("gradlew.bat") : resolve("gradlew");
 }
@@ -88,6 +120,19 @@ if (!existsSync("icon.png")) {
 if (!packageJson.files?.includes("icon.png")) {
   fail("package.json must include icon.png in files so jDeploy downloads show the app icon");
 }
+const seriesDocumentType = packageJson.jdeploy?.documentTypes?.find(
+  documentType => documentType.extension === "roseries"
+);
+if (!seriesDocumentType) {
+  fail("package.json must register .roseries as a jDeploy document type");
+}
+requireEqual(
+  "jDeploy .roseries MIME type",
+  seriesDocumentType.mimetype,
+  "application/vnd.openardf.radio-oracle-series+zip"
+);
+requireEqual("jDeploy .roseries editor role", seriesDocumentType.editor, true);
+requireEqual("jDeploy .roseries custom MIME registration", seriesDocumentType.custom, true);
 
 const expectedBundledDependencies = ["node-fetch", "shelljs", "tar", "yauzl"];
 const bundledDependencies = packageJson.bundledDependencies || packageJson.bundleDependencies || [];
@@ -111,16 +156,45 @@ if (!desktopBuildGradle.includes("packageVersion = rootProject.ext.radioOracleVe
   fail("desktop native packageVersion must use rootProject.ext.radioOracleVersion");
 }
 requireIncludes("desktop native packaging icon configuration", desktopBuildGradle, "Radio-Oracle.icns");
+requireIncludes("desktop series document icon configuration", desktopBuildGradle, "Radio-Oracle-Series.icns");
+requireIncludes("desktop series document icon configuration", desktopBuildGradle, "Radio-Oracle-Series.ico");
+requireIncludes("desktop series document icon configuration", desktopBuildGradle, "Radio-Oracle-Series.png");
+requireIncludes("desktop series document UTI configuration", desktopBuildGradle, "org.openardf.radiooracle.series");
 requireIncludes("desktop native packaging icon configuration", desktopBuildGradle, "Radio-Oracle.ico");
 requireIncludes("desktop native packaging icon configuration", desktopBuildGradle, "Radio-Oracle.png");
 for (const iconPath of [
   "desktopApp/packaging/icons/Radio-Oracle.icns",
+  "desktopApp/packaging/icons/Radio-Oracle-Series.icns",
   "desktopApp/packaging/icons/Radio-Oracle.ico",
-  "desktopApp/packaging/icons/Radio-Oracle.png"
+  "desktopApp/packaging/icons/Radio-Oracle-Series.ico",
+  "desktopApp/packaging/icons/Radio-Oracle.png",
+  "desktopApp/packaging/icons/Radio-Oracle-Series.png"
 ]) {
   if (!existsSync(iconPath)) {
     fail(`desktop packaging icon is missing: ${iconPath}`);
   }
+}
+for (const iconPath of [
+  "desktopApp/packaging/icons/Radio-Oracle.icns",
+  "desktopApp/packaging/icons/Radio-Oracle-Series.icns"
+]) {
+  requireIcnsChunkTypes(
+    iconPath,
+    ["ic07", "ic08", "ic09", "ic10", "ic11", "ic12", "ic13", "ic14"]
+  );
+}
+for (const iconPath of [
+  "desktopApp/packaging/icons/Radio-Oracle.ico",
+  "desktopApp/packaging/icons/Radio-Oracle-Series.ico"
+]) {
+  const icon = requireIconSignature(iconPath, Buffer.from([0, 0, 1, 0]));
+  requireEqual(`${iconPath} image count`, icon.readUInt16LE(4), 7);
+}
+for (const iconPath of [
+  "desktopApp/packaging/icons/Radio-Oracle.png",
+  "desktopApp/packaging/icons/Radio-Oracle-Series.png"
+]) {
+  requireIconSignature(iconPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
 }
 requireIncludes("desktop jDeploy runtime configuration", desktopBuildGradle, "desktopJdeployRuntimeClasspath");
 for (const artifact of requiredJdeploySkikoRuntimeArtifacts) {
