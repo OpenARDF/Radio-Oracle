@@ -1523,6 +1523,42 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun preResultLongClickOverrideIsLimitedToCloudflareWebsiteItems() {
+        val resultItems = flatten(DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport))
+        val allowedIds = setOf(
+            "results.exports",
+            "results.exports.cloudflare-website",
+            "results.generate-public-site",
+            "results.publish-public-site",
+            "results.public-site-preview",
+            "results.open-public-site-preview",
+            "results.stop-public-site-preview",
+            "results.view-public-results",
+            "results.cloudflare-settings"
+        )
+
+        allowedIds.forEach { itemId ->
+            val item = resultItems.first { it.id == itemId }
+            assertTrue(itemId, DesktopNavigation.isPreResultsCloudflareItem(item))
+        }
+        assertFalse(
+            DesktopNavigation.isPreResultsCloudflareItem(
+                resultItems.first { it.id == "results.export-csv" }
+            )
+        )
+        assertTrue(
+            DesktopNavigation.requiresCompleteCloudflareSettings(
+                resultItems.first { it.id == "results.view-public-results" }
+            )
+        )
+        assertFalse(
+            DesktopNavigation.requiresCompleteCloudflareSettings(
+                resultItems.first { it.id == "results.cloudflare-settings" }
+            )
+        )
+    }
+
+    @Test
     fun viewPublicResultsReturnsToCloudflareWebsiteMenuOnBack() {
         val resultsState = DesktopNavState().switchWorkflow(DesktopWorkflow.ResultsExport)
         val exportsState = DesktopNavigation.selectItem(

@@ -91,6 +91,24 @@ class EventProjectFileTest {
     }
 
     @Test
+    fun serializesAndDeserializesPublicResultsPublication() {
+        val publication = PublicResultsPublication(
+            url = "https://openardf-results.pages.dev/2026-08-13-championship/",
+            publishedAtIso = "2026-07-27T12:00:00Z"
+        )
+        val original = EventProjectFile(
+            raceData = raceData(),
+            publicResultsPublication = publication
+        )
+
+        val encoded = EventProjectFileJson.encode(original)
+        val decoded = EventProjectFileJson.decode(encoded)
+
+        assertTrue(encoded.contains("\"publicResultsPublication\""))
+        assertEquals(publication, decoded.publicResultsPublication)
+    }
+
+    @Test
     fun seriesLinkDoesNotStoreManifestOwnedSeriesName() {
         val encoded = EventProjectFileJson.encode(
             EventProjectFile(

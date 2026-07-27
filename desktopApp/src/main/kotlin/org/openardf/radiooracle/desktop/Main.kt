@@ -206,6 +206,7 @@ import org.openardf.radiooracle.shared.event.EventValidationIssueSeverity
 import org.openardf.radiooracle.shared.event.EventValidationRules
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
+import org.openardf.radiooracle.shared.event.PublicResultsPublication
 import org.openardf.radiooracle.shared.event.ResultRecalculationOutcome
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
@@ -431,6 +432,68 @@ internal fun loadPublicResultSeriesRaces(
         DesktopPublicResultSeriesRace(project, courseInfo, awardDisplayMode)
     }
     return seriesFile.name to races
+}
+
+internal fun savedPublicResultsPublication(
+    manifestPath: Path?,
+    currentProject: EventProjectFile?
+): PublicResultsPublication? =
+    manifestPath
+        ?.let(DesktopEventSeriesFiles::read)
+        ?.publicResultsPublication
+        ?: currentProject?.publicResultsPublication
+
+internal fun configuredPublicResultsUrl(
+    settings: DesktopCloudflarePagesPublishSettings,
+    currentProject: EventProjectFile?,
+    series: Pair<String, List<DesktopPublicResultSeriesRace>>?,
+    generatedAt: java.time.Instant = java.time.Instant.now()
+): String? {
+    if (!settings.isComplete() || currentProject == null) {
+        return null
+    }
+    val publicPath = if (series == null) {
+        DesktopPublicResultSiteExports.eventPath(currentProject, generatedAt)
+    } else {
+        val firstRace = series.second.firstOrNull()?.projectFile ?: return null
+        DesktopPublicResultSiteExports.seriesPath(series.first, firstRace, generatedAt)
+    }
+    return publicResultsUrl(settings, publicPath)
+}
+
+internal fun publicResultsUrl(
+    settings: DesktopCloudflarePagesPublishSettings,
+    publicPath: String
+): String? =
+    settings
+        .takeIf(DesktopCloudflarePagesPublishSettings::isComplete)
+        ?.let {
+            DesktopCloudflarePagesPublisher.publicResultsUrl(
+                it.publicSiteBaseUrl(),
+                publicPath
+            )
+        }
+
+internal fun persistPublicResultsPublication(
+    manifestPath: Path?,
+    projectSession: DesktopProjectSession,
+    publication: PublicResultsPublication
+): EventProjectFile? {
+    if (manifestPath != null) {
+        val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            seriesFile.copy(publicResultsPublication = publication)
+        )
+        return null
+    }
+    val updatedProject = projectSession.updateCurrentProject { currentProject ->
+        currentProject.copy(publicResultsPublication = publication)
+    }
+    if (projectSession.currentPath != null) {
+        projectSession.save()
+    }
+    return updatedProject
 }
 
 private enum class DesktopSportIdentAppendOutcome {
@@ -815,17 +878,6 @@ fun main(args: Array<String>) = application {
         val activeLocalResultsWebServerRefreshJob by rememberUpdatedState(localResultsWebServerRefreshJob)
         val activePublicResultSitePreviewServer by rememberUpdatedState(publicResultSitePreviewServer)
 
-        LaunchedEffect(projectFile?.raceData?.race?.id) {
-            publishedPublicResultSiteUrl = null
-            localResultsWebServerRefreshJob?.cancel()
-            localResultsWebServerRefreshJob = null
-            localResultsWebServer?.stop()
-            localResultsWebServer = null
-            localResultsWebServerUrl = null
-            localResultsWebServerDirectory = null
-            localResultsWebServerEventPath = null
-        }
-
         DisposableEffect(Unit) {
             onDispose {
                 activeEventFileTransferServer?.stop()
@@ -887,6 +939,20 @@ fun main(args: Array<String>) = application {
                 seriesLink = projectSession.currentProject?.seriesLink,
                 store = DesktopEventSeriesFiles
             )
+        }
+
+        LaunchedEffect(projectFile?.raceData?.race?.id, projectSession.currentPath) {
+            val savedPublication = runCatching {
+                savedPublicResultsPublication(currentSeriesManifestPath(), projectFile)
+            }.getOrNull()
+            publishedPublicResultSiteUrl = savedPublication?.url
+            localResultsWebServerRefreshJob?.cancel()
+            localResultsWebServerRefreshJob = null
+            localResultsWebServer?.stop()
+            localResultsWebServer = null
+            localResultsWebServerUrl = null
+            localResultsWebServerDirectory = null
+            localResultsWebServerEventPath = null
         }
 
         fun refreshSavedEventSeriesMetadata(savedProject: EventProjectFile, savedPath: Path): String? {
@@ -4238,7 +4304,8 @@ fun main(args: Array<String>) = application {
                     val paths = exportPublicResultsSiteForCurrentContext(directory, currentProject)
                     publicResultSiteDirectory = paths.directory
                     publicResultSiteEventPath = paths.eventPath
-                    publishedPublicResultSiteUrl = null
+                    publishedPublicResultSiteUrl =
+                        publicResultsUrl(cloudflarePagesPublishSettings, paths.eventPath)
                     syncProjectState()
                     projectStatusText = "Generated public results site at ${paths.eventDirectory}"
                     DesktopDebugLog.info(
@@ -4398,7 +4465,26 @@ fun main(args: Array<String>) = application {
                 }.onSuccess { result ->
                     val publicUrl = DesktopCloudflarePagesPublisher.publicResultsUrl(result.url, publicResultSiteEventPath)
                     publishedPublicResultSiteUrl = publicUrl
-                    projectStatusText = "Published public results site to $publicUrl"
+                    val publication = PublicResultsPublication(
+                        url = publicUrl,
+                        publishedAtIso = java.time.Instant.now().toString()
+                    )
+                    val persistenceError = runCatching {
+                        persistPublicResultsPublication(
+                            manifestPath = currentSeriesManifestPath(),
+                            projectSession = projectSession,
+                            publication = publication
+                        )?.let {
+                            projectFile = it
+                            syncProjectState()
+                        }
+                    }.exceptionOrNull()
+                    projectStatusText = if (persistenceError == null) {
+                        "Published public results site to $publicUrl and saved its link."
+                    } else {
+                        "Published public results site to $publicUrl, but its link could not be saved: " +
+                            (persistenceError.message ?: persistenceError::class.simpleName)
+                    }
                     DesktopDebugLog.info("PublicResults", "$projectStatusText root=$directory project=${result.projectName} branch=${result.branch}")
                 }.onFailure { error ->
                     projectStatusText = "Public results site publish failed: ${error.message ?: error::class.simpleName}"
@@ -5907,7 +5993,9 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.StopLocalResultsWebServer -> localResultsWebServerUrl != null
                 DesktopNavAction.OpenPublicResultsSitePreview -> publicResultSiteDirectory != null
                 DesktopNavAction.PublishPublicResultsSite ->
-                    publicResultSiteDirectory != null && !isPublishingPublicResultSite
+                    publicResultSiteDirectory != null &&
+                        !isPublishingPublicResultSite &&
+                        cloudflarePagesPublishSettings.isComplete()
                 DesktopNavAction.StopPublicResultsSitePreview -> publicResultSitePreviewUrl != null
                 DesktopNavAction.SendRobis -> projectFile != null && !isSendingLiveResults
                 DesktopNavAction.SendEventFileToAndroid -> projectFile != null
@@ -6024,6 +6112,8 @@ fun main(args: Array<String>) = application {
                     when {
                         publicResultSiteDirectory == null -> "Generate a public results site before publishing."
                         isPublishingPublicResultSite -> "The public results site is already being published."
+                        !cloudflarePagesPublishSettings.isComplete() ->
+                            "Save complete Cloudflare Settings before publishing."
                         else -> "Public results site publishing is not available right now."
                     }
                 DesktopNavAction.StopPublicResultsSitePreview ->
@@ -7167,7 +7257,11 @@ fun main(args: Array<String>) = application {
             isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
             areAliasesEnabled = areAliasesEnabled,
             localResultsWebServerUrl = localResultsWebServerUrl,
-            publishedPublicResultSiteUrl = publishedPublicResultSiteUrl,
+            publishedPublicResultSiteUrl = publishedPublicResultSiteUrl ?: configuredPublicResultsUrl(
+                settings = cloudflarePagesPublishSettings,
+                currentProject = projectSession.currentProject,
+                series = publicResultSeriesRaces()
+            ),
             printerDiagnostics = printerDiagnostics,
             isUpdateCheckingEnabled = isUpdateCheckingEnabled,
             sportIdentPortDiscoveryMode = sportIdentPortDiscoveryMode,
@@ -11846,6 +11940,8 @@ private fun RadioOManagerDesktopApp(
                         NavigationRail(
                             navState = navState,
                             navigationReadiness = navigationReadiness,
+                            bypassedDisabledNavigation = activeBypassedDisabledNavigation,
+                            hasCompleteCloudflareSettings = cloudflarePagesPublishSettings.isComplete(),
                             isNavActionEnabled = isNavActionEnabled,
                             disabledNavActionReason = disabledNavActionReason,
                             courseAnalysisResult = courseAnalysisResult.takeIf {
@@ -12798,6 +12894,8 @@ private fun Modifier.disabledMenuLongClickOverride(
 private fun NavigationRail(
     navState: DesktopNavState,
     navigationReadiness: DesktopNavigationReadiness,
+    bypassedDisabledNavigation: BypassedDisabledNavigation?,
+    hasCompleteCloudflareSettings: Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     disabledNavActionReason: (DesktopNavAction) -> String?,
     courseAnalysisResult: DesktopCourseAnalysisSummary?,
@@ -12816,12 +12914,36 @@ private fun NavigationRail(
     @Composable
     fun NavigationMenuButton(item: DesktopNavItem) {
         val isSelected = item.id == navState.selectedItemId && item.children.isEmpty()
-        val isNavigationEnabled = DesktopNavigation.isItemEnabled(item, navigationReadiness)
+        val isPreResultsCloudflareBypassEnabled =
+            bypassedDisabledNavigation?.workflow == DesktopWorkflow.ResultsExport &&
+                DesktopNavigation.isPreResultsCloudflareItem(item) &&
+                (
+                    !DesktopNavigation.requiresCompleteCloudflareSettings(item) ||
+                        hasCompleteCloudflareSettings
+                    )
+        val isNavigationEnabled =
+            (
+                DesktopNavigation.isItemEnabled(item, navigationReadiness) ||
+                    isPreResultsCloudflareBypassEnabled
+                ) &&
+                (
+                    !DesktopNavigation.requiresCompleteCloudflareSettings(item) ||
+                        hasCompleteCloudflareSettings
+                    )
         val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
         val isEnabled = isNavigationEnabled && actionEnabled
         val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledMenu(item, navigationReadiness)
-        val disabledReason = DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, navigationReadiness)
-            ?: item.action?.let(disabledNavActionReason)
+        val disabledReason = if (isEnabled) {
+            null
+        } else if (
+            DesktopNavigation.requiresCompleteCloudflareSettings(item) &&
+            !hasCompleteCloudflareSettings
+        ) {
+            "Save complete Cloudflare Settings before viewing public results."
+        } else {
+            DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, navigationReadiness)
+                ?: item.action?.let(disabledNavActionReason)
+        }
         DisabledReasonTooltip(
             reason = disabledReason,
             placement = DisabledReasonTooltipPlacement.RightOfCursor
@@ -24320,7 +24442,7 @@ private fun PublicResultsSiteLinkPanel(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "Published public results",
+            text = "Public results address",
             color = DesktopPalette.Disconnected,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold
@@ -24347,7 +24469,7 @@ private fun PublicResultsSiteLinkPanel(
             contentScale = ContentScale.Fit
         )
         Text(
-            text = "Scan the QR code or open the link below to view the published race results.",
+            text = "Scan the QR code or open the link below. Generate and publish before sharing a newly configured address.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )

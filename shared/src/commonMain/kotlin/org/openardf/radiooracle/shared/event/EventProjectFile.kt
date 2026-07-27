@@ -37,7 +37,8 @@ data class EventProjectFile(
     val schemaVersion: Int = EventProjectFileFormat.CURRENT_SCHEMA_VERSION,
     val appName: String = EventProjectFileFormat.APP_NAME,
     val raceData: EventRaceData,
-    val seriesLink: EventSeriesLink? = null
+    val seriesLink: EventSeriesLink? = null,
+    val publicResultsPublication: PublicResultsPublication? = null
 ) {
     /** Returns true when this file schema can be read by the current shared code. */
     fun isSupportedSchema(): Boolean =

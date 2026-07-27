@@ -51,6 +51,21 @@ class EventSeriesFileTest {
     }
 
     @Test
+    fun serializesAndDeserializesPublicResultsPublication() {
+        val publication = PublicResultsPublication(
+            url = "https://openardf-results.pages.dev/2026-08-13-championship-series/",
+            publishedAtIso = "2026-07-27T12:00:00Z"
+        )
+        val original = seriesFile().copy(publicResultsPublication = publication)
+
+        val encoded = EventSeriesFileJson.encode(original)
+        val decoded = EventSeriesFileJson.decode(encoded)
+
+        assertTrue(encoded.contains("\"publicResultsPublication\""))
+        assertEquals(publication, decoded.publicResultsPublication)
+    }
+
+    @Test
     fun rejectsUnsupportedSchemaVersion() {
         val encoded = EventSeriesFileJson.encode(seriesFile())
             .replace("\"schemaVersion\": 1", "\"schemaVersion\": 99")

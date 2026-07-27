@@ -241,6 +241,27 @@ class DesktopCloudflarePagesPublisherTest {
         )
     }
 
+    @Test
+    fun settingsAreCompleteOnlyWhenCloudflareCredentialsArePresent() {
+        assertFalse(DesktopCloudflarePagesPublishSettings().isComplete())
+        assertFalse(
+            DesktopCloudflarePagesPublishSettings(
+                accountId = "account",
+                apiToken = " "
+            ).isComplete()
+        )
+
+        val settings = DesktopCloudflarePagesPublishSettings(
+            projectName = " openardf-results ",
+            branch = " main ",
+            accountId = " account ",
+            apiToken = " token "
+        )
+
+        assertTrue(settings.isComplete())
+        assertEquals("https://openardf-results.pages.dev", settings.publicSiteBaseUrl())
+    }
+
     private fun generatedSiteDirectory(): Path {
         val root = Files.createTempDirectory("rom-public-site-publish")
         val eventDirectory = root.resolve("2026-07-11-practice")

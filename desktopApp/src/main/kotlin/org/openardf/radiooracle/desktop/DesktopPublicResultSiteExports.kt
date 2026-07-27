@@ -130,19 +130,7 @@ object DesktopPublicResultSiteExports {
         listOf(directory, rootDataDirectory, eventDirectory, assetsDirectory, dataDirectory, downloadsDirectory)
             .forEach(Files::createDirectories)
 
-        val finalResultsJson = FinalResultJsonExports.results(
-            projectFile.raceData,
-            protectedCourseInfoByCategoryId,
-            awardDisplayMode
-        )
-        val liveResultsJson = LiveResultJsonExports.results(projectFile.raceData)
-        val iofResultListXml = IofXmlExports.resultList(projectFile.raceData)
-        val printableResultsHtml = HtmlResultExports.results(
-            raceData = projectFile.raceData,
-            appVersion = appVersion,
-            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-            awardDisplayMode = awardDisplayMode
-        )
+        val hasResults = EventResultDetails.from(projectFile.raceData).isNotEmpty()
 
         val rootIndexPath = directory.resolve("index.html")
         val indexPath = eventDirectory.resolve("index.html")
@@ -157,12 +145,36 @@ object DesktopPublicResultSiteExports {
         writeText(assetsDirectory.resolve("site.js"), siteJs())
         writeText(directory.resolve("_headers"), headersText())
         writeText(publicResultsPath, publicResultsJson(projectFile, generatedAt, awardDisplayMode))
-        writeText(dataDirectory.resolve("final-results.json"), finalResultsJson)
-        writeText(dataDirectory.resolve("live-results.json"), liveResultsJson)
-        writeText(finalResultsPath, finalResultsJson)
-        writeText(liveResultsPath, liveResultsJson)
-        writeText(iofResultsPath, iofResultListXml)
-        writeText(printableResultsPath, printableResultsHtml)
+        if (hasResults) {
+            val finalResultsJson = FinalResultJsonExports.results(
+                projectFile.raceData,
+                protectedCourseInfoByCategoryId,
+                awardDisplayMode
+            )
+            val liveResultsJson = LiveResultJsonExports.results(projectFile.raceData)
+            val iofResultListXml = IofXmlExports.resultList(projectFile.raceData)
+            val printableResultsHtml = HtmlResultExports.results(
+                raceData = projectFile.raceData,
+                appVersion = appVersion,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                awardDisplayMode = awardDisplayMode
+            )
+            writeText(dataDirectory.resolve("final-results.json"), finalResultsJson)
+            writeText(dataDirectory.resolve("live-results.json"), liveResultsJson)
+            writeText(finalResultsPath, finalResultsJson)
+            writeText(liveResultsPath, liveResultsJson)
+            writeText(iofResultsPath, iofResultListXml)
+            writeText(printableResultsPath, printableResultsHtml)
+        } else {
+            listOf(
+                dataDirectory.resolve("final-results.json"),
+                dataDirectory.resolve("live-results.json"),
+                finalResultsPath,
+                liveResultsPath,
+                iofResultsPath,
+                printableResultsPath
+            ).forEach(Files::deleteIfExists)
+        }
         val eventSummary = PublishedEventSummary(
             path = eventPath,
             name = projectFile.raceData.race.name,
@@ -196,11 +208,10 @@ object DesktopPublicResultSiteExports {
         appVersion: String = "Desktop",
         generatedAt: Instant = Instant.now()
     ): DesktopPublicResultSiteExportPaths {
-        val racesWithResults = races.filter { EventResultDetails.from(it.projectFile.raceData).isNotEmpty() }
-        require(racesWithResults.isNotEmpty()) {
-            "The Race Series does not contain any races with results to publish."
+        require(races.isNotEmpty()) {
+            "The Race Series does not contain any races to publish."
         }
-        val raceExports = racesWithResults.map { race ->
+        val raceExports = races.map { race ->
             val paths = export(
                 directory = directory,
                 projectFile = race.projectFile,
@@ -215,7 +226,7 @@ object DesktopPublicResultSiteExports {
                 courseGraphicPaths = exportCourseGraphics(paths, race)
             )
         }
-        val seriesPath = seriesPath(seriesName, racesWithResults.first().projectFile, generatedAt)
+        val seriesPath = seriesPath(seriesName, races.first().projectFile, generatedAt)
         val seriesDirectory = directory.resolve(seriesPath)
         val assetsDirectory = seriesDirectory.resolve("assets")
         val dataDirectory = seriesDirectory.resolve("data")
@@ -230,9 +241,9 @@ object DesktopPublicResultSiteExports {
         val summary = PublishedEventSummary(
             path = seriesPath,
             name = seriesName,
-            start = racesWithResults.minOf { it.projectFile.raceData.race.startDateTimeIso },
+            start = races.minOf { it.projectFile.raceData.race.startDateTimeIso },
             generatedAt = generatedAt.toString(),
-            resultCount = racesWithResults.sumOf { EventResultDetails.from(it.projectFile.raceData).size }
+            resultCount = races.sumOf { EventResultDetails.from(it.projectFile.raceData).size }
         )
         val rootDataDirectory = directory.resolve("data")
         Files.createDirectories(rootDataDirectory)
@@ -334,14 +345,14 @@ object DesktopPublicResultSiteExports {
     private fun String.safePathSegment(): String =
         lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "course" }
 
-    private fun seriesPath(seriesName: String, firstRace: EventProjectFile, generatedAt: Instant): String {
+    internal fun seriesPath(seriesName: String, firstRace: EventProjectFile, generatedAt: Instant): String {
         val date = firstRace.raceData.race.startDateTimeIso.take(10)
             .takeIf { it.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
             ?: generatedAt.toString().take(10)
         return "$date-${seriesName.safePathSegment()}-series"
     }
 
-    private fun eventPath(projectFile: EventProjectFile, generatedAt: Instant): String {
+    internal fun eventPath(projectFile: EventProjectFile, generatedAt: Instant): String {
         val datePrefix = projectFile.raceData.race.startDateTimeIso
             .take(10)
             .takeIf { it.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
@@ -390,7 +401,7 @@ object DesktopPublicResultSiteExports {
             append(",\n")
             append("  \"resultCount\": ${results.size},\n")
             append("  \"publicationNotice\": ")
-            appendJsonString(awards.publicationNotice.orEmpty())
+            appendJsonString(awards.publicationNotice.takeIf { results.isNotEmpty() }.orEmpty())
             append(",\n")
             append("  \"awards\": ")
             appendAwardsJson(awards)
@@ -521,11 +532,16 @@ object DesktopPublicResultSiteExports {
             """<p class="empty-state">No public result races have been generated yet.</p>"""
         } else {
             races.joinToString(separator = "\n") { event ->
+                val publicationSummary = if (event.resultCount == 0) {
+                    "Coming Soon | Scheduled ${htmlText(event.start)}"
+                } else {
+                    "${event.resultCount} results | Published ${htmlText(event.generatedAt)}"
+                }
                 """
                 <a class="event-link" href="${htmlText(event.path)}/">
                   <span>
                     <strong>${htmlText(event.name)}</strong>
-                    <small>${htmlText(event.start)} | ${event.resultCount} results | Published ${htmlText(event.generatedAt)}</small>
+                    <small>$publicationSummary</small>
                   </span>
                 </a>
                 """.trimIndent()
@@ -580,7 +596,7 @@ object DesktopPublicResultSiteExports {
               <p id="event-meta" class="summary">Loading results...</p>
               <a class="parent-link" href="../">All published results</a>
             </div>
-            <nav class="download-links" aria-label="Downloads">
+            <nav id="download-links" class="download-links" aria-label="Downloads">
               <a href="downloads/printable-results.html">Printable HTML</a>
               <a href="downloads/final-results.json">Final JSON</a>
               <a href="downloads/iof-result-list.xml">IOF XML</a>
@@ -594,7 +610,13 @@ object DesktopPublicResultSiteExports {
               <div><span>Published</span><strong id="published-at">Pending</strong></div>
             </section>
 
-            <section class="panel">
+            <section id="coming-soon-panel" class="panel coming-soon" hidden>
+              <p class="eyebrow">Coming Soon</p>
+              <h2>Results will appear here</h2>
+              <p>This page is ready for the event. Return after the race begins for preliminary results.</p>
+            </section>
+
+            <section id="results-panel" class="panel">
               <div class="panel-heading">
                 <div>
                   <h2>Results</h2>
@@ -610,7 +632,7 @@ object DesktopPublicResultSiteExports {
               <div id="awards"></div>
             </section>
 
-            <section class="panel">
+            <section id="route-downloads-panel" class="panel">
               <h2>Route Downloads</h2>
               <p>Course route KML files and route graphics will appear here once they are generated from Course Analyzer exports.</p>
               <div id="route-downloads" class="empty-state">No route downloads in this export.</div>
@@ -665,6 +687,10 @@ object DesktopPublicResultSiteExports {
                             buildJsonObject {
                                 put("name", race.projectFile.raceData.race.name)
                                 put("start", race.projectFile.raceData.race.startDateTimeIso)
+                                put(
+                                    "resultCount",
+                                    EventResultDetails.from(race.projectFile.raceData).size
+                                )
                                 put("dataUrl", "../${race.paths.eventPath}/data/public-results.json")
                                 put("downloadsUrl", "../${race.paths.eventPath}/downloads/")
                                 put(
@@ -714,6 +740,10 @@ object DesktopPublicResultSiteExports {
           return `<section class="course-diagrams" aria-label="2D course diagrams"><h3>2D Course Diagram${'$'}{graphics.length===1 ? "" : "s"}</h3><div class="course-diagram-grid">${'$'}{graphics.map((url,index)=>`<figure><img src="${'$'}{escapeHtml(url)}" alt="2D course diagram ${'$'}{index+1} for ${'$'}{escapeHtml(race.name)}"></figure>`).join("")}</div></section>`
         }
         function renderRace(root,race,data,raceIndex){
+          if(data.resultCount===0){
+            root.innerHTML=`<section class="series-race coming-soon"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1} | Coming Soon</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Scheduled ${'$'}{escapeHtml(data.event.start)}</p></div></div><section class="panel"><h3>Results will appear here</h3><p>Return after this race begins for preliminary results.</p></section></section>`;
+            return
+          }
           root.innerHTML=`<section class="series-race"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1}</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Start ${'$'}{escapeHtml(data.event.start)} | ${'$'}{data.resultCount} results</p></div><nav class="download-links" aria-label="${'$'}{escapeHtml(data.event.name)} downloads"><a href="${'$'}{escapeHtml(race.downloadsUrl)}printable-results.html">Printable HTML</a><a href="${'$'}{escapeHtml(race.downloadsUrl)}iof-result-list.xml">IOF XML</a></nav></div>${'$'}{courseGraphicsHtml(race)}<section class="panel"><div class="panel-heading"><div><h3>Results</h3><p>Category results, points, runtime, status, and punch order.</p></div><input type="search" placeholder="Filter this race" aria-label="Filter ${'$'}{escapeHtml(data.event.name)} results"></div><div class="race-results">${'$'}{resultsHtml(data,raceIndex)}</div></section></section>`;
           const input=root.querySelector("input[type=search]");
           input.addEventListener("input",event=>{root.querySelector(".race-results").innerHTML=resultsHtml(data,raceIndex,event.target.value)})
@@ -739,7 +769,10 @@ object DesktopPublicResultSiteExports {
           if(!response.ok)throw new Error(`Unable to load series: ${'$'}{response.status}`);
           return response.json()
         }).then(async manifest=>{
-          document.getElementById("series-meta").textContent=`${'$'}{manifest.races.length} races with results | Published ${'$'}{manifest.generatedAt}`;
+          const racesWithResults=manifest.races.filter(race=>race.resultCount>0).length;
+          document.getElementById("series-meta").textContent=racesWithResults===0
+            ? `${'$'}{manifest.races.length} scheduled races | Results Coming Soon`
+            : `${'$'}{racesWithResults} of ${'$'}{manifest.races.length} races with results | Published ${'$'}{manifest.generatedAt}`;
           const root=document.getElementById("series-races");
           const raceData=await Promise.all(manifest.races.map(async race=>{
             const response=await fetch(race.dataUrl,{cache:"no-store"});
@@ -769,6 +802,7 @@ object DesktopPublicResultSiteExports {
         .overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:var(--line)}
         .overview>div{min-height:86px;padding:18px;background:var(--panel)}.overview span{display:block;margin-bottom:6px;color:var(--muted);font-size:13px}.overview strong{font-size:20px}
         .panel{padding:20px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+        .coming-soon{border-color:#9bbbd3;background:#f4f9fd}.coming-soon h2,.coming-soon h3{color:var(--accent-strong)}
         .series-race{display:grid;gap:16px;padding:24px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.race-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.race-heading h2{font-size:26px}.course-diagrams{padding:18px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe}.course-diagram-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,350px),700px));justify-content:start;gap:14px}.course-diagram-grid figure{margin:0}.course-diagram-grid img{display:block;width:100%;max-width:700px;height:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
         .panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}
         input[type=search]{width:min(280px,100%);height:40px;padding:0 12px;border:1px solid var(--line);border-radius:6px;font:inherit}
@@ -787,9 +821,12 @@ object DesktopPublicResultSiteExports {
         function text(value){return String(value ?? "")}
         function escapeHtml(value){return text(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;")}
         function renderSummary(data){
+          const isComingSoon=data.resultCount===0;
           document.getElementById("event-name").textContent=data.event.name;
-          document.getElementById("event-meta").textContent=`${'$'}{data.event.format} | ${'$'}{data.event.level} | Start ${'$'}{data.event.start}`;
-          if(data.publicationNotice){
+          document.getElementById("event-meta").textContent=isComingSoon
+            ? `${'$'}{data.event.format} | ${'$'}{data.event.level} | Scheduled ${'$'}{data.event.start}`
+            : `${'$'}{data.event.format} | ${'$'}{data.event.level} | Start ${'$'}{data.event.start}`;
+          if(!isComingSoon && data.publicationNotice){
             const notice=document.createElement("p");
             notice.className="notice";
             notice.textContent=data.publicationNotice;
@@ -797,7 +834,12 @@ object DesktopPublicResultSiteExports {
           }
           document.getElementById("result-count").textContent=data.resultCount;
           document.getElementById("category-count").textContent=data.categories.length;
-          document.getElementById("published-at").textContent=data.generatedAt
+          document.getElementById("published-at").textContent=data.generatedAt;
+          document.getElementById("coming-soon-panel").hidden=!isComingSoon;
+          document.getElementById("results-panel").hidden=isComingSoon;
+          document.getElementById("awards-panel").hidden=true;
+          document.getElementById("route-downloads-panel").hidden=isComingSoon;
+          document.getElementById("download-links").hidden=isComingSoon
         }
         function resultSearchText(result){
           const splitText=(result.splits || []).map(split=>`${'$'}{split.control} ${'$'}{split.status} ${'$'}{split.legTime} ${'$'}{split.cumulativeTime} ${'$'}{split.legPlace}`).join(" ");
@@ -868,9 +910,11 @@ object DesktopPublicResultSiteExports {
         });
         loadResults().then(data=>{
           renderSummary(data);
-          renderResults(data);
-          renderAwards(data);
-          document.getElementById("result-filter").addEventListener("input",event=>renderResults(data,event.target.value))
+          if(data.resultCount>0){
+            renderResults(data);
+            renderAwards(data);
+            document.getElementById("result-filter").addEventListener("input",event=>renderResults(data,event.target.value))
+          }
         }).catch(error=>{document.getElementById("results").textContent=error.message})
         """.trimIndent() + "\n"
 

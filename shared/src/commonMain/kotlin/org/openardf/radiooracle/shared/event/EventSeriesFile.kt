@@ -50,7 +50,8 @@ data class EventSeriesFile(
     val seriesId: String,
     val name: String,
     val events: List<EventSeriesEvent>,
-    val competitorMatchOverrides: List<EventSeriesCompetitorMatchOverride> = emptyList()
+    val competitorMatchOverrides: List<EventSeriesCompetitorMatchOverride> = emptyList(),
+    val publicResultsPublication: PublicResultsPublication? = null
 ) {
     init {
         require(seriesId.isNotBlank()) {

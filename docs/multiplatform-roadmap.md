@@ -1,6 +1,6 @@
 # Radio-Oracle Multiplatform Roadmap
 
-Status reviewed: 2026-07-10.
+Status reviewed: 2026-07-25.
 
 Radio-Oracle is no longer an Android-only app with a hypothetical desktop beta.
 It is a shared Kotlin project with Android race-day workflows, a desktop Race
@@ -285,6 +285,24 @@ These are deliberate limits in the current app, not necessarily defects.
 
 - Harden the desktop continuous SPORTident readout loop into a race-day reader
   workflow behind a platform device interface.
+- Build a shared, specification-backed SPORTident characterization suite before
+  broadening protocol behavior. Cover SI5, SI6, SI6*, SI8, SI9, pCard, tCard,
+  SI-Card10/11, and SIAC memory layouts; card-number family boundaries; maximum
+  punch counts; card-holder fields; CRC vectors; block ordering; erased and
+  zero-filled bytes; and malformed or incomplete reads. Use vendor documentation
+  and a licensed reference implementation as private behavioral oracles, but do
+  not commit proprietary binaries, restricted documentation, or license keys to
+  the public repository.
+- Audit protocol and model boundaries exposed by those fixtures. In particular,
+  verify permanent SI6* numbers above 9,999,999, the intended application limit
+  for encoded control codes above 511, tCard's 25 eight-byte records, SIAC owner
+  data that extends beyond block 0, and subsecond start/finish/readout semantics.
+  Preserve whole-second behavior where event rules require it, but do not
+  silently discard available precision before the scoring/export boundary.
+- Harden station discovery and remote/coupled-station communication against the
+  documented startup and retry cases. Characterize the double-`STX` wakeup
+  sequence, legacy base-protocol station detection, and bounded NAK retry/backoff
+  on real expendable hardware before changing the currently proven readout path.
 - Add a read-only Station Maintenance surface for attached SPORTident stations.
   It should show station serial number, reported function/mode, code number,
   firmware/config metadata when available, protocol flags, and explicit warnings
@@ -296,6 +314,16 @@ These are deliberate limits in the current app, not necessarily defects.
   protocol, or reports a clearly non-download mode.
 - Extend Station Maintenance to read coupled non-reader stations through a USB
   master/download station after the remote/coupled-station protocol is verified.
+- Add read-only station backup inspection and recovery. Read the backup pointer,
+  overflow state, and ring-buffer records in bounded chunks; decode both complete
+  card images and six-/eight-byte punch records; identify gaps and duplicates;
+  and preview recovered readouts before importing them into a Race File. Keep
+  backup erase/reset as a separate destructive maintenance action with explicit
+  confirmation and immediate read-back verification.
+- Treat live trigger/punch record ingestion as a follow-on to backup recovery.
+  Preserve station and card identity, subsecond time, and backup-memory record
+  addresses so missed auto-send records can be detected, recovered, deduplicated,
+  and audited rather than accepted as an unverified best-effort stream.
 - Treat station writes as a later guarded maintenance phase. A "set attached
   download box to READOUT" action may be added only after the SPORTident
   configuration write transaction is verified against real hardware and has

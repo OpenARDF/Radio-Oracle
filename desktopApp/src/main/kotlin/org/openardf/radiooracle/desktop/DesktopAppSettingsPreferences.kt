@@ -84,6 +84,17 @@ data class DesktopCloudflarePagesPublishSettings(
             apiToken = apiToken.trim()
         )
 
+    fun isComplete(): Boolean {
+        val normalized = normalized()
+        return normalized.projectName.isNotBlank() &&
+            normalized.branch.isNotBlank() &&
+            normalized.accountId.isNotBlank() &&
+            normalized.apiToken.isNotBlank()
+    }
+
+    fun publicSiteBaseUrl(): String =
+        "https://${normalized().projectName}.pages.dev"
+
     fun request(directory: java.nio.file.Path): DesktopCloudflarePagesPublishRequest {
         val normalized = normalized()
         return DesktopCloudflarePagesPublishRequest(

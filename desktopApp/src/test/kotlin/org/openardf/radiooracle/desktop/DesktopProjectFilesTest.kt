@@ -48,8 +48,10 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
 import org.openardf.radiooracle.shared.files.IofXmlValidator
+import org.openardf.radiooracle.shared.event.PublicResultsPublication
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -64,6 +66,78 @@ class DesktopProjectFilesTest {
         DesktopProjectFiles.write(path, projectFile)
 
         assertEquals(projectFile, DesktopProjectFiles.read(path))
+    }
+
+    @Test
+    fun persistsPublicResultsUrlInStandaloneRaceFile() {
+        val directory = Files.createTempDirectory("rom-public-results-publication")
+        val path = directory.resolve("sample.rom.json")
+        DesktopProjectFiles.write(path, EventProjectFile(raceData = raceData()))
+        val session = DesktopProjectSession(DesktopProjectFiles)
+        session.open(path)
+        val publication = PublicResultsPublication(
+            url = "https://openardf-results.pages.dev/2026-05-31-desktop-file-race/",
+            publishedAtIso = "2026-05-31T12:00:00Z"
+        )
+
+        val updatedProject = persistPublicResultsPublication(null, session, publication)
+
+        assertEquals(publication, updatedProject?.publicResultsPublication)
+        assertEquals(publication, DesktopProjectFiles.read(path).publicResultsPublication)
+        assertFalse(session.hasUnsavedChanges)
+    }
+
+    @Test
+    fun persistsPublicResultsUrlInSeriesManifest() {
+        val directory = Files.createTempDirectory("rom-series-public-results-publication")
+        val manifestPath = directory.resolve("championship.series.radio-oracle.json")
+        DesktopEventSeriesFiles.write(
+            manifestPath,
+            EventSeriesFile(
+                seriesId = "series",
+                name = "Championship",
+                events = emptyList()
+            )
+        )
+        val session = DesktopProjectSession(DesktopProjectFiles)
+        session.newProject(EventProjectFile(raceData = raceData()))
+        val publication = PublicResultsPublication(
+            url = "https://openardf-results.pages.dev/2026-05-31-championship-series/",
+            publishedAtIso = "2026-05-31T12:00:00Z"
+        )
+
+        val updatedProject = persistPublicResultsPublication(manifestPath, session, publication)
+
+        assertEquals(null, updatedProject)
+        assertEquals(publication, DesktopEventSeriesFiles.read(manifestPath).publicResultsPublication)
+        assertEquals(null, session.currentProject?.publicResultsPublication)
+    }
+
+    @Test
+    fun derivesPublicResultsUrlBeforeFirstPublicationWhenSettingsAreComplete() {
+        val settings = DesktopCloudflarePagesPublishSettings(
+            projectName = " openardf-results ",
+            branch = "main",
+            accountId = "account",
+            apiToken = "token"
+        )
+
+        assertEquals(
+            "https://openardf-results.pages.dev/2026-05-31-desktop-file-race/",
+            configuredPublicResultsUrl(
+                settings = settings,
+                currentProject = EventProjectFile(raceData = raceData()),
+                series = null
+            )
+        )
+        assertEquals(
+            null,
+            configuredPublicResultsUrl(
+                settings = settings.copy(apiToken = ""),
+                currentProject = EventProjectFile(raceData = raceData()),
+                series = null
+            )
+        )
     }
 
     @Test
@@ -381,13 +455,51 @@ class DesktopProjectFilesTest {
         assertTrue(index.contains("series-races"))
         assertTrue(manifest.contains("Desktop File Race"))
         assertTrue(manifest.contains("Second Series Race"))
-        assertTrue(!manifest.contains("Unfinished Series Race"))
+        assertTrue(manifest.contains("Unfinished Series Race"))
+        assertTrue(manifest.contains("\"resultCount\":0"))
+        assertTrue(siteJs.contains("Results Coming Soon"))
+        assertTrue(siteJs.contains("Return after this race begins for preliminary results."))
         assertTrue(siteJs.contains("courseGraphicsHtml(race)"))
         assertTrue(siteJs.indexOf("courseGraphicsHtml(race)") < siteJs.indexOf("race-results"))
         assertTrue(siteJs.contains("Promise.all(manifest.races"))
         val siteCss = Files.readString(paths.eventDirectory.resolve("assets").resolve("site.css"))
         assertTrue(siteCss.contains("max-width:700px"))
         assertTrue(Files.readString(paths.rootIndexHtml).contains("Summer Series"))
+    }
+
+    @Test
+    fun exportsComingSoonSeriesWithoutPublishingCompetitorDownloads() {
+        val directory = Files.createTempDirectory("rom-desktop-public-results-coming-soon")
+        val upcomingRace = raceData().copy(
+            race = raceData().race.copy(
+                name = "Upcoming Championship",
+                startDateTimeIso = "2026-08-13T09:00"
+            )
+        )
+
+        val paths = DesktopProjectFiles.exportPublicResultsSeriesSite(
+            directory = directory,
+            seriesName = "Championship Week",
+            races = listOf(
+                DesktopPublicResultSeriesRace(EventProjectFile(raceData = upcomingRace))
+            ),
+            generatedAt = java.time.Instant.parse("2026-07-27T12:00:00Z")
+        )
+
+        val manifest = Files.readString(paths.publicResultsJson)
+        val eventData = Files.readString(
+            directory.resolve("2026-08-13-upcoming-championship/data/public-results.json")
+        )
+        assertEquals("2026-08-13-championship-week-series", paths.eventPath)
+        assertTrue(manifest.contains("\"resultCount\":0"))
+        assertTrue(eventData.contains("\"resultCount\": 0"))
+        assertTrue(Files.readString(paths.indexHtml).contains("Championship Week"))
+        assertTrue(Files.readString(paths.rootIndexHtml).contains("Coming Soon"))
+        assertFalse(
+            Files.exists(
+                directory.resolve("2026-08-13-upcoming-championship/downloads/final-results.json")
+            )
+        )
     }
 
     @Test

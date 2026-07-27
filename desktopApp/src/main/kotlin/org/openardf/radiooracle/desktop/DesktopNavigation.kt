@@ -1143,6 +1143,22 @@ object DesktopNavigation {
     fun canLongClickOverrideDisabledMenu(item: DesktopNavItem, readiness: DesktopNavigationReadiness): Boolean =
         item.action == null && !isItemEnabled(item, readiness)
 
+    fun isPreResultsCloudflareItem(item: DesktopNavItem): Boolean =
+        item.id in setOf(
+            "results.exports",
+            "results.exports.cloudflare-website",
+            "results.generate-public-site",
+            "results.publish-public-site",
+            "results.public-site-preview",
+            "results.open-public-site-preview",
+            "results.stop-public-site-preview",
+            "results.view-public-results",
+            "results.cloudflare-settings"
+        )
+
+    fun requiresCompleteCloudflareSettings(item: DesktopNavItem): Boolean =
+        item.id == "results.view-public-results"
+
     fun disabledItemReasonWithMenuOverrideHint(
         item: DesktopNavItem,
         readiness: DesktopNavigationReadiness
