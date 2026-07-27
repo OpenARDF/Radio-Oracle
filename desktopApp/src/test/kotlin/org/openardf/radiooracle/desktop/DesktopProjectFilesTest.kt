@@ -378,6 +378,8 @@ class DesktopProjectFilesTest {
         assertTrue(rootIndex.contains("""href="2026-05-31-desktop-file-race/""""))
         assertTrue(index.contains("Desktop File Race"))
         assertTrue(index.contains("""href="../">All published results</a>"""))
+        assertFalse(index.contains("Unofficial"))
+        assertFalse(rootIndex.contains("unofficial"))
         assertTrue(index.contains("downloads/final-results.json"))
         val siteJs = Files.readString(paths.eventDirectory.resolve("assets").resolve("site.js"))
         assertTrue(siteJs.contains("data/public-results.json"))
@@ -409,6 +411,9 @@ class DesktopProjectFilesTest {
         val siteJs = Files.readString(paths.eventDirectory.resolve("assets").resolve("site.js"))
 
         assertTrue(index.contains("awards-panel"))
+        assertTrue(index.contains("Radio-Oracle unofficial results"))
+        assertTrue(index.contains("""href="../">All published unofficial results</a>"""))
+        assertTrue(index.contains("<h2>Unofficial Results</h2>"))
         assertTrue(siteJs.contains("renderAwards"))
         assertTrue(publicJson.contains("\"publicationNotice\": \"$PRELIMINARY_RESULT_NOTICE\""))
         assertTrue(publicJson.contains("\"usaAwards\":"))
@@ -457,8 +462,10 @@ class DesktopProjectFilesTest {
         assertTrue(manifest.contains("Second Series Race"))
         assertTrue(manifest.contains("Unfinished Series Race"))
         assertTrue(manifest.contains("\"resultCount\":0"))
-        assertTrue(siteJs.contains("Results Coming Soon"))
-        assertTrue(siteJs.contains("Return after this race begins for preliminary results."))
+        assertTrue(manifest.contains("\"unofficialResults\":false"))
+        assertFalse(index.contains("Unofficial"))
+        assertTrue(siteJs.contains("resultsLabel} Coming Soon"))
+        assertTrue(siteJs.contains("Return after this race begins for"))
         assertTrue(siteJs.contains("courseGraphicsHtml(race)"))
         assertTrue(siteJs.indexOf("courseGraphicsHtml(race)") < siteJs.indexOf("race-results"))
         assertTrue(siteJs.contains("Promise.all(manifest.races"))
@@ -473,7 +480,8 @@ class DesktopProjectFilesTest {
         val upcomingRace = raceData().copy(
             race = raceData().race.copy(
                 name = "Upcoming Championship",
-                startDateTimeIso = "2026-08-13T09:00"
+                startDateTimeIso = "2026-08-13T09:00",
+                raceLevel = RaceLevel.NATIONAL
             )
         )
 
@@ -490,16 +498,43 @@ class DesktopProjectFilesTest {
         val eventData = Files.readString(
             directory.resolve("2026-08-13-upcoming-championship/data/public-results.json")
         )
+        val eventIndex = Files.readString(
+            directory.resolve("2026-08-13-upcoming-championship/index.html")
+        )
+        val seriesIndex = Files.readString(paths.indexHtml)
+        val rootIndex = Files.readString(paths.rootIndexHtml)
         assertEquals("2026-08-13-championship-week-series", paths.eventPath)
         assertTrue(manifest.contains("\"resultCount\":0"))
+        assertTrue(manifest.contains("\"unofficialResults\":true"))
         assertTrue(eventData.contains("\"resultCount\": 0"))
-        assertTrue(Files.readString(paths.indexHtml).contains("Championship Week"))
-        assertTrue(Files.readString(paths.rootIndexHtml).contains("Coming Soon"))
+        assertTrue(seriesIndex.contains("Championship Week"))
+        assertTrue(seriesIndex.contains("Radio-Oracle Race Series unofficial results"))
+        assertTrue(seriesIndex.contains("All published unofficial results"))
+        assertTrue(eventIndex.contains("<h2>Unofficial Results Coming Soon</h2>"))
+        assertTrue(eventIndex.contains("All published unofficial results"))
+        assertTrue(rootIndex.contains("Unofficial Results Coming Soon"))
         assertFalse(
             Files.exists(
                 directory.resolve("2026-08-13-upcoming-championship/downloads/final-results.json")
             )
         )
+    }
+
+    @Test
+    fun keepsPracticeComingSoonPageFreeOfUnofficialDisclaimer() {
+        val directory = Files.createTempDirectory("rom-desktop-practice-coming-soon")
+
+        val paths = DesktopProjectFiles.exportPublicResultsSite(
+            directory,
+            EventProjectFile(raceData = raceData())
+        )
+
+        val eventIndex = Files.readString(paths.indexHtml)
+        val rootIndex = Files.readString(paths.rootIndexHtml)
+        assertTrue(eventIndex.contains("<h2>Results Coming Soon</h2>"))
+        assertTrue(rootIndex.contains("Results Coming Soon"))
+        assertFalse(eventIndex.contains("Unofficial"))
+        assertFalse(rootIndex.contains("Unofficial"))
     }
 
     @Test

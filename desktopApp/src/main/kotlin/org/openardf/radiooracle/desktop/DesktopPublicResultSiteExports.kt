@@ -32,6 +32,7 @@ import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.supportsChampionshipAwards
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.files.FinalResultJsonExports
@@ -140,7 +141,8 @@ object DesktopPublicResultSiteExports {
         val iofResultsPath = downloadsDirectory.resolve("iof-result-list.xml")
         val printableResultsPath = downloadsDirectory.resolve("printable-results.html")
 
-        writeText(indexPath, indexHtml(projectFile.raceData.race.name))
+        val unofficialResults = projectFile.raceData.race.supportsChampionshipAwards()
+        writeText(indexPath, indexHtml(projectFile.raceData.race.name, unofficialResults))
         writeText(assetsDirectory.resolve("site.css"), siteCss())
         writeText(assetsDirectory.resolve("site.js"), siteJs())
         writeText(directory.resolve("_headers"), headersText())
@@ -180,7 +182,8 @@ object DesktopPublicResultSiteExports {
             name = projectFile.raceData.race.name,
             start = projectFile.raceData.race.startDateTimeIso,
             generatedAt = generatedAt.toString(),
-            resultCount = EventResultDetails.from(projectFile.raceData).size
+            resultCount = EventResultDetails.from(projectFile.raceData).size,
+            unofficialResults = unofficialResults
         )
         writeText(dataDirectory.resolve("event-summary.json"), eventSummaryJson(eventSummary))
         val events = mergedEventSummaries(rootDataDirectory.resolve("races.json"), eventSummary)
@@ -233,7 +236,8 @@ object DesktopPublicResultSiteExports {
         listOf(seriesDirectory, assetsDirectory, dataDirectory).forEach(Files::createDirectories)
         val indexPath = seriesDirectory.resolve("index.html")
         val publicResultsPath = dataDirectory.resolve("series-results.json")
-        writeText(indexPath, seriesIndexHtml(seriesName))
+        val unofficialResults = races.any { it.projectFile.raceData.race.supportsChampionshipAwards() }
+        writeText(indexPath, seriesIndexHtml(seriesName, unofficialResults))
         writeText(assetsDirectory.resolve("site.css"), siteCss())
         writeText(assetsDirectory.resolve("series-site.js"), seriesSiteJs())
         writeText(publicResultsPath, seriesResultsJson(seriesName, raceExports, generatedAt))
@@ -243,7 +247,8 @@ object DesktopPublicResultSiteExports {
             name = seriesName,
             start = races.minOf { it.projectFile.raceData.race.startDateTimeIso },
             generatedAt = generatedAt.toString(),
-            resultCount = races.sumOf { EventResultDetails.from(it.projectFile.raceData).size }
+            resultCount = races.sumOf { EventResultDetails.from(it.projectFile.raceData).size },
+            unofficialResults = unofficialResults
         )
         val rootDataDirectory = directory.resolve("data")
         Files.createDirectories(rootDataDirectory)
@@ -533,9 +538,10 @@ object DesktopPublicResultSiteExports {
         } else {
             races.joinToString(separator = "\n") { event ->
                 val publicationSummary = if (event.resultCount == 0) {
-                    "Coming Soon | Scheduled ${htmlText(event.start)}"
+                    "${comingSoonResultsLabel(event.unofficialResults)} | Scheduled ${htmlText(event.start)}"
                 } else {
-                    "${event.resultCount} results | Published ${htmlText(event.generatedAt)}"
+                    "${event.resultCount} ${publicResultsLabel(event.unofficialResults).lowercase()} | " +
+                        "Published ${htmlText(event.generatedAt)}"
                 }
                 """
                 <a class="event-link" href="${htmlText(event.path)}/">
@@ -578,23 +584,45 @@ object DesktopPublicResultSiteExports {
         """.trimIndent() + "\n"
     }
 
-    private fun indexHtml(eventName: String): String =
-        """
+    private fun indexHtml(eventName: String, unofficialResults: Boolean): String {
+        val resultsLabel = publicResultsLabel(unofficialResults)
+        val comingSoonLabel = comingSoonResultsLabel(unofficialResults)
+        val eyebrow = if (unofficialResults) {
+            "Radio-Oracle unofficial results"
+        } else {
+            "Radio-Oracle public results"
+        }
+        val parentLink = if (unofficialResults) {
+            "All published unofficial results"
+        } else {
+            "All published results"
+        }
+        val comingSoonDescription = if (unofficialResults) {
+            "This page is ready for the event. Return after the race begins for unofficial results."
+        } else {
+            "This page is ready for the event. Return after the race begins for results."
+        }
+        val footer = if (unofficialResults) {
+            "Unofficial results generated by Radio-Oracle."
+        } else {
+            "Generated by Radio-Oracle."
+        }
+        return """
         <!doctype html>
         <html lang="en">
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>${htmlText(eventName)} Results</title>
+          <title>${htmlText(eventName)} $resultsLabel</title>
           <link rel="stylesheet" href="assets/site.css">
         </head>
         <body>
           <header class="page-header">
             <div>
-              <p class="eyebrow">Radio-Oracle public results</p>
+              <p class="eyebrow">$eyebrow</p>
               <h1 id="event-name">${htmlText(eventName)}</h1>
               <p id="event-meta" class="summary">Loading results...</p>
-              <a class="parent-link" href="../">All published results</a>
+              <a class="parent-link" href="../">$parentLink</a>
             </div>
             <nav id="download-links" class="download-links" aria-label="Downloads">
               <a href="downloads/printable-results.html">Printable HTML</a>
@@ -605,21 +633,21 @@ object DesktopPublicResultSiteExports {
 
           <main>
             <section class="overview" aria-label="Event summary">
-              <div><span>Results</span><strong id="result-count">0</strong></div>
+              <div><span>$resultsLabel</span><strong id="result-count">0</strong></div>
               <div><span>Categories</span><strong id="category-count">0</strong></div>
               <div><span>Published</span><strong id="published-at">Pending</strong></div>
             </section>
 
             <section id="coming-soon-panel" class="panel coming-soon" hidden>
-              <p class="eyebrow">Coming Soon</p>
-              <h2>Results will appear here</h2>
-              <p>This page is ready for the event. Return after the race begins for preliminary results.</p>
+              <p class="eyebrow">$comingSoonLabel</p>
+              <h2>$comingSoonLabel</h2>
+              <p>$comingSoonDescription</p>
             </section>
 
             <section id="results-panel" class="panel">
               <div class="panel-heading">
                 <div>
-                  <h2>Results</h2>
+                  <h2>$resultsLabel</h2>
                   <p>Category results, points, runtime, status, and punch order.</p>
                 </div>
                 <input id="result-filter" type="search" placeholder="Filter results" aria-label="Filter results">
@@ -639,37 +667,55 @@ object DesktopPublicResultSiteExports {
             </section>
           </main>
 
-          <footer>Generated by Radio-Oracle.</footer>
+          <footer>$footer</footer>
           <script src="assets/site.js"></script>
         </body>
         </html>
         """.trimIndent() + "\n"
+    }
 
-    private fun seriesIndexHtml(seriesName: String): String =
-        """
+    private fun seriesIndexHtml(seriesName: String, unofficialResults: Boolean): String {
+        val resultsLabel = publicResultsLabel(unofficialResults)
+        val eyebrow = if (unofficialResults) {
+            "Radio-Oracle Race Series unofficial results"
+        } else {
+            "Radio-Oracle Race Series results"
+        }
+        val parentLink = if (unofficialResults) {
+            "All published unofficial results"
+        } else {
+            "All published results"
+        }
+        val footer = if (unofficialResults) {
+            "Unofficial results generated by Radio-Oracle."
+        } else {
+            "Generated by Radio-Oracle."
+        }
+        return """
         <!doctype html>
         <html lang="en">
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>${htmlText(seriesName)} Results</title>
+          <title>${htmlText(seriesName)} $resultsLabel</title>
           <link rel="stylesheet" href="assets/site.css">
         </head>
         <body>
           <header class="page-header">
             <div>
-              <p class="eyebrow">Radio-Oracle Race Series results</p>
+              <p class="eyebrow">$eyebrow</p>
               <h1>${htmlText(seriesName)}</h1>
               <p id="series-meta" class="summary">Loading series results...</p>
-              <a class="parent-link" href="../">All published results</a>
+              <a class="parent-link" href="../">$parentLink</a>
             </div>
           </header>
           <main id="series-races"></main>
-          <footer>Generated by Radio-Oracle.</footer>
+          <footer>$footer</footer>
           <script src="assets/series-site.js"></script>
         </body>
         </html>
         """.trimIndent() + "\n"
+    }
 
     private fun seriesResultsJson(
         seriesName: String,
@@ -679,6 +725,10 @@ object DesktopPublicResultSiteExports {
         buildJsonObject {
             put("seriesName", seriesName)
             put("generatedAt", generatedAt.toString())
+            put(
+                "unofficialResults",
+                races.any { it.projectFile.raceData.race.supportsChampionshipAwards() }
+            )
             put(
                 "races",
                 buildJsonArray {
@@ -690,6 +740,10 @@ object DesktopPublicResultSiteExports {
                                 put(
                                     "resultCount",
                                     EventResultDetails.from(race.projectFile.raceData).size
+                                )
+                                put(
+                                    "unofficialResults",
+                                    race.projectFile.raceData.race.supportsChampionshipAwards()
                                 )
                                 put("dataUrl", "../${race.paths.eventPath}/data/public-results.json")
                                 put("downloadsUrl", "../${race.paths.eventPath}/downloads/")
@@ -740,11 +794,13 @@ object DesktopPublicResultSiteExports {
           return `<section class="course-diagrams" aria-label="2D course diagrams"><h3>2D Course Diagram${'$'}{graphics.length===1 ? "" : "s"}</h3><div class="course-diagram-grid">${'$'}{graphics.map((url,index)=>`<figure><img src="${'$'}{escapeHtml(url)}" alt="2D course diagram ${'$'}{index+1} for ${'$'}{escapeHtml(race.name)}"></figure>`).join("")}</div></section>`
         }
         function renderRace(root,race,data,raceIndex){
+          const resultsLabel=race.unofficialResults ? "Unofficial Results" : "Results";
           if(data.resultCount===0){
-            root.innerHTML=`<section class="series-race coming-soon"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1} | Coming Soon</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Scheduled ${'$'}{escapeHtml(data.event.start)}</p></div></div><section class="panel"><h3>Results will appear here</h3><p>Return after this race begins for preliminary results.</p></section></section>`;
+            const comingSoonLabel=`${'$'}{resultsLabel} Coming Soon`;
+            root.innerHTML=`<section class="series-race coming-soon"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1} | ${'$'}{comingSoonLabel}</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Scheduled ${'$'}{escapeHtml(data.event.start)}</p></div></div><section class="panel"><h3>${'$'}{comingSoonLabel}</h3><p>Return after this race begins for ${'$'}{resultsLabel.toLowerCase()}.</p></section></section>`;
             return
           }
-          root.innerHTML=`<section class="series-race"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1}</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Start ${'$'}{escapeHtml(data.event.start)} | ${'$'}{data.resultCount} results</p></div><nav class="download-links" aria-label="${'$'}{escapeHtml(data.event.name)} downloads"><a href="${'$'}{escapeHtml(race.downloadsUrl)}printable-results.html">Printable HTML</a><a href="${'$'}{escapeHtml(race.downloadsUrl)}iof-result-list.xml">IOF XML</a></nav></div>${'$'}{courseGraphicsHtml(race)}<section class="panel"><div class="panel-heading"><div><h3>Results</h3><p>Category results, points, runtime, status, and punch order.</p></div><input type="search" placeholder="Filter this race" aria-label="Filter ${'$'}{escapeHtml(data.event.name)} results"></div><div class="race-results">${'$'}{resultsHtml(data,raceIndex)}</div></section></section>`;
+          root.innerHTML=`<section class="series-race"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1}</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Start ${'$'}{escapeHtml(data.event.start)} | ${'$'}{data.resultCount} ${'$'}{resultsLabel.toLowerCase()}</p></div><nav class="download-links" aria-label="${'$'}{escapeHtml(race.name)} downloads"><a href="${'$'}{escapeHtml(race.downloadsUrl)}printable-results.html">Printable HTML</a><a href="${'$'}{escapeHtml(race.downloadsUrl)}iof-result-list.xml">IOF XML</a></nav></div>${'$'}{courseGraphicsHtml(race)}<section class="panel"><div class="panel-heading"><div><h3>${'$'}{resultsLabel}</h3><p>Category results, points, runtime, status, and punch order.</p></div><input type="search" placeholder="Filter this race" aria-label="Filter ${'$'}{escapeHtml(race.name)} results"></div><div class="race-results">${'$'}{resultsHtml(data,raceIndex)}</div></section></section>`;
           const input=root.querySelector("input[type=search]");
           input.addEventListener("input",event=>{root.querySelector(".race-results").innerHTML=resultsHtml(data,raceIndex,event.target.value)})
         }
@@ -770,9 +826,10 @@ object DesktopPublicResultSiteExports {
           return response.json()
         }).then(async manifest=>{
           const racesWithResults=manifest.races.filter(race=>race.resultCount>0).length;
+          const resultsLabel=manifest.unofficialResults ? "Unofficial Results" : "Results";
           document.getElementById("series-meta").textContent=racesWithResults===0
-            ? `${'$'}{manifest.races.length} scheduled races | Results Coming Soon`
-            : `${'$'}{racesWithResults} of ${'$'}{manifest.races.length} races with results | Published ${'$'}{manifest.generatedAt}`;
+            ? `${'$'}{manifest.races.length} scheduled races | ${'$'}{resultsLabel} Coming Soon`
+            : `${'$'}{racesWithResults} of ${'$'}{manifest.races.length} races with ${'$'}{resultsLabel.toLowerCase()} | Published ${'$'}{manifest.generatedAt}`;
           const root=document.getElementById("series-races");
           const raceData=await Promise.all(manifest.races.map(async race=>{
             const response=await fetch(race.dataUrl,{cache:"no-store"});
@@ -1041,6 +1098,12 @@ object DesktopPublicResultSiteExports {
             .replace("\"", "&quot;")
             .replace("'", "&#39;")
 
+    private fun publicResultsLabel(unofficialResults: Boolean): String =
+        if (unofficialResults) "Unofficial Results" else "Results"
+
+    private fun comingSoonResultsLabel(unofficialResults: Boolean): String =
+        "${publicResultsLabel(unofficialResults)} Coming Soon"
+
     private fun eventSummaryJson(summary: PublishedEventSummary): String =
         buildJsonObject {
             put("path", summary.path)
@@ -1048,6 +1111,7 @@ object DesktopPublicResultSiteExports {
             put("start", summary.start)
             put("generatedAt", summary.generatedAt)
             put("resultCount", summary.resultCount)
+            put("unofficialResults", summary.unofficialResults)
         }.toString() + "\n"
 
     private fun eventsJson(events: List<PublishedEventSummary>): String =
@@ -1063,6 +1127,7 @@ object DesktopPublicResultSiteExports {
                                 put("start", event.start)
                                 put("generatedAt", event.generatedAt)
                                 put("resultCount", event.resultCount)
+                                put("unofficialResults", event.unofficialResults)
                             }
                         )
                     }
@@ -1092,7 +1157,9 @@ object DesktopPublicResultSiteExports {
         val start = stringValue("start") ?: ""
         val generatedAt = stringValue("generatedAt") ?: ""
         val resultCount = (this["resultCount"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
-        return PublishedEventSummary(path, name, start, generatedAt, resultCount)
+        val unofficialResults =
+            (this["unofficialResults"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false
+        return PublishedEventSummary(path, name, start, generatedAt, resultCount, unofficialResults)
     }
 
     private fun JsonObject.stringValue(key: String): String? =
@@ -1103,6 +1170,7 @@ object DesktopPublicResultSiteExports {
         val name: String,
         val start: String,
         val generatedAt: String,
-        val resultCount: Int
+        val resultCount: Int,
+        val unofficialResults: Boolean
     )
 }
