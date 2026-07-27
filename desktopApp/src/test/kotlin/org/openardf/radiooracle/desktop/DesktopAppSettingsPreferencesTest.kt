@@ -48,4 +48,20 @@ class DesktopAppSettingsPreferencesTest {
     fun rejectsInvalidWindowLocations() {
         assertNull(DesktopWindowBounds(x = 40_000, y = 50, width = 1200, height = 800).normalized())
     }
+
+    @Test
+    fun restoresSavedPublicResultsRetentionModeWithSafeDefault() {
+        assertEquals(
+            DesktopPublicResultsRetentionMode.REPLACE_PREVIOUS,
+            desktopPublicResultsRetentionMode(DesktopPublicResultsRetentionMode.REPLACE_PREVIOUS.name)
+        )
+        assertEquals(
+            DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS,
+            desktopPublicResultsRetentionMode("unknown")
+        )
+        assertEquals(
+            DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS,
+            desktopPublicResultsRetentionMode(null)
+        )
+    }
 }

@@ -241,12 +241,14 @@ object DesktopProjectFiles : ProjectFileStore {
         directory: Path,
         seriesName: String,
         races: List<DesktopPublicResultSeriesRace>,
+        seriesId: String? = null,
         generatedAt: java.time.Instant = java.time.Instant.now()
     ): DesktopPublicResultSiteExportPaths =
         DesktopPublicResultSiteExports.exportSeries(
             directory = directory,
             seriesName = seriesName,
             races = races,
+            seriesId = seriesId,
             generatedAt = generatedAt
         )
 

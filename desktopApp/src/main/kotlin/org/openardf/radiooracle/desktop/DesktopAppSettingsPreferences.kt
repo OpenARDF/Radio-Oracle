@@ -74,7 +74,9 @@ data class DesktopCloudflarePagesPublishSettings(
     val projectName: String = "openardf-results",
     val branch: String = "main",
     val accountId: String = "",
-    val apiToken: String = ""
+    val apiToken: String = "",
+    val retentionMode: DesktopPublicResultsRetentionMode =
+        DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS
 ) {
     fun normalized(): DesktopCloudflarePagesPublishSettings =
         copy(
@@ -107,6 +109,11 @@ data class DesktopCloudflarePagesPublishSettings(
     }
 }
 
+internal fun desktopPublicResultsRetentionMode(value: String?): DesktopPublicResultsRetentionMode =
+    runCatching {
+        DesktopPublicResultsRetentionMode.valueOf(value.orEmpty())
+    }.getOrDefault(DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS)
+
 object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
     private const val CHECK_FOR_UPDATES_KEY = "checkForRadioOracleUpdates"
     private const val SPORT_IDENT_PORT_DISCOVERY_MODE_KEY = "sportIdentPortDiscoveryMode"
@@ -115,6 +122,7 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
     private const val CLOUDFLARE_BRANCH_KEY = "cloudflarePagesBranch"
     private const val CLOUDFLARE_ACCOUNT_ID_KEY = "cloudflarePagesAccountId"
     private const val CLOUDFLARE_API_TOKEN_KEY = "cloudflarePagesApiToken"
+    private const val CLOUDFLARE_RETENTION_MODE_KEY = "cloudflarePagesRetentionMode"
     private const val AWARD_DISPLAY_MODE_KEY = "awardDisplayMode"
     private const val WINDOW_X_KEY = "windowX"
     private const val WINDOW_Y_KEY = "windowY"
@@ -158,7 +166,13 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
             projectName = preferences.get(CLOUDFLARE_PROJECT_NAME_KEY, "openardf-results"),
             branch = preferences.get(CLOUDFLARE_BRANCH_KEY, "main"),
             accountId = preferences.get(CLOUDFLARE_ACCOUNT_ID_KEY, ""),
-            apiToken = preferences.get(CLOUDFLARE_API_TOKEN_KEY, "")
+            apiToken = preferences.get(CLOUDFLARE_API_TOKEN_KEY, ""),
+            retentionMode = desktopPublicResultsRetentionMode(
+                preferences.get(
+                    CLOUDFLARE_RETENTION_MODE_KEY,
+                    DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS.name
+                )
+            )
         ).normalized()
 
     override fun setCloudflarePagesPublishSettings(settings: DesktopCloudflarePagesPublishSettings) {
@@ -167,6 +181,7 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
         preferences.put(CLOUDFLARE_BRANCH_KEY, normalized.branch)
         preferences.put(CLOUDFLARE_ACCOUNT_ID_KEY, normalized.accountId)
         preferences.put(CLOUDFLARE_API_TOKEN_KEY, normalized.apiToken)
+        preferences.put(CLOUDFLARE_RETENTION_MODE_KEY, normalized.retentionMode.name)
     }
 
     override fun awardDisplayMode(): EventAwardDisplayMode =

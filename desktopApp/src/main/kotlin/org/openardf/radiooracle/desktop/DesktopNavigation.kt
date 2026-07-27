@@ -1509,7 +1509,7 @@ object DesktopNavigation {
         "results.export-report-pdf" to
             "Use Export Results Report PDF to write a printable report PDF with the same result rows as the HTML and XML report files.",
         "results.generate-public-site" to
-            "Use Generate Public Results Site to write a Cloudflare Pages-ready static site folder.",
+            "Use Generate Public Results Site to update Radio-Oracle's managed Cloudflare Pages site. Cloudflare Settings controls whether previously published events are retained or replaced.",
         "results.publish-public-site" to
             "Use Publish Public Results Site to deploy the generated public results site to Cloudflare Pages.",
         "results.view-public-results" to

@@ -538,6 +538,76 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun retainsPreviousEventsAndOverwritesCurrentRaceByStableIdentity() {
+        val directory = Files.createTempDirectory("rom-desktop-retained-public-results")
+        val firstRace = EventProjectFile(raceData = raceData())
+        val otherRace = EventProjectFile(
+            raceData = raceData().copy(
+                race = raceData().race.copy(
+                    id = "other-race",
+                    name = "Other Race",
+                    startDateTimeIso = "2026-06-01T10:00"
+                )
+            )
+        )
+        val firstPaths = DesktopProjectFiles.exportPublicResultsSite(directory, firstRace)
+        val otherPaths = DesktopProjectFiles.exportPublicResultsSite(directory, otherRace)
+        val renamedRace = firstRace.copy(
+            raceData = firstRace.raceData.copy(
+                race = firstRace.raceData.race.copy(
+                    name = "Renamed Desktop Race",
+                    startDateTimeIso = "2026-06-02T10:00"
+                )
+            )
+        )
+
+        val renamedPaths = DesktopProjectFiles.exportPublicResultsSite(directory, renamedRace)
+
+        val rootIndex = Files.readString(renamedPaths.rootIndexHtml)
+        val racesJson = Files.readString(directory.resolve("data/races.json"))
+        assertTrue(rootIndex.contains("Renamed Desktop Race"))
+        assertTrue(rootIndex.contains("Other Race"))
+        assertFalse(rootIndex.contains("Desktop File Race"))
+        assertTrue(racesJson.contains("\"publicationId\":\"race:race\""))
+        assertTrue(racesJson.contains("\"publicationId\":\"race:other-race\""))
+        assertFalse(Files.exists(firstPaths.eventDirectory))
+        assertTrue(Files.exists(otherPaths.eventDirectory))
+        assertTrue(Files.exists(renamedPaths.eventDirectory))
+
+        val publishedPaths = DesktopCloudflarePagesSiteReader.read(directory)
+            .assets
+            .map(DesktopCloudflarePagesAsset::relativePath)
+        assertTrue(publishedPaths.any { it.startsWith("${otherPaths.eventPath}/") })
+        assertTrue(publishedPaths.any { it.startsWith("${renamedPaths.eventPath}/") })
+        assertFalse(publishedPaths.any { it.startsWith("${firstPaths.eventPath}/") })
+    }
+
+    @Test
+    fun replacesRenamedSeriesByStableIdentity() {
+        val directory = Files.createTempDirectory("rom-desktop-retained-series")
+        val race = DesktopPublicResultSeriesRace(EventProjectFile(raceData = raceData()))
+        val first = DesktopProjectFiles.exportPublicResultsSeriesSite(
+            directory = directory,
+            seriesName = "Original Series",
+            seriesId = "series-id",
+            races = listOf(race)
+        )
+
+        val renamed = DesktopProjectFiles.exportPublicResultsSeriesSite(
+            directory = directory,
+            seriesName = "Renamed Series",
+            seriesId = "series-id",
+            races = listOf(race)
+        )
+
+        val rootIndex = Files.readString(renamed.rootIndexHtml)
+        assertTrue(rootIndex.contains("Renamed Series"))
+        assertFalse(rootIndex.contains("Original Series"))
+        assertFalse(Files.exists(first.eventDirectory))
+        assertTrue(Files.exists(renamed.eventDirectory))
+    }
+
+    @Test
     fun selectsOnePublishedDrawingForEachDistinctResultCourse() {
         val base = raceDataWithReadout()
         val firstCategoryData = base.categories.single()

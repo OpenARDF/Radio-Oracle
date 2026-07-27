@@ -385,17 +385,21 @@ object DesktopFileDialogs {
             DesktopProjectFilePaths.withHtmlExtension(it)
         }
 
-    fun chooseExportPublicResultsSiteDirectory(): Path? {
-        val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()
-        val chooser = JFileChooser(directory.toFile())
-        chooser.dialogTitle = "Generate Public Results Site"
-        chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-        chooser.approveButtonText = "Select Folder"
-        if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) {
-            return null
-        }
-        return chooser.selectedFile?.toPath()?.also(DesktopEventFileLocations::rememberEventFileDirectory)
-    }
+    fun confirmReplacePublicResultsSite(retainedEntryCount: Int): Boolean =
+        JOptionPane.showConfirmDialog(
+            null,
+            buildString {
+                append("Replace ")
+                append(retainedEntryCount)
+                append(" retained public result ")
+                append(if (retainedEntryCount == 1) "entry" else "entries")
+                append("?\n\n")
+                append("The next Cloudflare publish will contain only the current race or series.")
+            },
+            "Replace Previous Public Results",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        ) == JOptionPane.YES_OPTION
 
     fun chooseExportEventSeriesDirectory(): Path? {
         val directory = DesktopEventFileLocations.preparePreferredEventFileDirectory()

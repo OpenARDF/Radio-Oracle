@@ -183,12 +183,14 @@ object DesktopPublicResultSiteExports {
             start = projectFile.raceData.race.startDateTimeIso,
             generatedAt = generatedAt.toString(),
             resultCount = EventResultDetails.from(projectFile.raceData).size,
-            unofficialResults = unofficialResults
+            unofficialResults = unofficialResults,
+            publicationId = "race:${projectFile.raceData.race.id}"
         )
         writeText(dataDirectory.resolve("event-summary.json"), eventSummaryJson(eventSummary))
-        val events = mergedEventSummaries(rootDataDirectory.resolve("races.json"), eventSummary)
-        writeText(rootDataDirectory.resolve("races.json"), eventsJson(events))
-        writeText(rootIndexPath, rootIndexHtml(events))
+        val eventMerge = mergedEventSummaries(rootDataDirectory.resolve("races.json"), eventSummary)
+        deleteReplacedPublicationDirectories(directory, eventSummary.path, eventMerge.replacedPaths)
+        writeText(rootDataDirectory.resolve("races.json"), eventsJson(eventMerge.events))
+        writeText(rootIndexPath, rootIndexHtml(eventMerge.events))
 
         return DesktopPublicResultSiteExportPaths(
             directory = directory,
@@ -208,6 +210,7 @@ object DesktopPublicResultSiteExports {
         directory: Path,
         seriesName: String,
         races: List<DesktopPublicResultSeriesRace>,
+        seriesId: String? = null,
         appVersion: String = "Desktop",
         generatedAt: Instant = Instant.now()
     ): DesktopPublicResultSiteExportPaths {
@@ -248,11 +251,14 @@ object DesktopPublicResultSiteExports {
             start = races.minOf { it.projectFile.raceData.race.startDateTimeIso },
             generatedAt = generatedAt.toString(),
             resultCount = races.sumOf { EventResultDetails.from(it.projectFile.raceData).size },
-            unofficialResults = unofficialResults
+            unofficialResults = unofficialResults,
+            publicationId = seriesId?.let { "series:$it" }
         )
         val rootDataDirectory = directory.resolve("data")
         Files.createDirectories(rootDataDirectory)
-        val events = mergedEventSummaries(rootDataDirectory.resolve("races.json"), summary)
+        val seriesMerge = mergedEventSummaries(rootDataDirectory.resolve("races.json"), summary)
+        deleteReplacedPublicationDirectories(directory, summary.path, seriesMerge.replacedPaths)
+        val events = seriesMerge.events
             .filterNot { event -> raceExports.any { it.paths.eventPath == event.path } }
         writeText(rootDataDirectory.resolve("races.json"), eventsJson(events))
         val rootIndexPath = directory.resolve("index.html")
@@ -1112,6 +1118,7 @@ object DesktopPublicResultSiteExports {
             put("generatedAt", summary.generatedAt)
             put("resultCount", summary.resultCount)
             put("unofficialResults", summary.unofficialResults)
+            summary.publicationId?.let { put("publicationId", it) }
         }.toString() + "\n"
 
     private fun eventsJson(events: List<PublishedEventSummary>): String =
@@ -1128,6 +1135,7 @@ object DesktopPublicResultSiteExports {
                                 put("generatedAt", event.generatedAt)
                                 put("resultCount", event.resultCount)
                                 put("unofficialResults", event.unofficialResults)
+                                event.publicationId?.let { put("publicationId", it) }
                             }
                         )
                     }
@@ -1135,7 +1143,10 @@ object DesktopPublicResultSiteExports {
             )
         }.toString() + "\n"
 
-    private fun mergedEventSummaries(eventsJsonPath: Path, current: PublishedEventSummary): List<PublishedEventSummary> {
+    private fun mergedEventSummaries(
+        eventsJsonPath: Path,
+        current: PublishedEventSummary
+    ): PublishedEventSummaryMerge {
         val existing = if (Files.exists(eventsJsonPath)) {
             runCatching {
                 Json.parseToJsonElement(Files.readString(eventsJsonPath, StandardCharsets.UTF_8))
@@ -1147,8 +1158,19 @@ object DesktopPublicResultSiteExports {
         } else {
             emptyList()
         }
-        return (existing.filterNot { it.path == current.path } + current)
+        val replaced = existing.filter { event ->
+            event.path == current.path ||
+                (
+                    current.publicationId != null &&
+                        event.publicationId == current.publicationId
+                    )
+        }
+        val events = (existing - replaced.toSet() + current)
             .sortedWith(compareByDescending<PublishedEventSummary> { it.start }.thenBy { it.name })
+        return PublishedEventSummaryMerge(
+            events = events,
+            replacedPaths = replaced.map(PublishedEventSummary::path).toSet()
+        )
     }
 
     private fun JsonObject.toPublishedEventSummaryOrNull(): PublishedEventSummary? {
@@ -1159,7 +1181,16 @@ object DesktopPublicResultSiteExports {
         val resultCount = (this["resultCount"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
         val unofficialResults =
             (this["unofficialResults"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false
-        return PublishedEventSummary(path, name, start, generatedAt, resultCount, unofficialResults)
+        val publicationId = stringValue("publicationId")
+        return PublishedEventSummary(
+            path,
+            name,
+            start,
+            generatedAt,
+            resultCount,
+            unofficialResults,
+            publicationId
+        )
     }
 
     private fun JsonObject.stringValue(key: String): String? =
@@ -1171,6 +1202,24 @@ object DesktopPublicResultSiteExports {
         val start: String,
         val generatedAt: String,
         val resultCount: Int,
-        val unofficialResults: Boolean
+        val unofficialResults: Boolean,
+        val publicationId: String?
     )
+
+    private data class PublishedEventSummaryMerge(
+        val events: List<PublishedEventSummary>,
+        val replacedPaths: Set<String>
+    )
+
+    private fun deleteReplacedPublicationDirectories(
+        directory: Path,
+        currentPath: String,
+        replacedPaths: Set<String>
+    ) {
+        replacedPaths
+            .filterNot { it == currentPath }
+            .forEach { oldPath ->
+                DesktopPublicResultsSiteMirror.deleteGeneratedSiteDirectory(directory, oldPath)
+            }
+    }
 }

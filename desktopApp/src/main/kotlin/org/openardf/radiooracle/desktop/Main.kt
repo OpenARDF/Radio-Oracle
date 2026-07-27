@@ -1431,10 +1431,14 @@ fun main(args: Array<String>) = application {
                     currentDesktopAwardDisplayMode()
                 )
             } else {
+                val seriesId = currentSeriesManifestPath()
+                    ?.let(DesktopEventSeriesFiles::read)
+                    ?.seriesId
                 DesktopProjectFiles.exportPublicResultsSeriesSite(
                     directory = directory,
                     seriesName = series.first,
-                    races = series.second
+                    races = series.second,
+                    seriesId = seriesId
                 )
             }
         }
@@ -3562,6 +3566,16 @@ fun main(args: Array<String>) = application {
 
         fun setCloudflarePagesPublishSettings(settings: DesktopCloudflarePagesPublishSettings): Boolean {
             val normalized = settings.normalized()
+            if (
+                normalized.copy(apiToken = "") !=
+                cloudflarePagesPublishSettings.copy(apiToken = "")
+            ) {
+                publicResultSitePreviewServer?.stop()
+                publicResultSitePreviewServer = null
+                publicResultSiteDirectory = null
+                publicResultSiteEventPath = null
+                publicResultSitePreviewUrl = null
+            }
             cloudflarePagesPublishSettings = normalized
             DesktopAppSettingsPreferences.setCloudflarePagesPublishSettings(normalized)
             projectStatusText = "Cloudflare Pages publishing settings saved."
@@ -4299,23 +4313,28 @@ fun main(args: Array<String>) = application {
 
         fun generatePublicResultsSite() {
             val currentProject = projectSession.currentProject ?: return
-            DesktopFileDialogs.chooseExportPublicResultsSiteDirectory()?.let { directory ->
-                runCatching {
-                    val paths = exportPublicResultsSiteForCurrentContext(directory, currentProject)
-                    publicResultSiteDirectory = paths.directory
-                    publicResultSiteEventPath = paths.eventPath
-                    publishedPublicResultSiteUrl =
-                        publicResultsUrl(cloudflarePagesPublishSettings, paths.eventPath)
-                    syncProjectState()
-                    projectStatusText = "Generated public results site at ${paths.eventDirectory}"
-                    DesktopDebugLog.info(
-                        "PublicResults",
-                        "Generated public results site root=${paths.directory} event=${paths.eventPath} eventDirectory=${paths.eventDirectory}"
-                    )
-                }.onFailure { error ->
-                    projectStatusText = "Public results site generation failed: ${error.message ?: error::class.simpleName}"
-                    DesktopDebugLog.error("PublicResults", projectStatusText)
-                }
+            val directory = DesktopPublicResultsSiteMirror.prepare(
+                settings = cloudflarePagesPublishSettings,
+                confirmReplacement = DesktopFileDialogs::confirmReplacePublicResultsSite
+            ) ?: run {
+                projectStatusText = "Public results site replacement canceled."
+                return
+            }
+            runCatching {
+                val paths = exportPublicResultsSiteForCurrentContext(directory, currentProject)
+                publicResultSiteDirectory = paths.directory
+                publicResultSiteEventPath = paths.eventPath
+                publishedPublicResultSiteUrl =
+                    publicResultsUrl(cloudflarePagesPublishSettings, paths.eventPath)
+                syncProjectState()
+                projectStatusText = "Generated public results site at ${paths.eventDirectory}"
+                DesktopDebugLog.info(
+                    "PublicResults",
+                    "Generated public results site root=${paths.directory} event=${paths.eventPath} eventDirectory=${paths.eventDirectory}"
+                )
+            }.onFailure { error ->
+                projectStatusText = "Public results site generation failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("PublicResults", projectStatusText)
             }
         }
 
@@ -14770,13 +14789,15 @@ private fun CloudflarePagesPublishSettingsPanel(
     var branchDraft by remember(settings) { mutableStateOf(settings.branch) }
     var accountIdDraft by remember(settings) { mutableStateOf(settings.accountId) }
     var apiTokenDraft by remember(settings) { mutableStateOf(settings.apiToken) }
+    var retentionModeDraft by remember(settings) { mutableStateOf(settings.retentionMode) }
     var saveConfirmationText by remember { mutableStateOf<String?>(null) }
     val savedSettings = settings.normalized()
     val rawDraftSettings = DesktopCloudflarePagesPublishSettings(
         projectName = projectNameDraft,
         branch = branchDraft,
         accountId = accountIdDraft,
-        apiToken = apiTokenDraft
+        apiToken = apiTokenDraft,
+        retentionMode = retentionModeDraft
     )
     val draftSettings = rawDraftSettings.normalized()
     val disabledReason = cloudflarePagesSettingsDisabledReason(rawDraftSettings, draftSettings, savedSettings)
@@ -14827,6 +14848,32 @@ private fun CloudflarePagesPublishSettingsPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .commitOnEnter(::submitSettings)
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Published history",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            EnumPicker(
+                selectedValue = retentionModeDraft,
+                values = DesktopPublicResultsRetentionMode.entries,
+                label = DesktopPublicResultsRetentionMode::displayLabel,
+                onValueSelected = {
+                    retentionModeDraft = it
+                    clearSaveConfirmation()
+                },
+                modifier = Modifier.width(280.dp)
+            )
+        }
+        Text(
+            text = retentionModeDraft.description,
+            color = Color.DarkGray,
+            fontSize = 13.sp
         )
         TextField(
             value = apiTokenDraft,
@@ -24417,7 +24464,7 @@ private fun PublicResultsSiteWorkflowPanel() {
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Save Cloudflare Settings once with the Pages project name, branch, account ID, and API token. Generate Public Results Site writes the static site folder for the current race. Public Site Preview opens the generated race folder locally for review. Publish Public Results Site uploads the generated site root to Cloudflare Pages.",
+            text = "Save Cloudflare Settings once with the Pages project name, branch, account ID, API token, and published-history choice. Generate Public Results Site updates Radio-Oracle's managed site mirror. Public Site Preview opens the generated race or series locally for review. Publish Public Results Site uploads the complete managed mirror to Cloudflare Pages.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
