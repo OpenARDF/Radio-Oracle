@@ -20,6 +20,7 @@
 
     <!--PRINTING-->
     <string name="key_prints" translatable="false">prints</string>
+    <string name="key_cloudflare_settings" translatable="false">cloudflare_settings</string>
     <string name="key_prints_enabled" translatable="false">prints_enabled</string>
     <string name="key_prints_selected_printer_name" translatable="false">selected_printer_name</string>
     <string name="key_prints_selected_printer_address" translatable="false">selected_printer_address</string>

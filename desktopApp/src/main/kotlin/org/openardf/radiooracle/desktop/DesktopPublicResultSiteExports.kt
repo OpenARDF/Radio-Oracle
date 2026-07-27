@@ -40,6 +40,8 @@ import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
 import org.openardf.radiooracle.shared.files.ResultSplitRows
+import org.openardf.radiooracle.shared.publicresults.PublishedPublicResultsEntry
+import org.openardf.radiooracle.shared.publicresults.PublicResultsSiteCatalog
 import org.openardf.radiooracle.shared.time.DurationFormatter
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -357,32 +359,19 @@ object DesktopPublicResultSiteExports {
         lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "course" }
 
     internal fun seriesPath(seriesName: String, firstRace: EventProjectFile, generatedAt: Instant): String {
-        val date = firstRace.raceData.race.startDateTimeIso.take(10)
-            .takeIf { it.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
-            ?: generatedAt.toString().take(10)
-        return "$date-${seriesName.safePathSegment()}-series"
+        return PublicResultsSiteCatalog.seriesPath(
+            seriesName = seriesName,
+            firstStartDateTimeIso = firstRace.raceData.race.startDateTimeIso,
+            generatedDate = generatedAt.toString()
+        )
     }
 
     internal fun eventPath(projectFile: EventProjectFile, generatedAt: Instant): String {
-        val datePrefix = projectFile.raceData.race.startDateTimeIso
-            .take(10)
-            .takeIf { it.matches(Regex("""\d{4}-\d{2}-\d{2}""")) }
-            ?: generatedAt.toString().take(10)
-        val nameSlug = projectFile.raceData.race.name
-            .lowercase()
-            .map { character ->
-                when {
-                    character.isLetterOrDigit() -> character
-                    else -> '-'
-                }
-            }
-            .joinToString("")
-            .replace(Regex("-+"), "-")
-            .trim('-')
-            .ifBlank { "event" }
-            .take(64)
-            .trim('-')
-        return "$datePrefix-$nameSlug"
+        return PublicResultsSiteCatalog.eventPath(
+            eventName = projectFile.raceData.race.name,
+            startDateTimeIso = projectFile.raceData.race.startDateTimeIso,
+            generatedDate = generatedAt.toString()
+        )
     }
 
     private fun publicResultsJson(
@@ -538,57 +527,8 @@ object DesktopPublicResultSiteExports {
         }
     }
 
-    private fun rootIndexHtml(races: List<PublishedEventSummary>): String {
-        val eventLinks = if (races.isEmpty()) {
-            """<p class="empty-state">No public result races have been generated yet.</p>"""
-        } else {
-            races.joinToString(separator = "\n") { event ->
-                val publicationSummary = if (event.resultCount == 0) {
-                    "${comingSoonResultsLabel(event.unofficialResults)} | Scheduled ${htmlText(event.start)}"
-                } else {
-                    "${event.resultCount} ${publicResultsLabel(event.unofficialResults).lowercase()} | " +
-                        "Published ${htmlText(event.generatedAt)}"
-                }
-                """
-                <a class="event-link" href="${htmlText(event.path)}/">
-                  <span>
-                    <strong>${htmlText(event.name)}</strong>
-                    <small>$publicationSummary</small>
-                  </span>
-                </a>
-                """.trimIndent()
-            }
-        }
-        return """
-        <!doctype html>
-        <html lang="en">
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>OpenARDF Results</title>
-          <style>
-            :root{--bg:#f4f6f8;--panel:#fff;--text:#111827;--muted:#5f6b7a;--line:#d8dee8;--accent:#1769aa}
-            *{box-sizing:border-box}
-            body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-            header{padding:36px min(6vw,72px) 28px;background:#fff;border-bottom:1px solid var(--line)}
-            main{display:grid;gap:12px;width:min(900px,calc(100% - 32px));margin:24px auto 40px}
-            h1{margin:0 0 8px;font-size:34px;line-height:1.1}.summary,.empty-state,small{color:var(--muted)}
-            .event-link{display:flex;align-items:center;min-height:72px;padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);text-decoration:none}
-            .event-link:hover{border-color:var(--accent)}.event-link strong,.event-link small{display:block}.event-link small{margin-top:4px}
-          </style>
-        </head>
-        <body>
-          <header>
-            <h1>OpenARDF Results</h1>
-            <p class="summary">Published Radio-Oracle race results.</p>
-          </header>
-          <main>
-            $eventLinks
-          </main>
-        </body>
-        </html>
-        """.trimIndent() + "\n"
-    }
+    private fun rootIndexHtml(races: List<PublishedEventSummary>): String =
+        PublicResultsSiteCatalog.rootIndexHtml(races.map { it.toSharedEntry() })
 
     private fun indexHtml(eventName: String, unofficialResults: Boolean): String {
         val resultsLabel = publicResultsLabel(unofficialResults)
@@ -1105,10 +1045,10 @@ object DesktopPublicResultSiteExports {
             .replace("'", "&#39;")
 
     private fun publicResultsLabel(unofficialResults: Boolean): String =
-        if (unofficialResults) "Unofficial Results" else "Results"
+        PublicResultsSiteCatalog.publicResultsLabel(unofficialResults)
 
     private fun comingSoonResultsLabel(unofficialResults: Boolean): String =
-        "${publicResultsLabel(unofficialResults)} Coming Soon"
+        PublicResultsSiteCatalog.comingSoonResultsLabel(unofficialResults)
 
     private fun eventSummaryJson(summary: PublishedEventSummary): String =
         buildJsonObject {
@@ -1122,54 +1062,20 @@ object DesktopPublicResultSiteExports {
         }.toString() + "\n"
 
     private fun eventsJson(events: List<PublishedEventSummary>): String =
-        buildJsonObject {
-            put(
-                "races",
-                buildJsonArray {
-                    events.forEach { event ->
-                        add(
-                            buildJsonObject {
-                                put("path", event.path)
-                                put("name", event.name)
-                                put("start", event.start)
-                                put("generatedAt", event.generatedAt)
-                                put("resultCount", event.resultCount)
-                                put("unofficialResults", event.unofficialResults)
-                                event.publicationId?.let { put("publicationId", it) }
-                            }
-                        )
-                    }
-                }
-            )
-        }.toString() + "\n"
+        PublicResultsSiteCatalog.encode(events.map { it.toSharedEntry() })
 
     private fun mergedEventSummaries(
         eventsJsonPath: Path,
         current: PublishedEventSummary
     ): PublishedEventSummaryMerge {
-        val existing = if (Files.exists(eventsJsonPath)) {
-            runCatching {
-                Json.parseToJsonElement(Files.readString(eventsJsonPath, StandardCharsets.UTF_8))
-                    .jsonObject["races"]
-                    ?.jsonArray
-                    ?.mapNotNull { element -> element.jsonObject.toPublishedEventSummaryOrNull() }
-                    ?: emptyList()
-            }.getOrElse { emptyList() }
-        } else {
-            emptyList()
-        }
-        val replaced = existing.filter { event ->
-            event.path == current.path ||
-                (
-                    current.publicationId != null &&
-                        event.publicationId == current.publicationId
-                    )
-        }
-        val events = (existing - replaced.toSet() + current)
-            .sortedWith(compareByDescending<PublishedEventSummary> { it.start }.thenBy { it.name })
+        val existing = eventsJsonPath
+            .takeIf(Files::exists)
+            ?.let { PublicResultsSiteCatalog.parse(Files.readString(it, StandardCharsets.UTF_8)) }
+            .orEmpty()
+        val merge = PublicResultsSiteCatalog.merge(existing, current.toSharedEntry())
         return PublishedEventSummaryMerge(
-            events = events,
-            replacedPaths = replaced.map(PublishedEventSummary::path).toSet()
+            events = merge.entries.map { it.toDesktopEntry() },
+            replacedPaths = merge.replacedPaths
         )
     }
 
@@ -1205,6 +1111,28 @@ object DesktopPublicResultSiteExports {
         val unofficialResults: Boolean,
         val publicationId: String?
     )
+
+    private fun PublishedEventSummary.toSharedEntry(): PublishedPublicResultsEntry =
+        PublishedPublicResultsEntry(
+            path = path,
+            name = name,
+            start = start,
+            generatedAt = generatedAt,
+            resultCount = resultCount,
+            unofficialResults = unofficialResults,
+            publicationId = publicationId
+        )
+
+    private fun PublishedPublicResultsEntry.toDesktopEntry(): PublishedEventSummary =
+        PublishedEventSummary(
+            path = path,
+            name = name,
+            start = start,
+            generatedAt = generatedAt,
+            resultCount = resultCount,
+            unofficialResults = unofficialResults,
+            publicationId = publicationId
+        )
 
     private data class PublishedEventSummaryMerge(
         val events: List<PublishedEventSummary>,

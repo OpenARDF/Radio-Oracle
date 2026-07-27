@@ -415,6 +415,50 @@
 
     <!--Preferences:print-->
     <string name="preferences_prints_hint">Printer selection, automatic printing etc.</string>
+    <string name="preferences_public_results">Public Results</string>
+    <string name="preferences_cloudflare">Cloudflare Website</string>
+    <string name="preferences_cloudflare_hint">Cloudflare Pages project, credentials, and retained-results publishing mode.</string>
+    <string name="cloudflare_project_name">Pages Project Name</string>
+    <string name="cloudflare_branch">Pages Branch</string>
+    <string name="cloudflare_account_id">Cloudflare Account ID</string>
+    <string name="cloudflare_api_token">Cloudflare API Token</string>
+    <string name="cloudflare_api_token_saved">Saved in app preferences</string>
+    <string name="cloudflare_api_token_missing">Not set</string>
+    <string name="cloudflare_publishing_mode">Publishing Mode</string>
+    <string name="cloudflare_retain_previous">Retain previously published events</string>
+    <string name="cloudflare_replace_previous">Remove all previous events when publishing</string>
+    <string name="cloudflare_results_menu">Cloudflare Website</string>
+    <string name="cloudflare_results_title">Cloudflare Public Results</string>
+    <string name="cloudflare_results_target_loading">Loading race or series…</string>
+    <string name="cloudflare_results_target_race">Race: %1$s</string>
+    <string name="cloudflare_results_target_series">Race Series: %1$s (%2$d races)</string>
+    <string name="cloudflare_results_settings_incomplete">Complete Cloudflare Settings before publishing.</string>
+    <string name="cloudflare_results_include_diagrams">Include 2D course diagrams</string>
+    <string name="cloudflare_results_password">Race Password</string>
+    <string name="cloudflare_results_password_hint">Required to unlock protected course geometry.</string>
+    <string name="cloudflare_results_publish">Generate and Publish</string>
+    <string name="cloudflare_results_publishing">Publishing…</string>
+    <string name="cloudflare_results_view">View Public Results</string>
+    <string name="cloudflare_results_settings">Cloudflare Settings</string>
+    <string name="cloudflare_results_saved_url">Published URL</string>
+    <string name="cloudflare_results_not_published">This race or series does not have a saved public-results URL yet.</string>
+    <string name="cloudflare_results_publish_success">Published %1$s.</string>
+    <string name="cloudflare_results_publish_warning">Published, but the URL could not be saved: %1$s</string>
+    <string name="cloudflare_results_publish_failed">Publishing failed: %1$s</string>
+    <string name="cloudflare_results_replace_title">Remove previous public results?</string>
+    <string name="cloudflare_results_replace_message">This publishing mode removes every previously published event from the Cloudflare results website before publishing this race or series.</string>
+    <string name="cloudflare_results_replace_confirm">Remove and Publish</string>
+    <string name="cloudflare_results_retention_retain">Publishing mode: retain previous events.</string>
+    <string name="cloudflare_results_retention_replace">Publishing mode: remove previous events.</string>
+    <string name="cloudflare_results_close">Close</string>
+    <string-array name="cloudflare_retention_names">
+        <item>@string/cloudflare_retain_previous</item>
+        <item>@string/cloudflare_replace_previous</item>
+    </string-array>
+    <string-array name="cloudflare_retention_values">
+        <item>RETAIN_PREVIOUS</item>
+        <item>REPLACE_PREVIOUS</item>
+    </string-array>
     <string name="preferences_prints_enable">Enable Printing</string>
     <string name="preferences_prints_select_printer">Select Printer</string>
     <string name="preferences_prints_select_printer_hint">Select the device you want to print with. Make sure Bluetooth is on and the device is paired.\n[%1$s]</string>

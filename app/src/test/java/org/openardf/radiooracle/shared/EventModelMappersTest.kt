@@ -239,7 +239,9 @@ class EventModelMappersTest {
                         raceType = null,
                         raceBand = null,
                         timeLimitSeconds = null,
-                        controlPointsString = ""
+                        controlPointsString = "",
+                        encryptedIdealOrder = "encrypted-order",
+                        encryptedCourseInfo = "encrypted-course"
                     ),
                     controlPoints = listOf(
                         EventControlPoint(
@@ -275,10 +277,15 @@ class EventModelMappersTest {
         assertEquals("Desktop Smoke Race", room.race.name)
         assertEquals("M21", room.categories.single().category.name)
         assertEquals("31", room.categories.single().category.controlPointsString)
+        assertEquals("encrypted-order", room.categories.single().category.encryptedIdealOrder)
+        assertEquals("encrypted-course", room.categories.single().category.encryptedCourseInfo)
         assertEquals(31, room.categories.single().controlPoints.single().siCode)
         assertEquals(ControlPointType.CONTROL, room.categories.single().controlPoints.single().type)
         assertEquals(listOf("FOX 1"), room.aliases.map { it.name })
         assertEquals(listOf(31), room.aliases.map { it.siCode })
+        val roundTripCategory = room.toEventRaceData().categories.single().category
+        assertEquals("encrypted-order", roundTripCategory.encryptedIdealOrder)
+        assertEquals("encrypted-course", roundTripCategory.encryptedCourseInfo)
     }
 
     @Test

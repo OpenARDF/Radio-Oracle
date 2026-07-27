@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:id="@+id/cloudflare_target"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/cloudflare_results_target_loading"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6" />
+
+        <TextView
+            android:id="@+id/cloudflare_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:id="@+id/cloudflare_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textColor="@color/black" />
+
+        <LinearLayout
+            android:id="@+id/cloudflare_diagram_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/cloudflare_include_diagrams"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="@string/cloudflare_results_include_diagrams" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/cloudflare_password_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/cloudflare_results_password"
+                app:endIconMode="password_toggle"
+                app:helperText="@string/cloudflare_results_password_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/cloudflare_password"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textPassword"
+                    android:singleLine="true" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/cloudflare_publish"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/cloudflare_results_publish" />
+
+        <TextView
+            android:id="@+id/cloudflare_url_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/cloudflare_results_saved_url"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/cloudflare_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textIsSelectable="true" />
+
+        <ImageView
+            android:id="@+id/cloudflare_qr"
+            android:layout_width="240dp"
+            android:layout_height="240dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="12dp"
+            android:contentDescription="@string/cloudflare_results_saved_url"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/cloudflare_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/cloudflare_results_view" />
+
+        <Button
+            android:id="@+id/cloudflare_settings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/cloudflare_results_settings" />
+
+        <Button
+            android:id="@+id/cloudflare_close"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/cloudflare_results_close" />
+
+        <ProgressBar
+            android:id="@+id/cloudflare_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</ScrollView>

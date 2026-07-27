@@ -210,3 +210,16 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         db.execSQL("ALTER TABLE `competitor` ADD COLUMN `bib_number` TEXT NOT NULL DEFAULT ''")
     }
 }
+
+// Migration from version 9 -> 10: retain public-results locations and the protected
+// course geometry needed to render Cloudflare course diagrams on Android.
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `race` ADD COLUMN `public_results_url` TEXT")
+        db.execSQL("ALTER TABLE `race` ADD COLUMN `public_results_published_at_iso` TEXT")
+        db.execSQL("ALTER TABLE `event_series` ADD COLUMN `public_results_url` TEXT")
+        db.execSQL("ALTER TABLE `event_series` ADD COLUMN `public_results_published_at_iso` TEXT")
+        db.execSQL("ALTER TABLE `category` ADD COLUMN `encrypted_ideal_order` TEXT")
+        db.execSQL("ALTER TABLE `category` ADD COLUMN `encrypted_course_info` TEXT")
+    }
+}

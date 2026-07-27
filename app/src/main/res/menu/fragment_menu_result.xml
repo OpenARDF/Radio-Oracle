@@ -23,6 +23,9 @@
         android:id="@+id/result_menu_recalculate_results"
         android:title="@string/results_recalculate" />
     <item
+        android:id="@+id/result_menu_cloudflare_results"
+        android:title="@string/cloudflare_results_menu" />
+    <item
         android:id="@+id/result_menu_edit_race"
         android:title="@string/race_edit" />
     <item

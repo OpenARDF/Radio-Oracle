@@ -43,7 +43,6 @@ def desktopPackagingIconDir = layout.projectDirectory.dir("packaging/icons")
 
 dependencies {
     implementation(project(":shared"))
-    implementation(libs.bouncycastle.provider)
     implementation(compose.desktop.currentOs)
     implementation(libs.jserialcomm)
     implementation(libs.kotlinx.serialization.json)

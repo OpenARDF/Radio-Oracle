@@ -147,4 +147,18 @@
         android:title="@string/preferences_prints"
         app:iconSpaceReserved="false" />
 
+    <PreferenceCategory
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:title="@string/preferences_public_results"
+        app:iconSpaceReserved="false" />
+
+    <Preference
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:key="@string/key_cloudflare_settings"
+        android:summary="@string/preferences_cloudflare_hint"
+        android:title="@string/preferences_cloudflare"
+        app:iconSpaceReserved="false" />
+
 </PreferenceScreen>

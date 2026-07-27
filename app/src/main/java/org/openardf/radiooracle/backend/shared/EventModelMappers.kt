@@ -91,7 +91,9 @@ fun Category.toEventCategory(): EventCategory =
         raceType = null,
         raceBand = null,
         timeLimitSeconds = null,
-        controlPointsString = controlPointsString
+        controlPointsString = controlPointsString,
+        encryptedIdealOrder = encryptedIdealOrder,
+        encryptedCourseInfo = encryptedCourseInfo
     )
 
 /** Converts the Android Room control-point entity into the portable shared race model. */
@@ -265,7 +267,9 @@ private fun EventCategory.toRoomCategory(idMapper: RoomIdMapper): Category =
         raceType = null,
         categoryBand = null,
         timeLimit = null,
-        controlPointsString = controlPointsString
+        controlPointsString = controlPointsString,
+        encryptedIdealOrder = encryptedIdealOrder,
+        encryptedCourseInfo = encryptedCourseInfo
     )
 
 /** Converts the portable shared control-point model back into an Android Room entity. */

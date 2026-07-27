@@ -35,6 +35,7 @@ import org.openardf.radiooracle.shared.event.EventSeriesArchiveZipCodec
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesLink
+import org.openardf.radiooracle.shared.event.PublicResultsPublication
 import java.util.UUID
 
 /** Writes Android-local Race Series data as a desktop-importable series package. */
@@ -50,7 +51,11 @@ object EventSeriesExport {
         val seriesFile = EventSeriesFile(
             seriesId = seriesData.series.seriesId,
             name = seriesData.series.name,
-            events = members.map { member -> member.toEventSeriesEvent() }
+            events = members.map { member -> member.toEventSeriesEvent() },
+            publicResultsPublication = publication(
+                seriesData.series.publicResultsUrl,
+                seriesData.series.publicResultsPublishedAtIso
+            )
         )
 
         val archive = EventSeriesArchive(
@@ -63,6 +68,10 @@ object EventSeriesExport {
                     seriesLink = EventSeriesLink(
                         seriesId = member.seriesId,
                         seriesEventId = member.seriesEventId
+                    ),
+                    publicResultsPublication = publication(
+                        raceData.race.publicResultsUrl,
+                        raceData.race.publicResultsPublishedAtIso
                     )
                 )
             },
@@ -80,4 +89,11 @@ object EventSeriesExport {
             startDateTimeIso = startDateTimeIso,
             formatLabel = formatLabel
         )
+
+    private fun publication(url: String?, publishedAtIso: String?): PublicResultsPublication? =
+        if (!url.isNullOrBlank() && !publishedAtIso.isNullOrBlank()) {
+            PublicResultsPublication(url = url, publishedAtIso = publishedAtIso)
+        } else {
+            null
+        }
 }

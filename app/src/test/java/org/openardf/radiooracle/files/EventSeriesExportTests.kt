@@ -57,9 +57,17 @@ class EventSeriesExportTests {
                 "events/day-2.rom.json" to eventFileJson("race-day-2", "Day 2", "day-2")
             )
         )
+        val publicationUrl = "https://results.example/championship/"
+        val publicationTime = "2026-07-27T12:00:00Z"
+        originalImport.races.first().race.publicResultsUrl =
+            "https://results.example/day-1/"
+        originalImport.races.first().race.publicResultsPublishedAtIso = publicationTime
         val exportedBytes = EventSeriesExport.packageBytes(
             seriesData = EventSeriesData(
-                series = originalImport.series,
+                series = originalImport.series.copy(
+                    publicResultsUrl = publicationUrl,
+                    publicResultsPublishedAtIso = publicationTime
+                ),
                 members = originalImport.members
             ),
             raceDataById = originalImport.races.associateBy { it.race.id }
@@ -70,6 +78,12 @@ class EventSeriesExportTests {
         assertEquals("series-2026", exportedImport.series.seriesId)
         assertEquals(listOf("day-1", "day-2"), exportedImport.members.map { it.seriesEventId })
         assertEquals(listOf("Day 1", "Day 2"), exportedImport.races.map { it.race.name })
+        assertEquals(publicationUrl, exportedImport.series.publicResultsUrl)
+        assertEquals(publicationTime, exportedImport.series.publicResultsPublishedAtIso)
+        assertEquals(
+            "https://results.example/day-1/",
+            exportedImport.races.first().race.publicResultsUrl
+        )
     }
 
     private fun seriesManifest(): EventSeriesFile =

@@ -189,6 +189,9 @@ class DataProcessor private constructor(context: Context) {
     suspend fun updateRace(race: Race) {
         ardfRepository.updateRace(race)
         updateResultsByRace(race.id)
+        currentState.value
+            ?.takeIf { it.currentRace?.id == race.id }
+            ?.let { state -> currentState.postValue(AppState(race, state.siReaderState, state.resultServiceJob)) }
         DebugLog.info("Races", "Updated race=${race.id} name=${race.name}")
     }
 

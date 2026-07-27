@@ -44,7 +44,10 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.shared.toRoomRaceData
+import org.openardf.radiooracle.backend.shared.toEventRaceData
+import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
+import org.openardf.radiooracle.shared.event.PublicResultsPublication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
@@ -126,8 +129,14 @@ object JsonProcessor : FormatProcessor {
     fun importRaceData(jsonString: String, dataProcessor: DataProcessor): RaceData {
         val fingerprint = jsonString.sha256Hex()
         if (jsonString.contains("\"appName\"") && jsonString.contains("\"raceData\"")) {
-            val eventRaceData = EventProjectFileJson.decode(jsonString).raceData
-            return eventRaceData.toRoomRaceData().withImportIdentity(
+            val projectFile = EventProjectFileJson.decode(jsonString)
+            val eventRaceData = projectFile.raceData
+            return eventRaceData.toRoomRaceData().also { roomRaceData ->
+                roomRaceData.race.publicResultsUrl =
+                    projectFile.publicResultsPublication?.url
+                roomRaceData.race.publicResultsPublishedAtIso =
+                    projectFile.publicResultsPublication?.publishedAtIso
+            }.withImportIdentity(
                 sourceId = "event-file:${eventRaceData.race.id}",
                 fingerprint = fingerprint
             )
@@ -229,18 +238,27 @@ object JsonProcessor : FormatProcessor {
         raceId: UUID
     ) {
         withContext(Dispatchers.IO) {
-            val moshi: Moshi = Moshi.Builder()
-                .add(RaceDataJsonAdapter(dataProcessor))
-                .add(LocalDateTimeAdapter())
-                .add(KotlinJsonAdapterFactory())
-                .build()
             val raceData: RaceData = dataProcessor.getRaceData(raceId)
-            val adapter = moshi.adapter<RaceData>()
-
-            val json = adapter.toJson(raceData)
+            val publication = if (
+                !raceData.race.publicResultsUrl.isNullOrBlank() &&
+                !raceData.race.publicResultsPublishedAtIso.isNullOrBlank()
+            ) {
+                PublicResultsPublication(
+                    url = requireNotNull(raceData.race.publicResultsUrl),
+                    publishedAtIso =
+                        requireNotNull(raceData.race.publicResultsPublishedAtIso)
+                )
+            } else {
+                null
+            }
+            val json = EventProjectFileJson.encode(
+                EventProjectFile(
+                    raceData = raceData.toEventRaceData(),
+                    publicResultsPublication = publication
+                )
+            )
 
             outStream.write(json.toByteArray(Charsets.UTF_8))
-
             outStream.flush()
         }
     }

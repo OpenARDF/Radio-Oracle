@@ -94,6 +94,14 @@
             android:name="org.openardf.radiooracle.ui.results.ResultsExportDialogFragment"
             android:label="ResultsExportDialogFragment" />
         <dialog
+            android:id="@+id/cloudflareResultsDialogFragment"
+            android:name="org.openardf.radiooracle.ui.results.CloudflareResultsDialogFragment"
+            android:label="CloudflareResultsDialogFragment">
+            <action
+                android:id="@+id/openCloudflareSettings"
+                app:destination="@id/cloudflareSettingsFragment" />
+        </dialog>
+        <dialog
             android:id="@+id/competitorEditDialogFragment"
             android:name="org.openardf.radiooracle.ui.competitors.CompetitorEditDialogFragment"
             android:label="CompetitorCreateDialogFragment">
@@ -184,6 +192,9 @@
             <action
                 android:id="@+id/exportResults"
                 app:destination="@id/resultsShareDialogFragment" />
+            <action
+                android:id="@+id/cloudflareResults"
+                app:destination="@id/cloudflareResultsDialogFragment" />
             <action
                 android:id="@+id/openReadoutDetail"
                 app:destination="@id/readoutDetailFragment" />
@@ -292,11 +303,18 @@
         <action
             android:id="@+id/configurePrints"
             app:destination="@id/printsFragment" />
+        <action
+            android:id="@+id/configureCloudflare"
+            app:destination="@id/cloudflareSettingsFragment" />
     </fragment>
     <fragment
         android:id="@+id/printsFragment"
         android:name="org.openardf.radiooracle.ui.settings.PrintsFragment"
         android:label="PrintsFragment" />
+    <fragment
+        android:id="@+id/cloudflareSettingsFragment"
+        android:name="org.openardf.radiooracle.ui.settings.CloudflareSettingsFragment"
+        android:label="CloudflareSettingsFragment" />
     <dialog
         android:id="@+id/aboutAppDialogFragment"
         android:name="org.openardf.radiooracle.ui.settings.AboutDialogFragment"

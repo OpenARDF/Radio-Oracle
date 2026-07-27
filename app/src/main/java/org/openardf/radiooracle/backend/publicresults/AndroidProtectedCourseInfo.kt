@@ -22,21 +22,16 @@
  * SOFTWARE.
  */
 
-package org.openardf.radiooracle.backend.room.entity
+package org.openardf.radiooracle.backend.publicresults
 
-import androidx.room.ColumnInfo
-import androidx.room.Entity
-import androidx.room.PrimaryKey
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.publicresults.ProtectedCourseCipher
 
-/** Android-local record for one imported Race Series. */
-@Entity(tableName = "event_series")
-data class EventSeries(
-    @PrimaryKey
-    @ColumnInfo(name = "series_id")
-    val seriesId: String,
-    val name: String,
-    @ColumnInfo(name = "public_results_url")
-    val publicResultsUrl: String? = null,
-    @ColumnInfo(name = "public_results_published_at_iso")
-    val publicResultsPublishedAtIso: String? = null
-)
+/** Reads the password-protected course payload written by Radio-Oracle desktop. */
+object AndroidProtectedCourseInfo {
+    fun decryptCourseInfo(encryptedValue: String, password: String): ProtectedCourseInfo =
+        ProtectedCourseCipher.decryptCourseInfo(encryptedValue, password)
+
+    fun decrypt(encryptedValue: String, password: String): String =
+        ProtectedCourseCipher.decrypt(encryptedValue, password)
+}

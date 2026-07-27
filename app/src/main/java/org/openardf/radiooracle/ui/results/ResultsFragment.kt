@@ -154,6 +154,11 @@ class ResultsFragment : Fragment() {
                 return true
             }
 
+            R.id.result_menu_cloudflare_results -> {
+                findNavController().navigate(ResultsFragmentDirections.cloudflareResults())
+                return true
+            }
+
             R.id.result_menu_print_results -> {
                 selectedRaceViewModel.getCurrentRace()?.let { race ->
                     viewLifecycleOwner.lifecycleScope.launch {

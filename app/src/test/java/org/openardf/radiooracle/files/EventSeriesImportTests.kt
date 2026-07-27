@@ -45,12 +45,50 @@ import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesLink
+import org.openardf.radiooracle.shared.event.PublicResultsPublication
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 class EventSeriesImportTests {
+    @Test
+    fun importsSeriesAndRacePublicResultsPublication() {
+        val seriesPublication = PublicResultsPublication(
+            url = "https://results.example/series/",
+            publishedAtIso = "2026-07-27T12:00:00Z"
+        )
+        val racePublication = PublicResultsPublication(
+            url = "https://results.example/race/",
+            publishedAtIso = "2026-07-27T11:00:00Z"
+        )
+        val eventFile = EventProjectFileJson.decode(
+            eventFileJson("race-day-1", "Day 1", "day-1")
+        ).copy(publicResultsPublication = racePublication)
+        val import = EventSeriesImport.prepare(
+            manifestJson = EventSeriesFileJson.encode(
+                seriesManifest().copy(
+                    events = seriesManifest().events.take(1),
+                    publicResultsPublication = seriesPublication
+                )
+            ),
+            eventFileJsonByPath = mapOf(
+                "events/day-1.rom.json" to EventProjectFileJson.encode(eventFile)
+            )
+        )
+
+        assertEquals(seriesPublication.url, import.series.publicResultsUrl)
+        assertEquals(
+            seriesPublication.publishedAtIso,
+            import.series.publicResultsPublishedAtIso
+        )
+        assertEquals(racePublication.url, import.races.single().race.publicResultsUrl)
+        assertEquals(
+            racePublication.publishedAtIso,
+            import.races.single().race.publicResultsPublishedAtIso
+        )
+    }
+
     @Test
     fun preparesSeriesImportFromZipPackage() {
         val packageBytes = zipOf(

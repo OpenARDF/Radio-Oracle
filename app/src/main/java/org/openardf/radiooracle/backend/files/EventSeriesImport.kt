@@ -108,6 +108,12 @@ object EventSeriesImport {
             validateSeriesLink(projectFile, seriesFile.seriesId, event)
             val raceData = projectFile.raceData
                 .toRoomRaceData()
+                .also { roomRaceData ->
+                    roomRaceData.race.publicResultsUrl =
+                        projectFile.publicResultsPublication?.url
+                    roomRaceData.race.publicResultsPublishedAtIso =
+                        projectFile.publicResultsPublication?.publishedAtIso
+                }
                 .withSeriesImportIdentity(
                     seriesId = seriesFile.seriesId,
                     seriesEventId = event.seriesEventId,
@@ -133,7 +139,10 @@ object EventSeriesImport {
         return AndroidEventSeriesImport(
             series = EventSeries(
                 seriesId = seriesFile.seriesId,
-                name = seriesFile.name
+                name = seriesFile.name,
+                publicResultsUrl = seriesFile.publicResultsPublication?.url,
+                publicResultsPublishedAtIso =
+                    seriesFile.publicResultsPublication?.publishedAtIso
             ),
             memberImports = memberImports
         )

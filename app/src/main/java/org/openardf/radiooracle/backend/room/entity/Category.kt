@@ -75,7 +75,9 @@ data class Category(
     @ColumnInfo(name = "race_type") var raceType: RaceType? = null,
     @ColumnInfo(name = "category_band") var categoryBand: RaceBand? = null,
     @ColumnInfo(name = "limit") var timeLimit: Duration? = null,
-    @ColumnInfo(name = "control_points_string") var controlPointsString: String
+    @ColumnInfo(name = "control_points_string") var controlPointsString: String,
+    @ColumnInfo(name = "encrypted_ideal_order") var encryptedIdealOrder: String? = null,
+    @ColumnInfo(name = "encrypted_course_info") var encryptedCourseInfo: String? = null
 ) : Serializable {
 
     /** Formats this category in the legacy CSV export row shape. */

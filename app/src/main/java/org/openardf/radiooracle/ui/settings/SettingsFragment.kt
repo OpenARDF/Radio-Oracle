@@ -194,5 +194,12 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 true
             }
 
+        findPreference<androidx.preference.Preference>(
+            requireContext().getString(R.string.key_cloudflare_settings)
+        )?.setOnPreferenceClickListener {
+            findNavController().navigate(SettingsFragmentDirections.configureCloudflare())
+            true
+        }
+
     }
 }

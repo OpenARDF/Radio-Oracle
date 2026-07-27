@@ -29,8 +29,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
-import org.bouncycastle.crypto.digests.Blake3Digest
-import java.io.ByteArrayOutputStream
+import org.openardf.radiooracle.shared.publicresults.CloudflarePagesAsset
+import org.openardf.radiooracle.shared.publicresults.CloudflarePagesMultipartPart
+import org.openardf.radiooracle.shared.publicresults.CloudflarePagesProtocol
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -39,7 +40,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-import java.util.Base64
 
 internal data class DesktopCloudflarePagesAsset(
     val relativePath: String,
@@ -193,101 +193,35 @@ internal object DesktopCloudflarePagesSiteReader {
     }
 
     private fun contentType(path: Path): String =
-        when (path.fileName.toString().substringAfterLast('.', missingDelimiterValue = "").lowercase()) {
-            "css" -> "text/css"
-            "csv" -> "text/csv"
-            "gif" -> "image/gif"
-            "html", "htm" -> "text/html"
-            "ico" -> "image/x-icon"
-            "jpeg", "jpg" -> "image/jpeg"
-            "js", "mjs" -> "application/javascript"
-            "json" -> "application/json"
-            "kml" -> "application/vnd.google-earth.kml+xml"
-            "png" -> "image/png"
-            "svg" -> "image/svg+xml"
-            "txt" -> "text/plain"
-            "webp" -> "image/webp"
-            "xml" -> "application/xml"
-            else -> "application/octet-stream"
-        }
+        CloudflarePagesProtocol.contentType(path.fileName.toString())
 }
 
-internal fun cloudflarePagesAssetHash(path: Path): String {
-    // Cloudflare Pages deduplicates Wrangler uploads with the first 16 bytes of
-    // BLAKE3(base64(file contents) + file extension). Keep native uploads compatible.
-    val fileBytes = Files.readAllBytes(path)
-    val base64Bytes = Base64.getEncoder().encode(fileBytes)
-    val fileName = path.fileName.toString()
-    val extension = fileName.substringAfterLast('.', missingDelimiterValue = "")
-        .toByteArray(StandardCharsets.UTF_8)
-    val digest = Blake3Digest()
-    digest.update(base64Bytes, 0, base64Bytes.size)
-    digest.update(extension, 0, extension.size)
-    val output = ByteArray(digest.digestSize)
-    digest.doFinal(output, 0)
-    return output.take(16).joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-}
+internal fun cloudflarePagesAssetHash(path: Path): String =
+    CloudflarePagesProtocol.assetHash(path.fileName.toString(), Files.readAllBytes(path))
 
 internal fun cloudflarePagesCheckMissingBody(assets: List<DesktopCloudflarePagesAsset>): ByteArray =
-    JsonObject(
-        mapOf(
-            "hashes" to JsonArray(
-                assets.map(DesktopCloudflarePagesAsset::hash)
-                    .distinct()
-                    .map(::JsonPrimitive)
-            )
-        )
-    ).toString().toByteArray(StandardCharsets.UTF_8)
+    CloudflarePagesProtocol.checkMissingBody(assets.map(DesktopCloudflarePagesAsset::toSharedAsset))
 
 internal fun cloudflarePagesUploadBody(assets: List<DesktopCloudflarePagesAsset>): ByteArray =
-    JsonArray(
-        assets.map { asset ->
-            JsonObject(
-                mapOf(
-                    "key" to JsonPrimitive(asset.hash),
-                    "value" to JsonPrimitive(
-                        Base64.getEncoder().encodeToString(Files.readAllBytes(asset.source))
-                    ),
-                    "metadata" to JsonObject(
-                        mapOf("contentType" to JsonPrimitive(asset.contentType))
-                    ),
-                    "base64" to JsonPrimitive(true)
-                )
-            )
-        }
-    ).toString().toByteArray(StandardCharsets.UTF_8)
+    CloudflarePagesProtocol.uploadBody(assets.map(DesktopCloudflarePagesAsset::toSharedAsset))
 
 internal fun cloudflarePagesUpsertHashesBody(assets: List<DesktopCloudflarePagesAsset>): ByteArray =
     cloudflarePagesCheckMissingBody(assets)
 
 internal fun cloudflarePagesManifest(assets: List<DesktopCloudflarePagesAsset>): JsonObject =
-    JsonObject(
-        assets.associate { asset -> "/${asset.relativePath}" to JsonPrimitive(asset.hash) }
-    )
+    CloudflarePagesProtocol.manifest(assets.map(DesktopCloudflarePagesAsset::toSharedAsset))
 
 internal fun cloudflarePagesUploadBuckets(
     assets: List<DesktopCloudflarePagesAsset>,
     maxBucketBytes: Long = 40L * 1024L * 1024L,
     maxBucketFiles: Int = 2_000
 ): List<List<DesktopCloudflarePagesAsset>> {
-    val buckets = mutableListOf<MutableList<DesktopCloudflarePagesAsset>>()
-    var current = mutableListOf<DesktopCloudflarePagesAsset>()
-    var currentBytes = 0L
-    assets.sortedByDescending(DesktopCloudflarePagesAsset::sizeInBytes).forEach { asset ->
-        if (current.isNotEmpty() &&
-            (currentBytes + asset.sizeInBytes > maxBucketBytes || current.size >= maxBucketFiles)
-        ) {
-            buckets += current
-            current = mutableListOf()
-            currentBytes = 0L
-        }
-        current += asset
-        currentBytes += asset.sizeInBytes
-    }
-    if (current.isNotEmpty()) {
-        buckets += current
-    }
-    return buckets
+    val assetsByHash = assets.associateBy(DesktopCloudflarePagesAsset::hash)
+    return CloudflarePagesProtocol.uploadBuckets(
+        assets = assets.map(DesktopCloudflarePagesAsset::toSharedAsset),
+        maxBucketBytes = maxBucketBytes,
+        maxBucketFiles = maxBucketFiles
+    ).map { bucket -> bucket.map { assetsByHash.getValue(it.hash) } }
 }
 
 internal data class DesktopCloudflarePagesMultipartPart(
@@ -300,28 +234,26 @@ internal data class DesktopCloudflarePagesMultipartPart(
 internal fun cloudflarePagesMultipartBody(
     boundary: String,
     parts: List<DesktopCloudflarePagesMultipartPart>
-): ByteArray {
-    val output = ByteArrayOutputStream()
-    parts.forEach { part ->
-        output.write("--$boundary\r\n".toByteArray(StandardCharsets.UTF_8))
-        val disposition = buildString {
-            append("Content-Disposition: form-data; name=\"")
-            append(part.name)
-            append('"')
-            part.fileName?.let { append("; filename=\"$it\"") }
-            append("\r\n")
+): ByteArray =
+    CloudflarePagesProtocol.multipartBody(
+        boundary,
+        parts.map {
+            CloudflarePagesMultipartPart(
+                name = it.name,
+                content = it.content,
+                fileName = it.fileName,
+                contentType = it.contentType
+            )
         }
-        output.write(disposition.toByteArray(StandardCharsets.UTF_8))
-        part.contentType?.let { contentType ->
-            output.write("Content-Type: $contentType\r\n".toByteArray(StandardCharsets.UTF_8))
-        }
-        output.write("\r\n".toByteArray(StandardCharsets.UTF_8))
-        output.write(part.content)
-        output.write("\r\n".toByteArray(StandardCharsets.UTF_8))
-    }
-    output.write("--$boundary--\r\n".toByteArray(StandardCharsets.UTF_8))
-    return output.toByteArray()
-}
+    )
+
+private fun DesktopCloudflarePagesAsset.toSharedAsset(): CloudflarePagesAsset =
+    CloudflarePagesAsset(
+        relativePath = relativePath,
+        content = Files.readAllBytes(source),
+        contentType = contentType,
+        hash = hash
+    )
 
 internal data class DesktopCloudflarePagesHttpRequest(
     val method: String,

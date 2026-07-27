@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="@string/preferences_cloudflare"
+        app:iconSpaceReserved="false">
+
+        <EditTextPreference
+            android:defaultValue="openardf-results"
+            android:key="cloudflarePagesProjectName"
+            android:selectAllOnFocus="true"
+            android:title="@string/cloudflare_project_name"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:defaultValue="main"
+            android:key="cloudflarePagesBranch"
+            android:selectAllOnFocus="true"
+            android:title="@string/cloudflare_branch"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:key="cloudflarePagesAccountId"
+            android:selectAllOnFocus="true"
+            android:title="@string/cloudflare_account_id"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:key="cloudflarePagesApiToken"
+            android:title="@string/cloudflare_api_token"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:defaultValue="RETAIN_PREVIOUS"
+            android:entries="@array/cloudflare_retention_names"
+            android:entryValues="@array/cloudflare_retention_values"
+            android:key="cloudflarePagesRetentionMode"
+            android:title="@string/cloudflare_publishing_mode"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>
