@@ -80,13 +80,19 @@ data class ClassicCourseGeneratorRow(
     val coursePoints: List<ClassicCoursePoint>,
     val routePoints: List<CourseGeoPoint>,
     val orderLabels: List<String>,
-    val matchingCategories: List<String>
+    val matchingCategories: List<String>,
+    val sprintSlowFoxCount: Int? = null,
+    val sprintFastFoxCount: Int? = null
 ) {
     val hasCategoryMatch: Boolean = matchingCategories.isNotEmpty()
     val climbPercent: Double? = climbMeters
         ?.takeIf { horizontalLengthMeters > 0.0 }
         ?.let { it / horizontalLengthMeters * 100.0 }
     val orderKey: String = orderLabels.joinToString("\u0000")
+    val sprintLoopFoxCountDifference: Int? =
+        sprintSlowFoxCount?.let { slowCount ->
+            sprintFastFoxCount?.let { fastCount -> kotlin.math.abs(slowCount - fastCount) }
+        }
 }
 
 internal fun ClassicCourseGeneratorRow.routeGeneratorParentheticalText(): String =
@@ -115,6 +121,9 @@ data class ClassicCourseGeneratorRecommendedSet(
     val uniqueFirstFoxCount: Int,
     val categoryFoxMinimum: Int,
     val categoryFoxTotal: Int,
+    val sprintTargetTimeCategoryCount: Int,
+    val unbalancedSprintCourseCount: Int,
+    val totalSprintLoopFoxCountDifference: Int,
     val coveredCategories: List<String>,
     val rows: List<ClassicCourseGeneratorRow>
 )
@@ -181,7 +190,8 @@ object DesktopClassicCourseGenerator {
         transmitterSeparationMeters = EventCourseRuleCatalog.spacingRuleSet(RaceType.SPRINT)?.pairMinMeters ?: 100,
         useSubsetDynamicProgramming = false,
         recommendCourseSets = true,
-        recommendationCategoryFilter = { true }
+        recommendationCategoryFilter = { true },
+        preferBalancedSprintLoops = true
     )
 
     fun generate(
@@ -598,7 +608,9 @@ object DesktopClassicCourseGenerator {
                 foxCount = foxCount,
                 climbMeters = metrics.climbMeters,
                 config = config
-            )
+            ),
+            sprintSlowFoxCount = slowFoxes.size,
+            sprintFastFoxCount = fastFoxes.size
         )
     }
 
@@ -959,12 +971,12 @@ object DesktopClassicCourseGenerator {
         if (targetCategories.any { category -> rows.none { category in it.matchingCategories } }) {
             return emptyList()
         }
-        val candidates = recommendationCandidateRows(rows, targetCategories, categoryIndex)
+        val candidates = recommendationCandidateRows(rows, targetCategories, categoryIndex, config)
         if (candidates.isEmpty()) return emptyList()
 
         val targetMask = (1 shl targetCategories.size) - 1
         val scoredSets = mutableListOf<RecommendedCourseSetScore>()
-        val setComparator = recommendedSetComparator()
+        val setComparator = recommendedSetComparator(config)
         fun addScoredSet(score: RecommendedCourseSetScore) {
             if (scoredSets.size < FOXORING_RECOMMENDATION_SCORE_BUFFER) {
                 scoredSets += score
@@ -1006,6 +1018,9 @@ object DesktopClassicCourseGenerator {
                     uniqueFirstFoxCount = score.uniqueFirstFoxCount,
                     categoryFoxMinimum = score.categoryFoxMinimum,
                     categoryFoxTotal = score.categoryFoxTotal,
+                    sprintTargetTimeCategoryCount = score.sprintTargetTimeCategoryCount,
+                    unbalancedSprintCourseCount = score.unbalancedSprintCourseCount,
+                    totalSprintLoopFoxCountDifference = score.totalSprintLoopFoxCountDifference,
                     coveredCategories = targetCategories,
                     rows = score.rows.sortedWith(
                         compareByDescending<ClassicCourseGeneratorRow> { it.foxCount }
@@ -1043,7 +1058,8 @@ object DesktopClassicCourseGenerator {
     private fun recommendationCandidateRows(
         rows: List<ClassicCourseGeneratorRow>,
         allCategories: List<String>,
-        categoryIndex: Map<String, Int>
+        categoryIndex: Map<String, Int>,
+        config: CourseGeneratorConfig
     ): List<RecommendationCandidateRow> {
         val candidates = rows
             .filter { it.hasCategoryMatch }
@@ -1075,7 +1091,7 @@ object DesktopClassicCourseGenerator {
         allCategories.forEach { category ->
             candidates
                 .filter { category in it.row.matchingCategories }
-                .sortedWith(recommendationCandidateComparator())
+                .sortedWith(recommendationCandidateComparator(config, category))
                 .take(perCategorySeedLimit)
                 .forEach(::add)
         }
@@ -1084,16 +1100,16 @@ object DesktopClassicCourseGenerator {
             .values
             .forEach { sameFirstFox ->
                 sameFirstFox
-                    .sortedWith(recommendationCandidateComparator())
+                    .sortedWith(recommendationCandidateComparator(config))
                     .take(8)
                     .forEach(::addIfRoom)
             }
         candidates
-            .sortedWith(recommendationCandidateComparator())
+            .sortedWith(recommendationCandidateComparator(config))
             .take(FOXORING_RECOMMENDATION_CANDIDATE_LIMIT)
             .forEach(::addIfRoom)
         return selected.values
-            .sortedWith(recommendationCandidateComparator())
+            .sortedWith(recommendationCandidateComparator(config))
     }
 
     private fun scoreRecommendedSet(
@@ -1120,23 +1136,80 @@ object DesktopClassicCourseGenerator {
             uniqueFirstFoxCount = uniqueFirstFoxCount,
             categoryFoxMinimum = categoryFoxCounts.minOrNull() ?: 0,
             categoryFoxTotal = categoryFoxCounts.sum(),
+            sprintTargetTimeCategoryCount = allCategories.count { category ->
+                rows.any { row -> row.sprintTargetTimeMatches(category) }
+            },
+            unbalancedSprintCourseCount = rows.count { row ->
+                row.sprintLoopFoxCountDifference?.let { it > 0 } == true
+            },
+            totalSprintLoopFoxCountDifference = rows.sumOf { row ->
+                row.sprintLoopFoxCountDifference ?: 0
+            },
             totalEffectiveLengthMeters = rows.sumOf { it.effectiveLengthMeters }
         )
     }
 
-    private fun recommendationCandidateComparator(): Comparator<RecommendationCandidateRow> =
-        compareByDescending<RecommendationCandidateRow> { it.row.foxCount }
+    private fun recommendationCandidateComparator(
+        config: CourseGeneratorConfig,
+        category: String? = null
+    ): Comparator<RecommendationCandidateRow> {
+        if (!config.preferBalancedSprintLoops) {
+            return compareByDescending<RecommendationCandidateRow> { it.row.foxCount }
+                .thenByDescending { it.categoryMask.countOneBits() }
+                .thenBy { it.row.effectiveLengthMeters }
+                .thenBy { it.row.orderKey }
+        }
+        return compareByDescending<RecommendationCandidateRow> {
+            category?.let { targetCategory ->
+                if (it.row.sprintTargetTimeMatches(targetCategory)) 1 else 0
+            }
+                ?: it.row.matchingCategories.count { targetCategory ->
+                    it.row.sprintTargetTimeMatches(targetCategory)
+                }
+        }
+            .thenBy {
+                it.row.sprintLoopFoxCountDifference ?: 0
+            }
             .thenByDescending { it.categoryMask.countOneBits() }
+            .thenByDescending { it.row.foxCount }
             .thenBy { it.row.effectiveLengthMeters }
             .thenBy { it.row.orderKey }
+    }
 
-    private fun recommendedSetComparator(): Comparator<RecommendedCourseSetScore> =
-        compareByDescending<RecommendedCourseSetScore> { it.categoryFoxMinimum }
-            .thenByDescending { it.categoryFoxTotal }
+    private fun recommendedSetComparator(
+        config: CourseGeneratorConfig
+    ): Comparator<RecommendedCourseSetScore> {
+        if (!config.preferBalancedSprintLoops) {
+            return compareByDescending<RecommendedCourseSetScore> { it.categoryFoxMinimum }
+                .thenByDescending { it.categoryFoxTotal }
+                .thenByDescending { it.uniqueFirstFoxCount }
+                .thenByDescending { it.rows.size }
+                .thenBy { it.totalEffectiveLengthMeters }
+                .thenBy { it.orderKey }
+        }
+        return compareByDescending<RecommendedCourseSetScore> {
+            it.sprintTargetTimeCategoryCount
+        }
             .thenByDescending { it.uniqueFirstFoxCount }
+            .thenBy { it.unbalancedSprintCourseCount }
+            .thenBy { it.totalSprintLoopFoxCountDifference }
+            .thenByDescending { it.categoryFoxMinimum }
+            .thenByDescending { it.categoryFoxTotal }
             .thenByDescending { it.rows.size }
             .thenBy { it.totalEffectiveLengthMeters }
             .thenBy { it.orderKey }
+    }
+
+    private fun ClassicCourseGeneratorRow.sprintTargetTimeMatches(category: String): Boolean {
+        if (sprintLoopFoxCountDifference == null || category !in matchingCategories) {
+            return false
+        }
+        val estimatedSeconds = DesktopCourseSpeedFactors.estimatedSprintSeconds(
+            comparisonLengthMeters = effectiveLengthMeters,
+            categoryKey = category
+        )
+        return DesktopCourseSpeedFactors.isWithinSprintTargetTime(estimatedSeconds)
+    }
 
     private fun requirementWarnings(
         classified: ClassifiedClassicCoursePoints,
@@ -1491,7 +1564,8 @@ object DesktopClassicCourseGenerator {
         val transmitterSeparationMeters: Int,
         val useSubsetDynamicProgramming: Boolean,
         val recommendCourseSets: Boolean = false,
-        val recommendationCategoryFilter: (String) -> Boolean = { it.isFoxoringRecommendedSetCategory() }
+        val recommendationCategoryFilter: (String) -> Boolean = { it.isFoxoringRecommendedSetCategory() },
+        val preferBalancedSprintLoops: Boolean = false
     )
 
     private data class RecommendationCandidateRow(
@@ -1504,6 +1578,9 @@ object DesktopClassicCourseGenerator {
         val uniqueFirstFoxCount: Int,
         val categoryFoxMinimum: Int,
         val categoryFoxTotal: Int,
+        val sprintTargetTimeCategoryCount: Int,
+        val unbalancedSprintCourseCount: Int,
+        val totalSprintLoopFoxCountDifference: Int,
         val totalEffectiveLengthMeters: Double
     ) {
         val orderKey: String = rows.joinToString("\u0000") { it.orderKey }

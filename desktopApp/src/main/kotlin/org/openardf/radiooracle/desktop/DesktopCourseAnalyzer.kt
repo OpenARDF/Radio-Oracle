@@ -367,10 +367,10 @@ object DesktopCourseAnalyzer {
     private const val CLASSIC_TRANSMIT_SLOT_SECONDS = 60
     private const val CLASSIC_CONTROL_FIND_PUNCH_SECONDS = 30
     private const val CLASSIC_TARGET_SECONDS = 60 * 60
-    private const val SPRINT_TARGET_SECONDS = 15 * 60
+    private const val SPRINT_TARGET_SECONDS = DesktopCourseSpeedFactors.SPRINT_TARGET_SECONDS
     private const val FOXORING_TARGET_SECONDS = 45 * 60
     private const val CLASSIC_FLAT_SPEED_MPS = 3.6
-    private const val SPRINT_FLAT_SPEED_MPS = 4.2
+    private const val SPRINT_FLAT_SPEED_MPS = DesktopCourseSpeedFactors.SPRINT_FLAT_SPEED_METERS_PER_SECOND
     private const val FOXORING_FLAT_SPEED_MPS = 3.4
     private const val MIN_EFFECTIVE_SPEED_MPS = 0.25
     private const val MAX_PERMUTATION_CONTROLS = 8
@@ -3530,7 +3530,8 @@ object DesktopCourseAnalyzer {
                                 ?: "Unknown (target approximately ${compactDurationText(SPRINT_TARGET_SECONDS)})",
                             when {
                                 estimatedSeconds == null -> DesktopCourseMetricStatus.Unknown
-                                abs(estimatedSeconds - SPRINT_TARGET_SECONDS) <= SPRINT_TARGET_SECONDS * 0.15 -> DesktopCourseMetricStatus.Good
+                                DesktopCourseSpeedFactors.isWithinSprintTargetTime(estimatedSeconds.toDouble()) ->
+                                    DesktopCourseMetricStatus.Good
                                 else -> DesktopCourseMetricStatus.Warning
                             }
                         )
@@ -3823,7 +3824,15 @@ object DesktopCourseAnalyzer {
                     } ?: "Unknown",
                     if (estimatedIdealSeconds == null) {
                         DesktopCourseMetricStatus.Unknown
-                    } else if (abs(estimatedIdealSeconds - targetSeconds) <= targetSeconds * 0.15) {
+                    } else if (
+                        raceType == RaceType.SPRINT &&
+                        DesktopCourseSpeedFactors.isWithinSprintTargetTime(estimatedIdealSeconds.toDouble())
+                    ) {
+                        DesktopCourseMetricStatus.Good
+                    } else if (
+                        raceType != RaceType.SPRINT &&
+                        abs(estimatedIdealSeconds - targetSeconds) <= targetSeconds * 0.15
+                    ) {
                         DesktopCourseMetricStatus.Good
                     } else {
                         DesktopCourseMetricStatus.Warning
@@ -3841,7 +3850,15 @@ object DesktopCourseAnalyzer {
                         DesktopCourseGoodnessMetric(
                             "Saved route finish time with renumbering",
                             "${compactDurationText(renumberedIdealSeconds)} / ${compactDurationText(targetSeconds)}",
-                            if (abs(renumberedIdealSeconds - targetSeconds) <= targetSeconds * 0.15) {
+                            if (
+                                raceType == RaceType.SPRINT &&
+                                DesktopCourseSpeedFactors.isWithinSprintTargetTime(renumberedIdealSeconds.toDouble())
+                            ) {
+                                DesktopCourseMetricStatus.Good
+                            } else if (
+                                raceType != RaceType.SPRINT &&
+                                abs(renumberedIdealSeconds - targetSeconds) <= targetSeconds * 0.15
+                            ) {
                                 DesktopCourseMetricStatus.Good
                             } else {
                                 DesktopCourseMetricStatus.Warning

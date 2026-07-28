@@ -28,9 +28,27 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.openardf.radiooracle.shared.event.EventCourseRuleCatalog
 import java.nio.file.Files
 
 class DesktopSprintCourseGeneratorTest {
+    @Test
+    fun sprintTargetTimeUsesSharedCategorySpeedModel() {
+        val m21TargetSeconds = DesktopCourseSpeedFactors.estimatedSprintSeconds(
+            comparisonLengthMeters = 3_780.0,
+            categoryKey = "M21"
+        )
+        val w75TargetSeconds = DesktopCourseSpeedFactors.estimatedSprintSeconds(
+            comparisonLengthMeters = 1_776.6,
+            categoryKey = "W75"
+        )
+
+        assertEquals(900.0, m21TargetSeconds, 0.001)
+        assertEquals(900.0, w75TargetSeconds, 0.001)
+        assertTrue(DesktopCourseSpeedFactors.isWithinSprintTargetTime(m21TargetSeconds))
+        assertFalse(DesktopCourseSpeedFactors.isWithinSprintTargetTime(600.0))
+    }
+
     @Test
     fun generatesSprintCoursesFromOneThroughFiveFoxesPerLoop() {
         val path = Files.createTempFile("sprint-course-points", ".kml")
@@ -55,6 +73,11 @@ class DesktopSprintCourseGeneratorTest {
                 labels.takeLast(2) == listOf("B", "F") &&
                 labels.indexOf("SP") > 1 &&
                 labels.indexOf("SP") < labels.lastIndex - 1
+        })
+        assertTrue(result.rows.all { row ->
+            row.sprintSlowFoxCount != null &&
+                row.sprintFastFoxCount != null &&
+                row.foxCount == row.sprintSlowFoxCount + row.sprintFastFoxCount
         })
         assertTrue(result.rows.any { row ->
             row.foxCount == 6 &&
@@ -84,19 +107,57 @@ class DesktopSprintCourseGeneratorTest {
         assertTrue(firstSet.coveredCategories.contains("W75"))
         assertEquals(firstSet.rows.size, firstSet.courseCount)
         assertEquals(uniqueFirstFoxCount(firstSet.rows), firstSet.uniqueFirstFoxCount)
+        assertEquals(
+            "Balanced Sprint routes should win when target-time coverage and unique first foxes allow them.",
+            0,
+            firstSet.unbalancedSprintCourseCount
+        )
+        assertEquals(0, firstSet.totalSprintLoopFoxCountDifference)
         val recommendedFoxCountByCategory = bestMatchingFoxCountByCategory(firstSet.rows, firstSet.coveredCategories)
         assertEquals(firstSet.coveredCategories.toSet(), recommendedFoxCountByCategory.keys)
         assertEquals(recommendedFoxCountByCategory.values.minOrNull(), firstSet.categoryFoxMinimum)
         assertEquals(recommendedFoxCountByCategory.values.sum(), firstSet.categoryFoxTotal)
+        recommendedFoxCountByCategory.forEach { (category, foxCount) ->
+            val requirement = requireNotNull(EventCourseRuleCatalog.sprintRequirements[category])
+            assertTrue(
+                "$category assigned $foxCount foxes outside ${requirement.controlRangeText()}",
+                foxCount in requirement.minControls..requirement.maxControls
+            )
+        }
         assertEquals(
             result.recommendedCourseSets.sortedWith(
-                compareByDescending<ClassicCourseGeneratorRecommendedSet> { it.categoryFoxMinimum }
-                    .thenByDescending { it.categoryFoxTotal }
+                compareByDescending<ClassicCourseGeneratorRecommendedSet> { it.sprintTargetTimeCategoryCount }
                     .thenByDescending { it.uniqueFirstFoxCount }
+                    .thenBy { it.unbalancedSprintCourseCount }
+                    .thenBy { it.totalSprintLoopFoxCountDifference }
+                    .thenByDescending { it.categoryFoxMinimum }
+                    .thenByDescending { it.categoryFoxTotal }
                     .thenByDescending { it.rows.size }
             ),
             result.recommendedCourseSets
         )
+        assertTrue(
+            result.recommendedCourseSets.none { alternative ->
+                alternative.sprintTargetTimeCategoryCount == firstSet.sprintTargetTimeCategoryCount &&
+                    alternative.uniqueFirstFoxCount == firstSet.uniqueFirstFoxCount &&
+                    alternative.unbalancedSprintCourseCount < firstSet.unbalancedSprintCourseCount
+            }
+        )
+        result.recommendedCourseSets.forEach { recommendedSet ->
+            val assignedFoxCountByCategory = bestMatchingFoxCountByCategory(
+                recommendedSet.rows,
+                recommendedSet.coveredCategories
+            )
+            assertEquals(recommendedSet.coveredCategories.toSet(), assignedFoxCountByCategory.keys)
+            assignedFoxCountByCategory.forEach { (category, foxCount) ->
+                val requirement = requireNotNull(EventCourseRuleCatalog.sprintRequirements[category])
+                assertTrue(
+                    "Set ${recommendedSet.index}: $category assigned $foxCount foxes outside " +
+                        requirement.controlRangeText(),
+                    foxCount in requirement.minControls..requirement.maxControls
+                )
+            }
+        }
         assertTrue(reportText.contains("RECOMMENDED SPRINT COURSE SETS"))
         assertTrue(reportText.contains("Set #1"))
         assertTrue(pdfText.contains("Sprint Route Generator"))

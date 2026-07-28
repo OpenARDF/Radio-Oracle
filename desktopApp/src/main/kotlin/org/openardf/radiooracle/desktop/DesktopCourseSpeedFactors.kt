@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
+import kotlin.math.abs
+
 data class DesktopCourseSpeedFactorTable(
     val categoryFactors: List<DesktopCourseCategorySpeedFactor>,
     val unmatchedCategoryMultiplier: Double = 1.00,
@@ -43,6 +45,10 @@ data class DesktopCourseCategorySpeedFactor(
 )
 
 object DesktopCourseSpeedFactors {
+    const val SPRINT_FLAT_SPEED_METERS_PER_SECOND = 4.2
+    const val SPRINT_TARGET_SECONDS = 15 * 60
+    private const val SPRINT_TARGET_TOLERANCE_FRACTION = 0.15
+
     val provisionalCategoryTable = DesktopCourseSpeedFactorTable(
         categoryFactors = listOf(
             DesktopCourseCategorySpeedFactor(listOf("M21"), 1.00),
@@ -70,4 +76,16 @@ object DesktopCourseSpeedFactors {
             "to per-leg speed adjustment alongside vegetation, runnability, climb, barriers, and other " +
             "map-derived course-condition factors."
     )
+
+    fun estimatedSprintSeconds(
+        comparisonLengthMeters: Double,
+        categoryKey: String
+    ): Double {
+        val categoryMultiplier = provisionalCategoryTable.categoryMultiplier(categoryKey)
+        return comparisonLengthMeters / (SPRINT_FLAT_SPEED_METERS_PER_SECOND * categoryMultiplier)
+    }
+
+    fun isWithinSprintTargetTime(estimatedSeconds: Double): Boolean =
+        abs(estimatedSeconds - SPRINT_TARGET_SECONDS) <=
+            SPRINT_TARGET_SECONDS * SPRINT_TARGET_TOLERANCE_FRACTION
 }
