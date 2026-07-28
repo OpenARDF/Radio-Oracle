@@ -130,35 +130,43 @@ data class ClassicCourseGeneratorRecommendedSet(
 
 /**
  * Candidates arrive in recommendation-quality order. Keep the best set first, then maximize each
- * selected set's contribution of unused routes. Overlap and the original quality rank break ties.
+ * selected set's contribution of new first-fox alternatives. Exact combination reuse, overlap, and
+ * the original quality rank break ties.
  */
-internal fun selectDiverseRecommendedSetIndices(
-    routeKeysByCandidate: List<Set<String>>,
+internal fun selectDiverseFirstFoxCombinationIndices(
+    firstFoxesByCandidate: List<List<String>>,
     limit: Int
 ): List<Int> {
-    if (routeKeysByCandidate.isEmpty() || limit <= 0) return emptyList()
+    if (firstFoxesByCandidate.isEmpty() || limit <= 0) return emptyList()
+    val combinationSignatures = firstFoxesByCandidate.map { it.sorted() }
+    val firstFoxSets = firstFoxesByCandidate.map { it.toSet() }
     val selected = mutableListOf(0)
-    val usedRouteKeys = routeKeysByCandidate.first().toMutableSet()
-    val remaining = routeKeysByCandidate.indices.drop(1).toMutableSet()
+    val selectedCombinations = mutableSetOf(combinationSignatures.first())
+    val usedFirstFoxes = firstFoxSets.first().toMutableSet()
+    val remaining = firstFoxesByCandidate.indices.drop(1).toMutableSet()
     while (selected.size < limit && remaining.isNotEmpty()) {
         val next = remaining.minWith(
-            compareByDescending<Int> { candidateIndex ->
-                routeKeysByCandidate[candidateIndex].count { it !in usedRouteKeys }
+            compareBy<Int> { candidateIndex ->
+                if (combinationSignatures[candidateIndex] in selectedCombinations) 1 else 0
+            }
+                .thenByDescending { candidateIndex ->
+                    firstFoxSets[candidateIndex].count { it !in usedFirstFoxes }
             }
                 .thenBy { candidateIndex ->
                     selected.maxOfOrNull { selectedIndex ->
-                        routeKeysByCandidate[candidateIndex].count {
-                            it in routeKeysByCandidate[selectedIndex]
+                        firstFoxSets[candidateIndex].count {
+                            it in firstFoxSets[selectedIndex]
                         }
                     } ?: 0
                 }
                 .thenBy { candidateIndex ->
-                    routeKeysByCandidate[candidateIndex].count { it in usedRouteKeys }
+                    firstFoxSets[candidateIndex].count { it in usedFirstFoxes }
                 }
                 .thenBy { it }
         )
         selected += next
-        usedRouteKeys += routeKeysByCandidate[next]
+        selectedCombinations += combinationSignatures[next]
+        usedFirstFoxes += firstFoxSets[next]
         remaining -= next
     }
     return selected
@@ -228,7 +236,7 @@ object DesktopClassicCourseGenerator {
         recommendCourseSets = true,
         recommendationCategoryFilter = { true },
         preferBalancedSprintLoops = true,
-        preferDiverseCourseSets = true
+        preferDiverseFirstFoxCombinations = true
     )
 
     fun generate(
@@ -1014,7 +1022,14 @@ object DesktopClassicCourseGenerator {
         val targetMask = (1 shl targetCategories.size) - 1
         val scoredSets = mutableListOf<RecommendedCourseSetScore>()
         val setComparator = recommendedSetComparator(config)
+        val bestScoreByFirstFoxCombination = mutableMapOf<String, RecommendedCourseSetScore>()
         fun addScoredSet(score: RecommendedCourseSetScore) {
+            if (config.preferDiverseFirstFoxCombinations) {
+                val currentBest = bestScoreByFirstFoxCombination[score.firstFoxCombinationKey]
+                if (currentBest == null || setComparator.compare(score, currentBest) < 0) {
+                    bestScoreByFirstFoxCombination[score.firstFoxCombinationKey] = score
+                }
+            }
             if (scoredSets.size < FOXORING_RECOMMENDATION_SCORE_BUFFER) {
                 scoredSets += score
                 return
@@ -1039,7 +1054,7 @@ object DesktopClassicCourseGenerator {
                 )
             }
         }
-        val rankedScores = scoredSets
+        val rankedScores = (scoredSets + bestScoreByFirstFoxCombination.values)
             .distinctBy { score ->
                 score.rows
                     .map { it.orderKey }
@@ -1047,10 +1062,10 @@ object DesktopClassicCourseGenerator {
                     .joinToString("\u0000")
             }
             .sortedWith(setComparator)
-        val selectedScores = if (config.preferDiverseCourseSets) {
-            selectDiverseRecommendedSetIndices(
-                routeKeysByCandidate = rankedScores.map { score ->
-                    score.rows.mapTo(linkedSetOf()) { it.orderKey }
+        val selectedScores = if (config.preferDiverseFirstFoxCombinations) {
+            selectDiverseFirstFoxCombinationIndices(
+                firstFoxesByCandidate = rankedScores.map { score ->
+                    score.rows.mapNotNull { it.orderLabels.getOrNull(1) }
                 },
                 limit = FOXORING_RECOMMENDATION_LIMIT
             ).map(rankedScores::get)
@@ -1613,7 +1628,7 @@ object DesktopClassicCourseGenerator {
         val recommendCourseSets: Boolean = false,
         val recommendationCategoryFilter: (String) -> Boolean = { it.isFoxoringRecommendedSetCategory() },
         val preferBalancedSprintLoops: Boolean = false,
-        val preferDiverseCourseSets: Boolean = false
+        val preferDiverseFirstFoxCombinations: Boolean = false
     )
 
     private data class RecommendationCandidateRow(
@@ -1632,6 +1647,10 @@ object DesktopClassicCourseGenerator {
         val totalEffectiveLengthMeters: Double
     ) {
         val orderKey: String = rows.joinToString("\u0000") { it.orderKey }
+        val firstFoxCombinationKey: String = rows
+            .mapNotNull { it.orderLabels.getOrNull(1) }
+            .sorted()
+            .joinToString("\u0000")
     }
 
     private data class PdfLine(

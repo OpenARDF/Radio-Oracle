@@ -33,13 +33,13 @@ import java.nio.file.Files
 
 class DesktopSprintCourseGeneratorTest {
     @Test
-    fun diverseSetSelectionAddsNewRoutesBeforeReusingRoutes() {
-        val selected = selectDiverseRecommendedSetIndices(
-            routeKeysByCandidate = listOf(
-                setOf("A", "B", "C", "D"),
-                setOf("A", "B", "C", "E"),
-                setOf("E", "F", "G", "H"),
-                setOf("I", "J", "K", "L")
+    fun diverseSetSelectionAddsNewFirstFoxesBeforeReusingCombinations() {
+        val selected = selectDiverseFirstFoxCombinationIndices(
+            firstFoxesByCandidate = listOf(
+                listOf("A", "B", "C", "D"),
+                listOf("A", "B", "C", "E"),
+                listOf("E", "F", "G", "H"),
+                listOf("I", "J", "K", "L")
             ),
             limit = 3
         )
@@ -48,13 +48,13 @@ class DesktopSprintCourseGeneratorTest {
     }
 
     @Test
-    fun diverseSetSelectionSpreadsEqualOverlapAcrossEarlierSets() {
-        val selected = selectDiverseRecommendedSetIndices(
-            routeKeysByCandidate = listOf(
-                setOf("A", "B", "C", "D"),
-                setOf("A", "E", "I", "J"),
-                setOf("A", "B", "I", "J"),
-                setOf("E", "F", "G", "H")
+    fun diverseSetSelectionSpreadsFirstFoxOverlapAcrossEarlierSets() {
+        val selected = selectDiverseFirstFoxCombinationIndices(
+            firstFoxesByCandidate = listOf(
+                listOf("A", "B", "C", "D"),
+                listOf("A", "E", "I", "J"),
+                listOf("A", "B", "I", "J"),
+                listOf("E", "F", "G", "H")
             ),
             limit = 3
         )
@@ -188,16 +188,15 @@ class DesktopSprintCourseGeneratorTest {
                 )
             }
         }
-        val previouslyRecommendedRouteKeys = mutableSetOf<String>()
-        result.recommendedCourseSets.forEach { recommendedSet ->
-            val setRouteKeys = recommendedSet.rows.map { it.orderKey }
-            assertTrue(
-                "Recommended Sprint set ${recommendedSet.index} should contribute a route not used by earlier sets.",
-                setRouteKeys.any { it !in previouslyRecommendedRouteKeys }
-            )
-            previouslyRecommendedRouteKeys += setRouteKeys
+        val firstFoxCombinations = result.recommendedCourseSets.map { recommendedSet ->
+            recommendedSet.rows.mapNotNull { it.orderLabels.getOrNull(1) }.sorted()
         }
-        assertTrue(previouslyRecommendedRouteKeys.size > firstSet.courseCount)
+        assertEquals(
+            "Recommended Sprint sets should use different combinations of first ideal foxes.",
+            firstFoxCombinations.size,
+            firstFoxCombinations.distinct().size
+        )
+        assertTrue(firstFoxCombinations.flatten().distinct().size > firstFoxCombinations.first().distinct().size)
         assertTrue(reportText.contains("RECOMMENDED SPRINT COURSE SETS"))
         assertTrue(reportText.contains("Set #1"))
         assertTrue(pdfText.contains("Sprint Route Generator"))
