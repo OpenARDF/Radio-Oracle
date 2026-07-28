@@ -33,6 +33,36 @@ import java.nio.file.Files
 
 class DesktopSprintCourseGeneratorTest {
     @Test
+    fun diverseSetSelectionAddsNewRoutesBeforeReusingRoutes() {
+        val selected = selectDiverseRecommendedSetIndices(
+            routeKeysByCandidate = listOf(
+                setOf("A", "B", "C", "D"),
+                setOf("A", "B", "C", "E"),
+                setOf("E", "F", "G", "H"),
+                setOf("I", "J", "K", "L")
+            ),
+            limit = 3
+        )
+
+        assertEquals(listOf(0, 2, 3), selected)
+    }
+
+    @Test
+    fun diverseSetSelectionSpreadsEqualOverlapAcrossEarlierSets() {
+        val selected = selectDiverseRecommendedSetIndices(
+            routeKeysByCandidate = listOf(
+                setOf("A", "B", "C", "D"),
+                setOf("A", "E", "I", "J"),
+                setOf("A", "B", "I", "J"),
+                setOf("E", "F", "G", "H")
+            ),
+            limit = 3
+        )
+
+        assertEquals(listOf(0, 3, 1), selected)
+    }
+
+    @Test
     fun sprintTargetTimeUsesSharedCategorySpeedModel() {
         val m21TargetSeconds = DesktopCourseSpeedFactors.estimatedSprintSeconds(
             comparisonLengthMeters = 3_780.0,
@@ -124,17 +154,17 @@ class DesktopSprintCourseGeneratorTest {
                 foxCount in requirement.minControls..requirement.maxControls
             )
         }
+        val recommendationQualityComparator =
+            compareByDescending<ClassicCourseGeneratorRecommendedSet> { it.sprintTargetTimeCategoryCount }
+                .thenByDescending { it.uniqueFirstFoxCount }
+                .thenBy { it.unbalancedSprintCourseCount }
+                .thenBy { it.totalSprintLoopFoxCountDifference }
+                .thenByDescending { it.categoryFoxMinimum }
+                .thenByDescending { it.categoryFoxTotal }
+                .thenByDescending { it.rows.size }
         assertEquals(
-            result.recommendedCourseSets.sortedWith(
-                compareByDescending<ClassicCourseGeneratorRecommendedSet> { it.sprintTargetTimeCategoryCount }
-                    .thenByDescending { it.uniqueFirstFoxCount }
-                    .thenBy { it.unbalancedSprintCourseCount }
-                    .thenBy { it.totalSprintLoopFoxCountDifference }
-                    .thenByDescending { it.categoryFoxMinimum }
-                    .thenByDescending { it.categoryFoxTotal }
-                    .thenByDescending { it.rows.size }
-            ),
-            result.recommendedCourseSets
+            firstSet,
+            result.recommendedCourseSets.minWith(recommendationQualityComparator)
         )
         assertTrue(
             result.recommendedCourseSets.none { alternative ->
@@ -158,6 +188,16 @@ class DesktopSprintCourseGeneratorTest {
                 )
             }
         }
+        val previouslyRecommendedRouteKeys = mutableSetOf<String>()
+        result.recommendedCourseSets.forEach { recommendedSet ->
+            val setRouteKeys = recommendedSet.rows.map { it.orderKey }
+            assertTrue(
+                "Recommended Sprint set ${recommendedSet.index} should contribute a route not used by earlier sets.",
+                setRouteKeys.any { it !in previouslyRecommendedRouteKeys }
+            )
+            previouslyRecommendedRouteKeys += setRouteKeys
+        }
+        assertTrue(previouslyRecommendedRouteKeys.size > firstSet.courseCount)
         assertTrue(reportText.contains("RECOMMENDED SPRINT COURSE SETS"))
         assertTrue(reportText.contains("Set #1"))
         assertTrue(pdfText.contains("Sprint Route Generator"))

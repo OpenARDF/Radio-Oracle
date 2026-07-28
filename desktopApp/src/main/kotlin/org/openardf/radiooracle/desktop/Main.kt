@@ -111,6 +111,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -14683,6 +14684,7 @@ private fun AppSettingsPanel(
         AppSettingsSection("Cloudflare Pages publishing") {
             CloudflarePagesPublishSettingsPanel(
                 settings = cloudflarePagesPublishSettings,
+                projectFile = projectFile,
                 onSave = onSetCloudflarePagesPublishSettings
             )
         }
@@ -14783,6 +14785,7 @@ private fun raceAwardSettingsSummary(race: EventRace?): String =
 @Composable
 private fun CloudflarePagesPublishSettingsPanel(
     settings: DesktopCloudflarePagesPublishSettings,
+    projectFile: EventProjectFile?,
     onSave: (DesktopCloudflarePagesPublishSettings) -> Boolean
 ) {
     var projectNameDraft by remember(settings) { mutableStateOf(settings.projectName) }
@@ -14791,6 +14794,9 @@ private fun CloudflarePagesPublishSettingsPanel(
     var apiTokenDraft by remember(settings) { mutableStateOf(settings.apiToken) }
     var retentionModeDraft by remember(settings) { mutableStateOf(settings.retentionMode) }
     var saveConfirmationText by remember { mutableStateOf<String?>(null) }
+    val revealStateKey = projectFile?.raceData?.race?.id
+    var isApiTokenVisible by remember(revealStateKey, settings.apiToken) { mutableStateOf(false) }
+    var isTokenRevealDialogVisible by remember(revealStateKey) { mutableStateOf(false) }
     val savedSettings = settings.normalized()
     val rawDraftSettings = DesktopCloudflarePagesPublishSettings(
         projectName = projectNameDraft,
@@ -14875,18 +14881,50 @@ private fun CloudflarePagesPublishSettingsPanel(
             color = Color.DarkGray,
             fontSize = 13.sp
         )
-        TextField(
-            value = apiTokenDraft,
-            onValueChange = {
-                apiTokenDraft = it
-                clearSaveConfirmation()
-            },
-            label = { Text("API Token") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .commitOnEnter(::submitSettings)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            TextField(
+                value = apiTokenDraft,
+                onValueChange = {
+                    apiTokenDraft = it
+                    clearSaveConfirmation()
+                },
+                label = { Text("API Token") },
+                singleLine = true,
+                visualTransformation = if (isApiTokenVisible) {
+                    VisualTransformation.None
+                } else {
+                    PasswordVisualTransformation()
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .commitOnEnter(::submitSettings)
+            )
+            val revealDisabledReason = cloudflareApiTokenRevealDisabledReason(projectFile, apiTokenDraft)
+            DisabledReasonTooltip(
+                if (isApiTokenVisible) null else revealDisabledReason
+            ) {
+                Button(
+                    onClick = {
+                        if (isApiTokenVisible) {
+                            isApiTokenVisible = false
+                        } else {
+                            isTokenRevealDialogVisible = true
+                        }
+                    },
+                    enabled = isApiTokenVisible || revealDisabledReason == null
+                ) {
+                    ButtonLabel(if (isApiTokenVisible) "Hide API Token" else "Show API Token")
+                }
+            }
+        }
+        Text(
+            text = "The API token is hidden by default. Showing the stored value requires the current Race Password.",
+            color = Color.DarkGray,
+            fontSize = 13.sp
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -14910,7 +14948,101 @@ private fun CloudflarePagesPublishSettingsPanel(
             }
         }
     }
+    if (isTokenRevealDialogVisible) {
+        CloudflareApiTokenRevealDialog(
+            onVerify = { password ->
+                projectFile?.racePasswordAuthorizesCloudflareTokenReveal(password) == true
+            },
+            onReveal = {
+                isApiTokenVisible = true
+                isTokenRevealDialogVisible = false
+            },
+            onCancel = {
+                isTokenRevealDialogVisible = false
+            }
+        )
+    }
 }
+
+@Composable
+private fun CloudflareApiTokenRevealDialog(
+    onVerify: (String) -> Boolean,
+    onReveal: () -> Unit,
+    onCancel: () -> Unit
+) {
+    var passwordDraft by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf<String?>(null) }
+    fun submitPassword() {
+        if (passwordDraft.isBlank()) {
+            return
+        }
+        if (onVerify(passwordDraft)) {
+            passwordDraft = ""
+            errorText = null
+            onReveal()
+        } else {
+            errorText = "The Race Password is incorrect."
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Show Cloudflare API Token") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "This reveals the locally stored Cloudflare API token on screen. Enter the current Race Password to continue."
+                )
+                TextField(
+                    value = passwordDraft,
+                    onValueChange = {
+                        passwordDraft = it
+                        errorText = null
+                    },
+                    label = { Text("Race Password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .commitOnEnter(::submitPassword)
+                )
+                errorText?.let { message ->
+                    Text(
+                        text = message,
+                        color = DesktopPalette.Disconnected,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = ::submitPassword,
+                enabled = passwordDraft.isNotBlank()
+            ) {
+                Text("Show Token")
+            }
+        },
+        dismissButton = {
+            Button(onClick = onCancel) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+private fun cloudflareApiTokenRevealDisabledReason(
+    projectFile: EventProjectFile?,
+    apiToken: String
+): String? =
+    when {
+        apiToken.isBlank() -> "Save a Cloudflare API token before trying to show it."
+        projectFile == null -> "Open a Race File with a Race Password before showing the API token."
+        !projectFile.hasCoursePasswordSet() ->
+            "Set a Race Password for the open Race File before showing the API token."
+        else -> null
+    }
 
 private fun cloudflarePagesSettingsDisabledReason(
     rawDraftSettings: DesktopCloudflarePagesPublishSettings,
@@ -15037,6 +15169,16 @@ private fun EventProjectFile.hasCoursePasswordSet(): Boolean =
         !categoryData.category.encryptedIdealOrder.isNullOrBlank() ||
             !categoryData.category.encryptedCourseInfo.isNullOrBlank()
     }
+
+internal fun EventProjectFile.racePasswordAuthorizesCloudflareTokenReveal(password: String): Boolean {
+    val trimmedPassword = password.trim()
+    if (trimmedPassword.isEmpty() || !hasCoursePasswordSet()) {
+        return false
+    }
+    return runCatching {
+        decryptedProtectedCourseState(this, trimmedPassword)
+    }.isSuccess
+}
 
 private fun coursePasswordSubmitDisabledReason(
     projectFile: EventProjectFile?,

@@ -128,6 +128,42 @@ data class ClassicCourseGeneratorRecommendedSet(
     val rows: List<ClassicCourseGeneratorRow>
 )
 
+/**
+ * Candidates arrive in recommendation-quality order. Keep the best set first, then maximize each
+ * selected set's contribution of unused routes. Overlap and the original quality rank break ties.
+ */
+internal fun selectDiverseRecommendedSetIndices(
+    routeKeysByCandidate: List<Set<String>>,
+    limit: Int
+): List<Int> {
+    if (routeKeysByCandidate.isEmpty() || limit <= 0) return emptyList()
+    val selected = mutableListOf(0)
+    val usedRouteKeys = routeKeysByCandidate.first().toMutableSet()
+    val remaining = routeKeysByCandidate.indices.drop(1).toMutableSet()
+    while (selected.size < limit && remaining.isNotEmpty()) {
+        val next = remaining.minWith(
+            compareByDescending<Int> { candidateIndex ->
+                routeKeysByCandidate[candidateIndex].count { it !in usedRouteKeys }
+            }
+                .thenBy { candidateIndex ->
+                    selected.maxOfOrNull { selectedIndex ->
+                        routeKeysByCandidate[candidateIndex].count {
+                            it in routeKeysByCandidate[selectedIndex]
+                        }
+                    } ?: 0
+                }
+                .thenBy { candidateIndex ->
+                    routeKeysByCandidate[candidateIndex].count { it in usedRouteKeys }
+                }
+                .thenBy { it }
+        )
+        selected += next
+        usedRouteKeys += routeKeysByCandidate[next]
+        remaining -= next
+    }
+    return selected
+}
+
 data class ClassicCourseGeneratorExportPaths(
     val pdfPath: Path,
     val kmlPath: Path
@@ -191,7 +227,8 @@ object DesktopClassicCourseGenerator {
         useSubsetDynamicProgramming = false,
         recommendCourseSets = true,
         recommendationCategoryFilter = { true },
-        preferBalancedSprintLoops = true
+        preferBalancedSprintLoops = true,
+        preferDiverseCourseSets = true
     )
 
     fun generate(
@@ -1002,7 +1039,7 @@ object DesktopClassicCourseGenerator {
                 )
             }
         }
-        return scoredSets
+        val rankedScores = scoredSets
             .distinctBy { score ->
                 score.rows
                     .map { it.orderKey }
@@ -1010,7 +1047,17 @@ object DesktopClassicCourseGenerator {
                     .joinToString("\u0000")
             }
             .sortedWith(setComparator)
-            .take(FOXORING_RECOMMENDATION_LIMIT)
+        val selectedScores = if (config.preferDiverseCourseSets) {
+            selectDiverseRecommendedSetIndices(
+                routeKeysByCandidate = rankedScores.map { score ->
+                    score.rows.mapTo(linkedSetOf()) { it.orderKey }
+                },
+                limit = FOXORING_RECOMMENDATION_LIMIT
+            ).map(rankedScores::get)
+        } else {
+            rankedScores.take(FOXORING_RECOMMENDATION_LIMIT)
+        }
+        return selectedScores
             .mapIndexed { index, score ->
                 ClassicCourseGeneratorRecommendedSet(
                     index = index + 1,
@@ -1565,7 +1612,8 @@ object DesktopClassicCourseGenerator {
         val useSubsetDynamicProgramming: Boolean,
         val recommendCourseSets: Boolean = false,
         val recommendationCategoryFilter: (String) -> Boolean = { it.isFoxoringRecommendedSetCategory() },
-        val preferBalancedSprintLoops: Boolean = false
+        val preferBalancedSprintLoops: Boolean = false,
+        val preferDiverseCourseSets: Boolean = false
     )
 
     private data class RecommendationCandidateRow(

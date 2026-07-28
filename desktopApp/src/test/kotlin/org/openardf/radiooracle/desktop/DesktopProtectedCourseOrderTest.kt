@@ -25,8 +25,10 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
@@ -113,5 +115,35 @@ class DesktopProtectedCourseOrderTest {
                 newPassword = "new-password"
             )
         }
+    }
+
+    @Test
+    fun racePasswordAuthorizesCloudflareTokenReveal() {
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        ).let { projectFile ->
+            EventProjectEditor.updateCategoryEncryptedIdealOrder(
+                projectFile,
+                "cat-m21",
+                DesktopProtectedCourseOrder.encrypt("31 32", "race-password")
+            )
+        }
+
+        assertTrue(project.racePasswordAuthorizesCloudflareTokenReveal(" race-password "))
+        assertFalse(project.racePasswordAuthorizesCloudflareTokenReveal("wrong-password"))
+        assertFalse(project.racePasswordAuthorizesCloudflareTokenReveal(""))
+    }
+
+    @Test
+    fun cloudflareTokenRevealRequiresAnExistingRacePassword() {
+        val project = EventProjectFactory.createEmptyProject(
+            "race",
+            "Course Test",
+            "2026-06-05T09:00"
+        )
+
+        assertFalse(project.racePasswordAuthorizesCloudflareTokenReveal("race-password"))
     }
 }
