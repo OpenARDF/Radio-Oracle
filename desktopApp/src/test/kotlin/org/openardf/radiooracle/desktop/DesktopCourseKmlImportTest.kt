@@ -288,6 +288,37 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun onlyIncludesCourseObjectsNearExplicitLineStringEndpoints() {
+        val kmlPath = Files.createTempFile("radio-oracle-course-endpoints", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithSegmentOnlyCourseObjects())
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        val protectedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(
+            requireNotNull(updated.raceData.categories.single().category.encryptedCourseInfo),
+            "course-key"
+        )
+        assertEquals(3, summary.matchedControlPointCount)
+        assertEquals("31 32", protectedCourseInfo.idealOrder)
+        assertEquals(listOf("31", "32"), protectedCourseInfo.controlPoints.map { it.label })
+        assertEquals(
+            listOf("Start", "31", "32", "Finish"),
+            protectedCourseInfo.courseObjects.map { it.label }
+        )
+        assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
+    }
+
+    @Test
     fun importsGpxWaypointsAndRoutesIntoProtectedFields() {
         val gpxPath = Files.createTempFile("radio-oracle-course", ".gpx")
         Files.writeString(gpxPath, sampleGpx())
@@ -387,7 +418,7 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
-    fun importedRouteAppendsExplicitBeaconAndFinishWhenLineStringStopsAtLastFox() {
+    fun importedRouteRequiresBeaconBeforeFinishWhenLineStringStopsAtLastFox() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKmlWithExplicitBeaconAndFinishAfterRoute())
         val project = EventProjectEditor.addCategory(
@@ -396,7 +427,7 @@ class DesktopCourseKmlImportTest {
             name = "M21"
         )
 
-        val (updated, _) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
             path = kmlPath,
             projectFile = project,
             password = "course-key",
@@ -409,6 +440,7 @@ class DesktopCourseKmlImportTest {
         )
         assertEquals("31 32 M", protectedCourseInfo.idealOrder)
         assertEquals(listOf("Start", "31", "32", "M", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals("31 32 99B", summary.categoryAssignmentUpdates.single().controlPointsText)
         assertEquals(-94.9960, protectedCourseInfo.route.last().longitude, 0.000001)
         assertTrue(protectedCourseInfo.route.any { kotlin.math.abs(it.longitude - -94.9970) < 0.000001 })
         assertTrue(protectedCourseInfo.lengthMeters!! > 250)
@@ -438,6 +470,7 @@ class DesktopCourseKmlImportTest {
         assertEquals("31 32 M", protectedCourseInfo.idealOrder)
         assertEquals(-94.9960, protectedCourseInfo.route.last().longitude, 0.000001)
         assertTrue(protectedCourseInfo.route.dropLast(1).any { kotlin.math.abs(it.longitude - -94.9970) < 0.000001 })
+        assertEquals(listOf("M", "Finish"), protectedCourseInfo.courseObjects.takeLast(2).map { it.label })
         assertEquals("Finish", protectedCourseInfo.courseObjects.last().label)
         assertEquals(-94.9960, protectedCourseInfo.courseObjects.last().longitude, 0.000001)
     }
@@ -677,7 +710,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(2, summary.rejectedRoutes.size)
         assertEquals(setOf("M50", "W65"), summary.rejectedRoutes.map { it.categoryName }.toSet())
         assertTrue(summary.rejectedRoutes.any { it.reason.contains("start endpoint") })
-        assertTrue(summary.rejectedRoutes.any { it.reason.contains("does not pass near any matched fox controls") })
+        assertTrue(summary.rejectedRoutes.any { it.reason.contains("has no endpoint near any matched fox controls") })
         assertNotNull(updated.raceData.categories.single { it.category.name == "M21" }.category.encryptedCourseInfo)
         assertNull(updated.raceData.categories.single { it.category.name == "M50" }.category.encryptedCourseInfo)
         assertNull(updated.raceData.categories.single { it.category.name == "W65" }.category.encryptedCourseInfo)
@@ -3237,6 +3270,40 @@ class DesktopCourseKmlImportTest {
                   -95.0000,39.0000,0
                   -94.9990,39.0000,0
                   -94.9980,39.0000,0
+                </coordinates>
+              </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithSegmentOnlyCourseObjects(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <name>31</name>
+              <Point><coordinates>-95.0010,39.0000,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>32</name>
+              <Point><coordinates>-94.9990,39.0003,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>33</name>
+              <Point><coordinates>-95.0000,39.0003,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>Gate B</name>
+              <Point><coordinates>-95.0000,38.9997,0</coordinates></Point>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString>
+                <coordinates>
+                  -95.0010,39.0000,0
+                  -94.9990,39.0000,0
                 </coordinates>
               </LineString>
             </Placemark>

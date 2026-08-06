@@ -515,7 +515,7 @@ object DesktopCourseKmlImporter {
                 val routeMatchedControls = matchedControlsForRoute(raceType, route.points, controls)
                 val orientedRouteGeometry = orientedRoutePoints(route.points, routeImportedControls)
                 val routeGeometry = normalizedRouteGeometry(route.points, routeImportedControls, routeMatchedControls)
-                val routeLineControls = controlsOnRoute(routeGeometry, routeMatchedControls)
+                val routeLineControls = controlsOnRoute(orientedRouteGeometry, routeMatchedControls)
                 val explicitAssignmentControls = if (raceType == RaceType.CLASSIC || raceType == RaceType.SHORT) {
                     controlsFromExplicitClassicRouteOrder(route.name, controls)
                 } else {
@@ -548,7 +548,7 @@ object DesktopCourseKmlImporter {
                     categoryId = categoryData.category.id,
                     controls = assignmentControls
                 )?.let(categoryAssignmentUpdates::add)
-                val routeWaypoints = waypointsOnRoute(routeGeometry, routeImportedControls, routeMatchedControls)
+                val routeWaypoints = waypointsOnRoute(orientedRouteGeometry, routeImportedControls, routeMatchedControls)
                 val duplicateRouteControlIdValues = routeLineControls.map { it.controlId }
                 val duplicateRouteWaypointLabels = routeWaypoints.map { it.label }
                 val storedRouteControlIds = sameSourceCourseInfo?.controlPoints.orEmpty()
@@ -607,7 +607,9 @@ object DesktopCourseKmlImporter {
                         )
                     }
                     ?: importedSampledRoute
-                val routeControls = controlsOnRoute(sampledRoute, routeMatchedControls)
+                // Membership comes from the original LineString vertices. The sampled route adds
+                // synthetic elevation points that must not make nearby course objects look visited.
+                val routeControls = routeLineControls
 
                 val idealOrder = routeControls.joinToString(" ") { it.label }
                 val allProtectedControlPoints = routeMatchedControls.map { control ->
@@ -1069,26 +1071,23 @@ object DesktopCourseKmlImporter {
     private fun List<CourseGeoPoint>.orderedSprintRouteCandidateRoles(
         coursePoints: List<SprintRouteCandidatePoint>
     ): List<SprintRouteCandidateRole> {
-        var distanceBeforeSegment = 0.0
+        var distanceAlongRoute = 0.0
         val occurrences = mutableListOf<Pair<Double, SprintRouteCandidatePoint>>()
-        zipWithNext().forEach { (segmentStart, segmentEnd) ->
-            val segmentLength = segmentStart.distanceMetersTo(segmentEnd)
-            if (segmentLength > 0.0) {
-                coursePoints.forEach { coursePoint ->
-                    val fraction = coursePoint.point.projectedFractionOn(segmentStart, segmentEnd)
-                    val projectedPoint = segmentStart.interpolate(segmentEnd, fraction)
-                    if (coursePoint.point.distanceMetersTo(projectedPoint) <= CONTROL_ROUTE_TOLERANCE_METERS) {
-                        occurrences += (distanceBeforeSegment + segmentLength * fraction) to coursePoint
-                    }
+        forEachIndexed { index, endpoint ->
+            coursePoints.forEach { coursePoint ->
+                if (coursePoint.point.distanceMetersTo(endpoint) <= CONTROL_ROUTE_TOLERANCE_METERS) {
+                    occurrences += distanceAlongRoute to coursePoint
                 }
-                distanceBeforeSegment += segmentLength
+            }
+            if (index < lastIndex) {
+                distanceAlongRoute += endpoint.distanceMetersTo(this[index + 1])
             }
         }
         return occurrences
             .sortedBy { it.first }
             .fold(mutableListOf<SprintRouteCandidatePoint>()) { ordered, (_, point) ->
-                // Adjacent segments can report the same course point at their shared vertex. Keep
-                // one occurrence there, while preserving a later return to the same Beacon.
+                // Neighboring vertices can both fall within tolerance of the same course point.
+                // Keep one adjacent occurrence while preserving a later return to the same Beacon.
                 if (ordered.lastOrNull()?.routeKey != point.routeKey) {
                     ordered += point
                 }
@@ -1141,7 +1140,7 @@ object DesktopCourseKmlImporter {
     }
 
     private fun List<CourseGeoPoint>.intersectsCoursePoint(point: CourseGeoPoint): Boolean =
-        distanceAlongRouteOrNull(this, point, CONTROL_ROUTE_TOLERANCE_METERS) != null
+        any { endpoint -> endpoint.distanceMetersTo(point) <= CONTROL_ROUTE_TOLERANCE_METERS }
 
     private fun CourseGeoPoint.isNearAnyCoursePoint(controls: List<CourseControlPoint>): Boolean =
         controls.any { control -> distanceMetersTo(control.point) <= CONTROL_ROUTE_TOLERANCE_METERS }
@@ -2037,8 +2036,9 @@ object DesktopCourseKmlImporter {
                 val raceType = categoryData.category.effectiveRaceType(eventRace)
                 val routeImportedControls = endpointAwareImportedControls(route.points, importedControls)
                 val routeMatchedControls = matchedControlsForRoute(raceType, route.points, matchedControls)
+                val orientedRouteGeometry = orientedRoutePoints(route.points, routeImportedControls)
                 val routeGeometry = normalizedRouteGeometry(route.points, routeImportedControls, routeMatchedControls)
-                val routeLineControlIds = controlsOnRoute(routeGeometry, routeMatchedControls).map { it.controlId }
+                val routeLineControlIds = controlsOnRoute(orientedRouteGeometry, routeMatchedControls).map { it.controlId }
                 val sameSourceCourseInfo = courseInfoByCategoryId[categoryData.category.id]
                     ?.takeIf { it.sourceSha256 == sourceSha256 }
                     ?: return@forEach
@@ -2211,7 +2211,12 @@ object DesktopCourseKmlImporter {
             oriented + finish.copy(elevationMeters = null)
         }
         val beacon = matchedControls.firstOrNull { it.type == ControlPointType.BEACON }?.point
-        if (beacon == null || routeEndingAtFinish.any { it.sameRoutePoint(beacon) }) {
+        val finalObjectPoint = routeEndingAtFinish.dropLast(1).lastOrNull()
+        if (
+            beacon == null ||
+            routeEndingAtFinish.last().sameRoutePoint(beacon) ||
+            finalObjectPoint?.sameRoutePoint(beacon) == true
+        ) {
             return routeEndingAtFinish
         }
         val cleanBeacon = beacon.copy(elevationMeters = null)
@@ -2257,7 +2262,7 @@ object DesktopCourseKmlImporter {
         if (matchedControls.any { it.type == ControlPointType.CONTROL } &&
             routeLineControls.none { it.type == ControlPointType.CONTROL }
         ) {
-            issues += "LineString does not pass near any matched fox controls for $categoryName"
+            issues += "LineString has no endpoint near any matched fox controls for $categoryName"
         }
         return issues.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = "Route ${route.name}: ")
     }
@@ -2288,16 +2293,29 @@ object DesktopCourseKmlImporter {
             storedFinish.distanceMetersTo(routeGeometry.last()) <= CONTROL_ROUTE_TOLERANCE_METERS
     }
 
-    private fun controlsOnRoute(route: List<CourseGeoPoint>, controls: List<CourseMatchedControl>): List<CourseMatchedControl> =
-        controls
+    private fun controlsOnRoute(
+        route: List<CourseGeoPoint>,
+        controls: List<CourseMatchedControl>
+    ): List<CourseMatchedControl> {
+        val requiredBeacon = controls.firstOrNull { it.type == ControlPointType.BEACON }
+        val endpointControls = controls
+            .filterNot { it.type == ControlPointType.BEACON }
             .mapNotNull { control ->
-                // A route drawn through or very near a point counts as using that control. The
-                // tolerance absorbs KML drawing imprecision but still excludes unrelated controls.
-                val alongDistance = distanceAlongRouteOrNull(route, control.point, CONTROL_ROUTE_TOLERANCE_METERS)
+                // Only explicit LineString vertices identify visited course objects. A segment can
+                // pass near an unrelated object without adding it to the course.
+                val alongDistance = distanceAlongRouteEndpointOrNull(
+                    route,
+                    control.point,
+                    CONTROL_ROUTE_TOLERANCE_METERS
+                )
                 alongDistance?.let { it to control }
             }
             .sortedBy { it.first }
             .map { it.second }
+        // A specified Beacon is the one course-object exception: every route must visit it as the
+        // final object before Finish, even when the imported LineString has no nearby vertex.
+        return endpointControls + listOfNotNull(requiredBeacon)
+    }
 
     private fun waypointsOnRoute(
         route: List<CourseGeoPoint>,
@@ -2322,10 +2340,10 @@ object DesktopCourseKmlImporter {
                 }
             }
             .mapNotNull { importedPoint ->
-                // Non-control KML points are mandatory course objects only for routes that
-                // actually pass through them. Keep them out of idealOrder so they cannot become
+                // Non-control KML points are mandatory course objects only when an explicit
+                // LineString vertex visits them. Keep them out of idealOrder so they cannot become
                 // scored controls or public category assignments.
-                distanceAlongRouteOrNull(route, importedPoint.point, CONTROL_ROUTE_TOLERANCE_METERS)
+                distanceAlongRouteEndpointOrNull(route, importedPoint.point, CONTROL_ROUTE_TOLERANCE_METERS)
                     ?.let { alongDistance ->
                         CourseRouteWaypoint(
                             label = importedPoint.name,
@@ -2375,7 +2393,11 @@ object DesktopCourseKmlImporter {
                     val point = CourseGeoPoint(courseObject.latitude, courseObject.longitude, courseObject.elevationMeters)
                     (distanceAlongRouteOrNull(route, point, CONTROL_ROUTE_TOLERANCE_METERS) ?: Double.MAX_VALUE) to courseObject
                 }
-                .sortedBy { it.first }
+                .sortedWith(
+                    compareBy<Pair<Double, ProtectedCourseObjectPoint>> {
+                        if (it.second.type == ProtectedCourseObjectType.BEACON) 1 else 0
+                    }.thenBy { it.first }
+                )
                 .map { it.second }
                 .forEach(::add)
             route.lastOrNull()?.let { finish ->
@@ -2403,14 +2425,34 @@ object DesktopCourseKmlImporter {
             ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
         }
 
+    private fun distanceAlongRouteEndpointOrNull(
+        route: List<CourseGeoPoint>,
+        point: CourseGeoPoint,
+        toleranceMeters: Double
+    ): Double? {
+        var distanceAlongRoute = 0.0
+        var bestDistance = Double.MAX_VALUE
+        var bestAlongDistance = 0.0
+        route.forEachIndexed { index, endpoint ->
+            val distanceToEndpoint = point.distanceMetersTo(endpoint)
+            if (distanceToEndpoint < bestDistance) {
+                bestDistance = distanceToEndpoint
+                bestAlongDistance = distanceAlongRoute
+            }
+            if (index < route.lastIndex) {
+                distanceAlongRoute += endpoint.distanceMetersTo(route[index + 1])
+            }
+        }
+        return bestAlongDistance.takeIf { bestDistance <= toleranceMeters }
+    }
+
     private fun distanceAlongRouteOrNull(
         route: List<CourseGeoPoint>,
         point: CourseGeoPoint,
         toleranceMeters: Double
     ): Double? {
-        // Project each imported control onto the preferred route. Controls outside
-        // the tolerance are omitted so unrelated map placemarks do not become part
-        // of the stored ideal order.
+        // Project a known route object onto the route to preserve its position in the stored
+        // course-object sequence. Route membership is decided from explicit endpoints earlier.
         var distanceBeforeSegment = 0.0
         var bestDistance = Double.MAX_VALUE
         var bestAlongDistance = 0.0
