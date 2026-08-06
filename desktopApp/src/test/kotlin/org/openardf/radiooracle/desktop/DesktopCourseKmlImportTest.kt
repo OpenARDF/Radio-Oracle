@@ -686,6 +686,85 @@ class DesktopCourseKmlImportTest {
     }
 
     @Test
+    fun analyzerIgnoresPartialCourseObjectLineStringsBeforeAssigningRouteCandidates() {
+        val kmlPath = Files.createTempFile("radio-oracle-course-objects", ".kml")
+        Files.writeString(kmlPath, sampleKmlWithCourseRouteAndPartialCourseObjectLines())
+        val project = listOf("M21", "M50", "W65").fold(classicPresetProject()) { currentProject, categoryName ->
+            EventProjectEditor.addCategory(
+                currentProject,
+                categoryId = "cat-${categoryName.lowercase()}",
+                name = categoryName
+            )
+        }
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        // Only the complete Start-to-Finish line through the Beacon is a route candidate. The
+        // mandatory/corridor lines must not consume fallback categories or surface as bad routes.
+        assertEquals(1, summary.routeCount)
+        assertEquals(listOf("M21"), summary.matchedCategoryNames)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(emptyList<DesktopCourseKmlRejectedRoute>(), summary.rejectedRoutes)
+        assertEquals(emptyList<DesktopCourseKmlCategoryAssumption>(), summary.categoryAssumptions)
+        assertNotNull(updated.raceData.categories.single { it.category.name == "M21" }.category.encryptedCourseInfo)
+        assertNull(updated.raceData.categories.single { it.category.name == "M50" }.category.encryptedCourseInfo)
+        assertNull(updated.raceData.categories.single { it.category.name == "W65" }.category.encryptedCourseInfo)
+    }
+
+    @Test
+    fun sprintAnalyzerAlsoRequiresRouteCandidatesToIntersectSpectator() {
+        val kmlPath = Files.createTempFile("radio-oracle-sprint-course-objects", ".kml")
+        Files.writeString(kmlPath, sampleSprintKmlWithRouteThatSkipsSpectator())
+        val project = EventProjectEditor.addCategory(
+            sprintPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (_, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        assertEquals(1, summary.routeCount)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(emptyList<DesktopCourseKmlDuplicateRouteAssignment>(), summary.duplicateRouteAssignments)
+        assertEquals(emptyList<DesktopCourseKmlRejectedRoute>(), summary.rejectedRoutes)
+    }
+
+    @Test
+    fun sprintAnalyzerRequiresBeaconTransitionAndTerminalVisitsWhenNoSpectatorIsUsed() {
+        val kmlPath = Files.createTempFile("radio-oracle-sprint-beacon-transition", ".kml")
+        Files.writeString(kmlPath, sampleSprintKmlWithBeaconTransition())
+        val project = EventProjectEditor.addCategory(
+            sprintPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (_, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = "course-key",
+            elevationProvider = { null }
+        )
+
+        // The accepted route visits Beacon before and after a fast fox. The competing LineString
+        // reaches Beacon only after the fast fox, so it cannot supply the missing transition.
+        assertEquals(1, summary.routeCount)
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals(emptyList<DesktopCourseKmlDuplicateRouteAssignment>(), summary.duplicateRouteAssignments)
+        assertEquals(emptyList<DesktopCourseKmlRejectedRoute>(), summary.rejectedRoutes)
+    }
+
+    @Test
     fun optionallyCreatesMissingCategoriesListedInSprintRouteNames() {
         val kmlPath = Files.createTempFile("Sprint", ".kml")
         Files.writeString(kmlPath, sampleKmlWithSprintCategoryRouteNames())
@@ -3220,6 +3299,148 @@ class DesktopCourseKmlImportTest {
                   -94.9900,39.0000,0
                 </coordinates>
               </LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleKmlWithCourseRouteAndPartialCourseObjectLines(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark><name>Start</name><Point><coordinates>-95.0000,39.0000,0</coordinates></Point></Placemark>
+            <Placemark><name>1</name><Point><coordinates>-94.9980,39.0000,0</coordinates></Point></Placemark>
+            <Placemark><name>M</name><Point><coordinates>-94.9960,39.0020,0</coordinates></Point></Placemark>
+            <Placemark><name>Finish</name><Point><coordinates>-94.9900,39.0000,0</coordinates></Point></Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString><coordinates>
+                -95.0000,39.0000,0
+                -94.9980,39.0000,0
+                -94.9960,39.0020,0
+                -94.9900,39.0000,0
+              </coordinates></LineString>
+            </Placemark>
+            <Placemark>
+              <name>M50 Mandatory Start Route</name>
+              <LineString><coordinates>
+                -95.0000,39.0000,0
+                -94.9980,39.0000,0
+              </coordinates></LineString>
+            </Placemark>
+            <Placemark>
+              <name>W65 Finish Corridor</name>
+              <LineString><coordinates>
+                -94.9960,39.0020,0
+                -94.9900,39.0000,0
+              </coordinates></LineString>
+            </Placemark>
+            <Placemark>
+              <name>Long mandatory route with an arbitrary name</name>
+              <LineString><coordinates>
+                -95.0000,39.0000,0
+                -94.9980,39.0000,0
+                -94.9940,39.0000,0
+                -94.9920,39.0000,0
+                -94.9900,39.0000,0
+              </coordinates></LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleSprintKmlWithRouteThatSkipsSpectator(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark><name>Start</name><Point><coordinates>-95.0000,39.0000,0</coordinates></Point></Placemark>
+            <Placemark><name>1</name><Point><coordinates>-94.9980,39.0000,0</coordinates></Point></Placemark>
+            <Placemark><name>Sp</name><Point><coordinates>-94.9960,39.0020,0</coordinates></Point></Placemark>
+            <Placemark><name>F1</name><Point><coordinates>-94.9940,39.0000,0</coordinates></Point></Placemark>
+            <Placemark><name>M</name><Point><coordinates>-94.9920,39.0000,0</coordinates></Point></Placemark>
+            <Placemark><name>Finish</name><Point><coordinates>-94.9900,39.0000,0</coordinates></Point></Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString><coordinates>
+                -95.0000,39.0000,0
+                -94.9980,39.0000,0
+                -94.9960,39.0020,0
+                -94.9940,39.0000,0
+                -94.9920,39.0000,0
+                -94.9900,39.0000,0
+              </coordinates></LineString>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <description>Mandatory route that deliberately bypasses the spectator.</description>
+              <LineString><coordinates>
+                -95.0000,39.0000,0
+                -94.9980,39.0000,0
+                -94.9940,39.0000,0
+                -94.9920,39.0000,0
+                -94.9900,39.0000,0
+              </coordinates></LineString>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <description>Mandatory route that reaches the slow fox only after spectator.</description>
+              <LineString><coordinates>
+                -95.0000,39.0000,0
+                -94.9960,39.0020,0
+                -94.9980,39.0000,0
+                -94.9940,39.0000,0
+                -94.9920,39.0000,0
+                -94.9900,39.0000,0
+              </coordinates></LineString>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <description>Mandatory route with no fast fox after spectator.</description>
+              <LineString><coordinates>
+                -95.0000,39.0000,0
+                -94.9980,39.0000,0
+                -94.9960,39.0020,0
+                -94.9920,39.0000,0
+                -94.9900,39.0000,0
+              </coordinates></LineString>
+            </Placemark>
+          </Document>
+        </kml>
+        """.trimIndent()
+
+    private fun sampleSprintKmlWithBeaconTransition(): String =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark><name>Start</name><Point><coordinates>-95.0000,39.0000,0</coordinates></Point></Placemark>
+            <Placemark><name>1</name><Point><coordinates>-94.9980,39.0000,0</coordinates></Point></Placemark>
+            <Placemark><name>M</name><Point><coordinates>-94.9960,39.0020,0</coordinates></Point></Placemark>
+            <Placemark><name>F1</name><Point><coordinates>-94.9940,39.0000,0</coordinates></Point></Placemark>
+            <Placemark><name>Finish</name><Point><coordinates>-94.9900,39.0000,0</coordinates></Point></Placemark>
+            <Placemark>
+              <name>M21</name>
+              <LineString><coordinates>
+                -95.0000,39.0000,0
+                -94.9980,39.0000,0
+                -94.9960,39.0020,0
+                -94.9940,39.0000,0
+                -94.9960,39.0020,0
+                -94.9900,39.0000,0
+              </coordinates></LineString>
+            </Placemark>
+            <Placemark>
+              <name>M21</name>
+              <description>This line reaches Beacon only once, after the fast fox.</description>
+              <LineString><coordinates>
+                -95.0000,39.0000,0
+                -94.9980,39.0000,0
+                -94.9940,39.0000,0
+                -94.9960,39.0020,0
+                -94.9900,39.0000,0
+              </coordinates></LineString>
             </Placemark>
           </Document>
         </kml>

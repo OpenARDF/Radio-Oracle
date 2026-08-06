@@ -238,21 +238,22 @@ object DesktopCourseKmlImporter {
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
         val sourceSha256 = fileSha256(path)
         val parsedCourseData = parse(path)
-        val controlImportCourseData = if (requireRoutes) {
-            parsedCourseData
+        val routeCandidateCourseData = if (requireRoutes) {
+            parsedCourseData.withAnalyzerRouteCandidates(projectFile, path.fileName.toString())
         } else {
             parsedCourseData.withControlImportCourseRoutes()
         }
-        val courseData = if (requireRoutes && controlImportCourseData.routes.isEmpty()) {
-            controlImportCourseData.withSynthesizedAnalyzerRoute()
+        val courseData = if (requireRoutes && routeCandidateCourseData.routes.isEmpty()) {
+            routeCandidateCourseData.withSynthesizedAnalyzerRoute()
         } else {
-            controlImportCourseData
+            routeCandidateCourseData
         }
-        val ignoredRouteCount = parsedCourseData.routes.size - controlImportCourseData.routes.size
-        if (!requireRoutes && ignoredRouteCount > 0) {
+        val ignoredRouteCount = parsedCourseData.routes.size - routeCandidateCourseData.routes.size
+        if (ignoredRouteCount > 0) {
+            val importPurpose = if (requireRoutes) "Course Analyzer" else "Control import"
             DesktopDebugLog.info(
                 "CourseKml",
-                "Control import ignored $ignoredRouteCount non-course route geometries from ${path.fileName}"
+                "$importPurpose ignored $ignoredRouteCount non-course route geometries from ${path.fileName}"
             )
         }
         DesktopDebugLog.info(
@@ -917,6 +918,207 @@ object DesktopCourseKmlImporter {
     private fun CourseRoute.routeSelectionKey(routeIndex: Int): String =
         "${routeIndex}:${name}:${points.size}"
 
+    private fun DesktopCourseKmlData.withAnalyzerRouteCandidates(
+        projectFile: EventProjectFile,
+        sourceName: String
+    ): DesktopCourseKmlData {
+        if (routes.isEmpty()) {
+            return this
+        }
+        val sprintContext = isSprintCourseImport(projectFile, this, sourceName)
+        val filteredRoutes = routes.filter { route ->
+            route.isAnalyzerRouteCandidate(
+                controls = controls,
+                eventControls = projectFile.raceData.controls,
+                sprintContext = sprintContext
+            )
+        }
+        return if (filteredRoutes.size == routes.size) this else copy(routes = filteredRoutes)
+    }
+
+    private fun CourseRoute.isAnalyzerRouteCandidate(
+        controls: List<CourseControlPoint>,
+        eventControls: List<EventControl>,
+        sprintContext: Boolean
+    ): Boolean {
+        if (points.size < 2) {
+            return false
+        }
+        // Endpoint-aware classification distinguishes an abbreviated endpoint "S" from an
+        // interior Sprint spectator "S" or "Sp" before applying the required-object checks.
+        val routeControls = endpointAwareImportedControls(points, controls)
+        val starts = routeControls.filter { it.isCourseStartPoint() }
+        val finishes = routeControls.filter { it.isCourseFinishPoint() }
+        val matchedRouteControls = matchedControls(routeControls, eventControls).controls
+        val beacons = (
+            routeControls
+                .filter { ControlRoleLabelRules.inferredRole(it.name) == ControlPointType.BEACON }
+                .map { it.point } +
+                matchedRouteControls.filter { it.type == ControlPointType.BEACON }.map { it.point }
+            ).distinctBy { it.locationKey() }
+
+        // Older files may not carry labeled Start, Finish, or Beacon point objects. Preserve their
+        // existing import path because the missing locations make a geometric candidate decision
+        // impossible. When all three roles are known, however, partial course-object LineStrings
+        // are never allowed to consume a category or become an analyzer route candidate.
+        if (starts.isEmpty() || finishes.isEmpty() || beacons.isEmpty()) {
+            return true
+        }
+        if (!hasStartAndFinishEndpoints(routeControls)) {
+            return false
+        }
+        val orientedPoints = points.orientedFromStartToFinish(starts, finishes)
+        if (beacons.none { beacon -> orientedPoints.intersectsCoursePoint(beacon) }) {
+            return false
+        }
+        if (!sprintContext) {
+            return true
+        }
+        val spectators = (
+            routeControls
+                .filter { ControlRoleLabelRules.inferredRole(it.name) == ControlPointType.SEPARATOR }
+                .map { it.point } +
+                matchedRouteControls.filter { it.type == ControlPointType.SEPARATOR }.map { it.point }
+            ).distinctBy { it.locationKey() }
+        val sprintPoints = sprintRouteCandidatePoints(routeControls, matchedRouteControls)
+        return orientedPoints.hasSprintRouteCandidateShape(
+            coursePoints = sprintPoints,
+            spectatorIsUsed = spectators.isNotEmpty()
+        )
+    }
+
+    private fun List<CourseGeoPoint>.orientedFromStartToFinish(
+        starts: List<CourseControlPoint>,
+        finishes: List<CourseControlPoint>
+    ): List<CourseGeoPoint> =
+        if (
+            first().isNearAnyCoursePoint(finishes) &&
+            last().isNearAnyCoursePoint(starts)
+        ) {
+            asReversed()
+        } else {
+            this
+        }
+
+    private fun sprintRouteCandidatePoints(
+        importedControls: List<CourseControlPoint>,
+        matchedControls: List<CourseMatchedControl>
+    ): List<SprintRouteCandidatePoint> =
+        (
+            importedControls.mapNotNull { control ->
+                control.name.sprintRouteCandidateRole()?.let { role ->
+                    SprintRouteCandidatePoint(role, control.point)
+                }
+            } +
+                matchedControls.mapNotNull { control ->
+                    control.sprintRouteCandidateRole()?.let { role ->
+                        SprintRouteCandidatePoint(role, control.point)
+                    }
+                }
+            ).distinctBy { it.routeKey }
+
+    private fun String.sprintRouteCandidateRole(): SprintRouteCandidateRole? =
+        when {
+            isCourseStartName() -> SprintRouteCandidateRole.START
+            isCourseFinishName() -> SprintRouteCandidateRole.FINISH
+            DesktopCoursePointLabelClassifier.sprintFastFoxNumber(this) != null -> SprintRouteCandidateRole.FAST_FOX
+            DesktopCoursePointLabelClassifier.sprintSlowFoxNumber(this) != null -> SprintRouteCandidateRole.SLOW_FOX
+            ControlRoleLabelRules.inferredRole(this) == ControlPointType.BEACON -> SprintRouteCandidateRole.BEACON
+            ControlRoleLabelRules.inferredRole(this) == ControlPointType.SEPARATOR -> SprintRouteCandidateRole.SPECTATOR
+            else -> null
+        }
+
+    private fun CourseMatchedControl.sprintRouteCandidateRole(): SprintRouteCandidateRole? {
+        val labels = listOf(importedName, label, displayLabel)
+        return when (type) {
+            ControlPointType.BEACON -> SprintRouteCandidateRole.BEACON
+            ControlPointType.SEPARATOR -> SprintRouteCandidateRole.SPECTATOR
+            ControlPointType.CONTROL -> when {
+                labels.any { DesktopCoursePointLabelClassifier.sprintFastFoxNumber(it) != null } ->
+                    SprintRouteCandidateRole.FAST_FOX
+                labels.any { DesktopCoursePointLabelClassifier.sprintSlowFoxNumber(it) != null } ->
+                    SprintRouteCandidateRole.SLOW_FOX
+                else -> null
+            }
+        }
+    }
+
+    private fun List<CourseGeoPoint>.hasSprintRouteCandidateShape(
+        coursePoints: List<SprintRouteCandidatePoint>,
+        spectatorIsUsed: Boolean
+    ): Boolean {
+        val roles = orderedSprintRouteCandidateRoles(coursePoints)
+        var roleIndex = roles.indexOf(SprintRouteCandidateRole.START)
+        if (roleIndex < 0) return false
+        roleIndex = roles.indexOfAfter(SprintRouteCandidateRole.SLOW_FOX, roleIndex)
+        if (roleIndex < 0) return false
+        val transitionRole = if (spectatorIsUsed) {
+            SprintRouteCandidateRole.SPECTATOR
+        } else {
+            SprintRouteCandidateRole.BEACON
+        }
+        roleIndex = roles.indexOfAfter(transitionRole, roleIndex)
+        if (roleIndex < 0) return false
+        roleIndex = roles.indexOfAfter(SprintRouteCandidateRole.FAST_FOX, roleIndex)
+        if (roleIndex < 0) return false
+        roleIndex = roles.indexOfAfter(SprintRouteCandidateRole.BEACON, roleIndex)
+        if (roleIndex < 0) return false
+        return roles.indexOfAfter(SprintRouteCandidateRole.FINISH, roleIndex) >= 0
+    }
+
+    private fun List<CourseGeoPoint>.orderedSprintRouteCandidateRoles(
+        coursePoints: List<SprintRouteCandidatePoint>
+    ): List<SprintRouteCandidateRole> {
+        var distanceBeforeSegment = 0.0
+        val occurrences = mutableListOf<Pair<Double, SprintRouteCandidatePoint>>()
+        zipWithNext().forEach { (segmentStart, segmentEnd) ->
+            val segmentLength = segmentStart.distanceMetersTo(segmentEnd)
+            if (segmentLength > 0.0) {
+                coursePoints.forEach { coursePoint ->
+                    val fraction = coursePoint.point.projectedFractionOn(segmentStart, segmentEnd)
+                    val projectedPoint = segmentStart.interpolate(segmentEnd, fraction)
+                    if (coursePoint.point.distanceMetersTo(projectedPoint) <= CONTROL_ROUTE_TOLERANCE_METERS) {
+                        occurrences += (distanceBeforeSegment + segmentLength * fraction) to coursePoint
+                    }
+                }
+                distanceBeforeSegment += segmentLength
+            }
+        }
+        return occurrences
+            .sortedBy { it.first }
+            .fold(mutableListOf<SprintRouteCandidatePoint>()) { ordered, (_, point) ->
+                // Adjacent segments can report the same course point at their shared vertex. Keep
+                // one occurrence there, while preserving a later return to the same Beacon.
+                if (ordered.lastOrNull()?.routeKey != point.routeKey) {
+                    ordered += point
+                }
+                ordered
+            }
+            .map { it.role }
+    }
+
+    private fun List<SprintRouteCandidateRole>.indexOfAfter(
+        role: SprintRouteCandidateRole,
+        previousIndex: Int
+    ): Int =
+        indices.firstOrNull { index -> index > previousIndex && this[index] == role } ?: -1
+
+    private data class SprintRouteCandidatePoint(
+        val role: SprintRouteCandidateRole,
+        val point: CourseGeoPoint
+    ) {
+        val routeKey: String = "$role|${point.locationKey()}"
+    }
+
+    private enum class SprintRouteCandidateRole {
+        START,
+        SLOW_FOX,
+        SPECTATOR,
+        FAST_FOX,
+        BEACON,
+        FINISH
+    }
+
     private fun DesktopCourseKmlData.withControlImportCourseRoutes(): DesktopCourseKmlData {
         if (routes.isEmpty()) {
             return this
@@ -937,6 +1139,9 @@ object DesktopCourseKmlImporter {
                     first.isNearAnyCoursePoint(finishes) && last.isNearAnyCoursePoint(starts)
                 )
     }
+
+    private fun List<CourseGeoPoint>.intersectsCoursePoint(point: CourseGeoPoint): Boolean =
+        distanceAlongRouteOrNull(this, point, CONTROL_ROUTE_TOLERANCE_METERS) != null
 
     private fun CourseGeoPoint.isNearAnyCoursePoint(controls: List<CourseControlPoint>): Boolean =
         controls.any { control -> distanceMetersTo(control.point) <= CONTROL_ROUTE_TOLERANCE_METERS }
