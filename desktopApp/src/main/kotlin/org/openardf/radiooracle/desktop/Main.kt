@@ -196,6 +196,7 @@ import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventSeriesArchive
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
+import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesIssueSeverity
 import org.openardf.radiooracle.shared.event.EventSeriesSupport
 import org.openardf.radiooracle.shared.event.EventSeriesValidationIssue
@@ -447,19 +448,96 @@ internal fun savedPublicResultsPublication(
 internal fun configuredPublicResultsUrl(
     settings: DesktopCloudflarePagesPublishSettings,
     currentProject: EventProjectFile?,
-    series: Pair<String, List<DesktopPublicResultSeriesRace>>?,
+    seriesFile: EventSeriesFile?,
     generatedAt: java.time.Instant = java.time.Instant.now()
 ): String? {
     if (!settings.isComplete() || currentProject == null) {
         return null
     }
-    val publicPath = if (series == null) {
+    val publicPath = if (seriesFile == null) {
         DesktopPublicResultSiteExports.eventPath(currentProject, generatedAt)
     } else {
-        val firstRace = series.second.firstOrNull()?.projectFile ?: return null
-        DesktopPublicResultSiteExports.seriesPath(series.first, firstRace, generatedAt)
+        val firstEvent = seriesFile.sortedEvents().firstOrNull() ?: return null
+        DesktopPublicResultSiteExports.seriesPath(
+            seriesName = seriesFile.name,
+            firstStartDateTimeIso = firstEvent.startDateTimeIso,
+            generatedAt = generatedAt
+        )
     }
     return publicResultsUrl(settings, publicPath)
+}
+
+internal data class DesktopPublicResultsUrlState(
+    val savedUrl: String?,
+    val configuredUrl: String?
+)
+
+internal fun loadPublicResultsUrlState(
+    currentPath: Path?,
+    currentProject: EventProjectFile?,
+    settings: DesktopCloudflarePagesPublishSettings,
+    store: EventSeriesStore = DesktopEventSeriesFiles,
+    generatedAt: java.time.Instant = java.time.Instant.now()
+): DesktopPublicResultsUrlState {
+    val seriesFile = runCatching {
+        currentPath
+            ?.let { eventPath ->
+                DesktopEventSeriesActions.findManifestNearEvent(
+                    eventPath = eventPath,
+                    seriesLink = currentProject?.seriesLink,
+                    store = store
+                )
+            }
+            ?.let(store::read)
+    }.getOrNull()
+    return DesktopPublicResultsUrlState(
+        savedUrl = (seriesFile?.publicResultsPublication ?: currentProject?.publicResultsPublication)?.url,
+        configuredUrl = configuredPublicResultsUrl(
+            settings = settings,
+            currentProject = currentProject,
+            seriesFile = seriesFile,
+            generatedAt = generatedAt
+        )
+    )
+}
+
+@Composable
+private fun rememberDesktopPublicResultsUrlState(
+    currentPath: Path?,
+    currentProject: EventProjectFile?,
+    settings: DesktopCloudflarePagesPublishSettings,
+    seriesRevision: List<DesktopEventSeriesEventSummary>
+): DesktopPublicResultsUrlState {
+    val race = currentProject?.raceData?.race
+    var urlState by remember(
+        race?.id,
+        race?.name,
+        race?.startDateTimeIso,
+        currentProject?.seriesLink,
+        currentPath,
+        settings,
+        seriesRevision
+    ) {
+        mutableStateOf(DesktopPublicResultsUrlState(savedUrl = null, configuredUrl = null))
+    }
+    LaunchedEffect(
+        race?.id,
+        race?.name,
+        race?.startDateTimeIso,
+        currentProject?.seriesLink,
+        currentPath,
+        settings,
+        seriesRevision
+    ) {
+        urlState = withContext(Dispatchers.IO) {
+            loadPublicResultsUrlState(
+                currentPath = currentPath,
+                currentProject = currentProject,
+                settings = settings
+            )
+        }
+    }
+    return urlState
 }
 
 internal fun publicResultsUrl(
@@ -943,10 +1021,7 @@ fun main(args: Array<String>) = application {
         }
 
         LaunchedEffect(projectFile?.raceData?.race?.id, projectSession.currentPath) {
-            val savedPublication = runCatching {
-                savedPublicResultsPublication(currentSeriesManifestPath(), projectFile)
-            }.getOrNull()
-            publishedPublicResultSiteUrl = savedPublication?.url
+            publishedPublicResultSiteUrl = null
             localResultsWebServerRefreshJob?.cancel()
             localResultsWebServerRefreshJob = null
             localResultsWebServer?.stop()
@@ -955,6 +1030,13 @@ fun main(args: Array<String>) = application {
             localResultsWebServerDirectory = null
             localResultsWebServerEventPath = null
         }
+
+        val loadedPublicResultsUrlState = rememberDesktopPublicResultsUrlState(
+            currentPath = projectSession.currentPath,
+            currentProject = projectFile,
+            settings = cloudflarePagesPublishSettings,
+            seriesRevision = seriesEventSummaries
+        )
 
         fun refreshSavedEventSeriesMetadata(savedProject: EventProjectFile, savedPath: Path): String? {
             if (savedProject.seriesLink == null) {
@@ -7277,11 +7359,9 @@ fun main(args: Array<String>) = application {
             isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
             areAliasesEnabled = areAliasesEnabled,
             localResultsWebServerUrl = localResultsWebServerUrl,
-            publishedPublicResultSiteUrl = publishedPublicResultSiteUrl ?: configuredPublicResultsUrl(
-                settings = cloudflarePagesPublishSettings,
-                currentProject = projectSession.currentProject,
-                series = publicResultSeriesRaces()
-            ),
+            publishedPublicResultSiteUrl = publishedPublicResultSiteUrl
+                ?: loadedPublicResultsUrlState.savedUrl
+                ?: loadedPublicResultsUrlState.configuredUrl,
             printerDiagnostics = printerDiagnostics,
             isUpdateCheckingEnabled = isUpdateCheckingEnabled,
             sportIdentPortDiscoveryMode = sportIdentPortDiscoveryMode,

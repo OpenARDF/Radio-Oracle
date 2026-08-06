@@ -359,9 +359,13 @@ object DesktopPublicResultSiteExports {
         lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "course" }
 
     internal fun seriesPath(seriesName: String, firstRace: EventProjectFile, generatedAt: Instant): String {
+        return seriesPath(seriesName, firstRace.raceData.race.startDateTimeIso, generatedAt)
+    }
+
+    internal fun seriesPath(seriesName: String, firstStartDateTimeIso: String, generatedAt: Instant): String {
         return PublicResultsSiteCatalog.seriesPath(
             seriesName = seriesName,
-            firstStartDateTimeIso = firstRace.raceData.race.startDateTimeIso,
+            firstStartDateTimeIso = firstStartDateTimeIso,
             generatedDate = generatedAt.toString()
         )
     }

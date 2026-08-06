@@ -48,7 +48,9 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
+import org.openardf.radiooracle.shared.event.EventSeriesLink
 import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
 import org.openardf.radiooracle.shared.files.IofXmlValidator
 import org.openardf.radiooracle.shared.event.PublicResultsPublication
@@ -127,7 +129,7 @@ class DesktopProjectFilesTest {
             configuredPublicResultsUrl(
                 settings = settings,
                 currentProject = EventProjectFile(raceData = raceData()),
-                series = null
+                seriesFile = null
             )
         )
         assertEquals(
@@ -135,9 +137,89 @@ class DesktopProjectFilesTest {
             configuredPublicResultsUrl(
                 settings = settings.copy(apiToken = ""),
                 currentProject = EventProjectFile(raceData = raceData()),
-                series = null
+                seriesFile = null
             )
         )
+    }
+
+    @Test
+    fun derivesSeriesPublicResultsUrlFromManifestWithoutLoadingRaceFiles() {
+        val settings = DesktopCloudflarePagesPublishSettings(
+            projectName = "openardf-results",
+            branch = "main",
+            accountId = "account",
+            apiToken = "token"
+        )
+        val seriesFile = EventSeriesFile(
+            seriesId = "series",
+            name = "Championship",
+            events = listOf(
+                EventSeriesEvent(
+                    seriesEventId = "first-event",
+                    eventFilePath = "missing-first-event.json",
+                    order = 0,
+                    displayName = "First Event",
+                    startDateTimeIso = "2026-06-03T09:00"
+                )
+            )
+        )
+
+        assertEquals(
+            "https://openardf-results.pages.dev/2026-06-03-championship-series/",
+            configuredPublicResultsUrl(
+                settings = settings,
+                currentProject = EventProjectFile(raceData = raceData()),
+                seriesFile = seriesFile
+            )
+        )
+    }
+
+    @Test
+    fun loadsConfiguredSeriesUrlWithoutReadingMemberRaceFiles() {
+        val directory = Files.createTempDirectory("rom-series-url-state")
+        val manifestPath = directory.resolve("championship.series.radio-oracle.json")
+        val eventPath = directory.resolve("missing-first-event.json")
+        val seriesFile = EventSeriesFile(
+            seriesId = "series",
+            name = "Championship",
+            events = listOf(
+                EventSeriesEvent(
+                    seriesEventId = "first-event",
+                    eventFilePath = eventPath.fileName.toString(),
+                    order = 0,
+                    displayName = "First Event",
+                    startDateTimeIso = "2026-06-03T09:00"
+                )
+            )
+        )
+        DesktopEventSeriesFiles.write(manifestPath, seriesFile)
+        var memberRaceReadCount = 0
+        val manifestOnlyStore = object : EventSeriesStore by DesktopEventSeriesFiles {
+            override fun readEvent(path: Path): EventProjectFile {
+                memberRaceReadCount += 1
+                error("Configured results URL must not load a member Race File: $path")
+            }
+        }
+        val currentProject = EventProjectFile(
+            raceData = raceData(),
+            seriesLink = EventSeriesLink(seriesId = "series", seriesEventId = "first-event")
+        )
+        val settings = DesktopCloudflarePagesPublishSettings(
+            projectName = "openardf-results",
+            branch = "main",
+            accountId = "account",
+            apiToken = "token"
+        )
+
+        val state = loadPublicResultsUrlState(
+            currentPath = eventPath,
+            currentProject = currentProject,
+            settings = settings,
+            store = manifestOnlyStore
+        )
+
+        assertEquals(0, memberRaceReadCount)
+        assertEquals("https://openardf-results.pages.dev/2026-06-03-championship-series/", state.configuredUrl)
     }
 
     @Test
