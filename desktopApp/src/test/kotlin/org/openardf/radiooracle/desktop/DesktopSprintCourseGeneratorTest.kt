@@ -63,6 +63,22 @@ class DesktopSprintCourseGeneratorTest {
     }
 
     @Test
+    fun diverseSetSelectionDoesNotCrossARequiredQualityTier() {
+        val selected = selectDiverseFirstFoxCombinationIndices(
+            firstFoxesByCandidate = listOf(
+                listOf("A", "B", "C"),
+                listOf("D", "E", "F"),
+                listOf("A", "B", "D"),
+                listOf("G", "H", "I")
+            ),
+            limit = 3,
+            priorityTierByCandidate = listOf(0, 1, 0, 1)
+        )
+
+        assertEquals(listOf(0, 2, 3), selected)
+    }
+
+    @Test
     fun sprintTargetTimeUsesSharedCategorySpeedModel() {
         val m21TargetSeconds = DesktopCourseSpeedFactors.estimatedSprintSeconds(
             comparisonLengthMeters = 3_780.0,
@@ -155,12 +171,12 @@ class DesktopSprintCourseGeneratorTest {
             )
         }
         val recommendationQualityComparator =
-            compareByDescending<ClassicCourseGeneratorRecommendedSet> { it.sprintTargetTimeCategoryCount }
-                .thenByDescending { it.uniqueFirstFoxCount }
+            compareByDescending<ClassicCourseGeneratorRecommendedSet> { it.categoryFoxMinimum }
+                .thenByDescending { it.categoryFoxTotal }
                 .thenBy { it.unbalancedSprintCourseCount }
                 .thenBy { it.totalSprintLoopFoxCountDifference }
-                .thenByDescending { it.categoryFoxMinimum }
-                .thenByDescending { it.categoryFoxTotal }
+                .thenByDescending { it.sprintTargetTimeCategoryCount }
+                .thenByDescending { it.uniqueFirstFoxCount }
                 .thenByDescending { it.rows.size }
         assertEquals(
             firstSet,
@@ -191,12 +207,10 @@ class DesktopSprintCourseGeneratorTest {
         val firstFoxCombinations = result.recommendedCourseSets.map { recommendedSet ->
             recommendedSet.rows.mapNotNull { it.orderLabels.getOrNull(1) }.sorted()
         }
-        assertEquals(
-            "Recommended Sprint sets should use different combinations of first ideal foxes.",
-            firstFoxCombinations.size,
-            firstFoxCombinations.distinct().size
+        assertTrue(
+            "Recommended Sprint sets should diversify first-ideal-fox combinations within the required fox-count and balance tier.",
+            firstFoxCombinations.distinct().size > 1
         )
-        assertTrue(firstFoxCombinations.flatten().distinct().size > firstFoxCombinations.first().distinct().size)
         assertTrue(reportText.contains("RECOMMENDED SPRINT COURSE SETS"))
         assertTrue(reportText.contains("Set #1"))
         assertTrue(pdfText.contains("Sprint Route Generator"))
@@ -212,6 +226,39 @@ class DesktopSprintCourseGeneratorTest {
             kmlText.countOccurrences("<LineString>")
         )
         assertFalse(kmlText.contains("No category match"))
+    }
+
+    @Test
+    fun prioritizesRequiredFoxCountsThenBalancedLoopsAheadOfTargetTime() {
+        val path = Files.createTempFile("sprint-course-points-balance-priority", ".kml")
+        Files.writeString(path, sprintBalancePriorityCoursePointsKml())
+
+        val result = DesktopSprintCourseGenerator.generate(path, elevationLookup = { null })
+
+        assertTrue(result.recommendedCourseSets.isNotEmpty())
+        result.recommendedCourseSets.forEach { recommendedSet ->
+            val assignedFoxCountByCategory = bestMatchingFoxCountByCategory(
+                recommendedSet.rows,
+                recommendedSet.coveredCategories
+            )
+            assertEquals(recommendedSet.coveredCategories.toSet(), assignedFoxCountByCategory.keys)
+            assignedFoxCountByCategory.forEach { (category, foxCount) ->
+                assertEquals(
+                    "$category should receive its full Sprint fox assignment before route balance is considered.",
+                    EventCourseRuleCatalog.sprintRequirements.getValue(category).maxControls,
+                    foxCount
+                )
+            }
+            recommendedSet.rows
+                .filter { row -> row.foxCount < 10 && row.foxCount % 2 == 0 }
+                .forEach { row ->
+                    assertEquals(
+                        "Even Sprint assignments should use equal slow and fast fox counts before target-time proximity breaks ties: ${row.orderLabels}",
+                        0,
+                        row.sprintLoopFoxCountDifference
+                    )
+                }
+        }
     }
 
     @Test
@@ -300,6 +347,28 @@ class DesktopSprintCourseGeneratorTest {
             </kml>
         """.trimIndent()
     }
+
+    private fun sprintBalancePriorityCoursePointsKml(): String =
+        """
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+              <Document>
+                ${pointPlacemark("Start", -121.6707874501688, 45.29997622140402, 1277.38239289, "SI=200")}
+                ${pointPlacemark("3", -121.6704418259752, 45.29886556539267, 1264.96169061, "SI=163")}
+                ${pointPlacemark("5", -121.6692957048742, 45.29770713955187, 1256.99654462, "SI=165")}
+                ${pointPlacemark("1", -121.6706891576796, 45.29790481644139, 1250.18099412, "SI=161")}
+                ${pointPlacemark("2", -121.6724807053287, 45.29728701767213, 1248.86481787, "SI=162")}
+                ${pointPlacemark("4", -121.6710638383796, 45.29695757452851, 1262.09927079, "SI=164")}
+                ${pointPlacemark("S", -121.6718678618151, 45.29851629288117, 1268.09916729, "SI=137")}
+                ${pointPlacemark("3F", -121.67286354, 45.30121818, 1284.78709992, "SI=173")}
+                ${pointPlacemark("1F", -121.6741548479692, 45.2988254426979, 1268.88012747, "SI=171")}
+                ${pointPlacemark("4F", -121.6741437945765, 45.29989796968182, 1268.75703204, "SI=174")}
+                ${pointPlacemark("5F", -121.6737207394431, 45.29789384949425, 1258.98093943, "SI=175")}
+                ${pointPlacemark("2F", -121.6728527000563, 45.29926387442363, 1247.47549897, "SI=172")}
+                ${pointPlacemark("B", -121.6724676120949, 45.30020673173927, 1255.48802327, "SI=136")}
+                ${pointPlacemark("Finish", -121.6721378738688, 45.30037170669513, 1257.7052447, "SI=201")}
+              </Document>
+            </kml>
+        """.trimIndent()
 
     private fun classicCoursePointsKml(): String {
         val foxes = (1..5).joinToString("\n") { index ->

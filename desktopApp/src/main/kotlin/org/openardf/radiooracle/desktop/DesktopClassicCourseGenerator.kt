@@ -129,15 +129,21 @@ data class ClassicCourseGeneratorRecommendedSet(
 )
 
 /**
- * Candidates arrive in recommendation-quality order. Keep the best set first, then maximize each
- * selected set's contribution of new first-fox alternatives. Exact combination reuse, overlap, and
- * the original quality rank break ties.
+ * Candidates arrive in recommendation-quality order. Keep the best set first, finish each supplied
+ * priority tier before considering a lower one, then maximize each selected set's contribution of
+ * new first-fox alternatives. Exact combination reuse, overlap, and the original quality rank break
+ * ties within a tier.
  */
 internal fun selectDiverseFirstFoxCombinationIndices(
     firstFoxesByCandidate: List<List<String>>,
-    limit: Int
+    limit: Int,
+    priorityTierByCandidate: List<Int>? = null
 ): List<Int> {
     if (firstFoxesByCandidate.isEmpty() || limit <= 0) return emptyList()
+    val priorityTiers = priorityTierByCandidate ?: List(firstFoxesByCandidate.size) { 0 }
+    require(priorityTiers.size == firstFoxesByCandidate.size) {
+        "Each recommendation candidate must have a priority tier."
+    }
     val combinationSignatures = firstFoxesByCandidate.map { it.sorted() }
     val firstFoxSets = firstFoxesByCandidate.map { it.toSet() }
     val selected = mutableListOf(0)
@@ -146,12 +152,13 @@ internal fun selectDiverseFirstFoxCombinationIndices(
     val remaining = firstFoxesByCandidate.indices.drop(1).toMutableSet()
     while (selected.size < limit && remaining.isNotEmpty()) {
         val next = remaining.minWith(
-            compareBy<Int> { candidateIndex ->
-                if (combinationSignatures[candidateIndex] in selectedCombinations) 1 else 0
-            }
+            compareBy<Int> { candidateIndex -> priorityTiers[candidateIndex] }
+                .thenBy { candidateIndex ->
+                    if (combinationSignatures[candidateIndex] in selectedCombinations) 1 else 0
+                }
                 .thenByDescending { candidateIndex ->
                     firstFoxSets[candidateIndex].count { it !in usedFirstFoxes }
-            }
+                }
                 .thenBy { candidateIndex ->
                     selected.maxOfOrNull { selectedIndex ->
                         firstFoxSets[candidateIndex].count {
@@ -1063,11 +1070,21 @@ object DesktopClassicCourseGenerator {
             }
             .sortedWith(setComparator)
         val selectedScores = if (config.preferDiverseFirstFoxCombinations) {
+            val primaryPriorityTiers = linkedMapOf<List<Int>, Int>()
             selectDiverseFirstFoxCombinationIndices(
                 firstFoxesByCandidate = rankedScores.map { score ->
                     score.rows.mapNotNull { it.orderLabels.getOrNull(1) }
                 },
-                limit = FOXORING_RECOMMENDATION_LIMIT
+                limit = FOXORING_RECOMMENDATION_LIMIT,
+                priorityTierByCandidate = rankedScores.map { score ->
+                    val primaryPriority = listOf(
+                        -score.categoryFoxMinimum,
+                        -score.categoryFoxTotal,
+                        score.unbalancedSprintCourseCount,
+                        score.totalSprintLoopFoxCountDifference
+                    )
+                    primaryPriorityTiers.getOrPut(primaryPriority) { primaryPriorityTiers.size }
+                }
             ).map(rankedScores::get)
         } else {
             rankedScores.take(FOXORING_RECOMMENDATION_LIMIT)
@@ -1222,18 +1239,20 @@ object DesktopClassicCourseGenerator {
                 .thenBy { it.row.orderKey }
         }
         return compareByDescending<RecommendationCandidateRow> {
-            category?.let { targetCategory ->
-                if (it.row.sprintTargetTimeMatches(targetCategory)) 1 else 0
-            }
-                ?: it.row.matchingCategories.count { targetCategory ->
-                    it.row.sprintTargetTimeMatches(targetCategory)
-                }
+            it.row.foxCount
         }
             .thenBy {
                 it.row.sprintLoopFoxCountDifference ?: 0
             }
+            .thenByDescending {
+                category?.let { targetCategory ->
+                    if (it.row.sprintTargetTimeMatches(targetCategory)) 1 else 0
+                }
+                    ?: it.row.matchingCategories.count { targetCategory ->
+                        it.row.sprintTargetTimeMatches(targetCategory)
+                    }
+            }
             .thenByDescending { it.categoryMask.countOneBits() }
-            .thenByDescending { it.row.foxCount }
             .thenBy { it.row.effectiveLengthMeters }
             .thenBy { it.row.orderKey }
     }
@@ -1249,14 +1268,12 @@ object DesktopClassicCourseGenerator {
                 .thenBy { it.totalEffectiveLengthMeters }
                 .thenBy { it.orderKey }
         }
-        return compareByDescending<RecommendedCourseSetScore> {
-            it.sprintTargetTimeCategoryCount
-        }
-            .thenByDescending { it.uniqueFirstFoxCount }
+        return compareByDescending<RecommendedCourseSetScore> { it.categoryFoxMinimum }
+            .thenByDescending { it.categoryFoxTotal }
             .thenBy { it.unbalancedSprintCourseCount }
             .thenBy { it.totalSprintLoopFoxCountDifference }
-            .thenByDescending { it.categoryFoxMinimum }
-            .thenByDescending { it.categoryFoxTotal }
+            .thenByDescending { it.sprintTargetTimeCategoryCount }
+            .thenByDescending { it.uniqueFirstFoxCount }
             .thenByDescending { it.rows.size }
             .thenBy { it.totalEffectiveLengthMeters }
             .thenBy { it.orderKey }
