@@ -313,9 +313,9 @@ class DesktopControlsRouteKmlKmzExportTest {
                 "course-key"
             )
             val courseObjectLabels = protectedCourseInfo.courseObjects.map { it.label }
-            assertEquals(listOf("Start", "1", "Spectator", "B", "2", "Finish"), courseObjectLabels)
+            assertEquals(listOf("Start", "1", "Spectator", "2", "B", "Finish"), courseObjectLabels)
             assertEquals(courseObjectLabels.distinct(), courseObjectLabels)
-            assertEquals("1 Spectator B 2", protectedCourseInfo.idealOrder)
+            assertEquals("1 Spectator 2 B", protectedCourseInfo.idealOrder)
         }
     }
 
@@ -402,9 +402,9 @@ class DesktopControlsRouteKmlKmzExportTest {
                 "course-key"
             )
             val courseObjectLabels = protectedCourseInfo.courseObjects.map { it.label }
-            assertEquals(listOf("Start", "1", "Spectator", "B", "2", "Finish"), courseObjectLabels)
+            assertEquals(listOf("Start", "1", "Spectator", "2", "B", "Finish"), courseObjectLabels)
             assertEquals(courseObjectLabels.distinct(), courseObjectLabels)
-            assertEquals("1 Spectator B 2", protectedCourseInfo.idealOrder)
+            assertEquals("1 Spectator 2 B", protectedCourseInfo.idealOrder)
         }
     }
 

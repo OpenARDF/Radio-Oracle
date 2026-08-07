@@ -435,7 +435,7 @@ private fun SpreadsheetColumnChoice(
                     contentColor = if (selected != null && selectedOption == null) {
                         Color(0xFF9F1D20)
                     } else {
-                        MaterialTheme.colors.onSurface
+                        Color.White
                     }
                 )
             ) {
