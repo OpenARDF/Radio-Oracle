@@ -128,28 +128,35 @@ data class ClassicCourseGeneratorRecommendedSet(
     val rows: List<ClassicCourseGeneratorRow>
 )
 
+internal data class CourseFirstFoxAssignment(
+    val foxCount: Int,
+    val firstFox: String
+)
+
 /**
  * Candidates arrive in recommendation-quality order. Keep the best set first, finish each supplied
  * priority tier before considering a lower one, then maximize each selected set's contribution of
- * new first-fox alternatives. Exact combination reuse, overlap, and the original quality rank break
- * ties within a tier.
+ * new course-count/first-fox assignments. Exact assignment-combination reuse, overlap, and the
+ * original quality rank break ties within a tier.
  */
 internal fun selectDiverseFirstFoxCombinationIndices(
-    firstFoxesByCandidate: List<List<String>>,
+    firstFoxAssignmentsByCandidate: List<List<CourseFirstFoxAssignment>>,
     limit: Int,
     priorityTierByCandidate: List<Int>? = null
 ): List<Int> {
-    if (firstFoxesByCandidate.isEmpty() || limit <= 0) return emptyList()
-    val priorityTiers = priorityTierByCandidate ?: List(firstFoxesByCandidate.size) { 0 }
-    require(priorityTiers.size == firstFoxesByCandidate.size) {
+    if (firstFoxAssignmentsByCandidate.isEmpty() || limit <= 0) return emptyList()
+    val priorityTiers = priorityTierByCandidate ?: List(firstFoxAssignmentsByCandidate.size) { 0 }
+    require(priorityTiers.size == firstFoxAssignmentsByCandidate.size) {
         "Each recommendation candidate must have a priority tier."
     }
-    val combinationSignatures = firstFoxesByCandidate.map { it.sorted() }
-    val firstFoxSets = firstFoxesByCandidate.map { it.toSet() }
+    val assignmentComparator = compareByDescending<CourseFirstFoxAssignment> { it.foxCount }
+        .thenBy { it.firstFox }
+    val combinationSignatures = firstFoxAssignmentsByCandidate.map { it.sortedWith(assignmentComparator) }
+    val assignmentSets = firstFoxAssignmentsByCandidate.map { it.toSet() }
     val selected = mutableListOf(0)
     val selectedCombinations = mutableSetOf(combinationSignatures.first())
-    val usedFirstFoxes = firstFoxSets.first().toMutableSet()
-    val remaining = firstFoxesByCandidate.indices.drop(1).toMutableSet()
+    val usedAssignments = assignmentSets.first().toMutableSet()
+    val remaining = firstFoxAssignmentsByCandidate.indices.drop(1).toMutableSet()
     while (selected.size < limit && remaining.isNotEmpty()) {
         val next = remaining.minWith(
             compareBy<Int> { candidateIndex -> priorityTiers[candidateIndex] }
@@ -157,23 +164,23 @@ internal fun selectDiverseFirstFoxCombinationIndices(
                     if (combinationSignatures[candidateIndex] in selectedCombinations) 1 else 0
                 }
                 .thenByDescending { candidateIndex ->
-                    firstFoxSets[candidateIndex].count { it !in usedFirstFoxes }
+                    assignmentSets[candidateIndex].count { it !in usedAssignments }
                 }
                 .thenBy { candidateIndex ->
                     selected.maxOfOrNull { selectedIndex ->
-                        firstFoxSets[candidateIndex].count {
-                            it in firstFoxSets[selectedIndex]
+                        assignmentSets[candidateIndex].count {
+                            it in assignmentSets[selectedIndex]
                         }
                     } ?: 0
                 }
                 .thenBy { candidateIndex ->
-                    firstFoxSets[candidateIndex].count { it in usedFirstFoxes }
+                    assignmentSets[candidateIndex].count { it in usedAssignments }
                 }
                 .thenBy { it }
         )
         selected += next
         selectedCombinations += combinationSignatures[next]
-        usedFirstFoxes += firstFoxSets[next]
+        usedAssignments += assignmentSets[next]
         remaining -= next
     }
     return selected
@@ -1029,7 +1036,8 @@ object DesktopClassicCourseGenerator {
         val targetMask = (1 shl targetCategories.size) - 1
         val scoredSets = mutableListOf<RecommendedCourseSetScore>()
         val setComparator = recommendedSetComparator(config)
-        val bestScoreByFirstFoxCombination = mutableMapOf<String, RecommendedCourseSetScore>()
+        val bestScoreByFirstFoxCombination =
+            mutableMapOf<List<CourseFirstFoxAssignment>, RecommendedCourseSetScore>()
         fun addScoredSet(score: RecommendedCourseSetScore) {
             if (config.preferDiverseFirstFoxCombinations) {
                 val currentBest = bestScoreByFirstFoxCombination[score.firstFoxCombinationKey]
@@ -1072,16 +1080,15 @@ object DesktopClassicCourseGenerator {
         val selectedScores = if (config.preferDiverseFirstFoxCombinations) {
             val primaryPriorityTiers = linkedMapOf<List<Int>, Int>()
             selectDiverseFirstFoxCombinationIndices(
-                firstFoxesByCandidate = rankedScores.map { score ->
-                    score.rows.mapNotNull { it.orderLabels.getOrNull(1) }
-                },
+                firstFoxAssignmentsByCandidate = rankedScores.map { it.firstFoxAssignments },
                 limit = FOXORING_RECOMMENDATION_LIMIT,
                 priorityTierByCandidate = rankedScores.map { score ->
                     val primaryPriority = listOf(
                         -score.categoryFoxMinimum,
                         -score.categoryFoxTotal,
                         score.unbalancedSprintCourseCount,
-                        score.totalSprintLoopFoxCountDifference
+                        score.totalSprintLoopFoxCountDifference,
+                        -score.sprintTargetTimeCategoryCount
                     )
                     primaryPriorityTiers.getOrPut(primaryPriority) { primaryPriorityTiers.size }
                 }
@@ -1167,12 +1174,37 @@ object DesktopClassicCourseGenerator {
             }
         }
         val perCategorySeedLimit = max(1, FOXORING_RECOMMENDATION_CANDIDATE_LIMIT / allCategories.size)
-        allCategories.forEach { category ->
+        if (config.preferDiverseFirstFoxCombinations) {
             candidates
-                .filter { category in it.row.matchingCategories }
-                .sortedWith(recommendationCandidateComparator(config, category))
-                .take(perCategorySeedLimit)
-                .forEach(::add)
+                .mapNotNull { candidate ->
+                    candidate.row.firstFoxAssignment()?.let { assignment -> assignment to candidate }
+                }
+                .groupBy({ it.first }, { it.second })
+                .values
+                .map { sameAssignment ->
+                    sameAssignment.minWith(recommendationCandidateComparator(config))
+                }
+                .sortedWith(recommendationCandidateComparator(config))
+                .forEach(::addIfRoom)
+            val categorySeeds = allCategories.map { category ->
+                candidates
+                    .filter { category in it.row.matchingCategories }
+                    .sortedWith(recommendationCandidateComparator(config, category))
+                    .take(perCategorySeedLimit)
+            }
+            for (seedIndex in 0 until perCategorySeedLimit) {
+                categorySeeds.forEach { seeds ->
+                    seeds.getOrNull(seedIndex)?.let(::addIfRoom)
+                }
+            }
+        } else {
+            allCategories.forEach { category ->
+                candidates
+                    .filter { category in it.row.matchingCategories }
+                    .sortedWith(recommendationCandidateComparator(config, category))
+                    .take(perCategorySeedLimit)
+                    .forEach(::add)
+            }
         }
         candidates
             .groupBy { it.row.orderLabels.getOrNull(1).orEmpty() }
@@ -1289,6 +1321,11 @@ object DesktopClassicCourseGenerator {
         )
         return DesktopCourseSpeedFactors.isWithinSprintTargetTime(estimatedSeconds)
     }
+
+    private fun ClassicCourseGeneratorRow.firstFoxAssignment(): CourseFirstFoxAssignment? =
+        orderLabels.getOrNull(1)?.let { firstFox ->
+            CourseFirstFoxAssignment(foxCount = foxCount, firstFox = firstFox)
+        }
 
     private fun requirementWarnings(
         classified: ClassifiedClassicCoursePoints,
@@ -1664,10 +1701,11 @@ object DesktopClassicCourseGenerator {
         val totalEffectiveLengthMeters: Double
     ) {
         val orderKey: String = rows.joinToString("\u0000") { it.orderKey }
-        val firstFoxCombinationKey: String = rows
-            .mapNotNull { it.orderLabels.getOrNull(1) }
-            .sorted()
-            .joinToString("\u0000")
+        val firstFoxAssignments: List<CourseFirstFoxAssignment> = rows.mapNotNull { it.firstFoxAssignment() }
+        val firstFoxCombinationKey: List<CourseFirstFoxAssignment> = firstFoxAssignments.sortedWith(
+            compareByDescending<CourseFirstFoxAssignment> { it.foxCount }
+                .thenBy { it.firstFox }
+        )
     }
 
     private data class PdfLine(

@@ -35,11 +35,11 @@ class DesktopSprintCourseGeneratorTest {
     @Test
     fun diverseSetSelectionAddsNewFirstFoxesBeforeReusingCombinations() {
         val selected = selectDiverseFirstFoxCombinationIndices(
-            firstFoxesByCandidate = listOf(
-                listOf("A", "B", "C", "D"),
-                listOf("A", "B", "C", "E"),
-                listOf("E", "F", "G", "H"),
-                listOf("I", "J", "K", "L")
+            firstFoxAssignmentsByCandidate = listOf(
+                assignments("A", "B", "C", "D"),
+                assignments("A", "B", "C", "E"),
+                assignments("E", "F", "G", "H"),
+                assignments("I", "J", "K", "L")
             ),
             limit = 3
         )
@@ -50,11 +50,11 @@ class DesktopSprintCourseGeneratorTest {
     @Test
     fun diverseSetSelectionSpreadsFirstFoxOverlapAcrossEarlierSets() {
         val selected = selectDiverseFirstFoxCombinationIndices(
-            firstFoxesByCandidate = listOf(
-                listOf("A", "B", "C", "D"),
-                listOf("A", "E", "I", "J"),
-                listOf("A", "B", "I", "J"),
-                listOf("E", "F", "G", "H")
+            firstFoxAssignmentsByCandidate = listOf(
+                assignments("A", "B", "C", "D"),
+                assignments("A", "E", "I", "J"),
+                assignments("A", "B", "I", "J"),
+                assignments("E", "F", "G", "H")
             ),
             limit = 3
         )
@@ -65,17 +65,31 @@ class DesktopSprintCourseGeneratorTest {
     @Test
     fun diverseSetSelectionDoesNotCrossARequiredQualityTier() {
         val selected = selectDiverseFirstFoxCombinationIndices(
-            firstFoxesByCandidate = listOf(
-                listOf("A", "B", "C"),
-                listOf("D", "E", "F"),
-                listOf("A", "B", "D"),
-                listOf("G", "H", "I")
+            firstFoxAssignmentsByCandidate = listOf(
+                assignments("A", "B", "C"),
+                assignments("D", "E", "F"),
+                assignments("A", "B", "D"),
+                assignments("G", "H", "I")
             ),
-            limit = 3,
+            limit = 2,
             priorityTierByCandidate = listOf(0, 1, 0, 1)
         )
 
-        assertEquals(listOf(0, 2, 3), selected)
+        assertEquals(listOf(0, 2), selected)
+    }
+
+    @Test
+    fun diverseSetSelectionDistinguishesFirstFoxesByCourseAssignment() {
+        val selected = selectDiverseFirstFoxCombinationIndices(
+            firstFoxAssignmentsByCandidate = listOf(
+                listOf(firstFoxAssignment(10, "3"), firstFoxAssignment(8, "1")),
+                listOf(firstFoxAssignment(10, "1"), firstFoxAssignment(8, "3")),
+                listOf(firstFoxAssignment(10, "3"), firstFoxAssignment(8, "1"))
+            ),
+            limit = 2
+        )
+
+        assertEquals(listOf(0, 1), selected)
     }
 
     @Test
@@ -204,12 +218,14 @@ class DesktopSprintCourseGeneratorTest {
                 )
             }
         }
-        val firstFoxCombinations = result.recommendedCourseSets.map { recommendedSet ->
-            recommendedSet.rows.mapNotNull { it.orderLabels.getOrNull(1) }.sorted()
+        val firstFoxAssignmentCombinations = result.recommendedCourseSets.map { recommendedSet ->
+            recommendedSet.rows.mapNotNull { row ->
+                row.orderLabels.getOrNull(1)?.let { firstFox -> "${row.foxCount}:$firstFox" }
+            }.sorted()
         }
         assertTrue(
-            "Recommended Sprint sets should diversify first-ideal-fox combinations within the required fox-count and balance tier.",
-            firstFoxCombinations.distinct().size > 1
+            "Recommended Sprint sets should diversify course-count/first-fox assignments within the protected quality tier.",
+            firstFoxAssignmentCombinations.distinct().size > 1
         )
         assertTrue(reportText.contains("RECOMMENDED SPRINT COURSE SETS"))
         assertTrue(reportText.contains("Set #1"))
@@ -236,7 +252,13 @@ class DesktopSprintCourseGeneratorTest {
         val result = DesktopSprintCourseGenerator.generate(path, elevationLookup = { null })
 
         assertTrue(result.recommendedCourseSets.isNotEmpty())
+        val bestTargetTimeCategoryCount = result.recommendedCourseSets.first().sprintTargetTimeCategoryCount
         result.recommendedCourseSets.forEach { recommendedSet ->
+            assertEquals(
+                "First-fox diversity must not reduce target-time category coverage.",
+                bestTargetTimeCategoryCount,
+                recommendedSet.sprintTargetTimeCategoryCount
+            )
             val assignedFoxCountByCategory = bestMatchingFoxCountByCategory(
                 recommendedSet.rows,
                 recommendedSet.coveredCategories
@@ -259,6 +281,21 @@ class DesktopSprintCourseGeneratorTest {
                     )
                 }
         }
+        val firstFoxesByCourseCount = result.recommendedCourseSets
+            .flatMap { it.rows }
+            .groupBy { it.foxCount }
+            .mapValues { (_, rows) -> rows.mapNotNull { it.orderLabels.getOrNull(1) }.toSet() }
+        assertTrue(
+            "Balanced recommendations should use at least three available first foxes across course assignments: $firstFoxesByCourseCount",
+            firstFoxesByCourseCount.values.flatten().distinct().size >= 3
+        )
+        assertTrue(
+            "At least one even sub-10 assignment should offer multiple balanced first foxes: $firstFoxesByCourseCount",
+            firstFoxesByCourseCount
+                .filterKeys { it < 10 && it % 2 == 0 }
+                .values
+                .any { it.size >= 2 }
+        )
     }
 
     @Test
@@ -406,6 +443,14 @@ class DesktopSprintCourseGeneratorTest {
 
     private fun String.isFastFoxLabel(): Boolean =
         matches(Regex("""(?:[1-5]F|F[1-5])"""))
+
+    private fun assignments(vararg firstFoxes: String): List<CourseFirstFoxAssignment> =
+        firstFoxes.mapIndexed { index, firstFox ->
+            firstFoxAssignment(10 - index * 2, firstFox)
+        }
+
+    private fun firstFoxAssignment(foxCount: Int, firstFox: String): CourseFirstFoxAssignment =
+        CourseFirstFoxAssignment(foxCount = foxCount, firstFox = firstFox)
 
     private fun uniqueFirstFoxCount(rows: List<ClassicCourseGeneratorRow>): Int {
         val firstFoxCounts = rows
