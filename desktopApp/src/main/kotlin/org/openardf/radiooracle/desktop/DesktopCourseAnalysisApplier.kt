@@ -64,14 +64,8 @@ object DesktopCourseAnalysisApplier {
                     longitude = point.longitude,
                     elevationMeters = point.elevationMeters
                 )
-            },
-            controlPoints = courseInfo.controlPoints.map { controlPoint ->
-                labelByControlId[controlPoint.controlId]?.let { controlPoint.copy(label = it) } ?: controlPoint
-            },
-            courseObjects = courseInfo.courseObjects.map { courseObject ->
-                labelByControlId[courseObject.id]?.let { courseObject.copy(label = it) } ?: courseObject
             }
-        )
+        ).withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = false)
         val encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt(application.idealOrderText, trimmedPassword)
         val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(updatedCourseInfo, trimmedPassword)
         val sameCourseCategoryIds = DesktopCourseAnalyzer
@@ -250,20 +244,36 @@ object DesktopCourseAnalysisApplier {
 private fun ProtectedCourseInfo.withUpdatedProtectedLabels(
     labelByControlId: Map<String, String>,
     markAnalyzerSavedNumbering: Boolean
-): ProtectedCourseInfo =
-    copy(
+): ProtectedCourseInfo {
+    val descriptionByControlNumber = (controlPoints.map { it.label to it.description } +
+        courseObjects.map { it.label to it.description })
+        .unambiguousCourseDescriptionsByIdentity()
+
+    fun movedDescription(label: String, currentDescription: String?): String? =
+        descriptionByControlNumber[label.courseDescriptionIdentityKey()] ?: currentDescription
+
+    return copy(
         sourceName = if (markAnalyzerSavedNumbering && !sourceName.startsWith("Course Analyzer", ignoreCase = true)) {
             "Course Analyzer fox renumbering"
         } else {
             sourceName
         },
         controlPoints = controlPoints.map { controlPoint ->
-            labelByControlId[controlPoint.controlId]?.let { controlPoint.copy(label = it) } ?: controlPoint
+            val updatedLabel = labelByControlId[controlPoint.controlId] ?: controlPoint.label
+            controlPoint.copy(
+                label = updatedLabel,
+                description = movedDescription(updatedLabel, controlPoint.description)
+            )
         },
         courseObjects = courseObjects.map { courseObject ->
-            labelByControlId[courseObject.id]?.let { courseObject.copy(label = it) } ?: courseObject
+            val updatedLabel = labelByControlId[courseObject.id] ?: courseObject.label
+            courseObject.copy(
+                label = updatedLabel,
+                description = movedDescription(updatedLabel, courseObject.description)
+            )
         }
     )
+}
 
 private fun List<EventControl>.withoutPublicCoordinates(): List<EventControl> =
     map { control ->

@@ -252,6 +252,16 @@ class DesktopCourseKmlImportTest {
             listOf("'Fox 1'", "'Fox 2'", "'Fox 3'", "'Fox 4'", "'Fox 5'", "Beacon"),
             protectedCourseInfo.controlPoints.map { it.label }
         )
+        assertEquals(
+            listOf("SI=221", "SI=222", "SI=223", "SI=224", "SI=225", "SI=136"),
+            protectedCourseInfo.controlPoints.map { it.description }
+        )
+        assertEquals(
+            protectedCourseInfo.controlPoints.associate { it.controlId to it.description },
+            protectedCourseInfo.courseObjects
+                .filter { it.type == ProtectedCourseObjectType.CONTROL || it.type == ProtectedCourseObjectType.BEACON }
+                .associate { it.id to it.description }
+        )
     }
 
     @Test

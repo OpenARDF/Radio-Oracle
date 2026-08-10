@@ -199,8 +199,16 @@ object DesktopControlsRouteKmlKmzExporter {
                 )
             }
         }
-        appendCourseObjectPlacemarks(exportedCourseObjects.courseObjects, controlLookup)
-        appendCourseControlPointPlacemarks(exportedCourseObjects.controlPoints, controlLookup)
+        appendCourseObjectPlacemarks(
+            exportedCourseObjects.courseObjects,
+            exportedCourseObjects.analyzerSavedControlIds,
+            controlLookup
+        )
+        appendCourseControlPointPlacemarks(
+            exportedCourseObjects.controlPoints,
+            exportedCourseObjects.analyzerSavedControlIds,
+            controlLookup
+        )
         appendLine("    </Folder>")
         appendLine("  </Document>")
         appendLine("</kml>")
@@ -213,7 +221,7 @@ object DesktopControlsRouteKmlKmzExporter {
             val label = control.displayCourseLabel()
             appendLine("        <Placemark>")
             appendLine("          <name>${xml(label)}</name>")
-            appendLine("          <description>${xml(coursePointDescription(control, "Control catalog $label; type ${control.type}; id ${control.id}"))}</description>")
+            appendLine("          <description>${xml(coursePointDescription(control, null, "Control catalog $label; type ${control.type}; id ${control.id}"))}</description>")
             appendExtendedData(
                 indent = "          ",
                 values = listOf(
@@ -256,14 +264,20 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun StringBuilder.appendCourseControlPointPlacemarks(
         points: List<ProtectedCourseControlPoint>,
+        analyzerSavedControlIds: Set<String>,
         controlLookup: ControlExportLookup
     ) {
         points.forEach { point ->
             val control = controlLookup.resolve(point.controlId, point.label, point.type)
-            val label = control?.displayCourseLabel() ?: point.label
+            val label = if (point.controlId in analyzerSavedControlIds) {
+                point.label.takeIf { it.isNotBlank() } ?: control?.displayCourseLabel().orEmpty()
+            } else {
+                control?.displayCourseLabel() ?: point.label
+            }
+            val siCode = point.description.courseDescriptionSiCodeHint() ?: control?.siCode
             appendLine("        <Placemark>")
             appendLine("          <name>${xml(label)}</name>")
-            appendLine("          <description>${xml(coursePointDescription(control, "Course control $label; type ${point.type}; id ${point.controlId}"))}</description>")
+            appendLine("          <description>${xml(coursePointDescription(control, point.description, "Course control $label; type ${point.type}; id ${point.controlId}"))}</description>")
             appendExtendedData(
                 indent = "          ",
                 values = listOf(
@@ -271,7 +285,7 @@ object DesktopControlsRouteKmlKmzExporter {
                     "label" to label,
                     "sourceLabel" to point.label,
                     "type" to point.type.name,
-                    "siCode" to (control?.siCode?.toString() ?: ""),
+                    "siCode" to (siCode?.toString() ?: ""),
                     "elevationMeters" to (point.elevationMeters?.let(::formatNumber) ?: "")
                 )
             )
@@ -285,14 +299,20 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun StringBuilder.appendCourseObjectPlacemarks(
         points: List<ProtectedCourseObjectPoint>,
+        analyzerSavedControlIds: Set<String>,
         controlLookup: ControlExportLookup
     ) {
         points.forEach { point ->
             val control = controlLookup.resolve(point.id, point.label, point.type.controlPointType())
-            val label = control?.displayCourseLabel() ?: point.label
+            val label = if (point.id in analyzerSavedControlIds) {
+                point.label.takeIf { it.isNotBlank() } ?: control?.displayCourseLabel().orEmpty()
+            } else {
+                control?.displayCourseLabel() ?: point.label
+            }
+            val siCode = point.description.courseDescriptionSiCodeHint() ?: control?.siCode
             appendLine("        <Placemark>")
             appendLine("          <name>${xml(label)}</name>")
-            appendLine("          <description>${xml(coursePointDescription(control, "Course object $label; type ${point.type}; id ${point.id}"))}</description>")
+            appendLine("          <description>${xml(coursePointDescription(control, point.description, "Course object $label; type ${point.type}; id ${point.id}"))}</description>")
             appendExtendedData(
                 indent = "          ",
                 values = listOf(
@@ -300,7 +320,7 @@ object DesktopControlsRouteKmlKmzExporter {
                     "label" to label,
                     "sourceLabel" to point.label,
                     "type" to point.type.name,
-                    "siCode" to (control?.siCode?.toString() ?: ""),
+                    "siCode" to (siCode?.toString() ?: ""),
                     "elevationMeters" to (point.elevationMeters?.let(::formatNumber) ?: "")
                 )
             )
@@ -320,11 +340,19 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("${indent}</ExtendedData>")
     }
 
-    private fun coursePointDescription(control: EventControl?, details: String): String =
-        listOfNotNull(
-            control?.siCode?.let { "SI=$it" },
-            details
-        ).joinToString("\n")
+    private fun coursePointDescription(
+        control: EventControl?,
+        sourceDescription: String?,
+        details: String,
+        includeControlSiFallback: Boolean = true
+    ): String =
+        buildList {
+            sourceDescription?.takeIf { it.isNotBlank() }?.let(::add)
+            if (includeControlSiFallback && sourceDescription.courseDescriptionSiCodeHint() == null) {
+                control?.siCode?.let { add("SI=$it") }
+            }
+            add(details)
+        }.joinToString("\n")
 
     private fun buildKmz(kml: String): ByteArray {
         val output = ByteArrayOutputStream()
@@ -350,8 +378,16 @@ object DesktopControlsRouteKmlKmzExporter {
         appendLine("  </metadata>")
         val controlsById = projectFile.raceData.controls.associateBy { it.id }
         appendGpxControlCatalogWaypoints(controlCatalogControls)
-        appendGpxCourseObjectWaypoints(exportedCourseObjects.courseObjects, controlsById)
-        appendGpxCourseControlWaypoints(exportedCourseObjects.controlPoints, controlsById)
+        appendGpxCourseObjectWaypoints(
+            exportedCourseObjects.courseObjects,
+            exportedCourseObjects.analyzerSavedControlIds,
+            controlsById
+        )
+        appendGpxCourseControlWaypoints(
+            exportedCourseObjects.controlPoints,
+            exportedCourseObjects.analyzerSavedControlIds,
+            controlsById
+        )
         exportCategoryData(projectFile).forEach { categoryData ->
             val category = categoryData.category
             val courseInfo = protectedCourseInfoByCategoryId[category.id] ?: return@forEach
@@ -399,10 +435,16 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun StringBuilder.appendGpxCourseObjectWaypoints(
         points: List<ProtectedCourseObjectPoint>,
+        analyzerSavedControlIds: Set<String>,
         controlsById: Map<String, EventControl>
     ) {
         points.forEach { point ->
-            val label = controlsById[point.id]?.displayCourseLabel() ?: point.label
+            val control = controlsById[point.id]
+            val label = if (point.id in analyzerSavedControlIds) {
+                point.label.takeIf { it.isNotBlank() } ?: control?.displayCourseLabel().orEmpty()
+            } else {
+                control?.displayCourseLabel() ?: point.label
+            }
             appendGpxWaypoint(
                 indent = "  ",
                 tagName = "wpt",
@@ -410,7 +452,12 @@ object DesktopControlsRouteKmlKmzExporter {
                 longitude = point.longitude,
                 elevationMeters = point.elevationMeters,
                 name = label,
-                description = "Course object $label; type ${point.type}; id ${point.id}",
+                description = coursePointDescription(
+                    control,
+                    point.description,
+                    "Course object $label; type ${point.type}; id ${point.id}",
+                    includeControlSiFallback = false
+                ),
                 type = point.type.name
             )
         }
@@ -418,10 +465,16 @@ object DesktopControlsRouteKmlKmzExporter {
 
     private fun StringBuilder.appendGpxCourseControlWaypoints(
         points: List<ProtectedCourseControlPoint>,
+        analyzerSavedControlIds: Set<String>,
         controlsById: Map<String, EventControl>
     ) {
         points.forEach { point ->
-            val label = controlsById[point.controlId]?.displayCourseLabel() ?: point.label
+            val control = controlsById[point.controlId]
+            val label = if (point.controlId in analyzerSavedControlIds) {
+                point.label.takeIf { it.isNotBlank() } ?: control?.displayCourseLabel().orEmpty()
+            } else {
+                control?.displayCourseLabel() ?: point.label
+            }
             appendGpxWaypoint(
                 indent = "  ",
                 tagName = "wpt",
@@ -429,7 +482,12 @@ object DesktopControlsRouteKmlKmzExporter {
                 longitude = point.longitude,
                 elevationMeters = point.elevationMeters,
                 name = label,
-                description = "Course control $label; type ${point.type}; id ${point.controlId}",
+                description = coursePointDescription(
+                    control,
+                    point.description,
+                    "Course control $label; type ${point.type}; id ${point.controlId}",
+                    includeControlSiFallback = false
+                ),
                 type = point.type.name
             )
         }
@@ -490,7 +548,17 @@ object DesktopControlsRouteKmlKmzExporter {
             .flatMap { it.controlPoints }
             .filterNot { it.controlId in courseObjectControlIds }
             .distinctBy { "${it.controlId}:${it.type}" }
-        return CourseExportObjects(courseObjects = courseObjects, controlPoints = controlPoints)
+        val analyzerSavedControlIds = courseInfos
+            .filter { it.sourceName.startsWith("Course Analyzer", ignoreCase = true) }
+            .flatMap { courseInfo ->
+                courseInfo.courseObjects.map { it.id } + courseInfo.controlPoints.map { it.controlId }
+            }
+            .toSet()
+        return CourseExportObjects(
+            courseObjects = courseObjects,
+            controlPoints = controlPoints,
+            analyzerSavedControlIds = analyzerSavedControlIds
+        )
     }
 
     private fun controlCatalogControls(
@@ -595,7 +663,8 @@ object DesktopControlsRouteKmlKmzExporter {
 
 private data class CourseExportObjects(
     val courseObjects: List<ProtectedCourseObjectPoint>,
-    val controlPoints: List<ProtectedCourseControlPoint>
+    val controlPoints: List<ProtectedCourseControlPoint>,
+    val analyzerSavedControlIds: Set<String>
 )
 
 private class ControlExportLookup(controls: List<EventControl>) {

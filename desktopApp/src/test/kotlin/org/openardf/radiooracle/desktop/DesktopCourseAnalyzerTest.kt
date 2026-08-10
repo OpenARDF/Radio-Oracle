@@ -1358,7 +1358,12 @@ class DesktopCourseAnalyzerTest {
             foxCount = 3,
             publicLabels = listOf("Fox 3", "Fox 2", "Fox 1")
         )
-        val protectedInfo = protectedInfo(foxCount = 3)
+        val sourceDescriptionByLabel = mapOf(
+            "31" to "SI=135\nCustodian note for Fox 1",
+            "32" to "SI=136\nCustodian note for Fox 2",
+            "33" to "SI=137\nCustodian note for Fox 3"
+        )
+        val protectedInfo = protectedInfo(foxCount = 3).withControlDescriptions(sourceDescriptionByLabel)
         val summary = DesktopCourseAnalyzer.analyze(
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
@@ -1366,6 +1371,16 @@ class DesktopCourseAnalyzerTest {
             protectedIdealOrderText = "'Fox 1' 'Fox 2' 'Fox 3' Beacon"
         )
         val application = requireNotNull(summary.calculatedRouteApplication)
+        val descriptionByIdentity = sourceDescriptionByLabel.entries.associate { (label, description) ->
+            label.courseDescriptionIdentityKey() to description
+        }
+        val calculatedFolder = summary.kmlFolders.single { it.title == "Calculated foxes and route" }
+        application.foxAssignments.forEach { assignment ->
+            val expectedDescription = descriptionByIdentity.getValue(assignment.calculatedLabel.courseDescriptionIdentityKey())
+            val exportPoint = calculatedFolder.courseObjects.single { it.label == assignment.calculatedLabel }
+            assertEquals(expectedDescription, exportPoint.description)
+            assertEquals(expectedDescription.courseDescriptionSiCodeHint(), exportPoint.siCode)
+        }
         val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(protectedInfo, "test-password")
         val encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt(protectedInfo.idealOrder, "test-password")
         val projectWithSecondCategory = projectFile
@@ -1418,13 +1433,22 @@ class DesktopCourseAnalyzerTest {
             org.openardf.radiooracle.shared.course.ControlPointRules.tokenizeControlPoints(secondIdealOrder)
         )
         application.foxAssignments.forEach { assignment ->
+            val expectedDescription = descriptionByIdentity.getValue(assignment.calculatedLabel.courseDescriptionIdentityKey())
             assertEquals(
                 assignment.calculatedLabel,
                 secondCourseInfo.controlPoints.single { it.controlId == assignment.controlId }.label
             )
             assertEquals(
+                expectedDescription,
+                secondCourseInfo.controlPoints.single { it.controlId == assignment.controlId }.description
+            )
+            assertEquals(
                 assignment.calculatedLabel,
                 secondCourseInfo.courseObjects.single { it.id == assignment.controlId }.label
+            )
+            assertEquals(
+                expectedDescription,
+                secondCourseInfo.courseObjects.single { it.id == assignment.controlId }.description
             )
         }
         val publicLabelsByControlId = updatedProject.raceData.controls.associate { it.id to it.publicLabel }
@@ -1448,6 +1472,13 @@ class DesktopCourseAnalyzerTest {
             updatedRouteOrder,
             updatedRouteMap.routePointIndexes.map { updatedRouteMap.points[it].label }
         )
+        val savedFolder = updatedSummary.kmlFolders.single { it.title == "Saved foxes and route" }
+        application.foxAssignments.forEach { assignment ->
+            val expectedDescription = descriptionByIdentity.getValue(assignment.calculatedLabel.courseDescriptionIdentityKey())
+            val exportPoint = savedFolder.courseObjects.single { it.label == assignment.calculatedLabel }
+            assertEquals(expectedDescription, exportPoint.description)
+            assertEquals(expectedDescription.courseDescriptionSiCodeHint(), exportPoint.siCode)
+        }
     }
 
     @Test
@@ -2389,6 +2420,16 @@ class DesktopCourseAnalyzerTest {
             route = denseRoute
         )
     }
+
+    private fun ProtectedCourseInfo.withControlDescriptions(descriptionByLabel: Map<String, String>): ProtectedCourseInfo =
+        copy(
+            controlPoints = controlPoints.map { controlPoint ->
+                controlPoint.copy(description = descriptionByLabel[controlPoint.label])
+            },
+            courseObjects = courseObjects.map { courseObject ->
+                courseObject.copy(description = descriptionByLabel[courseObject.label])
+            }
+        )
 
     private fun kmlLineStringCoordinateLines(kmlText: String): List<List<String>> =
         Regex("<LineString>[\\s\\S]*?<coordinates>([\\s\\S]*?)</coordinates>[\\s\\S]*?</LineString>")

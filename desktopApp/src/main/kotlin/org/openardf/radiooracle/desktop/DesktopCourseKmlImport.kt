@@ -621,7 +621,8 @@ object DesktopCourseKmlImporter {
                         longitude = control.point.longitude,
                         type = control.type,
                         elevationMeters = elevation,
-                        speedFactor = control.speedFactorHint
+                        speedFactor = control.speedFactorHint,
+                        description = control.description
                     )
                 }.toMap()
                 val controlPoints = routeControls.mapNotNull { allProtectedControlPoints[it.controlId] }
@@ -634,18 +635,22 @@ object DesktopCourseKmlImporter {
                         longitude = waypoint.point.longitude,
                         elevationMeters = sameSourceCourseInfo?.elevationForWaypoint(waypoint)
                             ?: elevationProvider(waypoint.point),
-                        speedFactor = waypoint.speedFactorHint
+                        speedFactor = waypoint.speedFactorHint,
+                        description = waypoint.description
                     )
                 }
-                val firstLegSpeedFactor = routeImportedControls
+                val importedStart = routeImportedControls
                     .firstOrNull { it.isCourseStartPoint() && it.point.sameRoutePoint(routeGeometry.first()) }
-                    ?.speedFactorHint
-                    ?: route.speedFactorHint
+                val importedFinish = routeImportedControls
+                    .firstOrNull { it.isCourseFinishPoint() && it.point.sameRoutePoint(routeGeometry.last()) }
+                val firstLegSpeedFactor = importedStart?.speedFactorHint ?: route.speedFactorHint
                 val courseObjects = courseObjectsForRoute(
                     route = sampledRoute,
                     controls = controlPoints,
                     waypoints = protectedRouteWaypoints,
-                    firstLegSpeedFactor = firstLegSpeedFactor
+                    firstLegSpeedFactor = firstLegSpeedFactor,
+                    startDescription = importedStart?.description,
+                    finishDescription = importedFinish?.description
                 )
                 DesktopDebugLog.info(
                     "CourseKml",
@@ -1646,7 +1651,8 @@ object DesktopCourseKmlImporter {
                     siCodeHint = imported.siCodeHint,
                     type = control.type,
                     point = imported.point,
-                    speedFactorHint = imported.speedFactorHint
+                    speedFactorHint = imported.speedFactorHint,
+                    description = imported.description
                 )
             }
         }
@@ -1973,7 +1979,8 @@ object DesktopCourseKmlImporter {
                     longitude = control.point.longitude,
                     type = control.type,
                     elevationMeters = elevation,
-                    speedFactor = control.speedFactorHint
+                    speedFactor = control.speedFactorHint,
+                    description = control.description
                 )
             }
             val protectedCourseInfo = ProtectedCourseInfo(
@@ -2349,7 +2356,8 @@ object DesktopCourseKmlImporter {
                             label = importedPoint.name,
                             point = importedPoint.point,
                             alongDistanceMeters = alongDistance,
-                            speedFactorHint = importedPoint.speedFactorHint
+                            speedFactorHint = importedPoint.speedFactorHint,
+                            description = importedPoint.description
                         )
                     }
             }
@@ -2361,7 +2369,9 @@ object DesktopCourseKmlImporter {
         route: List<CourseGeoPoint>,
         controls: List<ProtectedCourseControlPoint>,
         waypoints: List<ProtectedCourseObjectPoint> = emptyList(),
-        firstLegSpeedFactor: Double? = null
+        firstLegSpeedFactor: Double? = null,
+        startDescription: String? = null,
+        finishDescription: String? = null
     ): List<ProtectedCourseObjectPoint> =
         buildList {
             route.firstOrNull()?.let { start ->
@@ -2373,7 +2383,8 @@ object DesktopCourseKmlImporter {
                         latitude = start.latitude,
                         longitude = start.longitude,
                         elevationMeters = start.elevationMeters,
-                        speedFactor = firstLegSpeedFactor
+                        speedFactor = firstLegSpeedFactor,
+                        description = startDescription
                     )
                 )
             }
@@ -2385,7 +2396,8 @@ object DesktopCourseKmlImporter {
                     latitude = control.latitude,
                     longitude = control.longitude,
                     elevationMeters = control.elevationMeters,
-                    speedFactor = control.speedFactor
+                    speedFactor = control.speedFactor,
+                    description = control.description
                 )
             } + waypoints
             routeObjects
@@ -2408,7 +2420,8 @@ object DesktopCourseKmlImporter {
                         type = ProtectedCourseObjectType.FINISH,
                         latitude = finish.latitude,
                         longitude = finish.longitude,
-                        elevationMeters = finish.elevationMeters
+                        elevationMeters = finish.elevationMeters,
+                        description = finishDescription
                     )
                 )
             }
@@ -2599,7 +2612,8 @@ private data class CourseMatchedControl(
     val siCodeHint: Int?,
     val type: ControlPointType,
     val point: CourseGeoPoint,
-    val speedFactorHint: Double? = null
+    val speedFactorHint: Double? = null,
+    val description: String? = null
 )
 
 private data class ControlsOnlyProtectedCourseInfoImportResult(
@@ -2620,7 +2634,8 @@ private data class CourseRouteWaypoint(
     val label: String,
     val point: CourseGeoPoint,
     val alongDistanceMeters: Double,
-    val speedFactorHint: Double? = null
+    val speedFactorHint: Double? = null,
+    val description: String? = null
 )
 
 private data class ControlMatchToken(

@@ -299,10 +299,13 @@ object DesktopCourseAnalysisExports {
         folder.courseObjects.forEach { courseObject ->
             appendLine("      <Placemark>")
             appendLine("        <name>${DesktopExportPrimitives.xmlText(courseObject.label)}</name>")
-            val descriptionLines = listOfNotNull(
-                courseObject.siCode?.let { "SI=$it" },
-                courseObject.originalLabel?.let { "Original label: $it" }
-            )
+            val descriptionLines = buildList {
+                courseObject.description?.takeIf { it.isNotBlank() }?.let(::add)
+                if (courseObject.description.courseDescriptionSiCodeHint() == null) {
+                    courseObject.siCode?.let { add("SI=$it") }
+                }
+                courseObject.originalLabel?.let { add("Original label: $it") }
+            }
             if (descriptionLines.isNotEmpty()) {
                 appendLine("        <description>${DesktopExportPrimitives.xmlText(descriptionLines.joinToString("\n"))}</description>")
             }

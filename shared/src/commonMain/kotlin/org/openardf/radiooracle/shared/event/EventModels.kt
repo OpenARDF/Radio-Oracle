@@ -123,7 +123,8 @@ data class ProtectedCourseControlPoint(
     val longitude: Double,
     val type: ControlPointType = ControlPointType.CONTROL,
     val elevationMeters: Double? = null,
-    val speedFactor: Double? = null
+    val speedFactor: Double? = null,
+    val description: String? = null
 )
 
 @Serializable
@@ -134,7 +135,8 @@ data class ProtectedCourseObjectPoint(
     val latitude: Double,
     val longitude: Double,
     val elevationMeters: Double? = null,
-    val speedFactor: Double? = null
+    val speedFactor: Double? = null,
+    val description: String? = null
 )
 
 @Serializable

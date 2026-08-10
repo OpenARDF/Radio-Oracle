@@ -134,6 +134,41 @@ class DesktopControlsRouteKmlKmzExportTest {
     }
 
     @Test
+    fun exportsAnalyzerRenumberedLabelsWithTheirMovedSourceDescriptions() {
+        val password = "course-key"
+        val output = Files.createTempFile("radio-oracle-renumbered-controls", ".kml.zip")
+        val renumberedCourseInfo = sampleCourseInfo().copy(
+            sourceName = "Course Analyzer calculated route",
+            controlPoints = sampleCourseInfo().controlPoints.map { point ->
+                when (point.controlId) {
+                    "control-31" -> point.copy(label = "2", description = "SI=32\nFox 2 detail")
+                    "control-32" -> point.copy(label = "1", description = "SI=31\nFox 1 detail")
+                    else -> point
+                }
+            }
+        )
+        val project = EventProjectEditor.updateCategoryEncryptedCourseInfo(
+            sampleProjectWithoutProtectedCourses(sampleProject(password)),
+            "cat-m21",
+            DesktopProtectedCourseOrder.encryptCourseInfo(renumberedCourseInfo, password)
+        )
+
+        DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+            target = DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Kml),
+            projectFile = project,
+            password = password
+        )
+
+        val kml = exportedKmlText(output, password)
+        val fox1 = kml.placemarkNamed("1")
+        val fox2 = kml.placemarkNamed("2")
+        assertTrue(fox1.contains("SI=31\nFox 1 detail"))
+        assertTrue(fox1.contains("<Data name=\"siCode\"><value>31</value></Data>"))
+        assertTrue(fox2.contains("SI=32\nFox 2 detail"))
+        assertTrue(fox2.contains("<Data name=\"siCode\"><value>32</value></Data>"))
+    }
+
+    @Test
     fun exportsGpxControlCatalogWhenProtectedCoursesAreAbsent() {
         val output = Files.createTempFile("radio-oracle-controls-catalog", ".gpx.zip")
         val project = sampleProjectWithoutProtectedCourses(sampleProject("course-key"))

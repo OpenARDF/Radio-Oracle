@@ -24,7 +24,6 @@
 
 package org.openardf.radiooracle.desktop
 
-import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -81,7 +80,7 @@ object DesktopCourseFileReader {
                     description = description,
                     displayLabel = displayLabel,
                     isVisible = isVisible,
-                    siCodeHint = description.siCodeHint(),
+                    siCodeHint = description.courseDescriptionSiCodeHint(),
                     speedFactorHint = if (DesktopCoursePointLabelClassifier.isEndpointFinishName(name)) {
                         null
                     } else {
@@ -323,20 +322,6 @@ data class CourseGeoPoint(
         return ((x * dx + y * dy) / lengthSquared).coerceIn(0.0, 1.0)
     }
 }
-
-private fun String?.siCodeHint(): Int? =
-    this
-        ?.lineSequence()
-        ?.map { line -> line.trim() }
-        ?.mapNotNull { line ->
-            Regex("""^SI\s*=\s*(\d+)\s*$""", RegexOption.IGNORE_CASE)
-                .matchEntire(line)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.toIntOrNull()
-                ?.takeIf(SportIdentCodes::isSICodeValid)
-        }
-        ?.firstOrNull()
 
 private fun String?.speedFactorHint(placemarkName: String): Double? {
     val text = this ?: return null

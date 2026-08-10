@@ -224,7 +224,8 @@ data class DesktopCourseKmlExportPoint(
     val originalLabel: String?,
     val point: CourseGeoPoint,
     val type: DesktopCourseKmlExportPointType,
-    val siCode: Int? = null
+    val siCode: Int? = null,
+    val description: String? = null
 )
 
 enum class DesktopCourseKmlExportPointType {
@@ -1040,7 +1041,8 @@ object DesktopCourseAnalyzer {
                                 start = start,
                                 stops = labeledCalculatedRouteStops,
                                 finish = finish,
-                                renumbering = calculatedWaitRenumbering
+                                renumbering = calculatedWaitRenumbering,
+                                courseObjectPoints = courseObjectPoints
                             )
                         )
                     )
@@ -1237,7 +1239,11 @@ object DesktopCourseAnalyzer {
                     // Course Analyzer renumbering is intentionally stored in protected course data,
                     // not in Setup > Controls. Use the protected label for analyzer route labels and
                     // wait-slot calculations while preserving the control ID/SI-code source of truth.
-                    control.copy(label = protectedControl.label, publicLabel = protectedControl.label)
+                    control.copy(
+                        label = protectedControl.label,
+                        publicLabel = protectedControl.label,
+                        siCode = protectedControl.description.courseDescriptionSiCodeHint() ?: control.siCode
+                    )
                 } else {
                     control
                 }
@@ -2734,7 +2740,8 @@ object DesktopCourseAnalyzer {
                         latitude = controlPoint.latitude,
                         longitude = controlPoint.longitude,
                         elevationMeters = controlPoint.elevationMeters,
-                        speedFactor = controlPoint.speedFactor
+                        speedFactor = controlPoint.speedFactor,
+                        description = controlPoint.description
                     )
                 )
             }
@@ -2888,8 +2895,17 @@ object DesktopCourseAnalyzer {
         courseObjectPoints: List<ProtectedCourseObjectPoint>
     ): List<DesktopCourseKmlExportPoint> =
         buildList {
+            val descriptionsById = courseObjectPoints.associate { it.id to it.description }
             route.firstOrNull()?.let { start ->
-                add(DesktopCourseKmlExportPoint("Start", null, start, DesktopCourseKmlExportPointType.START))
+                add(
+                    DesktopCourseKmlExportPoint(
+                        "Start",
+                        null,
+                        start,
+                        DesktopCourseKmlExportPointType.START,
+                        description = descriptionsById["start"]
+                    )
+                )
             }
             controls
                 .filter {
@@ -2904,7 +2920,8 @@ object DesktopCourseAnalyzer {
                         originalLabel = null,
                         point = point,
                         type = control.kmlExportPointType(),
-                        siCode = control.siCode
+                        siCode = control.siCode,
+                        description = descriptionsById[control.id]
                     )
                 }
                 .forEach(::add)
@@ -2917,14 +2934,23 @@ object DesktopCourseAnalyzer {
                         label = waypoint.label,
                         originalLabel = null,
                         point = point,
-                        type = DesktopCourseKmlExportPointType.WAYPOINT
+                        type = DesktopCourseKmlExportPointType.WAYPOINT,
+                        description = waypoint.description
                     )
                 }
                 .sortedBy { it.first }
                 .map { it.second }
                 .forEach(::add)
             route.lastOrNull()?.let { finish ->
-                add(DesktopCourseKmlExportPoint("Finish", null, finish, DesktopCourseKmlExportPointType.FINISH))
+                add(
+                    DesktopCourseKmlExportPoint(
+                        "Finish",
+                        null,
+                        finish,
+                        DesktopCourseKmlExportPointType.FINISH,
+                        description = descriptionsById["finish"]
+                    )
+                )
             }
         }
 
@@ -2979,14 +3005,27 @@ object DesktopCourseAnalyzer {
         start: CourseGeoPoint,
         stops: List<CalculatedRouteStop>,
         finish: CourseGeoPoint,
-        renumbering: DesktopCourseWaitRenumbering?
+        renumbering: DesktopCourseWaitRenumbering?,
+        courseObjectPoints: List<ProtectedCourseObjectPoint>
     ): List<DesktopCourseKmlExportPoint> {
         val assignmentsByControlLabel = renumbering
             ?.assignments
             .orEmpty()
             .associateBy { it.controlLabel }
+        val descriptionsByControlNumber = courseObjectPoints
+            .map { it.label to it.description }
+            .unambiguousCourseDescriptionsByIdentity()
+        val descriptionsById = courseObjectPoints.associate { it.id to it.description }
         return buildList {
-            add(DesktopCourseKmlExportPoint("Start", null, start, DesktopCourseKmlExportPointType.START))
+            add(
+                DesktopCourseKmlExportPoint(
+                    "Start",
+                    null,
+                    start,
+                    DesktopCourseKmlExportPointType.START,
+                    description = descriptionsById["start"]
+                )
+            )
             stops
                 .mapNotNull { stop ->
                     val type = stop.type ?: return@mapNotNull null
@@ -2998,16 +3037,28 @@ object DesktopCourseAnalyzer {
                     } else {
                         null
                     }
+                    val calculatedLabel = suggestedLabel ?: originalLabel
+                    val description = descriptionsByControlNumber[calculatedLabel.courseDescriptionIdentityKey()]
+                        ?: control?.id?.let(descriptionsById::get)
                     DesktopCourseKmlExportPoint(
-                        label = suggestedLabel ?: originalLabel,
+                        label = calculatedLabel,
                         originalLabel = originalLabel.takeIf { suggestedLabel != null && suggestedLabel != originalLabel },
                         point = stop.point,
                         type = type,
-                        siCode = control?.siCode
+                        siCode = description.courseDescriptionSiCodeHint() ?: control?.siCode,
+                        description = description
                     )
                 }
                 .forEach(::add)
-            add(DesktopCourseKmlExportPoint("Finish", null, finish, DesktopCourseKmlExportPointType.FINISH))
+            add(
+                DesktopCourseKmlExportPoint(
+                    "Finish",
+                    null,
+                    finish,
+                    DesktopCourseKmlExportPointType.FINISH,
+                    description = descriptionsById["finish"]
+                )
+            )
         }
     }
 
