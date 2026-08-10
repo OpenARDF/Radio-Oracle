@@ -93,6 +93,7 @@ enum class DesktopSection(val label: String) {
     SeriesSettings("Series Settings"),
     Controls("Controls"),
     CourseAnalysis("Course Analyzer"),
+    CourseReport("Course Report"),
     ElevationCache("Elevation Data"),
     ElevationCacheImport("Import Elevation Data"),
     Tools("More..."),

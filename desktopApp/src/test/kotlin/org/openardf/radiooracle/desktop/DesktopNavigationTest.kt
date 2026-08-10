@@ -1091,6 +1091,7 @@ class DesktopNavigationTest {
         assertEquals(
             listOf(
                 "Course Analyzer",
+                "Course Report",
                 "Move Course",
                 "Create Course",
                 "2D Graphic",
@@ -1131,6 +1132,9 @@ class DesktopNavigationTest {
         )
         assertEquals(DesktopNavAction.ImportCourseKmlKmz, courseAnalyzer.children.first().action)
         assertEquals(DesktopNavAction.ImportCourseGpx, courseAnalyzer.children.last().action)
+        val courseReport = courseTools.children.first { it.label == "Course Report" }
+        assertEquals(DesktopSection.CourseReport, courseReport.section)
+        assertTrue(courseReport.requiresEventFile)
         assertEquals(DesktopSection.KmlMoveCourse, courseTools.children.first { it.label == "Move Course" }.section)
         assertFalse(courseTools.children.first { it.label == "Move Course" }.requiresEventFile)
         assertEquals(DesktopSection.KmlCreateCourse, courseTools.children.first { it.label == "Create Course" }.section)

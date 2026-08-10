@@ -48,6 +48,7 @@ class DesktopPaletteTest {
                 "Series Settings",
                 "Controls",
                 "Course Analyzer",
+                "Course Report",
                 "Elevation Data",
                 "Import Elevation Data",
                 "More...",

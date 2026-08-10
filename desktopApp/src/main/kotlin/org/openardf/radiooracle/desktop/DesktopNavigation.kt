@@ -633,6 +633,12 @@ object DesktopNavigation {
                                     DesktopSection.CourseAnalysis
                                 ),
                                 item(
+                                    "setup.tools.course-tools.course-report",
+                                    "Course Report",
+                                    workflow,
+                                    DesktopSection.CourseReport
+                                ),
+                                item(
                                     "setup.tools.course-tools.move-course",
                                     "Move Course",
                                     workflow,
@@ -1444,6 +1450,8 @@ object DesktopNavigation {
             "Use Time Sync to inspect the attached SPORTident station before station-clock synchronization.",
         "setup.tools.course-tools.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
+        "setup.tools.course-tools.course-report" to
+            "Use Course Report to export one CSV row per unique set of course controls with distance, climb, and ascending SI control numbers.",
         "setup.tools.course-tools.course-analysis.import-kml-kmz" to
             "Use Import Course KML/KMZ to bring in control placemarks and required category route lines for course analysis and category course assignments.",
         "setup.tools.course-tools.course-analysis.import-gpx" to

@@ -13609,7 +13609,11 @@ private fun SectionWorkspace(
                 onUpdateSpeedFactor = onUpdateCourseAnalyzerSpeedFactor
             )
         }
-        CourseToolsSectionWorkspaceContent(section, projectFile)
+        CourseToolsSectionWorkspaceContent(
+            section = section,
+            projectFile = projectFile,
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+        )
         if (section == DesktopSection.SportIdentTools) {
             SportIdentToolsPanel()
         }
@@ -18903,13 +18907,94 @@ private fun String.sprintFastNumber(): Int? {
 }
 
 @Composable
-private fun CourseToolsSectionWorkspaceContent(section: DesktopSection, projectFile: EventProjectFile?) {
+private fun CourseToolsSectionWorkspaceContent(
+    section: DesktopSection,
+    projectFile: EventProjectFile?,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+) {
     when (section) {
+        DesktopSection.CourseReport -> projectFile?.let {
+            CourseReportPanel(
+                projectFile = it,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+            )
+        }
         DesktopSection.KmlMoveCourse -> KmlMoveCoursePanel()
         DesktopSection.KmlCreateCourse -> KmlCreateCoursePanel(projectFile)
         DesktopSection.Kml2dGraphic -> Kml2dGraphicPanel()
         DesktopSection.KmlRouteGenerator -> KmlRouteGeneratorPanel()
         else -> Unit
+    }
+}
+
+@Composable
+private fun CourseReportPanel(
+    projectFile: EventProjectFile,
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+) {
+    var statusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Course Report",
+            color = DesktopPalette.Black,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Exports one row per unique set of SI controls. Control numbers are listed least-to-greatest and identical sets are combined; courses are numbered longest-first, with distance in kilometers and climb in meters.",
+            color = DesktopPalette.Black,
+            fontSize = 14.sp
+        )
+        val reportRows = DesktopCourseReportCsv.rows(
+            projectFile = projectFile,
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+        )
+        if (reportRows.isEmpty()) {
+            Text(
+                text = "Assign SI controls to at least one category before exporting a Course Report.",
+                color = DesktopPalette.Black,
+                fontSize = 14.sp
+            )
+            return@Column
+        }
+        Button(
+            onClick = {
+                DesktopFileDialogs.chooseExportCsv(
+                    title = "Export Course Report CSV",
+                    eventName = projectFile.raceData.race.name,
+                    suffix = "course report"
+                )?.let { path ->
+                    runCatching {
+                        DesktopProjectFiles.exportCourseReportCsv(
+                            path = path,
+                            projectFile = projectFile,
+                            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+                        )
+                    }.onSuccess {
+                        statusText = "Exported ${path.fileName} with ${reportRows.size} unique control sets."
+                    }.onFailure { error ->
+                        statusText = "Course Report export failed: ${error.message ?: error::class.simpleName}"
+                    }
+                }
+            }
+        ) {
+            ButtonLabel("Export Course Report CSV...")
+        }
+        statusText?.let { text ->
+            Text(
+                text = text,
+                color = if (text.startsWith("Course Report export failed")) {
+                    DesktopPalette.Error
+                } else {
+                    DesktopPalette.Disconnected
+                },
+                fontSize = 13.sp
+            )
+        }
     }
 }
 

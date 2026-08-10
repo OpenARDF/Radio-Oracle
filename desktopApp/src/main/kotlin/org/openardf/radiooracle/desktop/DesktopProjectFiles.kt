@@ -70,6 +70,20 @@ object DesktopProjectFiles : ProjectFileStore {
         writeText(path, EventCsvExports.categories(projectFile.raceData, includeEncryptedIdealOrder))
     }
 
+    fun exportCourseReportCsv(
+        path: Path,
+        projectFile: EventProjectFile,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+    ) {
+        writeText(
+            path,
+            DesktopCourseReportCsv.generate(
+                projectFile = projectFile,
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+            )
+        )
+    }
+
     fun exportCompetitorsCsv(path: Path, projectFile: EventProjectFile) {
         writeText(path, EventCsvExports.competitors(projectFile.raceData))
     }
