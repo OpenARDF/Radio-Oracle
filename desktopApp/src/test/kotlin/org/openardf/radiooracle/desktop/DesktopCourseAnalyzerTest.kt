@@ -2091,7 +2091,8 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
-    fun routeMapUsesMagneticDeclinationWhenProvided() {
+    fun routeMapAppliesEastDeclinationWithCorrectRotationSign() {
+        val mtHoodDeclinationDegrees = 14.3
         val trueNorthSummary = DesktopCourseAnalyzer.analyze(
             projectFile = projectFile(foxCount = 3),
             categoryId = CATEGORY_ID,
@@ -2103,7 +2104,9 @@ class DesktopCourseAnalyzerTest {
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo(foxCount = 3),
             protectedIdealOrderText = null,
-            magneticDeclinationProvider = { DesktopMagneticDeclinationResult(90.0, usesExpiredCoefficients = false) }
+            magneticDeclinationProvider = {
+                DesktopMagneticDeclinationResult(mtHoodDeclinationDegrees, usesExpiredCoefficients = false)
+            }
         )
 
         val trueNorthMap = requireNotNull(trueNorthSummary.routeMaps.single())
@@ -2114,13 +2117,17 @@ class DesktopCourseAnalyzerTest {
         val magneticFinish = magneticNorthMap.points.single { it.label == "F" }
 
         assertNull(trueNorthMap.magneticDeclinationDegrees)
-        assertEquals(90.0, magneticNorthMap.magneticDeclinationDegrees ?: 0.0, 0.001)
-        assertTrue("True-north fixture should run east-west.", abs(trueFinish.xFraction - trueStart.xFraction) > 0.9)
-        assertTrue("Magnetic-north rotation should make the route nearly vertical.", abs(magneticFinish.xFraction - magneticStart.xFraction) < 0.01)
-        assertTrue("Magnetic-north rotation should keep route extent visible.", abs(magneticFinish.yFraction - magneticStart.yFraction) > 0.9)
+        assertEquals(mtHoodDeclinationDegrees, magneticNorthMap.magneticDeclinationDegrees ?: 0.0, 0.001)
+        assertTrue("True-north fixture should run from west to east.", trueFinish.xFraction > trueStart.xFraction)
+        assertEquals("True-north fixture should have no north-south change.", trueStart.yFraction, trueFinish.yFraction, 0.001)
+        assertTrue("East declination should preserve the route's west-to-east direction.", magneticFinish.xFraction > magneticStart.xFraction)
+        assertTrue(
+            "Positive east declination should rotate the eastward route toward the top of a magnetic-north map.",
+            magneticFinish.yFraction < magneticStart.yFraction
+        )
 
         val reportText = DesktopCourseAnalysisExports.reportText(magneticNorthSummary)
-        assertTrue(reportText.contains("Orientation: Magnetic north (90.0° E declination)"))
+        assertTrue(reportText.contains("Orientation: Magnetic north (14.3° E declination)"))
     }
 
     @Test
