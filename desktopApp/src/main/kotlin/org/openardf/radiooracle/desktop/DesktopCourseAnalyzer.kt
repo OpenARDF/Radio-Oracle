@@ -2685,26 +2685,30 @@ object DesktopCourseAnalyzer {
     }
 
     private fun sameCourseCategoryNames(projectFile: EventProjectFile, categoryId: String): List<String> {
+        return sameCourseCategories(projectFile, categoryId)
+            .sortedBy { it.category.order }
+            .map { it.category.name }
+    }
+
+    /** Returns categories whose assigned course contains the same controls, regardless of row order. */
+    internal fun sameCourseCategories(projectFile: EventProjectFile, categoryId: String): List<EventCategoryData> {
         val categoryData = protectedCourseStateCategories(projectFile.raceData).firstOrNull { it.category.id == categoryId }
             ?: return emptyList()
         val targetControlIds = assignedControlIds(categoryData)
         if (targetControlIds.isEmpty()) {
-            return listOf(categoryData.category.name)
+            return listOf(categoryData)
         }
         return protectedCourseStateCategories(projectFile.raceData)
             .filter { assignedControlIds(it) == targetControlIds }
-            .sortedBy { it.category.order }
-            .map { it.category.name }
-            .ifEmpty { listOf(categoryData.category.name) }
+            .ifEmpty { listOf(categoryData) }
     }
 
-    private fun assignedControlIds(categoryData: EventCategoryData): List<String> =
+    private fun assignedControlIds(categoryData: EventCategoryData): Set<String> =
         if (categoryData.controlPoints.isNotEmpty()) {
             categoryData.controlPoints
-                .sortedBy { it.order }
-                .map { it.controlId }
+                .mapTo(linkedSetOf()) { it.controlId }
         } else {
-            categoryData.publicControlIds
+            categoryData.publicControlIds.toSet()
         }
 
     private fun List<EventControl>.withTerminalBeacon(beacon: EventControl?): List<EventControl> =

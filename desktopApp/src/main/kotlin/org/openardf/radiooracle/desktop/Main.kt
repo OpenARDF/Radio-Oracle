@@ -3055,17 +3055,19 @@ fun main(args: Array<String>) = application {
                     ?: throw IllegalStateException("Load a Race File before applying calculated route.")
                 val currentCourseInfo = protectedCourseInfoByCategoryId[application.categoryId]
                     ?: throw IllegalStateException("Course data is missing for the selected category.")
-                val (updatedProject, updatedCourseInfo) = DesktopCourseAnalysisApplier.applyCalculatedRoute(
+                val result = DesktopCourseAnalysisApplier.applyCalculatedRoute(
                     projectFile = currentProject,
                     courseInfo = currentCourseInfo,
                     application = application,
                     password = password
                 )
-                projectFile = projectSession.updateCurrentProject { updatedProject }
-                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (application.categoryId to application.idealOrderText)
-                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId + (application.categoryId to updatedCourseInfo)
+                projectFile = projectSession.updateCurrentProject { result.projectFile }
+                syncProtectedCourseState(result.projectFile, password)
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = "Saved calculated route and fox numbering to the Race File. Save Race to write changes to disk."
+                projectStatusText =
+                    "Saved the calculated route and applied its ideal order to ${result.affectedCategoryCount} " +
+                        "categor${if (result.affectedCategoryCount == 1) "y" else "ies"} with the same course. " +
+                        "Save Race to write changes to disk."
                 projectStatusText
             }.getOrElse { error ->
                 projectStatusText = "Save calculated route failed: ${error.message ?: error::class.simpleName}"
@@ -11534,7 +11536,7 @@ private enum class CourseAnalysisSaveAction(
     CalculatedRoute(
         buttonLabel = "Save Calculated Route",
         title = "Save calculated route?",
-        message = "This will replace the saved route and saved fox numbering for the selected category with the calculated route data. Any improved calculated fox numbering will also be saved to affected course data. The Race File will have unsaved changes until you click Save Race."
+        message = "This will replace the saved route for the selected category and apply the generated ideal order to every category with the same assigned course. Any improved calculated fox numbering will also be saved to affected course data. The Race File will have unsaved changes until you click Save Race."
     ),
     FoxRenumberingOnly(
         buttonLabel = "Save Fox Renumbering Only",

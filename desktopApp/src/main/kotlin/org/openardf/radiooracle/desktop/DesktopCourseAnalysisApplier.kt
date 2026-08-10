@@ -37,7 +37,7 @@ object DesktopCourseAnalysisApplier {
         courseInfo: ProtectedCourseInfo,
         application: DesktopCourseCalculatedRouteApplication,
         password: String
-    ): Pair<EventProjectFile, ProtectedCourseInfo> {
+    ): DesktopCourseCalculatedRouteApplyResult {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) {
             "Race Password is required."
@@ -74,6 +74,9 @@ object DesktopCourseAnalysisApplier {
         )
         val encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt(application.idealOrderText, trimmedPassword)
         val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(updatedCourseInfo, trimmedPassword)
+        val sameCourseCategoryIds = DesktopCourseAnalyzer
+            .sameCourseCategories(projectFile, application.categoryId)
+            .mapTo(mutableSetOf()) { it.category.id }
         val updatedCategories = projectFile.raceData.categories.map { categoryData ->
             if (categoryData.category.id == application.categoryId) {
                 categoryData.copy(
@@ -83,30 +86,42 @@ object DesktopCourseAnalysisApplier {
                     )
                 )
             } else {
-                val updatedOtherIdealOrder = categoryData.category.encryptedIdealOrder
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { encryptedValue ->
-                        val idealOrderText = DesktopProtectedCourseOrder.decrypt(encryptedValue, trimmedPassword)
-                        val resolvedControlIds = runCatching {
-                            ProtectedIdealOrderRules.resolveControlIds(idealOrderText, projectFile.raceData.controls)
-                        }.getOrElse { error ->
-                            throw IllegalArgumentException(
-                                "Stored ideal order could not be updated for ${categoryData.category.name}: ${error.message ?: error::class.simpleName}"
-                            )
+                val hasSameCourse = categoryData.category.id in sameCourseCategoryIds
+                val updatedOtherIdealOrder = if (hasSameCourse) {
+                    application.idealOrderText
+                } else {
+                    categoryData.category.encryptedIdealOrder
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { encryptedValue ->
+                            val idealOrderText = DesktopProtectedCourseOrder.decrypt(encryptedValue, trimmedPassword)
+                            val resolvedControlIds = runCatching {
+                                ProtectedIdealOrderRules.resolveControlIds(idealOrderText, projectFile.raceData.controls)
+                            }.getOrElse { error ->
+                                throw IllegalArgumentException(
+                                    "Stored ideal order could not be updated for ${categoryData.category.name}: ${error.message ?: error::class.simpleName}"
+                                )
+                            }
+                            resolvedControlIds.joinToString(" ") { controlId ->
+                                labelByControlId[controlId]
+                                    ?.let(::quoteIdealOrderToken)
+                                    ?: updatedControlsById[controlId]
+                                        ?.idealOrderToken(updatedControls)
+                                    ?: throw IllegalArgumentException("Stored ideal order control could not be preserved: $controlId")
+                            }
                         }
-                        resolvedControlIds.joinToString(" ") { controlId ->
-                            labelByControlId[controlId]
-                                ?.let(::quoteIdealOrderToken)
-                                ?: updatedControlsById[controlId]
-                                    ?.idealOrderToken(updatedControls)
-                                ?: throw IllegalArgumentException("Stored ideal order control could not be preserved: $controlId")
-                        }
-                    }
+                }
                 val updatedOtherCourseInfo = categoryData.category.encryptedCourseInfo
                     ?.takeIf { it.isNotBlank() }
                     ?.let { encryptedValue ->
                         DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, trimmedPassword)
                             .withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true)
+                            .let { updatedInfo ->
+                                if (hasSameCourse) {
+                                    updatedInfo.copy(idealOrder = application.idealOrderText)
+                                } else {
+                                    updatedInfo
+                                }
+                            }
                     }
                 if (updatedOtherIdealOrder == null && updatedOtherCourseInfo == null) {
                     categoryData
@@ -124,12 +139,16 @@ object DesktopCourseAnalysisApplier {
                 }
             }
         }
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(
-                controls = updatedControls,
-                categories = updatedCategories
-            )
-        ) to updatedCourseInfo
+        return DesktopCourseCalculatedRouteApplyResult(
+            projectFile = projectFile.copy(
+                raceData = projectFile.raceData.copy(
+                    controls = updatedControls,
+                    categories = updatedCategories
+                )
+            ),
+            courseInfo = updatedCourseInfo,
+            affectedCategoryCount = updatedCategories.count { it.category.id in sameCourseCategoryIds }
+        )
     }
 
     fun applyFoxRenumberingOnly(
@@ -284,5 +303,11 @@ data class DesktopCourseFoxRenumberingApplyResult(
     val projectFile: EventProjectFile,
     val courseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     val changedControlCount: Int,
+    val affectedCategoryCount: Int
+)
+
+data class DesktopCourseCalculatedRouteApplyResult(
+    val projectFile: EventProjectFile,
+    val courseInfo: ProtectedCourseInfo,
     val affectedCategoryCount: Int
 )

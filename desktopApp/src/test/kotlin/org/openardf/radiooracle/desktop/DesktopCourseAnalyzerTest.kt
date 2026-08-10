@@ -1451,6 +1451,100 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun appliesCalculatedIdealOrderToEveryCategoryWithTheSameAssignedCourse() {
+        val password = "test-password"
+        val baseProject = projectFile(
+            foxCount = 3,
+            publicLabels = listOf("Fox 3", "Fox 2", "Fox 1")
+        )
+        val sourceCourseInfo = protectedInfo(foxCount = 3)
+        val application = requireNotNull(
+            DesktopCourseAnalyzer.analyze(
+                projectFile = baseProject,
+                categoryId = CATEGORY_ID,
+                protectedCourseInfo = sourceCourseInfo,
+                protectedIdealOrderText = "'Fox 1' 'Fox 2' 'Fox 3' Beacon"
+            ).calculatedRouteApplication
+        )
+        val sameCourseInfo = sourceCourseInfo.copy(
+            idealOrder = "'Fox 3' 'Fox 1' 'Fox 2' Beacon",
+            lengthMeters = 8_765,
+            climbMeters = 432,
+            route = sourceCourseInfo.route.reversed()
+        )
+        val differentCourseInfo = protectedInfo(foxCount = 2)
+        val projectWithCategories = baseProject
+            .withSameCourseCategory(categoryId = "category-m40", categoryName = "M40")
+            .withSameCourseCategory(categoryId = "category-w65", categoryName = "W65")
+        val projectToUpdate = projectWithCategories.copy(
+            raceData = projectWithCategories.raceData.copy(
+                categories = projectWithCategories.raceData.categories.map { categoryData ->
+                    val (courseInfo, controlPoints) = when (categoryData.category.id) {
+                        "category-m40" -> sameCourseInfo to categoryData.controlPoints.reversed()
+                        "category-w65" -> differentCourseInfo to categoryData.controlPoints
+                            .filterNot { it.controlId == "control-3" }
+                        else -> sourceCourseInfo to categoryData.controlPoints
+                    }
+                    categoryData.copy(
+                        category = categoryData.category.copy(
+                            encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt(courseInfo.idealOrder, password),
+                            encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(courseInfo, password)
+                        ),
+                        controlPoints = controlPoints
+                    )
+                }
+            )
+        )
+
+        val result = DesktopCourseAnalysisApplier.applyCalculatedRoute(
+            projectFile = projectToUpdate,
+            courseInfo = sourceCourseInfo,
+            application = application,
+            password = password
+        )
+
+        assertEquals(2, result.affectedCategoryCount)
+        listOf(CATEGORY_ID, "category-m40").forEach { categoryId ->
+            val category = result.projectFile.raceData.categories.single { it.category.id == categoryId }.category
+            assertEquals(
+                application.idealOrderText,
+                DesktopProtectedCourseOrder.decrypt(requireNotNull(category.encryptedIdealOrder), password)
+            )
+            assertEquals(
+                application.idealOrderText,
+                DesktopProtectedCourseOrder.decryptCourseInfo(
+                    requireNotNull(category.encryptedCourseInfo),
+                    password
+                ).idealOrder
+            )
+        }
+        val updatedSameCourseInfo = result.projectFile.raceData.categories
+            .single { it.category.id == "category-m40" }
+            .category.encryptedCourseInfo
+            .let(::requireNotNull)
+            .let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
+        assertEquals(sameCourseInfo.lengthMeters, updatedSameCourseInfo.lengthMeters)
+        assertEquals(sameCourseInfo.climbMeters, updatedSameCourseInfo.climbMeters)
+        assertEquals(sameCourseInfo.route, updatedSameCourseInfo.route)
+
+        val differentCategory = result.projectFile.raceData.categories
+            .single { it.category.id == "category-w65" }
+            .category
+        val differentIdealOrder = DesktopProtectedCourseOrder.decrypt(
+            requireNotNull(differentCategory.encryptedIdealOrder),
+            password
+        )
+        assertFalse(differentIdealOrder == application.idealOrderText)
+        assertEquals(
+            differentCourseInfo.idealOrder,
+            DesktopProtectedCourseOrder.decryptCourseInfo(
+                requireNotNull(differentCategory.encryptedCourseInfo),
+                password
+            ).idealOrder
+        )
+    }
+
+    @Test
     fun appliesFoxRenumberingOnlyAcrossProtectedCategoriesAndIdealOrders() {
         val password = "test-password"
         val projectFile = projectFile(
@@ -2186,11 +2280,11 @@ class DesktopCourseAnalyzerTest {
     }
 
     private fun EventProjectFile.withSameCourseCategory(categoryId: String, categoryName: String): EventProjectFile {
-        val baseCategory = raceData.categories.single()
+        val baseCategory = raceData.categories.first()
         val copiedCategory = baseCategory.category.copy(
             id = categoryId,
             name = categoryName,
-            order = baseCategory.category.order + 1
+            order = raceData.categories.maxOf { it.category.order } + 1
         )
         val copiedControlPoints = baseCategory.controlPoints.map { controlPoint ->
             controlPoint.copy(
