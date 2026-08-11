@@ -53,7 +53,7 @@ object DesktopPrintableStartListPdf {
         PdfColumn("Bib #", 40.0),
         PdfColumn("Category", 56.0),
         PdfColumn("SI #", 64.0),
-        PdfColumn("Corridor", 100.0, rowFontSize = 6, minimumRowFontSize = 3)
+        PdfColumn("Corridor", 100.0, rowFontSize = 10, minimumRowFontSize = 3)
     )
 
     fun defaultFileName(projectFile: EventProjectFile): String =

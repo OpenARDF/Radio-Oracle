@@ -464,7 +464,7 @@ class DesktopSmokeSampleTest {
         assertTrue(exported.contains("1 0 0 1 310.98 669.00 Tm\n(101) Tj"))
         assertTrue(exported.contains("1 0 0 1 358.98 669.00 Tm\n(M21) Tj"))
         assertTrue(exported.contains("1 0 0 1 411.96 669.00 Tm\n(123456) Tj"))
-        assertTrue(exported.contains("1 0 0 1 500.20 669.00 Tm\n(East2) Tj"))
+        assertTrue(exported.contains("/F1 10 Tf\n0 0 0 rg\n1 0 0 1 495.00 669.00 Tm\n(East2) Tj"))
         assertTrue(exported.contains("($maximumWidthCorridor) Tj"))
         assertTrue(exported.contains("0.96 0.96 0.96 rg"))
     }
