@@ -91,7 +91,8 @@ object EventCsvRows {
             competitor.index,
             competitor.bibNumber,
             competitor.club,
-            competitor.siNumber
+            competitor.siNumber,
+            competitor.corridor
         )
     }
 

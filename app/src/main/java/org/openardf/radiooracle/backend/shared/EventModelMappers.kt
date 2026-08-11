@@ -131,7 +131,8 @@ fun Competitor.toEventCompetitor(): EventCompetitor =
         siRent = siRent,
         startNumber = startNumber.takeIf { it > 0 },
         drawnStartTimeSeconds = drawnRelativeStartTime?.seconds,
-        bibNumber = bibNumber
+        bibNumber = bibNumber,
+        corridor = corridor
     )
 
 /** Converts the Android Room punch entity into the portable shared race model. */
@@ -329,7 +330,8 @@ private fun EventCompetitor.toRoomCompetitor(idMapper: RoomIdMapper): Competitor
         siRent = siRent,
         startNumber = startNumber ?: 0,
         drawnRelativeStartTime = drawnStartTimeSeconds?.let(Duration::ofSeconds),
-        bibNumber = bibNumber
+        bibNumber = bibNumber,
+        corridor = corridor
     )
 
 /** Converts the portable shared punch model back into an Android Room entity. */

@@ -44,15 +44,16 @@ object DesktopPrintableStartListPdf {
     private const val HeaderHeight = 22.0
     private const val RowHeight = 20.0
     private val ScheduledTimeFormatter = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy - HH:mm", Locale.US)
-    private val CenteredColumns = setOf(0, 1, 3, 4, 5)
+    private val CenteredColumns = setOf(0, 1, 3, 4, 5, 6)
 
     private val Columns = listOf(
         PdfColumn("Start #", 52.0),
         PdfColumn("Start Time", 62.0),
-        PdfColumn("Competitor's full name", 172.0),
-        PdfColumn("Bib #", 44.0),
-        PdfColumn("Category", 104.0),
-        PdfColumn("SI #", 70.0)
+        PdfColumn("Competitor's full name", 130.0, rowFontSize = 8),
+        PdfColumn("Bib #", 40.0),
+        PdfColumn("Category", 56.0),
+        PdfColumn("SI #", 64.0),
+        PdfColumn("Corridor", 100.0, rowFontSize = 6, minimumRowFontSize = 3)
     )
 
     fun defaultFileName(projectFile: EventProjectFile): String =
@@ -117,6 +118,7 @@ object DesktopPrintableStartListPdf {
                 bibNumber = competitor.bibNumber,
                 categoryName = categoryName(data, categoryNamesById),
                 siNumberText = competitor.siNumber?.toString().orEmpty(),
+                corridor = competitor.corridor,
                 shaded = startSlotNumber > 0 && startSlotNumber % 2 == 0 && startSeconds != null
             )
         }
@@ -183,12 +185,19 @@ object DesktopPrintableStartListPdf {
             row.competitorName,
             row.bibNumber,
             row.categoryName,
-            row.siNumberText
+            row.siNumberText,
+            row.corridor
         )
         var x = Left
         Columns.zip(values).forEachIndexed { index, (column, value) ->
-            val text = fitText(value, column.width, 9)
-            appendText(textXForColumn(index, x, column.width, text, 9), y, 9, text)
+            val fontSize = column.rowFontSizeFor(value)
+            val text = fitText(value, column.width, fontSize)
+            appendText(
+                textXForColumn(index, x, column.width, text, fontSize),
+                y,
+                fontSize,
+                text
+            )
             x += column.width
         }
     }
@@ -243,8 +252,15 @@ object DesktopPrintableStartListPdf {
         return cellLeft + ((cellWidth - estimatedTextWidth) / 2.0).coerceAtLeast(3.0)
     }
 
+    private fun centeredHelveticaTextX(cellLeft: Double, cellWidth: Double, text: String, fontSize: Int): Double {
+        val estimatedTextWidth = text.sumOf(::helveticaWidthUnits) * fontSize
+        return cellLeft + ((cellWidth - estimatedTextWidth) / 2.0).coerceAtLeast(3.0)
+    }
+
     private fun textXForColumn(index: Int, cellLeft: Double, cellWidth: Double, text: String, fontSize: Int): Double =
-        if (index in CenteredColumns) {
+        if (index == Columns.lastIndex && text.length > 15) {
+            centeredHelveticaTextX(cellLeft, cellWidth, text, fontSize)
+        } else if (index in CenteredColumns) {
             centeredTextX(cellLeft, cellWidth, text, fontSize)
         } else {
             cellLeft + 3.0
@@ -253,9 +269,33 @@ object DesktopPrintableStartListPdf {
     private fun pdfNumber(value: Double): String =
         DesktopPdfDocument.number(value)
 
+    private fun PdfColumn.rowFontSizeFor(value: String): Int {
+        if (value.isEmpty() || minimumRowFontSize >= rowFontSize) return rowFontSize
+        val availableWidth = width - 6.0
+        val fittedSize = (availableWidth / value.sumOf(::helveticaWidthUnits)).toInt()
+        return fittedSize.coerceIn(minimumRowFontSize, rowFontSize)
+    }
+
+    private fun helveticaWidthUnits(character: Char): Double = when (character) {
+        'W' -> 0.944
+        'M', 'm' -> 0.833
+        'G', 'O', 'Q' -> 0.778
+        'C', 'D', 'H', 'N', 'R', 'U', 'w' -> 0.722
+        'A', 'B', 'E', 'K', 'P', 'V', 'X', 'Y' -> 0.667
+        'F', 'S', 'T', 'Z' -> 0.611
+        'L' -> 0.556
+        'J' -> 0.500
+        'I' -> 0.278
+        'i', 'j', 'l' -> 0.222
+        in '0'..'9' -> 0.556
+        else -> 0.556
+    }
+
     private data class PdfColumn(
         val title: String,
-        val width: Double
+        val width: Double,
+        val rowFontSize: Int = 9,
+        val minimumRowFontSize: Int = rowFontSize
     )
 
     private data class PrintableStartListRow(
@@ -265,6 +305,7 @@ object DesktopPrintableStartListPdf {
         val bibNumber: String,
         val categoryName: String,
         val siNumberText: String,
+        val corridor: String,
         val shaded: Boolean
     )
 }

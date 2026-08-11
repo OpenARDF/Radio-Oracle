@@ -130,11 +130,17 @@ object EventCsvFormat {
         const val START_NUMBER = 0
         const val START_TIME = 1
         const val SI_NUMBER = 2
-        const val EXPORTED_COLUMN_COUNT = 10
+        const val COMPACT_CORRIDOR = 3
+        const val COMPACT_COLUMN_COUNT_WITH_CORRIDOR = 4
+        const val MIN_EXPORTED_COLUMN_COUNT = 10
+        const val EXPORTED_COLUMN_COUNT = 11
         const val EXPORTED_START_TIME = 5
-        const val EXPORTED_INDEX = 6
+        const val EXPORTED_PERSON_ID = 6
+        @Deprecated("Use EXPORTED_PERSON_ID; this column stores IOF Person/Id, not an index.")
+        const val EXPORTED_INDEX = EXPORTED_PERSON_ID
         const val EXPORTED_BIB_NUMBER = 7
         const val EXPORTED_SI_NUMBER = 9
+        const val EXPORTED_CORRIDOR = 10
     }
 
     object Control {

@@ -26,6 +26,7 @@ package org.openardf.radiooracle.desktop
 
 import java.awt.FileDialog
 import java.awt.Frame
+import java.awt.Dimension
 import java.io.File
 import java.io.FilenameFilter
 import java.nio.file.Files
@@ -33,11 +34,14 @@ import java.nio.file.Path
 import java.util.prefs.Preferences
 import javax.swing.JFileChooser
 import javax.swing.JOptionPane
+import javax.swing.JScrollPane
+import javax.swing.JTextArea
 import javax.swing.filechooser.FileNameExtensionFilter
 import javax.swing.filechooser.FileFilter
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_NAMED_FILE_SUFFIX
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_FILE_SUFFIX
+import org.openardf.radiooracle.shared.event.CompetitorStartBibChange
 import org.openardf.radiooracle.shared.event.isEventSeriesArchiveFileName
 import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 
@@ -300,6 +304,46 @@ object DesktopEventFileLocations {
 
 /** AWT-backed file chooser for desktop Race Files. */
 object DesktopFileDialogs {
+    /** Returns true to use imported bibs, false to keep current bibs, or null to cancel. */
+    fun chooseStartsCsvBibNumbers(path: Path, changes: List<CompetitorStartBibChange>): Boolean? {
+        if (changes.isEmpty()) return true
+
+        val details = buildString {
+            append("The imported starts file contains bib numbers that differ from current competitor settings.\n")
+            append("Choose which bib numbers to keep. Start times, SI numbers, and corridor assignments will be imported with either choice.\n\n")
+            append("File: ${path.fileName}\n\n")
+            changes.forEach { change ->
+                append("${change.competitorName}: ${change.currentBibNumber} -> ${change.importedBibNumber}\n")
+            }
+        }
+        val textArea = JTextArea(details).apply {
+            isEditable = false
+            lineWrap = true
+            wrapStyleWord = true
+            caretPosition = 0
+        }
+        val scrollPane = JScrollPane(textArea).apply {
+            preferredSize = Dimension(620, (190 + changes.size * 18).coerceAtMost(420))
+        }
+        val options = arrayOf("Keep Current Bibs", "Use Imported Bibs", "Cancel")
+        return when (
+            JOptionPane.showOptionDialog(
+                null,
+                scrollPane,
+                "Review Starts CSV Bib Changes",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.WARNING_MESSAGE,
+                null,
+                options,
+                options[0]
+            )
+        ) {
+            0 -> false
+            1 -> true
+            else -> null
+        }
+    }
+
     /** Lets the user choose an existing Race File, returning null when cancelled. */
     fun chooseOpenProject(): Path? =
         chooseLoadEventFile("Open Radio-Oracle Race File", DesktopEventFileChooserFilters.openableEventFiles())

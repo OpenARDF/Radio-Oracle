@@ -309,8 +309,10 @@ object EventSeriesSupport {
                         useMinutes = true
                     ),
                     siNumber = competitor.siNumber,
+                    personId = competitor.index,
                     bibNumber = competitor.bibNumber,
-                    callSign = competitor.callSign
+                    callSign = competitor.callSign,
+                    corridor = competitor.corridor
                 )
             }
 

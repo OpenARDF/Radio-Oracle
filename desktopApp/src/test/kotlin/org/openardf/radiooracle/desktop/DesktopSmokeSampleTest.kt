@@ -412,17 +412,27 @@ class DesktopSmokeSampleTest {
         val source = Path.of("..", "samples", "desktop-smoke.rom.json")
         val target = directory.resolve("desktop-smoke-start-list.pdf")
         val projectFile = DesktopProjectFiles.read(source)
+        val maximumWidthCorridor = "W".repeat(30)
         val projectWithBib = projectFile.copy(
             raceData = projectFile.raceData.copy(
                 competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
                     if (index == 0) {
                         data.copy(
                             competitorCategory = data.competitorCategory.copy(
-                                competitor = data.competitorCategory.competitor.copy(bibNumber = "101")
+                                competitor = data.competitorCategory.competitor.copy(
+                                    bibNumber = "101",
+                                    corridor = "East2"
+                                )
                             )
                         )
                     } else {
-                        data
+                        data.copy(
+                            competitorCategory = data.competitorCategory.copy(
+                                competitor = data.competitorCategory.competitor.copy(
+                                    corridor = maximumWidthCorridor
+                                )
+                            )
+                        )
                     }
                 }
             )
@@ -446,12 +456,16 @@ class DesktopSmokeSampleTest {
         assertTrue(exported.contains("Bib #"))
         assertTrue(exported.contains("Category"))
         assertTrue(exported.contains("SI #"))
-        assertTrue(exported.contains("1 0 0 1 351.60 690.00 Tm\n(Bib #) Tj"))
-        assertTrue(exported.contains("1 0 0 1 419.36 690.00 Tm\n(Category) Tj"))
-        assertTrue(exported.contains("1 0 0 1 514.68 690.00 Tm\n(SI #) Tj"))
-        assertTrue(exported.contains("1 0 0 1 354.98 669.00 Tm\n(101) Tj"))
-        assertTrue(exported.contains("1 0 0 1 428.98 669.00 Tm\n(M21) Tj"))
-        assertTrue(exported.contains("1 0 0 1 508.96 669.00 Tm\n(123456) Tj"))
+        assertTrue(exported.contains("Corridor"))
+        assertTrue(exported.contains("1 0 0 1 307.60 690.00 Tm\n(Bib #) Tj"))
+        assertTrue(exported.contains("1 0 0 1 349.36 690.00 Tm\n(Category) Tj"))
+        assertTrue(exported.contains("1 0 0 1 417.68 690.00 Tm\n(SI #) Tj"))
+        assertTrue(exported.contains("1 0 0 1 491.36 690.00 Tm\n(Corridor) Tj"))
+        assertTrue(exported.contains("1 0 0 1 310.98 669.00 Tm\n(101) Tj"))
+        assertTrue(exported.contains("1 0 0 1 358.98 669.00 Tm\n(M21) Tj"))
+        assertTrue(exported.contains("1 0 0 1 411.96 669.00 Tm\n(123456) Tj"))
+        assertTrue(exported.contains("1 0 0 1 500.20 669.00 Tm\n(East2) Tj"))
+        assertTrue(exported.contains("($maximumWidthCorridor) Tj"))
         assertTrue(exported.contains("0.96 0.96 0.96 rg"))
     }
 

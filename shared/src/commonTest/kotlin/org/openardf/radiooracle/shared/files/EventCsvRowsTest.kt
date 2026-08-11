@@ -146,7 +146,7 @@ class EventCsvRowsTest {
         )
 
         assertEquals(";;Pavel;Kolsky;;0;;OK;OK001;;0;;;SWL;;;;", EventCsvRows.competitorRow(competitor, ""))
-        assertEquals(";Kolsky;Pavel;;;;OK001;;OK;", EventCsvRows.competitorStartRow(competitor, "", null))
+        assertEquals(";Kolsky;Pavel;;;;OK001;;OK;;", EventCsvRows.competitorStartRow(competitor, "", null))
     }
 
     @Test
@@ -164,15 +164,16 @@ class EventCsvRowsTest {
             siNumber = 123456,
             siRent = false,
             startNumber = 42,
-            drawnStartTimeSeconds = 600
+            drawnStartTimeSeconds = 600,
+            corridor = "East2"
         )
 
         assertEquals(
-            "42;Kolsky;Pavel;M21;;10:10;OK001;;OK;123456",
+            "42;Kolsky;Pavel;M21;;10:10;OK001;;OK;123456;East2",
             EventCsvRows.competitorStartRow(competitor, "M21", "10:10")
         )
         assertEquals(
-            "42;Kolsky;Pavel;M21;;;OK001;;OK;123456",
+            "42;Kolsky;Pavel;M21;;;OK001;;OK;123456;East2",
             EventCsvRows.competitorStartRow(competitor, "M21", null)
         )
     }
@@ -196,7 +197,7 @@ class EventCsvRowsTest {
         )
 
         assertEquals(
-            "42;\"Kol;sky\";\"Pa\"\"vel\";\"M;21\";;10:10;OK001;;\"OK; East\";123456",
+            "42;\"Kol;sky\";\"Pa\"\"vel\";\"M;21\";;10:10;OK001;;\"OK; East\";123456;",
             EventCsvRows.competitorStartRow(competitor, "M;21", "10:10")
         )
     }

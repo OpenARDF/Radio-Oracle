@@ -310,6 +310,7 @@ class EventCsvImportsTest {
             """
             42;10:00;123456
             43;10:05;
+            44;10:10;123457;East2
             """.trimIndent()
         )
 
@@ -317,7 +318,13 @@ class EventCsvImportsTest {
         assertEquals(
             listOf(
                 CompetitorStartCsvImportRow(startNumber = 42, startTimeText = "10:00", siNumber = 123456),
-                CompetitorStartCsvImportRow(startNumber = 43, startTimeText = "10:05", siNumber = null)
+                CompetitorStartCsvImportRow(startNumber = 43, startTimeText = "10:05", siNumber = null),
+                CompetitorStartCsvImportRow(
+                    startNumber = 44,
+                    startTimeText = "10:10",
+                    siNumber = 123457,
+                    corridor = "East2"
+                )
             ),
             result.rows
         )
@@ -326,7 +333,7 @@ class EventCsvImportsTest {
     @Test
     fun parsesExportedCompetitorStartRows() {
         val result = EventCsvImports.parseAndroidCompetitorStartRows(
-            "42;\"Kol;sky\";\"Pa\"\"vel\";\"M;21\";;10:10;OK001;1007;\"OK; East\";123456"
+            "42;\"Kol;sky\";\"Pa\"\"vel\";\"M;21\";;10:10;OK001;1007;\"OK; East\";123456;West3"
         )
 
         assertEquals(emptyList(), result.invalidLines)
@@ -336,10 +343,45 @@ class EventCsvImportsTest {
                     startNumber = 42,
                     startTimeText = "10:10",
                     siNumber = 123456,
-                    bibNumber = "1007"
+                    personId = "OK001",
+                    bibNumber = "1007",
+                    corridor = "West3"
                 )
             ),
             result.rows
+        )
+    }
+
+    @Test
+    fun parsesLegacyExportedCompetitorStartRowsWithoutCorridor() {
+        val result = EventCsvImports.parseAndroidCompetitorStartRows(
+            "42;Kolsky;Pavel;M21;;10:10;OK001;1007;OK;123456"
+        )
+
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals("OK001", result.rows.single().personId)
+        assertEquals(null, result.rows.single().corridor)
+    }
+
+    @Test
+    fun reportsInvalidCompetitorStartCorridors() {
+        val result = EventCsvImports.parseAndroidCompetitorStartRows(
+            """
+            42;10:00;123456;East-West
+            43;10:05;123457;ABCDEFGHIJKLMNOPQRSTUVWXYZ12345
+            44;10:10;123458;East2
+            """.trimIndent()
+        )
+
+        assertEquals(listOf("East2"), result.rows.mapNotNull { it.corridor })
+        assertEquals(2, result.invalidLines.size)
+        assertEquals(
+            "Corridor must contain only letters and numbers and be at most 30 characters.",
+            result.invalidLines[0].message
+        )
+        assertEquals(
+            "Corridor must contain only letters and numbers and be at most 30 characters.",
+            result.invalidLines[1].message
         )
     }
 
@@ -359,6 +401,6 @@ class EventCsvImportsTest {
         )
         assertEquals(2, result.invalidLines.size)
         assertEquals("Invalid SI number at line: 0", result.invalidLines[0].message)
-        assertEquals("Expected 3 or at least 10 columns at line: 1", result.invalidLines[1].message)
+        assertEquals("Expected 3 or 4, or at least 10 columns at line: 1", result.invalidLines[1].message)
     }
 }

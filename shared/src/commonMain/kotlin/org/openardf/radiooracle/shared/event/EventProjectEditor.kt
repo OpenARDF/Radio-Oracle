@@ -111,6 +111,13 @@ data class IofResultListImportOutcome(
     val importedReadouts: List<EventReadoutData> = emptyList()
 )
 
+data class CompetitorStartBibChange(
+    val competitorId: String,
+    val competitorName: String,
+    val currentBibNumber: String,
+    val importedBibNumber: String
+)
+
 /** Shared Race File editing helpers used by desktop and future non-Android flows. */
 object EventProjectEditor {
     /** Returns a copy of the Race File linked to a Race Series manifest entry. */
@@ -2020,31 +2027,54 @@ object EventProjectEditor {
         )
     }
 
+    /** Returns nonblank bib assignments that would replace existing nonblank bib numbers. */
+    fun competitorStartBibChanges(
+        projectFile: EventProjectFile,
+        rows: List<CompetitorStartCsvImportRow>
+    ): List<CompetitorStartBibChange> {
+        val competitorData = projectFile.raceData.competitorData
+        return rows.mapNotNull { row ->
+            val importedBibNumber = row.bibNumber.trim()
+            if (importedBibNumber.isBlank()) return@mapNotNull null
+            val competitorPosition = competitorData.competitorStartMatchIndex(row) ?: return@mapNotNull null
+            val competitor = competitorData[competitorPosition].competitorCategory.competitor
+            val currentBibNumber = competitor.bibNumber.trim()
+            if (currentBibNumber.isBlank() || currentBibNumber == importedBibNumber) return@mapNotNull null
+            CompetitorStartBibChange(
+                competitorId = competitor.id,
+                competitorName = competitor.fullName(),
+                currentBibNumber = currentBibNumber,
+                importedBibNumber = importedBibNumber
+            )
+        }.distinctBy { it.competitorId }
+    }
+
     /** Applies parsed start rows to existing competitors by stable identity fields only. */
     fun importCompetitorStartRows(
         projectFile: EventProjectFile,
-        rows: List<CompetitorStartCsvImportRow>
+        rows: List<CompetitorStartCsvImportRow>,
+        updateBibNumbers: Boolean = true
     ): EventProjectFile {
         var competitorData = projectFile.raceData.competitorData
 
         rows.forEach { row ->
-            val competitorPosition = row.siNumber?.let { siNumber ->
-                competitorData.indexOfFirst { it.competitorCategory.competitor.siNumber == siNumber }
-            }?.takeIf { it >= 0 }
-                ?: row.bibNumber.trim().takeIf { it.isNotEmpty() }?.let { bibNumber ->
-                    competitorData.uniqueCompetitorIndex { it.bibNumber.trim() == bibNumber }
-                }
-                ?: ImportValidationRules.normalizedUniqueCallSign(row.callSign)?.let { callSign ->
-                    competitorData.uniqueCompetitorIndex { it.callSign.trim().uppercase() == callSign }
-                }
+            val competitorPosition = competitorData.competitorStartMatchIndex(row)
             if (competitorPosition != null) {
                 val siNumber = row.siNumber
+                val bibNumber = row.bibNumber.trim()
                 require(
                     siNumber == null || competitorData.noneIndexed { index, data ->
                         index != competitorPosition && data.competitorCategory.competitor.siNumber == siNumber
                     }
                 ) {
                     "SI number must be unique."
+                }
+                require(
+                    !updateBibNumbers || bibNumber.isBlank() || competitorData.noneIndexed { index, data ->
+                        index != competitorPosition && data.competitorCategory.competitor.bibNumber == bibNumber
+                    }
+                ) {
+                    "Bib number must be unique."
                 }
 
                 competitorData = competitorData.mapIndexed { index, data ->
@@ -2055,7 +2085,13 @@ object EventProjectEditor {
                             competitorCategory = competitorCategory.copy(
                                 competitor = competitor.copy(
                                     siNumber = siNumber ?: competitor.siNumber,
-                                    drawnStartTimeSeconds = DurationFormatter.minuteStringToSeconds(row.startTimeText)
+                                    drawnStartTimeSeconds = DurationFormatter.minuteStringToSeconds(row.startTimeText),
+                                    bibNumber = if (updateBibNumbers) {
+                                        bibNumber.ifBlank { competitor.bibNumber }
+                                    } else {
+                                        competitor.bibNumber
+                                    },
+                                    corridor = row.corridor ?: competitor.corridor
                                 )
                             )
                         )
@@ -2070,6 +2106,20 @@ object EventProjectEditor {
             raceData = projectFile.raceData.copy(competitorData = competitorData)
         ))
     }
+
+    private fun List<EventCompetitorData>.competitorStartMatchIndex(row: CompetitorStartCsvImportRow): Int? =
+        row.siNumber?.let { siNumber ->
+            indexOfFirst { it.competitorCategory.competitor.siNumber == siNumber }
+        }?.takeIf { it >= 0 }
+            ?: row.personId.trim().takeIf { it.isNotEmpty() }?.let { personId ->
+                uniqueCompetitorIndex { it.index.trim() == personId }
+            }
+            ?: row.bibNumber.trim().takeIf { it.isNotEmpty() }?.let { bibNumber ->
+                uniqueCompetitorIndex { it.bibNumber.trim() == bibNumber }
+            }
+            ?: ImportValidationRules.normalizedUniqueCallSign(row.callSign)?.let { callSign ->
+                uniqueCompetitorIndex { it.callSign.trim().uppercase() == callSign }
+            }
 
     private inline fun List<EventCompetitorData>.uniqueCompetitorIndex(
         predicate: (EventCompetitor) -> Boolean

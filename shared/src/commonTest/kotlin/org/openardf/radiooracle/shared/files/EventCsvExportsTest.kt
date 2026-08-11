@@ -238,7 +238,7 @@ class EventCsvExportsTest {
     @Test
     fun exportsPortableCompetitorStartRows() {
         assertEquals(
-            "7;Runner;Test;M21;;10:00;OK001;;OK Test;123456\n",
+            "7;Runner;Test;M21;;10:00;OK001;;OK Test;123456;\n",
             EventCsvExports.competitorStarts(raceData())
         )
     }
@@ -249,7 +249,15 @@ class EventCsvExportsTest {
 
         assertEquals(emptyList(), result.invalidLines)
         assertEquals(
-            listOf(CompetitorStartCsvImportRow(startNumber = 7, startTimeText = "10:00", siNumber = 123456)),
+            listOf(
+                CompetitorStartCsvImportRow(
+                    startNumber = 7,
+                    startTimeText = "10:00",
+                    siNumber = 123456,
+                    personId = "OK001",
+                    corridor = ""
+                )
+            ),
             result.rows
         )
     }
@@ -262,7 +270,7 @@ class EventCsvExportsTest {
                 val competitor = competitorData.competitorCategory.competitor
                 competitorData.copy(
                     competitorCategory = competitorData.competitorCategory.copy(
-                        competitor = competitor.copy(index = "REG001", bibNumber = "1007")
+                        competitor = competitor.copy(index = "REG001", bibNumber = "1007", corridor = "East2")
                     )
                 )
             }
@@ -272,7 +280,16 @@ class EventCsvExportsTest {
 
         assertEquals(emptyList(), result.invalidLines)
         assertEquals(
-            listOf(CompetitorStartCsvImportRow(startNumber = 7, startTimeText = "10:00", siNumber = 123456, bibNumber = "1007")),
+            listOf(
+                CompetitorStartCsvImportRow(
+                    startNumber = 7,
+                    startTimeText = "10:00",
+                    siNumber = 123456,
+                    personId = "REG001",
+                    bibNumber = "1007",
+                    corridor = "East2"
+                )
+            ),
             result.rows
         )
     }
@@ -299,10 +316,10 @@ class EventCsvExportsTest {
     fun exportsCompetitorStartRowsByCategory() {
         assertEquals(
             """
-            3;Gamma;Carol;M21;;12:00;OK003;;OK Test;333333
-            4;NoTime;Dave;M21;;;OK004;;OK Test;444444
-            2;Beta;Bob;W21;;11:00;OK002;;OK Test;222222
-            1;Alpha;Alice;W21;;13:00;OK001;;OK Test;111111
+            3;Gamma;Carol;M21;;12:00;OK003;;OK Test;333333;
+            4;NoTime;Dave;M21;;;OK004;;OK Test;444444;
+            2;Beta;Bob;W21;;11:00;OK002;;OK Test;222222;
+            1;Alpha;Alice;W21;;13:00;OK001;;OK Test;111111;
             """.trimIndent() + "\n",
             EventCsvExports.competitorStartsByCategory(startVariantRaceData())
         )
@@ -312,10 +329,10 @@ class EventCsvExportsTest {
     fun exportsCompetitorStartRowsByMinute() {
         assertEquals(
             """
-            2;Beta;Bob;W21;;11:00;OK002;;OK Test;222222
-            3;Gamma;Carol;M21;;12:00;OK003;;OK Test;333333
-            1;Alpha;Alice;W21;;13:00;OK001;;OK Test;111111
-            4;NoTime;Dave;M21;;;OK004;;OK Test;444444
+            2;Beta;Bob;W21;;11:00;OK002;;OK Test;222222;
+            3;Gamma;Carol;M21;;12:00;OK003;;OK Test;333333;
+            1;Alpha;Alice;W21;;13:00;OK001;;OK Test;111111;
+            4;NoTime;Dave;M21;;;OK004;;OK Test;444444;
             """.trimIndent() + "\n",
             EventCsvExports.competitorStartsByMinute(startVariantRaceData())
         )

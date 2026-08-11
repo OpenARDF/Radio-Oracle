@@ -28,6 +28,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceType
+import org.openardf.radiooracle.shared.event.CompetitorCorridorRules
 import org.openardf.radiooracle.shared.event.EventControlDetails
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.defaultScored
@@ -78,8 +79,10 @@ data class CompetitorStartCsvImportRow(
     val startNumber: Int,
     val startTimeText: String,
     val siNumber: Int?,
+    val personId: String = "",
     val bibNumber: String = "",
-    val callSign: String = ""
+    val callSign: String = "",
+    val corridor: String? = null
 )
 
 data class CategoryCsvImportRow(
@@ -341,12 +344,13 @@ object EventCsvImports {
     private fun parseAndroidCompetitorStartRow(fields: List<String>, lineIndex: Int): CompetitorStartCsvImportRow {
         require(
             fields.size == EventCsvFormat.CompetitorStart.COLUMN_COUNT ||
-                fields.size >= EventCsvFormat.CompetitorStart.EXPORTED_COLUMN_COUNT
+                fields.size == EventCsvFormat.CompetitorStart.COMPACT_COLUMN_COUNT_WITH_CORRIDOR ||
+                fields.size >= EventCsvFormat.CompetitorStart.MIN_EXPORTED_COLUMN_COUNT
         ) {
-            "Expected ${EventCsvFormat.CompetitorStart.COLUMN_COUNT} or at least ${EventCsvFormat.CompetitorStart.EXPORTED_COLUMN_COUNT} columns at line: $lineIndex"
+            "Expected ${EventCsvFormat.CompetitorStart.COLUMN_COUNT} or ${EventCsvFormat.CompetitorStart.COMPACT_COLUMN_COUNT_WITH_CORRIDOR}, or at least ${EventCsvFormat.CompetitorStart.MIN_EXPORTED_COLUMN_COUNT} columns at line: $lineIndex"
         }
 
-        val exportedShape = fields.size >= EventCsvFormat.CompetitorStart.EXPORTED_COLUMN_COUNT
+        val exportedShape = fields.size >= EventCsvFormat.CompetitorStart.MIN_EXPORTED_COLUMN_COUNT
         val startTimeColumn = if (exportedShape) {
             EventCsvFormat.CompetitorStart.EXPORTED_START_TIME
         } else {
@@ -358,6 +362,16 @@ object EventCsvImports {
             EventCsvFormat.CompetitorStart.SI_NUMBER
         }
         val bibNumber = if (exportedShape) fields[EventCsvFormat.CompetitorStart.EXPORTED_BIB_NUMBER].trim() else ""
+        val personId = if (exportedShape) fields[EventCsvFormat.CompetitorStart.EXPORTED_PERSON_ID].trim() else ""
+        val corridor = when {
+            fields.size == EventCsvFormat.CompetitorStart.COMPACT_COLUMN_COUNT_WITH_CORRIDOR ->
+                CompetitorCorridorRules.normalized(fields[EventCsvFormat.CompetitorStart.COMPACT_CORRIDOR])
+
+            fields.size >= EventCsvFormat.CompetitorStart.EXPORTED_COLUMN_COUNT ->
+                CompetitorCorridorRules.normalized(fields[EventCsvFormat.CompetitorStart.EXPORTED_CORRIDOR])
+
+            else -> null
+        }
         val startNumber = fields[EventCsvFormat.CompetitorStart.START_NUMBER].trim().toInt()
         val siNumber = fields[siNumberColumn].trim().takeIf { it.isNotEmpty() }?.toInt()
         require(siNumber == null || SportIdentCodes.isSINumberValid(siNumber)) {
@@ -368,7 +382,9 @@ object EventCsvImports {
             startNumber = startNumber,
             startTimeText = fields[startTimeColumn].trim(),
             siNumber = siNumber,
-            bibNumber = bibNumber
+            personId = personId,
+            bibNumber = bibNumber,
+            corridor = corridor
         )
     }
 

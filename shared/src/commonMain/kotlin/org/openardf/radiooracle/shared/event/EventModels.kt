@@ -216,6 +216,7 @@ data class EventCompetitor(
     val drawnStartTimeSeconds: Long?,
     val preferredStartGroup: Int? = null,
     val bibNumber: String = "",
+    val corridor: String = "",
     val callSign: String = "SWL",
     val email: String = "",
     val cellPhone: String = "",
@@ -226,6 +227,9 @@ data class EventCompetitor(
         require(preferredStartGroup == null || preferredStartGroup in 1..3) {
             "Preferred start group must be 1, 2, or 3."
         }
+        require(CompetitorCorridorRules.isValid(corridor)) {
+            CompetitorCorridorRules.ERROR_MESSAGE
+        }
     }
 
     /** Formats the competitor name in the app's existing LASTNAME Firstname style. */
@@ -234,6 +238,19 @@ data class EventCompetitor(
     /** Formats the competitor name with the assigned start number appended when starts have been assigned. */
     fun nameWithStartNumber(): String =
         startNumber?.let { "${fullName()} ($it)" } ?: fullName()
+}
+
+/** Validation and normalization rules for optional start-corridor assignments. */
+object CompetitorCorridorRules {
+    const val MAX_LENGTH = 30
+    const val ERROR_MESSAGE = "Corridor must contain only letters and numbers and be at most 30 characters."
+
+    fun normalized(value: String): String = value.trim().also { normalized ->
+        require(isValid(normalized)) { ERROR_MESSAGE }
+    }
+
+    fun isValid(value: String): Boolean =
+        value.length <= MAX_LENGTH && value.all(Char::isLetterOrDigit)
 }
 
 /** Portable raw punch record, with SportIdent times represented as absolute seconds. */

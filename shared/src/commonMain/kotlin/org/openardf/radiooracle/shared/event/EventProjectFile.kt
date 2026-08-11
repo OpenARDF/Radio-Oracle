@@ -75,7 +75,7 @@ object EventProjectFileJson {
     fun normalizedForStorage(projectFile: EventProjectFile): EventProjectFile =
         reconcileStandardCategoryGenders(
             clearPublicControlLocations(clearLegacyCategoryRaceSettings(projectFile))
-        )
+        ).copy(schemaVersion = EventProjectFileFormat.CURRENT_SCHEMA_VERSION)
 
     /** Encodes a Race File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =
@@ -187,7 +187,7 @@ object EventProjectFileJson {
 /** Schema metadata for portable Radio-Oracle Race Files. */
 object EventProjectFileFormat {
     const val APP_NAME = "Radio-Oracle"
-    const val CURRENT_SCHEMA_VERSION = 4
+    const val CURRENT_SCHEMA_VERSION = 5
 
     /** Returns true when the supplied schema version is within the supported range. */
     fun isSupportedSchema(schemaVersion: Int): Boolean =

@@ -74,9 +74,9 @@ empty categories leave competitors category-less and are also reported.
 
 ## Starts CSV
 
-The starts CSV importer accepts the compact three-column start-list format and
-the longer start-list rows exported by Radio-Oracle. Neither format includes a
-header row.
+The starts CSV importer accepts the compact three-column start-list format, an
+optional fourth corridor column, and the longer start-list rows exported by
+Radio-Oracle. Neither format includes a header row.
 
 The compact import field order is:
 
@@ -84,14 +84,33 @@ The compact import field order is:
 start_number;start_time;si_number
 ```
 
+When corridor assignments are included, the compact field order is:
+
+```text
+start_number;start_time;si_number;corridor
+```
+
 The exported field order is:
 
 ```text
-start_number;last_name;first_name;category;reserved;start_time;person_id;bib_number;club;si_number
+start_number;last_name;first_name;category;reserved;start_time;person_id;bib_number;club;si_number;corridor
 ```
 
+`corridor` is optional, may contain only letters and numbers, and is limited to
+30 characters. Omitting the corridor column preserves an existing assignment;
+including an empty corridor field clears it. Legacy ten-column exported rows
+without `corridor` remain supported. A nonblank `bib_number` in a matched start
+row is saved to the competitor as long as it remains unique.
+
+When an imported nonblank bib number differs from an existing nonblank bib
+number, the desktop importer pauses before changing the Race File. The review
+dialog lists every change and lets the user either use the imported bib numbers
+or keep the current bib settings. Start times, SI numbers, and corridors are
+imported with either choice. Blank current bib numbers are filled without a
+conflict prompt.
+
 Radio-Oracle matches prior starts to current competitors by `si_number` when
-available, then by `bib_number` when it is present and unique. If both are
-blank, `start_number` is used only as an operational fallback for the imported
-start-list row. Because start numbers may change between days, SI numbers and
-true bib numbers give the most reliable multi-day fairness history.
+available, then by `person_id`, and then by `bib_number` when it is present and
+unique. Desktop imports do not treat `start_number` alone as competitor identity,
+because start numbers may change between races. SI numbers, Person IDs, and true
+bib numbers give the most reliable multi-day identity and fairness history.

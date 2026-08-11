@@ -117,7 +117,8 @@ class EventModelMappersTest {
             siRent = false,
             startNumber = 42,
             drawnRelativeStartTime = Duration.ofMinutes(10),
-            bibNumber = "B-42"
+            bibNumber = "B-42",
+            corridor = "East2"
         )
         val alias = Alias(
             id = uuid("00000000-0000-0000-0000-000000000007"),
@@ -181,6 +182,7 @@ class EventModelMappersTest {
         assertEquals(null, shared.categories.single().category.timeLimitSeconds)
         assertEquals("OK001", shared.competitorData.single().competitorCategory.competitor.index)
         assertEquals("B-42", shared.competitorData.single().competitorCategory.competitor.bibNumber)
+        assertEquals("East2", shared.competitorData.single().competitorCategory.competitor.corridor)
         assertEquals(600L, shared.competitorData.single().competitorCategory.competitor.drawnStartTimeSeconds)
         assertEquals(900L, shared.competitorData.single().readoutData!!.punches.single().punch.splitSeconds)
         assertEquals("F1", shared.competitorData.single().readoutData!!.punches.single().alias!!.name)
@@ -206,6 +208,7 @@ class EventModelMappersTest {
         )
         assertEquals(Duration.ofMinutes(10), room.competitorData.single().competitorCategory.competitor.drawnRelativeStartTime)
         assertEquals("B-42", room.competitorData.single().competitorCategory.competitor.bibNumber)
+        assertEquals("East2", room.competitorData.single().competitorCategory.competitor.corridor)
         assertEquals(Duration.ofMinutes(15), room.competitorData.single().readoutData!!.punches.single().punch.split)
         assertEquals(1, room.competitorData.single().readoutData!!.result.place)
         assertEquals(listOf("F1"), room.aliases.map { it.name })
@@ -439,7 +442,7 @@ class EventModelMappersTest {
         assertEquals("KOLSKY Pavel (42)", competitor.getNameWithStartNumber())
         assertEquals(";42;Pavel;Kolsky;M21;0;;OK;OK001;;0;;;SWL;;;;", competitor.toSimpleCsvString("M21"))
         assertEquals(
-            "42;Kolsky;Pavel;M21;;;OK001;;OK;",
+            "42;Kolsky;Pavel;M21;;;OK001;;OK;;",
             competitor.toStartCsvString("M21", LocalDateTime.of(2026, 5, 30, 10, 0))
         )
     }

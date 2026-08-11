@@ -1943,7 +1943,8 @@ class EventProjectEditorTest {
                     startNumber = 99,
                     startTimeText = "10:15",
                     siNumber = 2222,
-                    bibNumber = "REG002"
+                    bibNumber = "REG002",
+                    corridor = "East2"
                 )
             )
         )
@@ -1952,6 +1953,113 @@ class EventProjectEditorTest {
         val changed = updated.raceData.competitorData[1].competitorCategory.competitor
         assertEquals(null, kept.drawnStartTimeSeconds)
         assertEquals(10 * 60L + 15, changed.drawnStartTimeSeconds)
+        assertEquals("REG002", changed.bibNumber)
+        assertEquals("East2", changed.corridor)
+    }
+
+    @Test
+    fun reportsBibChangesAndCanRetainCurrentBibsDuringStartsImport() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    startNumber = 1,
+                    siNumber = 1111,
+                    bibNumber = "OLD101",
+                    corridor = "North1"
+                )
+            )
+        )
+        val rows = listOf(
+            CompetitorStartCsvImportRow(
+                startNumber = 99,
+                startTimeText = "10:15",
+                siNumber = 1111,
+                bibNumber = "NEW101",
+                corridor = "South2"
+            )
+        )
+
+        assertEquals(
+            listOf(
+                CompetitorStartBibChange(
+                    competitorId = "comp-1",
+                    competitorName = "RUNNER Alice",
+                    currentBibNumber = "OLD101",
+                    importedBibNumber = "NEW101"
+                )
+            ),
+            EventProjectEditor.competitorStartBibChanges(original, rows)
+        )
+
+        val updated = EventProjectEditor.importCompetitorStartRows(
+            projectFile = original,
+            rows = rows,
+            updateBibNumbers = false
+        )
+        val competitor = updated.raceData.competitorData.single().competitorCategory.competitor
+        assertEquals("OLD101", competitor.bibNumber)
+        assertEquals("South2", competitor.corridor)
+        assertEquals(10 * 60L + 15, competitor.drawnStartTimeSeconds)
+    }
+
+    @Test
+    fun importsChangedBibByPersonIdWhenSiNumberIsMissing() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    startNumber = 1,
+                    siNumber = null,
+                    personId = "OK001",
+                    bibNumber = "OLD101"
+                )
+            )
+        )
+        val rows = listOf(
+            CompetitorStartCsvImportRow(
+                startNumber = 99,
+                startTimeText = "10:15",
+                siNumber = null,
+                personId = "OK001",
+                bibNumber = "NEW101"
+            )
+        )
+
+        assertEquals(1, EventProjectEditor.competitorStartBibChanges(original, rows).size)
+
+        val updated = EventProjectEditor.importCompetitorStartRows(original, rows)
+        val competitor = updated.raceData.competitorData.single().competitorCategory.competitor
+        assertEquals("NEW101", competitor.bibNumber)
+        assertEquals(10 * 60L + 15, competitor.drawnStartTimeSeconds)
+    }
+
+    @Test
+    fun legacyCompetitorStartRowsPreserveExistingCorridor() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData(
+                    "comp-1",
+                    "Alice",
+                    "Runner",
+                    startNumber = 1,
+                    siNumber = 1111,
+                    corridor = "North1"
+                )
+            )
+        )
+
+        val updated = EventProjectEditor.importCompetitorStartRows(
+            original,
+            listOf(CompetitorStartCsvImportRow(startNumber = 1, startTimeText = "10:15", siNumber = 1111))
+        )
+
+        val changed = updated.raceData.competitorData.single().competitorCategory.competitor
+        assertEquals("North1", changed.corridor)
     }
 
     @Test
@@ -4521,10 +4629,12 @@ class EventProjectEditorTest {
         siNumber: Int? = null,
         category: EventCategory? = null,
         club: String = "",
+        personId: String = "",
         readoutData: EventReadoutData? = null,
         preferredStartGroup: Int? = null,
         bibNumber: String = "",
-        callSign: String = ""
+        callSign: String = "",
+        corridor: String = ""
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
@@ -4535,7 +4645,7 @@ class EventProjectEditorTest {
                     firstName = firstName,
                     lastName = lastName,
                     club = club,
-                    index = "",
+                    index = personId,
                     isMan = true,
                     birthYear = null,
                     siNumber = siNumber,
@@ -4544,6 +4654,7 @@ class EventProjectEditorTest {
                     drawnStartTimeSeconds = null,
                     preferredStartGroup = preferredStartGroup,
                     bibNumber = bibNumber,
+                    corridor = corridor,
                     callSign = callSign
                 ),
                 category = category

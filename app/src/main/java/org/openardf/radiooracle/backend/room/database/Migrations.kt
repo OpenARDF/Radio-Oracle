@@ -223,3 +223,10 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         db.execSQL("ALTER TABLE `category` ADD COLUMN `encrypted_course_info` TEXT")
     }
 }
+
+// Migration from version 10 -> 11: store optional per-competitor start corridors.
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `competitor` ADD COLUMN `corridor` TEXT NOT NULL DEFAULT ''")
+    }
+}

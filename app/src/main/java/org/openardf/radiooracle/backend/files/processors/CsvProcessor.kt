@@ -340,7 +340,7 @@ object CsvProcessor : FormatProcessor {
         )
     }
 
-    /** Imports start-list rows and updates matched competitors by SI number or start number. */
+    /** Imports start-list rows and updates matched competitors by SI number, bib number, or start number. */
     private fun importCompetitorStarts(
         inStream: InputStream,
         competitors: HashSet<CompetitorData>,
@@ -360,17 +360,39 @@ object CsvProcessor : FormatProcessor {
         for ((index, row) in parsedRows.rows.withIndex()) {
             try {
                 val relativeTime = TimeProcessor.minuteStringToDuration(row.startTimeText)
+                val bibNumber = row.bibNumber.trim()
                 val match = row.siNumber?.let { siNumber ->
                     competitors.find { it.competitorCategory.competitor.siNumber == siNumber }
+                } ?: row.personId.trim().takeIf { it.isNotEmpty() }?.let { personId ->
+                    competitors.singleOrNull {
+                        it.competitorCategory.competitor.index.trim() == personId
+                    }
+                } ?: bibNumber.takeIf { it.isNotEmpty() }?.let { importedBibNumber ->
+                    competitors.singleOrNull {
+                        it.competitorCategory.competitor.bibNumber == importedBibNumber
+                    }
                 } ?: competitors.find { it.competitorCategory.competitor.startNumber == row.startNumber }
 
-                if (match != null && !preferAppStartTime) {
-                    match.competitorCategory.competitor.drawnRelativeStartTime =
-                        relativeTime
+                if (match != null) {
+                    val competitor = match.competitorCategory.competitor
+                    if (!preferAppStartTime) {
+                        competitor.drawnRelativeStartTime = relativeTime
+                    }
 
                     if (row.siNumber != null) {
-                        match.competitorCategory.competitor.siNumber = row.siNumber
+                        competitor.siNumber = row.siNumber
                     }
+                    if (bibNumber.isNotEmpty()) {
+                        require(
+                            competitors.none {
+                                it != match && it.competitorCategory.competitor.bibNumber == bibNumber
+                            }
+                        ) {
+                            "Bib number must be unique."
+                        }
+                        competitor.bibNumber = bibNumber
+                    }
+                    row.corridor?.let { competitor.corridor = it }
                 }
             } catch (e: Exception) {
                 Log.e(

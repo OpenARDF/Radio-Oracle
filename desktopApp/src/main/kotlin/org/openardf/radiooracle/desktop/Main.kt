@@ -182,6 +182,7 @@ import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.shared.event.EventInForestDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutDetails
 import org.openardf.radiooracle.shared.event.EventLastReadoutSeverity
+import org.openardf.radiooracle.shared.event.CompetitorStartBibChange
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.PracticeCompetitorCategoryAssignment
 import org.openardf.radiooracle.shared.event.EventProjectFactory
@@ -224,6 +225,7 @@ import org.openardf.radiooracle.shared.event.resultPublicationNotice
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
+import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.IofCourseDataPreview
@@ -4905,15 +4907,38 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun applyCompetitorStartsCsvImport(
+            review: PendingStartsCsvImportReview,
+            updateBibNumbers: Boolean
+        ) {
+            runCatching {
+                checkpointBeforeImport("starts CSV import ${review.path.fileName}")
+                projectFile = projectSession.updateCurrentProject { currentProject ->
+                    currentProject.withImportedStarts(review, updateBibNumbers)
+                }
+                syncProjectState()
+                recentImportReport = DesktopImportReport(
+                    title = "Starts CSV: ${review.path.fileName}",
+                    lines = withRollbackBackupLine(review.reportLines(updateBibNumbers))
+                )
+                projectStatusText = review.importStatusText()
+            }.onFailure { error ->
+                projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
         fun importCompetitorStartsCsv() {
             DesktopFileDialogs.chooseImportCsv("Import Starts CSV")?.let { path ->
                 runCatching {
-                    val result = EventCsvImports.parseAndroidCompetitorStartRows(Files.readString(path))
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.importCompetitorStartRows(currentProject, result.rows)
+                    val currentProject = projectSession.currentProject
+                        ?: throw IllegalStateException("Open or create a Race File before importing starts CSV.")
+                    val review = startsCsvImportReview(path, currentProject)
+                    val updateBibNumbers = DesktopFileDialogs.chooseStartsCsvBibNumbers(path, review.bibChanges)
+                    if (updateBibNumbers == null) {
+                        projectStatusText = "Starts CSV import canceled. No changes applied."
+                    } else {
+                        applyCompetitorStartsCsvImport(review, updateBibNumbers)
                     }
-                    syncProjectState()
-                    projectStatusText = importStatusText("Imported", result.rows.size, result.invalidLines.size, path.fileName.toString())
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -11464,6 +11489,48 @@ private data class PendingIofCourseDataImportReview(
     val deletedControlNames: List<String>,
     val warningLines: List<String>
 )
+
+private data class PendingStartsCsvImportReview(
+    val path: Path,
+    val rows: List<CompetitorStartCsvImportRow>,
+    val invalidLineCount: Int,
+    val bibChanges: List<CompetitorStartBibChange>
+)
+
+private fun startsCsvImportReview(path: Path, projectFile: EventProjectFile): PendingStartsCsvImportReview {
+    val result = EventCsvImports.parseAndroidCompetitorStartRows(Files.readString(path))
+    return PendingStartsCsvImportReview(
+        path = path,
+        rows = result.rows,
+        invalidLineCount = result.invalidLines.size,
+        bibChanges = EventProjectEditor.competitorStartBibChanges(projectFile, result.rows)
+    )
+}
+
+private fun EventProjectFile.withImportedStarts(
+    review: PendingStartsCsvImportReview,
+    updateBibNumbers: Boolean
+): EventProjectFile =
+    EventProjectEditor.importCompetitorStartRows(
+        projectFile = this,
+        rows = review.rows,
+        updateBibNumbers = updateBibNumbers
+    )
+
+private fun PendingStartsCsvImportReview.reportLines(updateBibNumbers: Boolean): List<String> =
+    listOf("${rows.size} start rows imported.") +
+        if (bibChanges.isEmpty()) {
+            emptyList()
+        } else if (updateBibNumbers) {
+            listOf("${bibChanges.size} existing bib number assignment(s) replaced from the imported file.")
+        } else {
+            listOf("${bibChanges.size} existing bib number assignment(s) retained.")
+        } + invalidLineCount.takeIf { it > 0 }
+            ?.let { listOf("$it invalid row(s) skipped.") }
+            .orEmpty()
+
+private fun PendingStartsCsvImportReview.importStatusText(): String =
+    importStatusText("Imported", rows.size, invalidLineCount, path.fileName.toString())
 
 private data class PendingIofStartListImportReview(
     val path: Path,
