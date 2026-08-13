@@ -61,7 +61,31 @@ class EventSeriesReadoutRouterTest {
         )
 
         assertSame(day2, (route as Matched).memberData)
-        assertEquals(EventSeriesReadoutRouteReason.CONTROL_PUNCHES, route.reason)
+        assertEquals(EventSeriesReadoutRouteReason.CONTROL_PUNCHES_AND_SI_NUMBER, route.reason)
+    }
+
+    @Test
+    fun routesSameRegisteredCardToClosestMatchingCourse() {
+        val shortCourse = memberData(
+            "short",
+            "Short course",
+            controls = listOf(31, 32),
+            siNumbers = listOf(1001)
+        )
+        val longerCourse = memberData(
+            "longer",
+            "Longer course",
+            controls = listOf(31, 32, 33),
+            siNumbers = listOf(1001)
+        )
+
+        val route = EventSeriesReadoutRouter.route(
+            cardData = card(siNumber = 1001, punches = listOf(31, 32)),
+            members = listOf(shortCourse, longerCourse)
+        )
+
+        assertSame(shortCourse, (route as Matched).memberData)
+        assertEquals(EventSeriesReadoutRouteReason.CONTROL_PUNCHES_AND_SI_NUMBER, route.reason)
     }
 
     @Test

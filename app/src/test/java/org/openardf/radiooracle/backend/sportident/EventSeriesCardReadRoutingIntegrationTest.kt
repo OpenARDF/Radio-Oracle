@@ -141,6 +141,97 @@ class EventSeriesCardReadRoutingIntegrationTest {
     }
 
     @Test
+    fun sameRegisteredCardRoutesToClosestCourseAndStoresResultThere() = runBlocking {
+        val processor = DataProcessor.get()
+        val shortCourse = raceData("Short course", listOf(31, 32), siNumber = 1001)
+        val longerCourse = raceData("Longer course", listOf(31, 32, 33), siNumber = 1001)
+        val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
+        processor.saveRaceData(shortCourse)
+        processor.saveRaceData(longerCourse)
+        processor.saveEventSeries(
+            series = series,
+            members = listOf(
+                member(series.seriesId, "short", shortCourse, order = 0),
+                member(series.seriesId, "longer", longerCourse, order = 1)
+            )
+        )
+
+        val selectionRequest = async {
+            withTimeout(1_000) { processor.raceSelectionRequests.first() }
+        }
+        val stored = processor.processCardDataForCurrentRaceOrSeries(
+            cardData = card(siNumber = 1001, punches = listOf(31, 32)),
+            currentRace = longerCourse.race
+        )
+
+        assertEquals(true, stored)
+        assertEquals(shortCourse.race.id, selectionRequest.await())
+        assertEquals(
+            listOf(ResultDataSummary(raceId = shortCourse.race.id, siNumber = 1001)),
+            processor.resultSummaries(shortCourse.race.id)
+        )
+        assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(longerCourse.race.id))
+    }
+
+    @Test
+    fun indistinguishableSeriesCardIsStillStoredInCurrentEvent() = runBlocking {
+        val processor = DataProcessor.get()
+        val day1 = raceData("Day 1", listOf(31, 32), siNumber = 1001)
+        val day2 = raceData("Day 2", listOf(31, 32), siNumber = 1001)
+        val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
+        processor.saveRaceData(day1)
+        processor.saveRaceData(day2)
+        processor.saveEventSeries(
+            series = series,
+            members = listOf(
+                member(series.seriesId, "day-1", day1, order = 0),
+                member(series.seriesId, "day-2", day2, order = 1)
+            )
+        )
+
+        val stored = processor.processCardDataForCurrentRaceOrSeries(
+            cardData = card(siNumber = 1001, punches = listOf(31, 32)),
+            currentRace = day1.race
+        )
+
+        assertEquals(true, stored)
+        assertEquals(
+            listOf(ResultDataSummary(raceId = day1.race.id, siNumber = 1001)),
+            processor.resultSummaries(day1.race.id)
+        )
+        assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(day2.race.id))
+    }
+
+    @Test
+    fun unexpectedSeriesCardControlsAreStillStoredInCurrentEvent() = runBlocking {
+        val processor = DataProcessor.get()
+        val day1 = raceData("Day 1", listOf(31, 32), siNumber = 1001)
+        val day2 = raceData("Day 2", listOf(41, 42), siNumber = 1001)
+        val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
+        processor.saveRaceData(day1)
+        processor.saveRaceData(day2)
+        processor.saveEventSeries(
+            series = series,
+            members = listOf(
+                member(series.seriesId, "day-1", day1, order = 0),
+                member(series.seriesId, "day-2", day2, order = 1)
+            )
+        )
+
+        val stored = processor.processCardDataForCurrentRaceOrSeries(
+            cardData = card(siNumber = 1001, punches = listOf(99)),
+            currentRace = day1.race
+        )
+
+        assertEquals(true, stored)
+        assertEquals(
+            listOf(ResultDataSummary(raceId = day1.race.id, siNumber = 1001)),
+            processor.resultSummaries(day1.race.id)
+        )
+        assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(day2.race.id))
+    }
+
+    @Test
     fun unknownPracticeSeriesCardCreatesCategorizedCompetitorInEveryRace() = runBlocking {
         val processor = DataProcessor.get()
         val day1 = raceData("Practice Day 1", listOf(31, 32), siNumber = null)

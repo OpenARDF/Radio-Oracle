@@ -29,6 +29,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventReadoutCourseMatcher
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.PracticeCompetitorCategoryAssignment
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
@@ -64,12 +65,15 @@ object DesktopSeriesSportIdentReadoutRouter {
             .takeIf { it.isNotEmpty() }
             ?: return null
         val matches = loadSeriesMembers(store, manifestPath).mapNotNull { member ->
-            if (!member.projectFile.containsAllControlPunches(punchCodes)) {
-                return@mapNotNull null
-            }
-            member
+            EventReadoutCourseMatcher.bestMatch(
+                raceData = member.projectFile.raceData,
+                siNumber = readout.siNumber,
+                controlPunchCodes = readout.punches.map { it.siCode }
+            )?.takeIf { it.quality.matchedPunchCount > 0 }
+                ?.let { match -> member to match }
         }
-        return matches.singleOrNull()
+        val bestQuality = matches.maxOfOrNull { it.second.quality } ?: return null
+        return matches.filter { it.second.quality == bestQuality }.singleOrNull()?.first
     }
 
     fun startPracticeCompetitorInForestAcrossSeries(
@@ -253,12 +257,6 @@ object DesktopSeriesSportIdentReadoutRouter {
             }
         }
         return DesktopSeriesPracticeInForestUpdate(updatedPaths, updatedCompetitors)
-    }
-
-    private fun EventProjectFile.containsAllControlPunches(punchCodes: Set<Int>): Boolean {
-        val eventControlCodes = raceData.controls
-            .mapTo(mutableSetOf()) { it.siCode }
-        return eventControlCodes.isNotEmpty() && punchCodes.all { it in eventControlCodes }
     }
 
     private fun loadSeriesMembers(store: EventSeriesStore, manifestPath: Path): List<DesktopSeriesSportIdentReadoutMatch> {

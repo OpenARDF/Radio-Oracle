@@ -88,7 +88,7 @@ class DesktopSeriesSportIdentReadoutRouterTest {
     }
 
     @Test
-    fun returnsNoMatchWhenMultipleSeriesEventsContainAllPunches() {
+    fun selectsClosestCourseWhenMultipleSeriesEventsContainAllPunches() {
         val store = FakeSeriesStore()
         val manifestPath = Path.of("/series/events.radio-oracle.json")
         store.seriesFiles[manifestPath] = seriesFile(
@@ -104,7 +104,7 @@ class DesktopSeriesSportIdentReadoutRouterTest {
             readout = readout(31, 32)
         )
 
-        assertNull(match)
+        assertEquals("first", match?.event?.seriesEventId)
     }
 
     @Test

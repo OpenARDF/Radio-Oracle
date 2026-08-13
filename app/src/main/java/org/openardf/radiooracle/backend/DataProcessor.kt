@@ -29,7 +29,6 @@ import android.content.Context
 import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.net.Uri
-import android.widget.Toast
 import androidx.lifecycle.MutableLiveData
 import androidx.preference.PreferenceManager
 import org.openardf.radiooracle.R
@@ -90,8 +89,6 @@ import org.openardf.radiooracle.shared.files.DataFormat
 import org.openardf.radiooracle.shared.files.DataType
 import org.openardf.radiooracle.shared.event.PracticeCompetitorCategoryAssignment
 import org.openardf.radiooracle.shared.event.toDisplayLabel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -100,7 +97,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -611,20 +607,18 @@ class DataProcessor private constructor(context: Context) {
             is EventSeriesReadoutRoute.Ambiguous -> {
                 DebugLog.warn(
                     "Race Series",
-                    "Card read ignored reason=ambiguous-series-route si=${cardData.siNumber} " +
+                    "Card read kept in current race reason=ambiguous-series-route si=${cardData.siNumber} " +
                         "candidates=${route.candidates.joinToString { it.member.seriesEventId }} " +
                         "reason=${route.reason}"
                 )
-                showSiReadoutToast(R.string.si_card_ambiguous_series_route, cardData.siNumber)
-                false
+                processCardData(cardData, currentRace)
             }
             EventSeriesReadoutRoute.NoMatch -> {
                 DebugLog.warn(
                     "Race Series",
-                    "Card read ignored reason=no-series-route si=${cardData.siNumber}"
+                    "Card read kept in current race reason=no-series-route si=${cardData.siNumber}"
                 )
-                showSiReadoutToast(R.string.si_card_no_series_route, cardData.siNumber)
-                false
+                processCardData(cardData, currentRace)
             }
         }
     }
@@ -714,16 +708,6 @@ class DataProcessor private constructor(context: Context) {
 
     private fun CardData.isBlankPracticeStart(): Boolean =
         punchData.isEmpty() && startTime == null && finishTime == null
-
-    private fun showSiReadoutToast(messageResId: Int, vararg formatArgs: Any) {
-        CoroutineScope(Dispatchers.Main).launch {
-            Toast.makeText(
-                appContext,
-                appContext.getString(messageResId, *formatArgs),
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
 
     private suspend fun eventSeriesReadoutMembersForRace(raceId: UUID): List<EventSeriesReadoutMemberData> {
         val seriesData = getEventSeriesForRace(raceId) ?: return emptyList()

@@ -242,8 +242,6 @@
     <string name="si_card_error">SI station %1$d, error reading card %2$d </string>
     <string name="si_card_read">SI station %1$d, read card %2$d </string>
     <string name="si_last_card">Last read card: %1$s </string>
-    <string name="si_card_ambiguous_series_route">Card %1$d matched more than one event; readout was not stored.</string>
-    <string name="si_card_no_series_route">Card %1$d did not match any event in this series.</string>
     <string name="no_cards_yet">No cards yet </string>
 
     <!--Readout-->

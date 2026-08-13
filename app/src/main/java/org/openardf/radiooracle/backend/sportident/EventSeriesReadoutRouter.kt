@@ -26,7 +26,10 @@ package org.openardf.radiooracle.backend.sportident
 
 import org.openardf.radiooracle.backend.room.entity.EventSeriesMember
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
+import org.openardf.radiooracle.backend.shared.toEventRaceData
 import org.openardf.radiooracle.backend.sportident.SIPort.CardData
+import org.openardf.radiooracle.shared.event.EventReadoutCourseMatch
+import org.openardf.radiooracle.shared.event.EventReadoutCourseMatcher
 
 /** One series member and its local Android race aggregate for readout routing. */
 data class EventSeriesReadoutMemberData(
@@ -67,21 +70,29 @@ object EventSeriesReadoutRouter {
 
         val punchCodes = cardData.punchData.mapTo(mutableSetOf()) { it.siCode }
         if (punchCodes.isNotEmpty()) {
-            val controlMatches = members.filter { memberData ->
-                memberData.raceData.containsAllControlPunches(punchCodes)
+            val matches = members.mapNotNull { memberData ->
+                EventReadoutCourseMatcher.bestMatch(
+                    raceData = memberData.raceData.toEventRaceData(),
+                    siNumber = cardData.siNumber,
+                    controlPunchCodes = cardData.punchData.map { it.siCode }
+                )?.takeIf { it.quality.matchedPunchCount > 0 }
+                    ?.let { match -> memberData to match }
             }
+            val bestQuality = matches.maxOfOrNull { it.second.quality }
+                ?: return EventSeriesReadoutRoute.NoMatch
+            val controlMatches = matches.filter { it.second.quality == bestQuality }
             return when (controlMatches.size) {
                 0 -> EventSeriesReadoutRoute.NoMatch
                 1 -> EventSeriesReadoutRoute.Matched(
-                    memberData = controlMatches.single(),
-                    reason = EventSeriesReadoutRouteReason.CONTROL_PUNCHES
+                    memberData = controlMatches.single().first,
+                    reason = controlMatches.single().second.routeReason()
                 )
                 else -> routeBySiNumber(
                     cardData = cardData,
-                    candidates = controlMatches,
+                    candidates = controlMatches.map { it.first },
                     ambiguousReason = EventSeriesReadoutRouteReason.CONTROL_PUNCHES
                 ) ?: EventSeriesReadoutRoute.Ambiguous(
-                    candidates = controlMatches,
+                    candidates = controlMatches.map { it.first },
                     reason = EventSeriesReadoutRouteReason.CONTROL_PUNCHES
                 )
             }
@@ -121,10 +132,10 @@ object EventSeriesReadoutRouter {
         }
     }
 
-    private fun RaceData.containsAllControlPunches(punchCodes: Set<Int>): Boolean {
-        val eventControlCodes = categories
-            .flatMap { it.controlPoints }
-            .mapTo(mutableSetOf()) { it.siCode }
-        return eventControlCodes.isNotEmpty() && punchCodes.all { it in eventControlCodes }
-    }
+    private fun EventReadoutCourseMatch.routeReason(): EventSeriesReadoutRouteReason =
+        if (usesRegisteredCompetitorCategory) {
+            EventSeriesReadoutRouteReason.CONTROL_PUNCHES_AND_SI_NUMBER
+        } else {
+            EventSeriesReadoutRouteReason.CONTROL_PUNCHES
+        }
 }
