@@ -25,13 +25,20 @@
 package org.openardf.radiooracle.shared.files
 
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.event.EventAssignedControlOrder
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
+import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.results.EventResultPlacement
@@ -43,9 +50,26 @@ import java.time.format.DateTimeFormatter
 object IofXmlExports {
     private const val IOF_NAMESPACE = "http://www.orienteering.org/datastandard/3.0"
 
-    fun courseData(raceData: EventRaceData, creator: String = "Radio-Oracle Desktop"): String {
+    fun courseData(
+        raceData: EventRaceData,
+        creator: String = "Radio-Oracle Desktop",
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
+    ): String {
         val raceStart = parseRaceStart(raceData.race.startDateTimeIso)
         val controlsById = raceData.controls.associateBy { it.id }
+        val categoryCourses = raceData.categories
+            .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+            .map { categoryData ->
+                categoryData.toIofCourse(
+                    raceData = raceData,
+                    controlsById = controlsById,
+                    protectedCourseInfo = protectedCourseInfoByCategoryId?.get(categoryData.category.id)
+                )
+            }
+        val controlDefinitions = categoryCourses.controlDefinitions(
+            controls = raceData.controls,
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId.orEmpty()
+        )
         return buildString {
             append("""<?xml version="1.0" encoding="UTF-8"?>""")
             append('\n')
@@ -53,11 +77,9 @@ object IofXmlExports {
             append('\n')
             appendEvent(raceData, raceStart)
             append("  <RaceCourseData>\n")
-            raceData.categories
-                .sortedWith(compareBy({ it.category.order }, { it.category.name }))
-                .forEach { categoryData ->
-                    appendCourse(categoryData, controlsById)
-                }
+            controlDefinitions.forEach { control -> appendControlDefinition(control) }
+            categoryCourses.forEach { course -> appendCourse(course) }
+            categoryCourses.forEach { course -> appendClassCourseAssignment(course) }
             append("  </RaceCourseData>\n")
             append("</CourseData>\n")
         }
@@ -131,51 +153,234 @@ object IofXmlExports {
     private fun EventCompetitorData.resultCategoryId(): String? =
         readoutData?.result?.categoryId ?: competitorCategory.category?.id ?: competitorCategory.competitor.categoryId
 
-    private fun StringBuilder.appendCourse(
-        categoryData: EventCategoryData,
-        controlsById: Map<String, org.openardf.radiooracle.shared.event.EventControl>
-    ) {
+    private fun StringBuilder.appendCourse(course: IofCategoryCourse) {
         append("    <Course>\n")
-        appendTextElement("Name", categoryData.category.name, indent = "      ")
-        if (categoryData.category.lengthMeters > 0) {
-            appendTextElement("Length", categoryData.category.lengthMeters.toString(), indent = "      ")
+        appendTextElement("Name", course.name, indent = "      ")
+        if (course.lengthMeters > 0) {
+            appendTextElement("Length", course.lengthMeters.toString(), indent = "      ")
         }
-        if (categoryData.category.climbMeters > 0) {
-            appendTextElement("Climb", categoryData.category.climbMeters.toString(), indent = "      ")
+        if (course.climbMeters > 0) {
+            appendTextElement("Climb", course.climbMeters.toString(), indent = "      ")
         }
         appendCourseControl(code = "S", type = "Start")
-        categoryData.courseControlCodes(controlsById).forEach { controlCode ->
-            appendCourseControl(code = controlCode, type = "Control")
+        course.controls.forEach { control ->
+            appendCourseControl(
+                code = control.code,
+                type = "Control",
+                randomOrder = control.randomOrder
+            )
         }
         appendCourseControl(code = "F", type = "Finish")
         append("    </Course>\n")
     }
 
-    private fun StringBuilder.appendCourseControl(code: String, type: String) {
-        append("""      <CourseControl type="$type">""")
+    private fun StringBuilder.appendCourseControl(code: String, type: String, randomOrder: Boolean = false) {
+        append("""      <CourseControl type="$type"""")
+        if (randomOrder) {
+            append(""" randomOrder="true"""")
+        }
+        append('>')
         append('\n')
         appendTextElement("Control", code, indent = "        ")
         append("      </CourseControl>\n")
     }
 
-    private fun EventCategoryData.courseControlCodes(
-        controlsById: Map<String, org.openardf.radiooracle.shared.event.EventControl>
-    ): List<String> {
-        val points = if (controlPoints.isNotEmpty()) {
-            controlPoints.sortedBy { it.order }.mapNotNull { point ->
-                val control = controlsById[point.controlId]
-                val siCode = control?.siCode ?: point.siCode
-                val type = control?.type ?: point.type
-                siCode.takeIf { type == ControlPointType.CONTROL && it > 0 }?.toString()
+    private fun StringBuilder.appendControlDefinition(control: IofControlDefinition) {
+        append("""    <Control type="${control.iofType}">""")
+        append('\n')
+        appendTextElement("Id", control.code, indent = "      ")
+        control.name.takeIf { it.isNotBlank() }?.let { name ->
+            appendTextElement("Name", name, indent = "      ")
+        }
+        control.position?.let { position ->
+            append("""      <Position lng="${position.longitude}" lat="${position.latitude}"""")
+            position.elevationMeters?.let { elevation ->
+                append(" alt=\"")
+                append(elevation)
+                append('"')
             }
-        } else {
-            publicControlIds.mapNotNull { controlId ->
-                val control = controlsById[controlId] ?: return@mapNotNull null
-                control.siCode.takeIf { control.type == ControlPointType.CONTROL && it > 0 }?.toString()
+            append("/>\n")
+        }
+        append("    </Control>\n")
+    }
+
+    private fun StringBuilder.appendClassCourseAssignment(course: IofCategoryCourse) {
+        append("    <ClassCourseAssignment>\n")
+        appendTextElement("ClassId", course.categoryId, indent = "      ")
+        appendTextElement("ClassName", course.name, indent = "      ")
+        appendTextElement("CourseName", course.name, indent = "      ")
+        append("    </ClassCourseAssignment>\n")
+    }
+
+    @Suppress("DEPRECATION")
+    private fun EventCategoryData.toIofCourse(
+        raceData: EventRaceData,
+        controlsById: Map<String, EventControl>,
+        protectedCourseInfo: ProtectedCourseInfo?
+    ): IofCategoryCourse {
+        val assignedPoints = when {
+            controlPoints.isNotEmpty() -> controlPoints
+            publicControlIds.isNotEmpty() -> publicControlIds.mapIndexedNotNull { index, controlId ->
+                val control = controlsById[controlId] ?: return@mapIndexedNotNull null
+                EventControlPoint(
+                    id = "public-$controlId",
+                    categoryId = category.id,
+                    siCode = control.siCode,
+                    type = control.type,
+                    order = index + 1,
+                    controlId = control.id
+                )
+            }
+            else -> emptyList()
+        }
+        val raceType = category.effectiveRaceType(raceData.race)
+        val controlsByLegacyDefinition = raceData.controls
+            .groupBy { it.siCode to it.type }
+            .mapNotNull { (definition, controls) -> controls.singleOrNull()?.let { definition to it } }
+            .toMap()
+        val controls = EventAssignedControlOrder.sort(assignedPoints, controlsById, raceType)
+            .mapNotNull { point ->
+                val control = controlsById[point.controlId]
+                    ?: controlsByLegacyDefinition[point.siCode to point.type]
+                val siCode = control?.siCode ?: point.siCode
+                if (siCode <= 0) {
+                    return@mapNotNull null
+                }
+                val type = control?.type ?: point.type
+                IofAssignedControl(
+                    code = siCode.toString(),
+                    name = control?.displayCourseLabel().orEmpty().ifBlank { siCode.toString() },
+                    type = type,
+                    controlId = control?.id ?: point.controlId,
+                    randomOrder = raceType != RaceType.ORIENTEERING && type == ControlPointType.CONTROL
+                )
+            }
+        return IofCategoryCourse(
+            categoryId = category.id,
+            name = category.name,
+            lengthMeters = protectedCourseInfo?.lengthMeters ?: category.lengthMeters,
+            climbMeters = protectedCourseInfo?.climbMeters ?: category.climbMeters,
+            controls = controls
+        )
+    }
+
+    private fun List<IofCategoryCourse>.controlDefinitions(
+        controls: List<EventControl>,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+    ): List<IofControlDefinition> {
+        val controlsById = controls.associateBy { it.id }
+        val protectedInfosInCourseOrder = mapNotNull { course ->
+            protectedCourseInfoByCategoryId[course.categoryId]
+        }
+        val definitions = linkedMapOf<String, IofControlDefinition>()
+        definitions["S"] = IofControlDefinition(
+            code = "S",
+            name = "Start",
+            iofType = "Start",
+            position = protectedInfosInCourseOrder.firstNotNullOfOrNull { it.startPosition() }
+        )
+        forEach { course ->
+            val categoryInfo = protectedCourseInfoByCategoryId[course.categoryId]
+            course.controls.forEach controlLoop@ { assignedControl ->
+                if (assignedControl.code in definitions) {
+                    return@controlLoop
+                }
+                val control = controlsById[assignedControl.controlId]
+                definitions[assignedControl.code] = IofControlDefinition(
+                    code = assignedControl.code,
+                    name = assignedControl.name,
+                    iofType = "Control",
+                    position = assignedControl.positionFrom(
+                        control = control,
+                        categoryInfo = categoryInfo,
+                        allCourseInfos = protectedInfosInCourseOrder
+                    )
+                )
             }
         }
-        return points
+        definitions["F"] = IofControlDefinition(
+            code = "F",
+            name = "Finish",
+            iofType = "Finish",
+            position = protectedInfosInCourseOrder.firstNotNullOfOrNull { it.finishPosition() }
+        )
+        return definitions.values.toList()
     }
+
+    private fun IofAssignedControl.positionFrom(
+        control: EventControl?,
+        categoryInfo: ProtectedCourseInfo?,
+        allCourseInfos: List<ProtectedCourseInfo>
+    ): IofGeoPosition? {
+        val matchingInfos = buildList {
+            categoryInfo?.let(::add)
+            allCourseInfos.filterTo(this) { it !== categoryInfo }
+        }
+        matchingInfos.forEach { courseInfo ->
+            courseInfo.courseObjects
+                .firstOrNull { point -> point.id == controlId && point.type.matches(type) }
+                ?.toPosition()
+                ?.let { return it }
+            courseInfo.controlPoints
+                .firstOrNull { point -> point.controlId == controlId && point.type == type }
+                ?.toPosition()
+                ?.let { return it }
+        }
+        val normalizedLabels = listOfNotNull(
+            name,
+            control?.displayCourseLabel(),
+            control?.label
+        )
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .toSet()
+        matchingInfos.forEach { courseInfo ->
+            val candidates = courseInfo.courseObjects
+                .filter { point ->
+                    point.type.matches(type) && point.label.trim().lowercase() in normalizedLabels
+                }
+                .mapNotNull { point -> point.toPosition() } +
+                courseInfo.controlPoints
+                    .filter { point ->
+                        point.type == type && point.label.trim().lowercase() in normalizedLabels
+                    }
+                    .mapNotNull { point -> point.toPosition() }
+            candidates.firstOrNull()?.let { return it }
+        }
+        return IofGeoPosition.of(control?.latitude, control?.longitude, elevationMeters = null)
+    }
+
+    private fun ProtectedCourseInfo.startPosition(): IofGeoPosition? =
+        courseObjects.firstNotNullOfOrNull { point ->
+            point.takeIf { it.type == ProtectedCourseObjectType.START }?.toPosition()
+        } ?: route.firstNotNullOfOrNull { point ->
+            IofGeoPosition.of(point.latitude, point.longitude, point.elevationMeters)
+        }
+
+    private fun ProtectedCourseInfo.finishPosition(): IofGeoPosition? =
+        courseObjects.firstNotNullOfOrNull { point ->
+            point.takeIf { it.type == ProtectedCourseObjectType.FINISH }?.toPosition()
+        } ?: route.asReversed().firstNotNullOfOrNull { point ->
+            IofGeoPosition.of(point.latitude, point.longitude, point.elevationMeters)
+        }
+
+    private fun ProtectedCourseObjectPoint.toPosition(): IofGeoPosition? =
+        IofGeoPosition.of(latitude, longitude, elevationMeters)
+
+    private fun ProtectedCourseControlPoint.toPosition(): IofGeoPosition? =
+        IofGeoPosition.of(latitude, longitude, elevationMeters)
+
+    private fun ProtectedCourseObjectType.matches(type: ControlPointType): Boolean = when (this) {
+        ProtectedCourseObjectType.CONTROL -> type == ControlPointType.CONTROL
+        ProtectedCourseObjectType.BEACON -> type == ControlPointType.BEACON
+        ProtectedCourseObjectType.SPECTATOR -> type == ControlPointType.SEPARATOR
+        ProtectedCourseObjectType.START,
+        ProtectedCourseObjectType.FINISH,
+        ProtectedCourseObjectType.WAYPOINT -> false
+    }
+
+    private fun EventControl.displayCourseLabel(): String =
+        publicLabel?.takeIf { it.isNotBlank() } ?: label
 
     private fun StringBuilder.appendEvent(raceData: EventRaceData, raceStart: LocalDateTime) {
         append("  <Event>\n")
@@ -383,4 +588,45 @@ object IofXmlExports {
                 }
             }
         }
+}
+
+private data class IofCategoryCourse(
+    val categoryId: String,
+    val name: String,
+    val lengthMeters: Int,
+    val climbMeters: Int,
+    val controls: List<IofAssignedControl>
+)
+
+private data class IofAssignedControl(
+    val code: String,
+    val name: String,
+    val type: ControlPointType,
+    val controlId: String,
+    val randomOrder: Boolean
+)
+
+private data class IofControlDefinition(
+    val code: String,
+    val name: String,
+    val iofType: String,
+    val position: IofGeoPosition?
+)
+
+private data class IofGeoPosition(
+    val latitude: Double,
+    val longitude: Double,
+    val elevationMeters: Double?
+) {
+    companion object {
+        fun of(latitude: Double?, longitude: Double?, elevationMeters: Double?): IofGeoPosition? {
+            val validLatitude = latitude?.takeIf { it.isFinite() && it in -90.0..90.0 } ?: return null
+            val validLongitude = longitude?.takeIf { it.isFinite() && it in -180.0..180.0 } ?: return null
+            return IofGeoPosition(
+                latitude = validLatitude,
+                longitude = validLongitude,
+                elevationMeters = elevationMeters?.takeIf(Double::isFinite)
+            )
+        }
+    }
 }

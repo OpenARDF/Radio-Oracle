@@ -2848,9 +2848,18 @@ fun main(args: Array<String>) = application {
 
         fun exportIofCourseDataXml() {
             val currentProject = projectSession.currentProject ?: return
+            if (currentProject.hasLockedProtectedCourseData(protectedCoursePassword != null)) {
+                projectStatusText = "Course data is locked. Unlock the Race Password before exporting IOF CourseData XML."
+                return
+            }
             DesktopFileDialogs.chooseExportIofXml("Export IOF CourseData XML")?.let { path ->
                 runCatching {
-                    DesktopProjectFiles.exportIofCourseDataXml(path, currentProject)
+                    DesktopProjectFiles.exportIofCourseDataXml(
+                        path = path,
+                        projectFile = currentProject,
+                        protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+                            .takeIf { protectedCoursePassword != null }
+                    )
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
                 }.onFailure { error ->

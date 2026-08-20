@@ -1,0 +1,340 @@
+<?xml version='1.0' encoding='utf-8'?>
+<CourseData xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0" creator="Radio-Oracle 1.0.39 coordinate-complete handoff">
+  <Event>
+    <Name>Sprint</Name>
+    <StartTime>
+      <Date>2026-08-13</Date>
+      <Time>10:00:00</Time>
+    </StartTime>
+  </Event>
+  <RaceCourseData>
+    <Control type="Start">
+      <Id>S</Id>
+      <Name>Start</Name>
+      <Position lng="-121.678737031876" lat="45.173663426448" alt="1277.38239289" />
+    </Control>
+    <Control type="Control">
+      <Id>136</Id>
+      <Name>Beacon</Name>
+      <Position lng="-121.679760786469" lat="45.173890579815" alt="1255.48802327" />
+    </Control>
+    <Control type="Control">
+      <Id>137</Id>
+      <Name>Spectator</Name>
+      <Position lng="-121.678750349169" lat="45.170681559384" alt="1268.09916729" />
+    </Control>
+    <Control type="Control">
+      <Id>161</Id>
+      <Name>1</Name>
+      <Position lng="-121.677394455711" lat="45.171565458543" alt="1250.18099412" />
+    </Control>
+    <Control type="Control">
+      <Id>162</Id>
+      <Name>2</Name>
+      <Position lng="-121.676531538046" lat="45.172277806816" alt="1248.86481787" />
+    </Control>
+    <Control type="Control">
+      <Id>163</Id>
+      <Name>3</Name>
+      <Position lng="-121.67552083988" lat="45.172906841743" alt="1264.96169061" />
+    </Control>
+    <Control type="Control">
+      <Id>164</Id>
+      <Name>4</Name>
+      <Position lng="-121.6772826111" lat="45.173020538819" alt="1262.09927079" />
+    </Control>
+    <Control type="Control">
+      <Id>165</Id>
+      <Name>5</Name>
+      <Position lng="-121.675527686785" lat="45.171527961762" alt="1256.99654462" />
+    </Control>
+    <Control type="Control">
+      <Id>171</Id>
+      <Name>1F</Name>
+      <Position lng="-121.680114065941" lat="45.170818075439" alt="1268.88012747" />
+    </Control>
+    <Control type="Control">
+      <Id>172</Id>
+      <Name>2F</Name>
+      <Position lng="-121.680007846101" lat="45.171928784749" alt="1247.47549897" />
+    </Control>
+    <Control type="Control">
+      <Id>173</Id>
+      <Name>3F</Name>
+      <Position lng="-121.679230912648" lat="45.172773135131" alt="1284.78709992" />
+    </Control>
+    <Control type="Control">
+      <Id>174</Id>
+      <Name>4F</Name>
+      <Position lng="-121.681465483002" lat="45.172268471211" alt="1268.75703204" />
+    </Control>
+    <Control type="Control">
+      <Id>175</Id>
+      <Name>5F</Name>
+      <Position lng="-121.680728165405" lat="45.173265583229" alt="1258.98093943" />
+    </Control>
+    <Control type="Finish">
+      <Id>F</Id>
+      <Name>Finish</Name>
+      <Position lng="-121.679753285679" lat="45.174099550133" alt="1257.7052447" />
+    </Control>
+    <Course>
+      <Id>course-1</Id>
+      <Name>M21</Name>
+      <Length>1606</Length>
+      <Climb>25</Climb>
+      <CourseControl type="Start">
+        <Control>S</Control>
+        <MapText>S</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>161</Control>
+        <MapText>1</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>162</Control>
+        <MapText>2</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>163</Control>
+        <MapText>3</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>164</Control>
+        <MapText>4</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>165</Control>
+        <MapText>5</MapText>
+      </CourseControl>
+      <CourseControl>
+        <Control>137</Control>
+        <MapText>S</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>171</Control>
+        <MapText>1F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>172</Control>
+        <MapText>2F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>173</Control>
+        <MapText>3F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>174</Control>
+        <MapText>4F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>175</Control>
+        <MapText>5F</MapText>
+      </CourseControl>
+      <CourseControl>
+        <Control>136</Control>
+        <MapText>B</MapText>
+      </CourseControl>
+      <CourseControl type="Finish">
+        <Control>F</Control>
+        <MapText>F</MapText>
+      </CourseControl>
+    </Course>
+    <Course>
+      <Id>course-2</Id>
+      <Name>M60, W55</Name>
+      <Length>1382</Length>
+      <Climb>33</Climb>
+      <CourseControl type="Start">
+        <Control>S</Control>
+        <MapText>S</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>163</Control>
+        <MapText>3</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>164</Control>
+        <MapText>4</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>165</Control>
+        <MapText>5</MapText>
+      </CourseControl>
+      <CourseControl>
+        <Control>137</Control>
+        <MapText>S</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>173</Control>
+        <MapText>3F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>174</Control>
+        <MapText>4F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>175</Control>
+        <MapText>5F</MapText>
+      </CourseControl>
+      <CourseControl>
+        <Control>136</Control>
+        <MapText>B</MapText>
+      </CourseControl>
+      <CourseControl type="Finish">
+        <Control>F</Control>
+        <MapText>F</MapText>
+      </CourseControl>
+    </Course>
+    <Course>
+      <Id>course-3</Id>
+      <Name>M50, W35, W19, W45</Name>
+      <Length>1400</Length>
+      <Climb>22</Climb>
+      <CourseControl type="Start">
+        <Control>S</Control>
+        <MapText>S</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>161</Control>
+        <MapText>1</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>162</Control>
+        <MapText>2</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>163</Control>
+        <MapText>3</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>165</Control>
+        <MapText>5</MapText>
+      </CourseControl>
+      <CourseControl>
+        <Control>137</Control>
+        <MapText>S</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>171</Control>
+        <MapText>1F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>172</Control>
+        <MapText>2F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>173</Control>
+        <MapText>3F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>175</Control>
+        <MapText>5F</MapText>
+      </CourseControl>
+      <CourseControl>
+        <Control>136</Control>
+        <MapText>B</MapText>
+      </CourseControl>
+      <CourseControl type="Finish">
+        <Control>F</Control>
+        <MapText>F</MapText>
+      </CourseControl>
+    </Course>
+    <Course>
+      <Id>course-4</Id>
+      <Name>W65, M19, M70</Name>
+      <Length>1318</Length>
+      <Climb>26</Climb>
+      <CourseControl type="Start">
+        <Control>S</Control>
+        <MapText>S</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>162</Control>
+        <MapText>2</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>164</Control>
+        <MapText>4</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>165</Control>
+        <MapText>5</MapText>
+      </CourseControl>
+      <CourseControl>
+        <Control>137</Control>
+        <MapText>S</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>171</Control>
+        <MapText>1F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>173</Control>
+        <MapText>3F</MapText>
+      </CourseControl>
+      <CourseControl randomOrder="true">
+        <Control>175</Control>
+        <MapText>5F</MapText>
+      </CourseControl>
+      <CourseControl>
+        <Control>136</Control>
+        <MapText>B</MapText>
+      </CourseControl>
+      <CourseControl type="Finish">
+        <Control>F</Control>
+        <MapText>F</MapText>
+      </CourseControl>
+    </Course>
+    <ClassCourseAssignment>
+      <ClassId>65dbaf63-48d3-43f3-a6c1-0451a6db40df</ClassId>
+      <ClassName>M21</ClassName>
+      <CourseName>M21</CourseName>
+    </ClassCourseAssignment>
+    <ClassCourseAssignment>
+      <ClassId>ad5ff76b-fe4c-4103-99ae-ecdefb5de716</ClassId>
+      <ClassName>M60</ClassName>
+      <CourseName>M60, W55</CourseName>
+    </ClassCourseAssignment>
+    <ClassCourseAssignment>
+      <ClassId>3246444c-67cf-4d97-8793-93c06ac41047</ClassId>
+      <ClassName>M50</ClassName>
+      <CourseName>M50, W35, W19, W45</CourseName>
+    </ClassCourseAssignment>
+    <ClassCourseAssignment>
+      <ClassId>290ec783-6b99-457a-8a93-572092d9ed4b</ClassId>
+      <ClassName>W65</ClassName>
+      <CourseName>W65, M19, M70</CourseName>
+    </ClassCourseAssignment>
+    <ClassCourseAssignment>
+      <ClassId>4d9d1484-f4a8-43d7-a5a0-9f08fb0ab160</ClassId>
+      <ClassName>W55</ClassName>
+      <CourseName>M60, W55</CourseName>
+    </ClassCourseAssignment>
+    <ClassCourseAssignment>
+      <ClassId>79c45d00-2905-458b-9ac4-cbbcd33c5b51</ClassId>
+      <ClassName>M19</ClassName>
+      <CourseName>W65, M19, M70</CourseName>
+    </ClassCourseAssignment>
+    <ClassCourseAssignment>
+      <ClassId>09a5121c-4660-4176-b6ed-0bb3f220a740</ClassId>
+      <ClassName>W35</ClassName>
+      <CourseName>M50, W35, W19, W45</CourseName>
+    </ClassCourseAssignment>
+    <ClassCourseAssignment>
+      <ClassId>fb082929-65bf-4db2-9c64-ec054f21c53d</ClassId>
+      <ClassName>W19</ClassName>
+      <CourseName>M50, W35, W19, W45</CourseName>
+    </ClassCourseAssignment>
+    <ClassCourseAssignment>
+      <ClassId>a599af27-b093-4ec7-bf39-d58c802cc745</ClassId>
+      <ClassName>W45</ClassName>
+      <CourseName>M50, W35, W19, W45</CourseName>
+    </ClassCourseAssignment>
+    <ClassCourseAssignment>
+      <ClassId>e5a336ab-27c5-4924-a0f4-f76b8bffff62</ClassId>
+      <ClassName>M70</ClassName>
+      <CourseName>W65, M19, M70</CourseName>
+    </ClassCourseAssignment>
+  </RaceCourseData>
+</CourseData>

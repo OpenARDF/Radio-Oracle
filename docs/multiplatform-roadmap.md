@@ -251,6 +251,23 @@ These are deliberate limits in the current app, not necessarily defects.
   sampled straight control-to-control legs rather than paths selected from a
   terrain-cost or barrier-aware model.
 
+## Near-Term Roadmap
+
+### Cloudflare Settings Transfer
+
+- Add an explicit desktop-to-Android transfer for the Cloudflare Pages project,
+  branch, account ID, API token, and retained-results publishing mode. Keep these
+  app-level credentials out of Race Files and Race Series archives.
+- Reuse the established local desktop-to-Android transfer experience, but use a
+  versioned settings payload with authenticated encryption rather than sending
+  the API token through the current plaintext Race File download endpoint.
+- Make every transfer short-lived and single-use. Require confirmation on the
+  Android device before replacing existing settings, keep the API token masked,
+  and never include credential values in logs, status text, or diagnostics.
+- Put payload validation and normalization in shared code so desktop and Android
+  accept the same fields and defaults. Cover expiry, replay, tampering,
+  incomplete settings, cancellation, and explicit overwrite behavior in tests.
+
 ## Medium-Term Roadmap
 
 ### Shared Race Services

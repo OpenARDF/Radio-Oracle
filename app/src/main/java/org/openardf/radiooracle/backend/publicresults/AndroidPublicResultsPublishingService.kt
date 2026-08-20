@@ -26,6 +26,7 @@ package org.openardf.radiooracle.backend.publicresults
 
 import android.content.Context
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.embeddeds.EventSeriesData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.shared.toEventRaceData
@@ -44,7 +45,10 @@ data class AndroidPublicResultsTarget(
     val savedUrl: String?,
     val publishedAtIso: String?,
     val needsRacePasswordForDiagrams: Boolean
-)
+) {
+    val canViewPublicResults: Boolean
+        get() = !savedUrl.isNullOrBlank()
+}
 
 data class AndroidPublicResultsPublishOutcome(
     val name: String,
@@ -59,33 +63,93 @@ class AndroidPublicResultsPublishingService(
     context: Context,
     private val dataProcessor: DataProcessor = DataProcessor.get(),
     private val publisher: AndroidCloudflarePagesPublisher =
-        AndroidCloudflarePagesPublisher()
+        AndroidCloudflarePagesPublisher(),
+    private val publicationLookup: AndroidPublicResultsPublicationLookup =
+        AndroidPublicResultsRemoteSynchronizer()
 ) {
     private val appContext = context.applicationContext
 
-    suspend fun target(raceId: UUID): AndroidPublicResultsTarget {
+    suspend fun target(raceId: UUID, publicSiteBaseUrl: String): AndroidPublicResultsTarget {
         val series = dataProcessor.getEventSeriesForRace(raceId)
         return if (series == null) {
             val raceData = dataProcessor.getRaceData(raceId)
+            val publication = recoverPublicationIfMissing(
+                raceId = raceId,
+                series = null,
+                savedUrl = raceData.race.publicResultsUrl,
+                publishedAtIso = raceData.race.publicResultsPublishedAtIso,
+                publicSiteBaseUrl = publicSiteBaseUrl,
+                publicationId = publicResultsPublicationId(
+                    raceData.race.importSourceId,
+                    raceData.race.id
+                )
+            )
             AndroidPublicResultsTarget(
                 name = raceData.race.name,
                 isSeries = false,
                 raceCount = 1,
-                savedUrl = raceData.race.publicResultsUrl,
-                publishedAtIso = raceData.race.publicResultsPublishedAtIso,
+                savedUrl = publication?.url,
+                publishedAtIso = publication?.publishedAtIso,
                 needsRacePasswordForDiagrams = raceData.needsPasswordForCourseDiagrams()
             )
         } else {
             val races = series.orderedMembers().map { dataProcessor.getRaceData(it.localRaceId) }
+            val publication = recoverPublicationIfMissing(
+                raceId = raceId,
+                series = series,
+                savedUrl = series.series.publicResultsUrl,
+                publishedAtIso = series.series.publicResultsPublishedAtIso,
+                publicSiteBaseUrl = publicSiteBaseUrl,
+                publicationId = "series:${series.series.seriesId}"
+            )
             AndroidPublicResultsTarget(
                 name = series.series.name,
                 isSeries = true,
                 raceCount = races.size,
-                savedUrl = series.series.publicResultsUrl,
-                publishedAtIso = series.series.publicResultsPublishedAtIso,
+                savedUrl = publication?.url,
+                publishedAtIso = publication?.publishedAtIso,
                 needsRacePasswordForDiagrams = races.any { it.needsPasswordForCourseDiagrams() }
             )
         }
+    }
+
+    private suspend fun recoverPublicationIfMissing(
+        raceId: UUID,
+        series: EventSeriesData?,
+        savedUrl: String?,
+        publishedAtIso: String?,
+        publicSiteBaseUrl: String,
+        publicationId: String
+    ): AndroidPublicResultsRemotePublication? {
+        if (!savedUrl.isNullOrBlank()) {
+            return AndroidPublicResultsRemotePublication(savedUrl, publishedAtIso.orEmpty())
+        }
+        val recovered = runCatching {
+            publicationLookup.findPublication(publicSiteBaseUrl, publicationId)
+        }.onFailure { error ->
+            DebugLog.warn(
+                "PublicResults",
+                "Could not discover saved publication id=$publicationId: " +
+                    (error.message ?: error::class.simpleName)
+            )
+        }.getOrNull() ?: return null
+        runCatching {
+            persistPublication(
+                raceId = raceId,
+                series = series,
+                url = recovered.url,
+                publishedAtIso = recovered.publishedAtIso
+            )
+        }.onSuccess {
+            DebugLog.info("PublicResults", "Recovered saved publication id=$publicationId")
+        }.onFailure { error ->
+            DebugLog.warn(
+                "PublicResults",
+                "Found publication id=$publicationId but could not save it: " +
+                    (error.message ?: error::class.simpleName)
+            )
+        }
+        return recovered
     }
 
     suspend fun publish(
@@ -203,4 +267,16 @@ class AndroidPublicResultsPublishingService(
                 !categoryData.category.encryptedCourseInfo.isNullOrBlank()
         }
     }
+}
+
+internal fun publicResultsPublicationId(importSourceId: String?, localRaceId: UUID): String {
+    val marker = "event-file:"
+    val source = importSourceId.orEmpty()
+    val markerIndex = source.lastIndexOf(marker)
+    val eventFileRaceId = if (markerIndex >= 0) {
+        source.substring(markerIndex + marker.length).takeIf(String::isNotBlank)
+    } else {
+        null
+    }
+    return "race:${eventFileRaceId ?: localRaceId}"
 }

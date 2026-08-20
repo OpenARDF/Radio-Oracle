@@ -32,6 +32,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.openardf.radiooracle.shared.publicresults.CloudflarePagesPublisher
 import org.openardf.radiooracle.shared.publicresults.PublicResultsSiteCatalog
 import java.io.File
 import java.net.URI
@@ -135,13 +136,47 @@ object AndroidPublicResultsSiteMirror {
             ).any { directory.resolve("data/$it").isFile }
 }
 
+data class AndroidPublicResultsRemotePublication(
+    val url: String,
+    val publishedAtIso: String
+)
+
+fun interface AndroidPublicResultsPublicationLookup {
+    fun findPublication(
+        baseUrl: String,
+        publicationId: String
+    ): AndroidPublicResultsRemotePublication?
+}
+
 class AndroidPublicResultsRemoteSynchronizer(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .callTimeout(2, TimeUnit.MINUTES)
         .build()
-) {
+) : AndroidPublicResultsPublicationLookup {
+    override fun findPublication(
+        baseUrl: String,
+        publicationId: String
+    ): AndroidPublicResultsRemotePublication? {
+        val rootUrl = baseUrl.trim().trimEnd('/')
+        val catalogBytes = get("$rootUrl/data/races.json", optional = true) ?: return null
+        val entries = PublicResultsSiteCatalog.parseStrict(
+            catalogBytes.toString(StandardCharsets.UTF_8)
+        )
+        requireNotNull(entries) {
+            "The public results site has an invalid data/races.json catalog."
+        }
+        return entries
+            .firstOrNull { it.publicationId == publicationId }
+            ?.let { entry ->
+                AndroidPublicResultsRemotePublication(
+                    url = CloudflarePagesPublisher.publicResultsUrl(rootUrl, entry.path),
+                    publishedAtIso = entry.generatedAt
+                )
+            }
+    }
+
     fun synchronize(baseUrl: String, targetDirectory: File, cacheDirectory: File) {
         val rootUrl = baseUrl.trim().trimEnd('/')
         val catalogBytes = get("$rootUrl/data/races.json", optional = true)

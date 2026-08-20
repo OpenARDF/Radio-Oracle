@@ -44,6 +44,8 @@ import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
+import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
@@ -345,14 +347,47 @@ class DesktopProjectFilesTest {
     fun exportsIofCourseDataXmlFile() {
         val directory = Files.createTempDirectory("rom-desktop-iof-course-data")
         val path = directory.resolve("event.iof.xml")
+        val raceData = raceDataWithReadout()
+        val categoryId = raceData.categories.single().category.id
 
-        DesktopProjectFiles.exportIofCourseDataXml(path, EventProjectFile(raceData = raceDataWithReadout()))
+        DesktopProjectFiles.exportIofCourseDataXml(
+            path = path,
+            projectFile = EventProjectFile(raceData = raceData),
+            protectedCourseInfoByCategoryId = mapOf(
+                categoryId to ProtectedCourseInfo(
+                    lengthMeters = 1_234,
+                    climbMeters = 56,
+                    courseObjects = listOf(
+                        ProtectedCourseObjectPoint(
+                            id = "start",
+                            label = "Start",
+                            type = ProtectedCourseObjectType.START,
+                            latitude = 37.1,
+                            longitude = -122.1,
+                            elevationMeters = 10.0
+                        ),
+                        ProtectedCourseObjectPoint(
+                            id = "finish",
+                            label = "Finish",
+                            type = ProtectedCourseObjectType.FINISH,
+                            latitude = 37.2,
+                            longitude = -122.2,
+                            elevationMeters = 20.0
+                        )
+                    )
+                )
+            )
+        )
         val exported = Files.readString(path)
 
         assertTrue(exported.contains("<CourseData"))
         assertTrue(exported.contains("<RaceCourseData>"))
         assertTrue(exported.contains("<Course>"))
         assertTrue(exported.contains("<Name>M21</Name>"))
+        assertTrue(exported.contains("<Length>1234</Length>"))
+        assertTrue(exported.contains("<Climb>56</Climb>"))
+        assertTrue(exported.contains("""<Position lng="-122.1" lat="37.1" alt="10.0"/>"""))
+        assertTrue(exported.contains("<ClassCourseAssignment>"))
         assertIofSchemaValid(exported)
     }
 

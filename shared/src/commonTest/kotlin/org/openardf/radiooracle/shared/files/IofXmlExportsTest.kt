@@ -37,12 +37,16 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
+import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -62,7 +66,7 @@ class IofXmlExportsTest {
         assertTrue(xml.contains("<Climb>120</Climb>"))
         assertTrue(xml.contains("""<CourseControl type="Start">"""))
         assertTrue(xml.contains("<Control>S</Control>"))
-        assertTrue(xml.contains("""<CourseControl type="Control">"""))
+        assertTrue(xml.contains("""<CourseControl type="Control" randomOrder="true">"""))
         assertTrue(xml.contains("<Control>31</Control>"))
         assertTrue(xml.contains("<Control>32</Control>"))
         assertTrue(xml.contains("""<CourseControl type="Finish">"""))
@@ -81,6 +85,50 @@ class IofXmlExportsTest {
         assertEquals(listOf(31, 32), imported.parsedData.categories.first().controlPoints.map { it.siCode })
         assertTrue(imported.unsupportedItems.any { it.reason.contains("Start controls") })
         assertTrue(imported.unsupportedItems.any { it.reason.contains("Finish controls") })
+    }
+
+    @Test
+    fun exportsCompleteArdfCourseDataWithProtectedPositionsAndAssignments() {
+        val raceData = sprintRaceDataWithCourseControls()
+        val categoryId = raceData.categories.single().category.id
+        val xml = IofXmlExports.courseData(
+            raceData = raceData,
+            protectedCourseInfoByCategoryId = mapOf(
+                categoryId to ProtectedCourseInfo(
+                    lengthMeters = 4_300,
+                    climbMeters = 90,
+                    courseObjects = listOf(
+                        protectedObject("start", "Start", ProtectedCourseObjectType.START, 37.1, -122.1, 10.0),
+                        protectedObject("slow", "1", ProtectedCourseObjectType.CONTROL, 37.2, -122.2, 20.0),
+                        protectedObject("spectator", "Spectator", ProtectedCourseObjectType.SPECTATOR, 37.3, -122.3, 30.0),
+                        protectedObject("fast", "1F", ProtectedCourseObjectType.CONTROL, 37.4, -122.4, 40.0),
+                        protectedObject("beacon", "B", ProtectedCourseObjectType.BEACON, 37.5, -122.5, 50.0),
+                        protectedObject("finish", "Finish", ProtectedCourseObjectType.FINISH, 37.6, -122.6, 60.0)
+                    )
+                )
+            ),
+            creator = "Radio-Oracle 1.0"
+        )
+
+        assertTrue(xml.contains("""<Control type="Start">"""))
+        assertTrue(xml.contains("""<Position lng="-122.1" lat="37.1" alt="10.0"/>"""))
+        assertTrue(xml.contains("<Id>137</Id>"))
+        assertTrue(xml.contains("<Name>Spectator</Name>"))
+        assertTrue(xml.contains("<Id>136</Id>"))
+        assertTrue(xml.contains("<Name>B</Name>"))
+        assertTrue(xml.contains("<Length>4300</Length>"))
+        assertTrue(xml.contains("<Climb>90</Climb>"))
+        assertEquals(2, Regex("""<CourseControl type="Control" randomOrder="true">""").findAll(xml).count())
+        assertEquals(2, Regex("""<CourseControl type="Control">""").findAll(xml).count())
+        assertTrue(xml.indexOf("<Control>31</Control>") < xml.indexOf("<Control>137</Control>"))
+        assertTrue(xml.indexOf("<Control>137</Control>") < xml.indexOf("<Control>41</Control>"))
+        assertTrue(xml.indexOf("<Control>41</Control>") < xml.indexOf("<Control>136</Control>"))
+        assertTrue(xml.contains("<ClassCourseAssignment>"))
+        assertTrue(xml.contains("<ClassId>m21</ClassId>"))
+        assertTrue(xml.contains("<ClassName>M21</ClassName>"))
+        assertTrue(xml.contains("<CourseName>M21</CourseName>"))
+        val validation = IofXmlValidator.validate(xml, IofXmlSchemaResource.loadBundledSchema())
+        assertTrue(validation.valid, validation.errors.joinToString { it.message })
     }
 
     @Test
@@ -384,6 +432,66 @@ class IofXmlExportsTest {
         }
         return raceData.copy(categories = categories)
     }
+
+    private fun sprintRaceDataWithCourseControls(): EventRaceData {
+        val original = raceData()
+        val base = original.copy(race = original.race.copy(raceType = RaceType.SPRINT))
+        val category = base.categories.first().category
+        val controls = listOf(
+            eventControl(base.race.id, "slow", "Slow 1", "1", 31, ControlPointType.CONTROL),
+            eventControl(base.race.id, "spectator", "Spectator", "Spectator", 137, ControlPointType.SEPARATOR),
+            eventControl(base.race.id, "fast", "Fast 1", "1F", 41, ControlPointType.CONTROL),
+            eventControl(base.race.id, "beacon", "Beacon", "B", 136, ControlPointType.BEACON)
+        )
+        val controlPoints = controls.mapIndexed { index, control ->
+            EventControlPoint(
+                id = "point-${control.id}",
+                categoryId = category.id,
+                siCode = control.siCode,
+                type = control.type,
+                order = index + 1,
+                controlId = control.id
+            )
+        }
+        return base.copy(
+            controls = controls,
+            categories = listOf(
+                EventCategoryData(category, controlPoints = controlPoints, competitors = base.categories.first().competitors)
+            )
+        )
+    }
+
+    private fun eventControl(
+        raceId: String,
+        id: String,
+        label: String,
+        publicLabel: String,
+        siCode: Int,
+        type: ControlPointType
+    ): EventControl = EventControl(
+        id = id,
+        raceId = raceId,
+        label = label,
+        siCode = siCode,
+        type = type,
+        publicLabel = publicLabel
+    )
+
+    private fun protectedObject(
+        id: String,
+        label: String,
+        type: ProtectedCourseObjectType,
+        latitude: Double,
+        longitude: Double,
+        elevationMeters: Double
+    ): ProtectedCourseObjectPoint = ProtectedCourseObjectPoint(
+        id = id,
+        label = label,
+        type = type,
+        latitude = latitude,
+        longitude = longitude,
+        elevationMeters = elevationMeters
+    )
 
     private fun courseControl(categoryId: String, siCode: Int, order: Int): EventControlPoint =
         EventControlPoint(

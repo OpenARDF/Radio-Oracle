@@ -29,12 +29,52 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsRemoteSynchronizer
 import java.nio.file.Files
 
 class AndroidPublicResultsRemoteSynchronizerTest {
+    @Test
+    fun findsPublishedSeriesByStablePublicationId() {
+        val server = MockWebServer()
+        server.enqueue(
+            ok(
+                """{"races":[{"path":"championship-series","name":"Championship","start":"2026-08-13","generatedAt":"2026-08-11T22:47:21Z","resultCount":0,"unofficialResults":false,"publicationId":"series:series-1"}]}"""
+            )
+        )
+        server.start()
+        try {
+            val publication = AndroidPublicResultsRemoteSynchronizer().findPublication(
+                baseUrl = server.url("/").toString(),
+                publicationId = "series:series-1"
+            )
+
+            assertEquals(server.url("/championship-series/").toString(), publication?.url)
+            assertEquals("2026-08-11T22:47:21Z", publication?.publishedAtIso)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun returnsNullWhenPublicationIsNotInPublicCatalog() {
+        val server = MockWebServer()
+        server.enqueue(ok("""{"races":[]}"""))
+        server.start()
+        try {
+            val publication = AndroidPublicResultsRemoteSynchronizer().findPublication(
+                baseUrl = server.url("/").toString(),
+                publicationId = "series:missing"
+            )
+
+            assertNull(publication)
+        } finally {
+            server.shutdown()
+        }
+    }
+
     @Test
     fun synchronizesSeriesMembersDownloadsAndCourseGraphics() {
         val server = MockWebServer()

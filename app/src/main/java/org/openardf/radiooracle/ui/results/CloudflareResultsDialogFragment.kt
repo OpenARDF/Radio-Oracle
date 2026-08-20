@@ -123,8 +123,11 @@ class CloudflareResultsDialogFragment : DialogFragment() {
             return
         }
         viewLifecycleOwner.lifecycleScope.launch {
+            val settings = AndroidCloudflarePagesSettingsStore.read(requireContext())
             runCatching {
-                withContext(Dispatchers.IO) { service.target(race.id) }
+                withContext(Dispatchers.IO) {
+                    service.target(race.id, settings.publicSiteBaseUrl())
+                }
             }.onSuccess {
                 target = it
                 render()
@@ -155,7 +158,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         }
         diagramControls.visibility =
             if (value.needsRacePasswordForDiagrams) View.VISIBLE else View.GONE
-        renderUrl(value.savedUrl, settings.isComplete())
+        renderUrl(value.savedUrl)
         publishButton.isEnabled = settings.isComplete()
         if (!settings.isComplete()) {
             statusView.text = getString(R.string.cloudflare_results_settings_incomplete)
@@ -164,7 +167,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         }
     }
 
-    private fun renderUrl(url: String?, settingsComplete: Boolean) {
+    private fun renderUrl(url: String?) {
         if (url.isNullOrBlank()) {
             urlView.text = getString(R.string.cloudflare_results_not_published)
             qrView.visibility = View.GONE
@@ -174,7 +177,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         urlView.text = url
         qrView.setImageBitmap(qrCode(url))
         qrView.visibility = View.VISIBLE
-        viewButton.isEnabled = settingsComplete
+        viewButton.isEnabled = target?.canViewPublicResults == true
     }
 
     private fun confirmAndPublish() {
@@ -228,8 +231,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
             savedUrl = outcome.url,
             publishedAtIso = outcome.publishedAtIso
         )
-        val settings = AndroidCloudflarePagesSettingsStore.read(requireContext())
-        renderUrl(outcome.url, settings.isComplete())
+        renderUrl(outcome.url)
         statusView.text = outcome.persistenceWarning?.let {
             getString(R.string.cloudflare_results_publish_warning, it)
         } ?: getString(R.string.cloudflare_results_publish_success, outcome.name)
