@@ -172,10 +172,7 @@ class SelectedRaceViewModel : ViewModel() {
                 }
 
                 resultWrapperJob = launch {
-                    val seriesResultsFlow = dataProcessor.getSeriesResultWrapperFlowForRace(id)
-                    val resultsFlow = seriesResultsFlow
-                        ?: ResultsProcessor.getResultWrapperFlowByRace(id, dataProcessor)
-                    resultsFlow.collect {
+                    ResultsProcessor.getResultWrapperFlowByRace(id, dataProcessor).collect {
                         _resultWrappers.value = CategoryDisplaySort.resultWrappers(it)
                     }
                 }

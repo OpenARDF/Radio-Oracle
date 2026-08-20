@@ -24,8 +24,11 @@
 
 package org.openardf.radiooracle.backend
 
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -46,6 +49,7 @@ import org.openardf.radiooracle.backend.room.enums.RaceBand
 import org.openardf.radiooracle.backend.room.enums.RaceLevel
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
+import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import java.time.Duration
@@ -162,6 +166,40 @@ class DataProcessorEventSeriesMembershipTests {
             listOf(classic.race.id, sprint.race.id),
             wrappers.map { it.competitorData.single().readoutData!!.result.raceId }
         )
+    }
+
+    @Test
+    fun selectedRaceViewModelShowsOnlySelectedRaceResultsWithinSeries() = runBlocking {
+        val processor = DataProcessor.get()
+        val dayOne = raceDataWithResult(
+            id = UUID.fromString("77777777-7777-7777-7777-777777777777"),
+            name = "Results Day 1"
+        )
+        val dayTwo = raceDataWithResult(
+            id = UUID.fromString("88888888-8888-8888-8888-888888888888"),
+            name = "Results Day 2"
+        )
+        processor.saveRaceData(dayOne)
+        processor.saveRaceData(dayTwo)
+        val series = processor.createEventSeriesFromRace(dayOne.race.id, "Results Series")
+        processor.addRaceToEventSeries(dayTwo.race.id, series.series.seriesId)
+
+        val viewModel = SelectedRaceViewModel()
+        try {
+            viewModel.setRace(dayOne.race.id)
+
+            val wrappers = withTimeout(5_000) {
+                viewModel.resultWrappers.first { it.isNotEmpty() }
+            }
+
+            assertEquals(1, wrappers.size)
+            assertEquals(
+                dayOne.race.id,
+                wrappers.single().competitorData.single().readoutData!!.result.raceId
+            )
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
     }
 
     private fun raceData(id: UUID, name: String): RaceData =
