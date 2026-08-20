@@ -161,7 +161,16 @@ class EventSeriesSupportTest {
                 "day-1",
                 projectFile(
                     "Day 1",
-                    competitors = listOf(competitorData("alice", 11, 123456, drawnStartTimeSeconds = 600)),
+                    competitors = listOf(
+                        competitorData(
+                            "alice",
+                            11,
+                            123456,
+                            drawnStartTimeSeconds = 600,
+                            personId = "person-1",
+                            corridor = "A"
+                        )
+                    ),
                     seriesLink = EventSeriesLink("series-1", "day-1")
                 )
             ),
@@ -169,7 +178,16 @@ class EventSeriesSupportTest {
                 "day-2",
                 projectFile(
                     "Day 2",
-                    competitors = listOf(competitorData("alice-2", 11, 123456, drawnStartTimeSeconds = 1200)),
+                    competitors = listOf(
+                        competitorData(
+                            "alice-2",
+                            11,
+                            123456,
+                            drawnStartTimeSeconds = 1200,
+                            personId = "person-1",
+                            corridor = "B"
+                        )
+                    ),
                     seriesLink = EventSeriesLink("series-1", "day-2")
                 )
             ),
@@ -177,7 +195,16 @@ class EventSeriesSupportTest {
                 "day-3",
                 projectFile(
                     "Day 3",
-                    competitors = listOf(competitorData("current-alice", 11, 123456, drawnStartTimeSeconds = 1800)),
+                    competitors = listOf(
+                        competitorData(
+                            "current-alice",
+                            11,
+                            123456,
+                            drawnStartTimeSeconds = 1800,
+                            personId = "person-1",
+                            corridor = "C"
+                        )
+                    ),
                     seriesLink = EventSeriesLink("series-1", "day-3")
                 )
             ),
@@ -185,7 +212,16 @@ class EventSeriesSupportTest {
                 "day-4",
                 projectFile(
                     "Day 4",
-                    competitors = listOf(competitorData("alice-4", 11, 123456, drawnStartTimeSeconds = 2400)),
+                    competitors = listOf(
+                        competitorData(
+                            "alice-4",
+                            11,
+                            123456,
+                            drawnStartTimeSeconds = 2400,
+                            personId = "person-1",
+                            corridor = "D"
+                        )
+                    ),
                     seriesLink = EventSeriesLink("series-1", "day-4")
                 )
             )
@@ -195,9 +231,33 @@ class EventSeriesSupportTest {
 
         assertEquals(
             listOf(
-                listOf(CompetitorStartCsvImportRow(startNumber = 1, startTimeText = "10:00", siNumber = 123456)),
-                listOf(CompetitorStartCsvImportRow(startNumber = 1, startTimeText = "20:00", siNumber = 123456)),
-                listOf(CompetitorStartCsvImportRow(startNumber = 1, startTimeText = "40:00", siNumber = 123456))
+                listOf(
+                    CompetitorStartCsvImportRow(
+                        startNumber = 1,
+                        startTimeText = "10:00",
+                        siNumber = 123456,
+                        personId = "person-1",
+                        corridor = "A"
+                    )
+                ),
+                listOf(
+                    CompetitorStartCsvImportRow(
+                        startNumber = 1,
+                        startTimeText = "20:00",
+                        siNumber = 123456,
+                        personId = "person-1",
+                        corridor = "B"
+                    )
+                ),
+                listOf(
+                    CompetitorStartCsvImportRow(
+                        startNumber = 1,
+                        startTimeText = "40:00",
+                        siNumber = 123456,
+                        personId = "person-1",
+                        corridor = "D"
+                    )
+                )
             ),
             rows
         )
@@ -432,7 +492,9 @@ class EventSeriesSupportTest {
         siNumber: Int?,
         drawnStartTimeSeconds: Long? = null,
         bibNumber: String = "",
-        callSign: String = ""
+        callSign: String = "",
+        personId: String = "",
+        corridor: String = ""
     ): EventCompetitorData =
         EventCompetitorData(
             competitorCategory = EventCompetitorCategory(
@@ -443,7 +505,7 @@ class EventSeriesSupportTest {
                     firstName = id,
                     lastName = "Runner",
                     club = "OPEN",
-                    index = "",
+                    index = personId,
                     isMan = true,
                     birthYear = null,
                     siNumber = siNumber,
@@ -451,6 +513,7 @@ class EventSeriesSupportTest {
                     startNumber = startNumber,
                     drawnStartTimeSeconds = drawnStartTimeSeconds,
                     bibNumber = bibNumber,
+                    corridor = corridor,
                     callSign = callSign
                 ),
                 category = null
