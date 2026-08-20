@@ -4060,17 +4060,30 @@ object DesktopCourseAnalyzer {
                     )
                 }
         }
-        val pointsByToken = typedPoints
-            .flatMap { candidate ->
+        fun uniquePointsByToken(candidates: List<Pair<String, CourseGeoPoint>>): Map<String, CourseGeoPoint> =
+            candidates
+                .groupBy { it.first }
+                .mapNotNull { (token, matches) ->
+                    matches.map { it.second.coordinateKey() }.distinct().singleOrNull()?.let {
+                        token to matches.first().second
+                    }
+                }
+                .toMap()
+
+        val aliasPointsByToken = uniquePointsByToken(
+            typedPoints.flatMap { candidate ->
                 candidate.label.expandedProtectedCoordinateTokens().map { token -> token to candidate.point }
             }
-            .groupBy { it.first }
-            .mapNotNull { (token, matches) ->
-                matches.map { it.second.coordinateKey() }.distinct().singleOrNull()?.let {
-                    token to matches.first().second
-                }
+        )
+        val exactPointsByToken = uniquePointsByToken(
+            typedPoints.mapNotNull { candidate ->
+                candidate.label.normalizedProtectedCoordinateToken()?.let { token -> token to candidate.point }
             }
-            .toMap()
+        )
+        // Foxoring legitimately uses paired labels such as 1 and 1F. Their expanded fox-number
+        // aliases overlap, but their exact public labels still identify two different locations.
+        // Keep broad alias matching for legacy imports while giving exact labels precedence.
+        val pointsByToken = aliasPointsByToken + exactPointsByToken
         return ProtectedCoordinateLookup(
             pointsByToken = pointsByToken,
             singleBeaconPoint = typedPoints.singleUniquePoint(ProtectedCourseObjectType.BEACON),

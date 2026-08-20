@@ -28,8 +28,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.awt.Color
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import javax.imageio.ImageIO
 
 class DesktopCourseGraphicTest {
     @Test
@@ -112,6 +114,34 @@ class DesktopCourseGraphicTest {
         assertTrue(allFractions.all { it in 0.12..0.88 })
         assertTrue(allFractions.any { it == 0.12 })
         assertTrue(allFractions.any { it == 0.88 })
+    }
+
+    @Test
+    fun webPngUsesLargerMarkersAndLabelsThanStandaloneGraphic() {
+        val routeMap = DesktopCourseRouteMap(
+            title = "Foxoring web course",
+            points = listOf(
+                DesktopCourseRouteMapPoint("Fox 1", 0.5, 0.5, DesktopCourseRouteMapPointType.Control)
+            ),
+            routeLabels = listOf("Fox 1")
+        )
+        val directory = Files.createTempDirectory("radio-oracle-web-graphic")
+        val standalonePath = directory.resolve("standalone.png")
+        val webPath = directory.resolve("web.png")
+
+        DesktopCourseGraphic.writePng(standalonePath, routeMap)
+        DesktopCourseGraphic.writeWebPng(webPath, routeMap)
+
+        val standalone = ImageIO.read(standalonePath.toFile())
+        val web = ImageIO.read(webPath.toFile())
+        val markerRgb = DesktopCourseRouteMapStyle.markerAwtColor().rgb
+        fun pixelCount(image: java.awt.image.BufferedImage, rgb: Int): Int =
+            (0 until image.width).sumOf { x ->
+                (0 until image.height).count { y -> image.getRGB(x, y) == rgb }
+            }
+
+        assertTrue(pixelCount(web, markerRgb) > pixelCount(standalone, markerRgb))
+        assertTrue(pixelCount(web, Color.BLACK.rgb) > pixelCount(standalone, Color.BLACK.rgb))
     }
 
     @Test

@@ -64,8 +64,18 @@ private data class GraphicLabelRequest(
     val kind: GraphicLabelKind,
     val normalX: Double = 0.0,
     val normalY: Double = -1.0,
-    val strokeWidth: Double = 0.0
+    val strokeWidth: Double = 0.0,
+    val pointGap: Double = 18.0
 )
+
+private data class ImageRenderStyle(
+    val markerScale: Double,
+    val labelFontSize: Int,
+    val labelFontStyle: Int,
+    val pointLabelGap: Double
+) {
+    val markerRadius: Int = (14.0 * markerScale).toInt()
+}
 
 private enum class GraphicLabelKind {
     Point,
@@ -103,13 +113,24 @@ object DesktopCourseGraphic {
     private const val ImageMapTop = 130
     private const val ImageMapWidth = 1260
     private const val ImageMapHeight = 800
-    private const val PointRadius = 8
     private const val GraphicFractionPadding = 0.06
     private const val WebGraphicFractionPadding = 0.12
     private const val PdfMapLeft = 54.0
     private const val PdfMapBottom = 54.0
     private const val PdfMapWidth = 684.0
     private const val PdfMapHeight = 450.0
+    private val StandardImageStyle = ImageRenderStyle(
+        markerScale = 1.0,
+        labelFontSize = 18,
+        labelFontStyle = Font.PLAIN,
+        pointLabelGap = 18.0
+    )
+    private val WebImageStyle = ImageRenderStyle(
+        markerScale = 1.75,
+        labelFontSize = 30,
+        labelFontStyle = Font.BOLD,
+        pointLabelGap = 32.0
+    )
 
     fun generate(
         path: Path,
@@ -235,21 +256,30 @@ object DesktopCourseGraphic {
 
     internal fun writePng(path: Path, routeMap: DesktopCourseRouteMap) {
         path.parent?.let(Files::createDirectories)
-        ImageIO.write(renderImage(routeMap, "png"), "png", path.toFile())
+        ImageIO.write(renderImage(routeMap, "png", StandardImageStyle), "png", path.toFile())
     }
 
     internal fun writeWebPng(path: Path, routeMap: DesktopCourseRouteMap) {
-        writePng(path, routeMap.withFractionPadding(WebGraphicFractionPadding))
+        path.parent?.let(Files::createDirectories)
+        ImageIO.write(
+            renderImage(routeMap.withFractionPadding(WebGraphicFractionPadding), "png", WebImageStyle),
+            "png",
+            path.toFile()
+        )
     }
 
     internal fun webRouteMap(routeMap: DesktopCourseRouteMap): DesktopCourseRouteMap =
         routeMap.withFractionPadding(WebGraphicFractionPadding)
 
     private fun writeJpg(path: Path, routeMap: DesktopCourseRouteMap) {
-        ImageIO.write(renderImage(routeMap, "jpg"), "jpg", path.toFile())
+        ImageIO.write(renderImage(routeMap, "jpg", StandardImageStyle), "jpg", path.toFile())
     }
 
-    private fun renderImage(routeMap: DesktopCourseRouteMap, format: String): BufferedImage {
+    private fun renderImage(
+        routeMap: DesktopCourseRouteMap,
+        format: String,
+        imageStyle: ImageRenderStyle
+    ): BufferedImage {
         val imageType = if (format == "jpg") BufferedImage.TYPE_INT_RGB else BufferedImage.TYPE_INT_ARGB
         val image = BufferedImage(ImageWidth, ImageHeight, imageType)
         val graphics = image.createGraphics()
@@ -269,8 +299,8 @@ object DesktopCourseGraphic {
             graphics.drawRect(ImageMapLeft, ImageMapTop, ImageMapWidth, ImageMapHeight)
             drawImagePolygons(graphics, routeMap)
             drawImageLineStrings(graphics, routeMap)
-            drawImagePoints(graphics, routeMap)
-            drawImageLabels(graphics, routeMap)
+            drawImagePoints(graphics, routeMap, imageStyle)
+            drawImageLabels(graphics, routeMap, imageStyle)
             drawImageMagneticNorthArrow(graphics)
             drawImageScaleBar(graphics, routeMap)
         } finally {
@@ -305,9 +335,13 @@ object DesktopCourseGraphic {
         }
     }
 
-    private fun drawImagePoints(graphics: java.awt.Graphics2D, routeMap: DesktopCourseRouteMap) {
+    private fun drawImagePoints(
+        graphics: java.awt.Graphics2D,
+        routeMap: DesktopCourseRouteMap,
+        imageStyle: ImageRenderStyle
+    ) {
         routeMap.points.forEach { point ->
-            drawImageMarkerIcon(graphics, point.type, imageX(point), imageY(point))
+            drawImageMarkerIcon(graphics, point.type, imageX(point), imageY(point), imageStyle.markerScale)
         }
     }
 
@@ -315,39 +349,46 @@ object DesktopCourseGraphic {
         graphics: java.awt.Graphics2D,
         type: DesktopCourseRouteMapPointType,
         centerX: Int,
-        centerY: Int
+        centerY: Int,
+        markerScale: Double
     ) {
+        fun scaled(value: Int): Int = (value * markerScale).toInt()
+
         graphics.color = DesktopCourseRouteMapStyle.markerAwtColor()
-        graphics.stroke = BasicStroke(4f)
+        graphics.stroke = BasicStroke((4.0 * markerScale).toFloat())
         when (type) {
             DesktopCourseRouteMapPointType.Start -> {
                 graphics.drawPolygon(
                     Polygon(
-                        intArrayOf(centerX, centerX - 12, centerX + 12),
-                        intArrayOf(centerY - 13, centerY + 11, centerY + 11),
+                        intArrayOf(centerX, centerX - scaled(12), centerX + scaled(12)),
+                        intArrayOf(centerY - scaled(13), centerY + scaled(11), centerY + scaled(11)),
                         3
                     )
                 )
             }
             DesktopCourseRouteMapPointType.Finish -> {
-                graphics.drawOval(centerX - 14, centerY - 14, 28, 28)
-                graphics.drawOval(centerX - 7, centerY - 7, 14, 14)
+                graphics.drawOval(centerX - scaled(14), centerY - scaled(14), scaled(28), scaled(28))
+                graphics.drawOval(centerX - scaled(7), centerY - scaled(7), scaled(14), scaled(14))
             }
             DesktopCourseRouteMapPointType.Waypoint -> {
-                graphics.fillOval(centerX - 10, centerY - 10, 20, 20)
+                graphics.fillOval(centerX - scaled(10), centerY - scaled(10), scaled(20), scaled(20))
             }
             DesktopCourseRouteMapPointType.Control,
             DesktopCourseRouteMapPointType.Beacon,
             DesktopCourseRouteMapPointType.Spectator -> {
-                graphics.drawOval(centerX - 12, centerY - 12, 24, 24)
+                graphics.drawOval(centerX - scaled(12), centerY - scaled(12), scaled(24), scaled(24))
             }
         }
     }
 
-    private fun drawImageLabels(graphics: java.awt.Graphics2D, routeMap: DesktopCourseRouteMap) {
-        graphics.font = Font(Font.SANS_SERIF, Font.PLAIN, 18)
+    private fun drawImageLabels(
+        graphics: java.awt.Graphics2D,
+        routeMap: DesktopCourseRouteMap,
+        imageStyle: ImageRenderStyle
+    ) {
+        graphics.font = Font(Font.SANS_SERIF, imageStyle.labelFontStyle, imageStyle.labelFontSize)
         graphics.color = Color.BLACK
-        imageLabelPlacements(graphics, routeMap).forEach { placement ->
+        imageLabelPlacements(graphics, routeMap, imageStyle).forEach { placement ->
             graphics.drawString(placement.label, placement.x.toInt(), (placement.y + placement.height - 4.0).toInt())
         }
     }
@@ -387,7 +428,8 @@ object DesktopCourseGraphic {
 
     private fun imageLabelPlacements(
         graphics: java.awt.Graphics2D,
-        routeMap: DesktopCourseRouteMap
+        routeMap: DesktopCourseRouteMap,
+        imageStyle: ImageRenderStyle
     ): List<GraphicLabelPlacement> {
         val metrics = graphics.fontMetrics
         val labelHeight = metrics.height.toDouble()
@@ -401,7 +443,8 @@ object DesktopCourseGraphic {
                         width = metrics.stringWidth(point.label).toDouble(),
                         height = labelHeight,
                         priority = 0,
-                        kind = GraphicLabelKind.Point
+                        kind = GraphicLabelKind.Point,
+                        pointGap = imageStyle.pointLabelGap
                     )
                 )
             }
@@ -449,7 +492,7 @@ object DesktopCourseGraphic {
             occupied = listOf(
                 Rectangle(ImageMapLeft + ImageMapWidth - 106, ImageMapTop + 10, 96, 126),
                 Rectangle(ImageMapLeft, ImageHeight - 72, 220, 66)
-            ) + routeMap.imagePointMarkerBounds()
+            ) + routeMap.imagePointMarkerBounds(imageStyle.markerRadius)
         )
     }
 
@@ -668,7 +711,7 @@ object DesktopCourseGraphic {
     }
 
     private fun pointLabelOffsets(request: GraphicLabelRequest): List<Pair<Double, Double>> {
-        val gap = 18.0
+        val gap = request.pointGap
         return listOf(
             -request.width / 2.0 to -request.height - gap,
             -request.width / 2.0 to gap
@@ -1012,9 +1055,14 @@ object DesktopCourseGraphic {
     private fun DesktopCourseRouteMapLine.isBlackStroke(): Boolean =
         strokeColorArgb?.let { (it and 0x00FFFFFFL) == 0L } == true
 
-    private fun DesktopCourseRouteMap.imagePointMarkerBounds(): List<Rectangle> =
+    private fun DesktopCourseRouteMap.imagePointMarkerBounds(markerRadius: Int): List<Rectangle> =
         points.map { point ->
-            Rectangle(imageX(point) - 14, imageY(point) - 14, 28, 28)
+            Rectangle(
+                imageX(point) - markerRadius,
+                imageY(point) - markerRadius,
+                markerRadius * 2,
+                markerRadius * 2
+            )
         }
 
     private fun DesktopCourseRouteMap.pdfPointMarkerBounds(): List<Rectangle> =

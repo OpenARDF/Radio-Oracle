@@ -33,10 +33,10 @@ import kotlin.math.max
 object CourseDiagramSvg {
     private const val WIDTH = 1000.0
     private const val HEIGHT = 720.0
-    private const val LEFT = 64.0
-    private const val TOP = 92.0
-    private const val RIGHT = 64.0
-    private const val BOTTOM = 54.0
+    private const val LEFT = 90.0
+    private const val TOP = 110.0
+    private const val RIGHT = 150.0
+    private const val BOTTOM = 70.0
 
     fun render(title: String, courseInfo: ProtectedCourseInfo): String {
         val geoPoints = buildList {
@@ -118,27 +118,27 @@ object CourseDiagramSvg {
 
     private fun StringBuilder.appendStart(point: ProjectedPoint) {
         append(
-            """<polygon points="${point.x.svg()},${(point.y - 15).svg()} ${(point.x - 14).svg()},${(point.y + 12).svg()} ${(point.x + 14).svg()},${(point.y + 12).svg()}" fill="#fff" stroke="#d946ef" stroke-width="4"/>"""
+            """<polygon points="${point.x.svg()},${(point.y - 24).svg()} ${(point.x - 22).svg()},${(point.y + 20).svg()} ${(point.x + 22).svg()},${(point.y + 20).svg()}" fill="#fff" stroke="#d946ef" stroke-width="6"/>"""
         )
     }
 
     private fun StringBuilder.appendFinish(point: ProjectedPoint) {
-        append("""<circle cx="${point.x.svg()}" cy="${point.y.svg()}" r="14" fill="#fff" stroke="#d946ef" stroke-width="4"/>""")
-        append("""<circle cx="${point.x.svg()}" cy="${point.y.svg()}" r="9" fill="none" stroke="#d946ef" stroke-width="3"/>""")
+        append("""<circle cx="${point.x.svg()}" cy="${point.y.svg()}" r="24" fill="#fff" stroke="#d946ef" stroke-width="6"/>""")
+        append("""<circle cx="${point.x.svg()}" cy="${point.y.svg()}" r="14" fill="none" stroke="#d946ef" stroke-width="5"/>""")
     }
 
     private fun StringBuilder.appendControl(point: ProjectedPoint) {
-        append("""<circle cx="${point.x.svg()}" cy="${point.y.svg()}" r="13" fill="#fff" stroke="#d946ef" stroke-width="4"/>""")
+        append("""<circle class="course-control" cx="${point.x.svg()}" cy="${point.y.svg()}" r="22" fill="#fff" stroke="#d946ef" stroke-width="6"/>""")
     }
 
     private fun StringBuilder.appendWaypoint(point: ProjectedPoint) {
-        append("""<rect x="${(point.x - 8).svg()}" y="${(point.y - 8).svg()}" width="16" height="16" fill="#fff" stroke="#0f766e" stroke-width="3"/>""")
+        append("""<rect x="${(point.x - 14).svg()}" y="${(point.y - 14).svg()}" width="28" height="28" fill="#fff" stroke="#0f766e" stroke-width="5"/>""")
     }
 
     private fun StringBuilder.appendLabel(point: ProjectedPoint, label: String) {
         if (label.isBlank()) return
         append(
-            """<text x="${(point.x + 18).svg()}" y="${(point.y - 10).svg()}" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#581c87" paint-order="stroke" stroke="#fff" stroke-width="4">${xml(label)}</text>"""
+            """<text class="course-label" x="${(point.x + 30).svg()}" y="${(point.y - 16).svg()}" font-family="Arial,sans-serif" font-size="26" font-weight="700" fill="#581c87" paint-order="stroke" stroke="#fff" stroke-width="6">${xml(label)}</text>"""
         )
     }
 

@@ -142,6 +142,9 @@ class PublicResultsSupportTest {
         assertTrue(html.contains(svgPath))
         assertTrue(svg.contains("<polyline"))
         assertTrue(svg.contains("Fox 1"))
+        assertTrue(svg.contains("class=\"course-control\""))
+        assertTrue(svg.contains("class=\"course-label\""))
+        assertTrue(svg.contains("font-size=\"26\""))
         assertTrue("downloads/live-results.json" in rendered.files)
         assertTrue("downloads/iof-result-list.xml" in rendered.files)
     }

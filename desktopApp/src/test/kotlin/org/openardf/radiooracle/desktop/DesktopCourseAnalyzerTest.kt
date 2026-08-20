@@ -2021,6 +2021,70 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun foxoringRouteMapKeepsPairedSlowAndFastFoxLabelsAtDistinctLocations() {
+        val baseProject = sprintProjectFile(includeSpectator = false).let { project ->
+            project.copy(
+                raceData = project.raceData.copy(
+                    race = project.raceData.race.copy(raceType = RaceType.FOXORING),
+                    controls = project.raceData.controls.map { control ->
+                        when (control.id) {
+                            "control-fast-1" -> control.copy(label = "1F", publicLabel = "1F")
+                            "control-fast-2" -> control.copy(label = "2F", publicLabel = "2F")
+                            else -> control
+                        }
+                    }
+                )
+            )
+        }
+        val controlsById = baseProject.raceData.controls.associateBy { it.id }
+        val projectFile = baseProject.copy(
+            raceData = baseProject.raceData.copy(
+                categories = baseProject.raceData.categories.map { categoryData ->
+                    categoryData.copy(
+                        controlPoints = categoryData.controlPoints.map { controlPoint ->
+                            val control = controlsById.getValue(controlPoint.controlId)
+                            controlPoint.copy(siCode = control.siCode, type = control.type)
+                        }
+                    )
+                }
+            )
+        )
+        val baseInfo = sprintProtectedInfo(includeSpectator = false)
+        val protectedInfo = baseInfo.copy(
+            idealOrder = "1 1F 2 2F Beacon",
+            controlPoints = baseInfo.controlPoints.map { control ->
+                when (control.controlId) {
+                    "control-slow-1", "control-slow-2" -> control.copy(controlId = "stale-${control.controlId}")
+                    "control-fast-1" -> control.copy(label = "1F")
+                    "control-fast-2" -> control.copy(label = "2F")
+                    else -> control
+                }
+            },
+            courseObjects = baseInfo.courseObjects.map { courseObject ->
+                when (courseObject.id) {
+                    "control-slow-1", "control-slow-2" -> courseObject.copy(id = "stale-${courseObject.id}")
+                    "control-fast-1" -> courseObject.copy(label = "1F")
+                    "control-fast-2" -> courseObject.copy(label = "2F")
+                    else -> courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        val routeMapLabels = requireNotNull(summary.providedRouteSection?.routeMap).points
+            .filter { it.type == DesktopCourseRouteMapPointType.Control }
+            .map { it.label }
+        assertEquals(setOf("1", "1F", "2", "2F"), routeMapLabels.toSet())
+        assertEquals(4, routeMapLabels.size)
+    }
+
+    @Test
     fun calculatedRouteUsesControlsFromStoredRouteInsteadOfBroaderCategoryAssignments() {
         val baseProtectedInfo = protectedInfo(foxCount = 5)
         val routeControlIds = setOf("control-1", "control-3", "control-5", "control-beacon")
