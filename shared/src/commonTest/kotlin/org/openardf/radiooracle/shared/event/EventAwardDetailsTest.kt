@@ -150,8 +150,8 @@ class EventAwardDetailsTest {
             )
         )
 
-        assertEquals(listOf("Gold", "Gold", "Silver"), awards.categories.single().usaAwards.map { it.medal })
-        assertEquals(listOf(1, 1, 2), awards.categories.single().usaAwards.map { it.awardPlace })
+        assertEquals(listOf("Gold", "Gold", "Bronze"), awards.categories.single().usaAwards.map { it.medal })
+        assertEquals(listOf(1, 1, 3), awards.categories.single().usaAwards.map { it.awardPlace })
     }
 
     @Test

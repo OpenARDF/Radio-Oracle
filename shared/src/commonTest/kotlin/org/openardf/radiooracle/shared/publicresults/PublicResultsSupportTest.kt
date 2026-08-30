@@ -45,9 +45,11 @@ import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -93,7 +95,7 @@ class PublicResultsSupportTest {
     }
 
     @Test
-    fun rendererLabelsChampionshipComingSoonAsUnofficial() {
+    fun rendererLabelsChampionshipComingSoonAsPreliminary() {
         val rendered = PublicResultsSiteRenderer.renderRace(
             request = PublicResultsRaceRenderRequest(
                 projectFile = EventProjectFile(raceData = raceData(RaceLevel.NATIONAL, false))
@@ -103,13 +105,13 @@ class PublicResultsSupportTest {
         )
         val html = rendered.files.getValue("index.html").decodeToString()
 
-        assertTrue(html.contains("Unofficial Results Coming Soon"))
-        assertTrue(html.contains("All published unofficial results"))
+        assertTrue(html.contains("Preliminary Results Coming Soon"))
+        assertTrue(html.contains("All published results"))
         assertEquals(0, rendered.resultCount)
     }
 
     @Test
-    fun rendererOmitsUnofficialLanguageForPracticeComingSoon() {
+    fun rendererDefaultsPracticeComingSoonToPreliminary() {
         val rendered = PublicResultsSiteRenderer.renderRace(
             request = PublicResultsRaceRenderRequest(
                 projectFile = EventProjectFile(raceData = raceData(RaceLevel.PRACTICE, false))
@@ -119,7 +121,7 @@ class PublicResultsSupportTest {
         )
         val html = rendered.files.getValue("index.html").decodeToString()
 
-        assertTrue(html.contains(">Results Coming Soon<"))
+        assertTrue(html.contains(">Preliminary Results Coming Soon<"))
         assertFalse(html.contains("Unofficial"))
     }
 
@@ -147,10 +149,122 @@ class PublicResultsSupportTest {
         assertTrue(svg.contains("font-size=\"26\""))
         assertTrue("downloads/live-results.json" in rendered.files)
         assertTrue("downloads/iof-result-list.xml" in rendered.files)
+        assertTrue(
+            rendered.files.getValue("downloads/iof-result-list.xml").decodeToString()
+                .contains("status=\"Snapshot\"")
+        )
         assertTrue("downloads/split-results.csv" in rendered.files)
         assertTrue("downloads/split-results.pdf" in rendered.files)
         assertTrue(rendered.files.getValue("downloads/split-results.csv").decodeToString().contains("Leg Place"))
         assertTrue(rendered.files.getValue("downloads/split-results.pdf").decodeToString().startsWith("%PDF-1.4"))
+    }
+
+    @Test
+    fun officialRendererLabelsAndExportsCompleteResults() {
+        val rendered = PublicResultsSiteRenderer.renderRace(
+            request = PublicResultsRaceRenderRequest(
+                projectFile = EventProjectFile(raceData = raceData(RaceLevel.NATIONAL, true)),
+                publicationStatus = PublicResultsPublicationStatus.OFFICIAL
+            ),
+            generatedAtIso = "2026-07-27T12:00:00Z",
+            appVersion = "test"
+        )
+
+        val html = rendered.files.getValue("index.html").decodeToString()
+        val printable = rendered.files.getValue("downloads/printable-results.html").decodeToString()
+        val iof = rendered.files.getValue("downloads/iof-result-list.xml").decodeToString()
+        assertTrue(html.contains("Official Results"))
+        assertTrue(printable.contains("<th>Bib #</th>"))
+        assertTrue(printable.contains("<td>101</td>"))
+        assertTrue(iof.contains("status=\"Complete\""))
+        assertTrue(iof.contains("<BibNumber>101</BibNumber>"))
+        assertFalse(printable.contains("Preliminary"))
+    }
+
+    @Test
+    fun officialRendererRefusesCompetitorsWithoutResults() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            PublicResultsSiteRenderer.renderRace(
+                request = PublicResultsRaceRenderRequest(
+                    projectFile = EventProjectFile(raceData = raceData(RaceLevel.NATIONAL, false)),
+                    publicationStatus = PublicResultsPublicationStatus.OFFICIAL
+                ),
+                generatedAtIso = "2026-07-27T12:00:00Z",
+                appVersion = "test"
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("mark non-starters DNS"))
+        assertTrue(error.message.orEmpty().contains("publish Preliminary Results instead"))
+    }
+
+    @Test
+    fun officialReviewReportsBibResultAndReadoutProblemsTogether() {
+        val base = raceData(RaceLevel.NATIONAL, true)
+        val firstData = base.competitorData.single()
+        val firstCompetitor = firstData.competitorCategory.competitor
+        val secondCompetitor = firstCompetitor.copy(
+            id = "competitor-2",
+            firstName = "Bob",
+            lastName = "Second"
+        )
+        val secondReadout = requireNotNull(firstData.readoutData).copy(
+            result = firstData.readoutData.result.copy(
+                id = "result-2",
+                competitorId = secondCompetitor.id,
+                resultStatus = ResultStatus.ERROR
+            )
+        )
+        val review = PublicResultsPublicationRules.review(
+            raceData = base.copy(
+                competitorData = listOf(
+                    firstData,
+                    EventCompetitorData(
+                        EventCompetitorCategory(secondCompetitor, firstData.competitorCategory.category),
+                        secondReadout
+                    )
+                ),
+                unmatchedReadoutData = listOf(
+                    requireNotNull(firstData.readoutData).copy(
+                        result = firstData.readoutData.result.copy(
+                            id = "unmatched",
+                            competitorId = null
+                        )
+                    )
+                )
+            ),
+            status = PublicResultsPublicationStatus.OFFICIAL
+        )
+
+        assertFalse(review.isReady)
+        assertTrue(review.issues.any { it.contains("duplicate bib numbers") })
+        assertTrue(review.issues.any { it.contains("Error result status") })
+        assertTrue(review.issues.any { it.contains("remain unmatched") })
+    }
+
+    @Test
+    fun officialReviewRequiresBibWhilePreliminaryRemainsAvailable() {
+        val base = raceData(RaceLevel.NATIONAL, true)
+        val competitorData = base.competitorData.single()
+        val withoutBib = competitorData.copy(
+            competitorCategory = competitorData.competitorCategory.copy(
+                competitor = competitorData.competitorCategory.competitor.copy(bibNumber = "")
+            )
+        )
+        val raceData = base.copy(competitorData = listOf(withoutBib))
+
+        assertTrue(
+            PublicResultsPublicationRules.review(
+                raceData,
+                PublicResultsPublicationStatus.OFFICIAL
+            ).issues.any { it.contains("no bib number") }
+        )
+        assertTrue(
+            PublicResultsPublicationRules.review(
+                raceData,
+                PublicResultsPublicationStatus.PRELIMINARY
+            ).isReady
+        )
     }
 
     @Test
@@ -222,7 +336,8 @@ class PublicResultsSupportTest {
             siNumber = 123456,
             siRent = false,
             startNumber = 1,
-            drawnStartTimeSeconds = null
+            drawnStartTimeSeconds = null,
+            bibNumber = "101"
         )
         return EventRaceData(
             race = race,

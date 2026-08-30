@@ -30,6 +30,19 @@
             android:layout_marginTop="12dp"
             android:textColor="@color/black" />
 
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/cloudflare_official_results"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/cloudflare_results_official" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/cloudflare_results_official_hint"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption" />
+
         <LinearLayout
             android:id="@+id/cloudflare_diagram_controls"
             android:layout_width="match_parent"

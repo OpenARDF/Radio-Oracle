@@ -47,7 +47,7 @@ object EventResultPlacement {
                 ) {
                     place
                 } else {
-                    place + 1
+                    index + 1
                 }
                 competitorData.withResultPlace(place)
             }

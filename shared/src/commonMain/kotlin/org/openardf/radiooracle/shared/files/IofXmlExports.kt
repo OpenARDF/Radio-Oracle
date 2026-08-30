@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.shared.files
 
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
@@ -37,12 +38,14 @@ import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.results.IofResultStatus
+import org.openardf.radiooracle.shared.publicresults.PublicResultsPublicationRules
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -130,7 +133,12 @@ object IofXmlExports {
         }
     }
 
-    fun resultList(raceData: EventRaceData, creator: String = "Radio-Oracle Desktop"): String {
+    fun resultList(
+        raceData: EventRaceData,
+        creator: String = "Radio-Oracle Desktop",
+        publicationStatus: PublicResultsPublicationStatus? = null
+    ): String {
+        publicationStatus?.let { PublicResultsPublicationRules.requireReady(raceData, it) }
         val raceStart = parseRaceStart(raceData.race.startDateTimeIso)
         val placedByCategory = raceData.competitorData
             .groupBy { it.resultCategoryId() }
@@ -138,13 +146,23 @@ object IofXmlExports {
         return buildString {
             append("""<?xml version="1.0" encoding="UTF-8"?>""")
             append('\n')
-            append("""<ResultList xmlns="$IOF_NAMESPACE" iofVersion="3.0" creator="${creator.xmlEscaped()}" status="Complete">""")
+            val resultListStatus = if (publicationStatus != PublicResultsPublicationStatus.PRELIMINARY) {
+                "Complete"
+            } else {
+                "Snapshot"
+            }
+            append("""<ResultList xmlns="$IOF_NAMESPACE" iofVersion="3.0" creator="${creator.xmlEscaped()}" status="$resultListStatus">""")
             append('\n')
             appendEvent(raceData, raceStart)
             raceData.competitionCategories()
                 .sortedWith(compareBy({ it.category.order }, { it.category.name }))
                 .forEach { categoryData ->
-                    appendClassResult(categoryData, placedByCategory[categoryData.category.id] ?: emptyList(), raceStart)
+                    appendClassResult(
+                        categoryData = categoryData,
+                        competitorData = placedByCategory[categoryData.category.id] ?: emptyList(),
+                        raceStart = raceStart,
+                        raceData = raceData
+                    )
                 }
             append("</ResultList>\n")
         }
@@ -461,21 +479,35 @@ object IofXmlExports {
     private fun StringBuilder.appendClassResult(
         categoryData: EventCategoryData,
         competitorData: List<EventCompetitorData>,
-        raceStart: LocalDateTime
+        raceStart: LocalDateTime,
+        raceData: EventRaceData
     ) {
         append("  <ClassResult>\n")
         append("""    <Class sex="${if (categoryData.category.isMan) "M" else "F"}">""")
         append('\n')
         appendTextElement("Name", categoryData.category.name, indent = "      ")
         append("    </Class>\n")
-        competitorData.forEach { appendPersonResult(it, raceStart) }
+        val assignedControlCodes = categoryData.toIofCourse(
+            raceData = raceData,
+            controlsById = raceData.controls.associateBy { it.id },
+            protectedCourseInfo = null
+        ).controls.map { it.code }
+        competitorData.forEach { appendPersonResult(it, raceStart, assignedControlCodes) }
         append("  </ClassResult>\n")
     }
 
-    private fun StringBuilder.appendPersonResult(competitorData: EventCompetitorData, raceStart: LocalDateTime) {
+    private fun StringBuilder.appendPersonResult(
+        competitorData: EventCompetitorData,
+        raceStart: LocalDateTime,
+        assignedControlCodes: List<String>
+    ) {
         append("    <PersonResult>\n")
-        appendPersonAndOrganisation(competitorData.competitorCategory.competitor, indent = "      ")
+        val competitor = competitorData.competitorCategory.competitor
+        appendPersonAndOrganisation(competitor, indent = "      ")
         append("      <Result>\n")
+        competitor.bibNumber.takeIf { it.isIofBibNumber() }?.let { bibNumber ->
+            appendTextElement("BibNumber", bibNumber, indent = "        ")
+        }
         val readoutData = competitorData.readoutData
         if (readoutData == null) {
             appendTextElement("Status", "Active", indent = "        ")
@@ -493,21 +525,47 @@ object IofXmlExports {
             }
             appendTextElement("Status", IofResultStatus.fromResultStatus(result.resultStatus), indent = "        ")
         }
+        appendResultSplitTimes(readoutData, assignedControlCodes)
+        (readoutData?.result?.siNumber?.takeIf { it > 0 } ?: competitor.siNumber)?.let { siNumber ->
+            appendTextElement("ControlCard", siNumber.toString(), indent = "        ")
+        }
+        append("      </Result>\n")
+        append("    </PersonResult>\n")
+    }
+
+    private fun StringBuilder.appendResultSplitTimes(
+        readoutData: org.openardf.radiooracle.shared.event.EventReadoutData?,
+        assignedControlCodes: List<String>
+    ) {
+        val assigned = assignedControlCodes.toSet()
+        val successfullyVisited = mutableSetOf<String>()
         var cumulativeSplitSeconds = 0L
         readoutData?.punches
             ?.filter { it.punch.punchType == SIRecordType.CONTROL }
             ?.forEach { aliasPunch ->
                 cumulativeSplitSeconds += aliasPunch.punch.splitSeconds
-                append("        <SplitTime>\n")
-                appendTextElement("ControlCode", aliasPunch.punch.siCode.toString(), indent = "          ")
+                val controlCode = aliasPunch.punch.siCode.toString()
+                val isFirstValidAssignedPunch =
+                    assigned.isEmpty() ||
+                        (controlCode in assigned &&
+                            aliasPunch.punch.punchStatus == PunchStatus.VALID &&
+                            successfullyVisited.add(controlCode))
+                append("        <SplitTime")
+                if (!isFirstValidAssignedPunch) {
+                    append(" status=\"Additional\"")
+                }
+                append(">\n")
+                appendTextElement("ControlCode", controlCode, indent = "          ")
                 appendTextElement("Time", cumulativeSplitSeconds.toString(), indent = "          ")
                 append("        </SplitTime>\n")
             }
-        (readoutData?.result?.siNumber?.takeIf { it > 0 } ?: competitorData.competitorCategory.competitor.siNumber)?.let { siNumber ->
-            appendTextElement("ControlCard", siNumber.toString(), indent = "        ")
-        }
-        append("      </Result>\n")
-        append("    </PersonResult>\n")
+        assignedControlCodes
+            .filterNot(successfullyVisited::contains)
+            .forEach { controlCode ->
+                append("        <SplitTime status=\"Missing\">\n")
+                appendTextElement("ControlCode", controlCode, indent = "          ")
+                append("        </SplitTime>\n")
+            }
     }
 
     private fun StringBuilder.appendPersonAndOrganisation(

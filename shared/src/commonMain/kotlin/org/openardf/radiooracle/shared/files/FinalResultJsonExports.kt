@@ -48,9 +48,11 @@ import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.event.resultPublicationNotice
+import org.openardf.radiooracle.shared.publicresults.PublicResultsPublicationRules
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Android-shaped final-result JSON export containing categories, aliases, and competitors. */
@@ -65,19 +67,28 @@ object FinalResultJsonExports {
     fun results(
         raceData: EventRaceData,
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        publicationStatus: PublicResultsPublicationStatus? = null
     ): String =
-        json.encodeToString(resultDocument(raceData, protectedCourseInfoByCategoryId, awardDisplayMode))
+        json.encodeToString(
+            resultDocument(raceData, protectedCourseInfoByCategoryId, awardDisplayMode, publicationStatus)
+        )
 
     fun resultDocument(
         raceData: EventRaceData,
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        publicationStatus: PublicResultsPublicationStatus? = null
     ): FinalResultsJson {
+        publicationStatus?.let { PublicResultsPublicationRules.requireReady(raceData, it) }
         val controlsById = raceData.controls.associateBy { it.id }
         val awards = EventAwardDetails.from(raceData, awardDisplayMode)
         return FinalResultsJson(
-            publicationNotice = raceData.race.resultPublicationNotice(),
+            publicationNotice = if (publicationStatus == null) {
+                raceData.race.resultPublicationNotice()
+            } else {
+                PublicResultsPublicationRules.publicationNotice(publicationStatus)
+            },
             categories = raceData.competitionCategories()
                 .map { it.toFinalCategory(controlsById, protectedCourseInfoByCategoryId) },
             aliases = androidAliases(raceData),

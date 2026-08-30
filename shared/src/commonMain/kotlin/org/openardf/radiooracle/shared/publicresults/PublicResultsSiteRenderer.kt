@@ -31,7 +31,7 @@ import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
-import org.openardf.radiooracle.shared.event.supportsChampionshipAwards
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.files.FinalResultJsonExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
@@ -43,7 +43,8 @@ import java.nio.charset.StandardCharsets
 data class PublicResultsRaceRenderRequest(
     val projectFile: EventProjectFile,
     val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
-    val awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+    val awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+    val publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY
 )
 
 data class RenderedPublicResultsRace(
@@ -52,6 +53,7 @@ data class RenderedPublicResultsRace(
     val start: String,
     val resultCount: Int,
     val unofficialResults: Boolean,
+    val publicationStatus: PublicResultsPublicationStatus,
     val publicationId: String,
     val files: Map<String, ByteArray>,
     val courseGraphics: List<String>
@@ -64,6 +66,7 @@ data class RenderedPublicResultsRace(
             generatedAt = generatedAtIso,
             resultCount = resultCount,
             unofficialResults = unofficialResults,
+            publicationStatus = publicationStatus,
             publicationId = publicationId
         )
 }
@@ -74,6 +77,7 @@ data class RenderedPublicResultsSeries(
     val start: String,
     val resultCount: Int,
     val unofficialResults: Boolean,
+    val publicationStatus: PublicResultsPublicationStatus,
     val publicationId: String,
     val files: Map<String, ByteArray>,
     val races: List<RenderedPublicResultsRace>
@@ -86,6 +90,7 @@ data class RenderedPublicResultsSeries(
             generatedAt = generatedAtIso,
             resultCount = resultCount,
             unofficialResults = unofficialResults,
+            publicationStatus = publicationStatus,
             publicationId = publicationId
         )
 }
@@ -103,36 +108,47 @@ object PublicResultsSiteRenderer {
         appVersion: String
     ): RenderedPublicResultsRace {
         val raceData = request.projectFile.raceData
+        PublicResultsPublicationRules.requireReady(raceData, request.publicationStatus)
         val path = PublicResultsSiteCatalog.eventPath(
             eventName = raceData.race.name,
             startDateTimeIso = raceData.race.startDateTimeIso,
             generatedDate = generatedAtIso
         )
         val results = EventResultDetails.from(raceData)
-        val unofficial = raceData.race.supportsChampionshipAwards()
+        val unofficial = request.publicationStatus != PublicResultsPublicationStatus.OFFICIAL
         val graphics = courseGraphics(request, results)
         val finalJson = FinalResultJsonExports.results(
             raceData = raceData,
             protectedCourseInfoByCategoryId =
                 request.protectedCourseInfoByCategoryId.takeIf { it.isNotEmpty() },
-            awardDisplayMode = request.awardDisplayMode
+            awardDisplayMode = request.awardDisplayMode,
+            publicationStatus = request.publicationStatus
         )
         val printableHtml = HtmlResultExports.results(
             raceData = raceData,
             appVersion = appVersion,
             protectedCourseInfoByCategoryId =
                 request.protectedCourseInfoByCategoryId.takeIf { it.isNotEmpty() },
-            awardDisplayMode = request.awardDisplayMode
+            awardDisplayMode = request.awardDisplayMode,
+            publicationStatus = request.publicationStatus
         )
-        val splitResultsCsv = SplitResultExports.csv(raceData, request.awardDisplayMode)
-        val splitResultsPdf = SplitResultPdfExports.pdf(raceData, request.awardDisplayMode)
+        val splitResultsCsv = SplitResultExports.csv(
+            raceData,
+            request.awardDisplayMode,
+            request.publicationStatus
+        )
+        val splitResultsPdf = SplitResultPdfExports.pdf(
+            raceData,
+            request.awardDisplayMode,
+            request.publicationStatus
+        )
         val pageHtml = eventPageHtml(
             printableHtml = printableHtml,
             eventName = raceData.race.name,
             start = raceData.race.startDateTimeIso,
             generatedAtIso = generatedAtIso,
             resultCount = results.size,
-            unofficialResults = unofficial,
+            publicationStatus = request.publicationStatus,
             courseGraphics = graphics
         )
         val summary = PublicResultsEventSummary(
@@ -142,6 +158,7 @@ object PublicResultsSiteRenderer {
             generatedAt = generatedAtIso,
             resultCount = results.size,
             unofficialResults = unofficial,
+            publicationStatus = request.publicationStatus,
             publicationId = "race:${raceData.race.id}",
             courseGraphics = graphics.map { "course-graphics/${it.fileName}" }
         )
@@ -154,7 +171,10 @@ object PublicResultsSiteRenderer {
             }
             if (results.isNotEmpty()) {
                 val liveJson = LiveResultJsonExports.results(raceData)
-                val iofXml = IofXmlExports.resultList(raceData)
+                val iofXml = IofXmlExports.resultList(
+                    raceData,
+                    publicationStatus = request.publicationStatus
+                )
                 putText("data/final-results.json", finalJson)
                 putText("data/live-results.json", liveJson)
                 putText("downloads/final-results.json", finalJson)
@@ -171,6 +191,7 @@ object PublicResultsSiteRenderer {
             start = raceData.race.startDateTimeIso,
             resultCount = results.size,
             unofficialResults = unofficial,
+            publicationStatus = request.publicationStatus,
             publicationId = "race:${raceData.race.id}",
             files = files,
             courseGraphics = graphics.map { "course-graphics/${it.fileName}" }
@@ -191,17 +212,26 @@ object PublicResultsSiteRenderer {
             firstStartDateTimeIso = races.first().start,
             generatedDate = generatedAtIso
         )
-        val unofficial = races.any(RenderedPublicResultsRace::unofficialResults)
+        val publicationStatus = if (races.all {
+                it.publicationStatus == PublicResultsPublicationStatus.OFFICIAL
+            }) {
+            PublicResultsPublicationStatus.OFFICIAL
+        } else {
+            PublicResultsPublicationStatus.PRELIMINARY
+        }
+        val unofficial = publicationStatus != PublicResultsPublicationStatus.OFFICIAL
         val document = PublicResultsSeriesDocument(
             seriesName = seriesName,
             generatedAt = generatedAtIso,
             unofficialResults = unofficial,
+            publicationStatus = publicationStatus,
             races = races.map { race ->
                 PublicResultsSeriesRace(
                     name = race.name,
                     start = race.start,
                     resultCount = race.resultCount,
                     unofficialResults = race.unofficialResults,
+                    publicationStatus = race.publicationStatus,
                     dataUrl = "../${race.path}/data/public-results.json",
                     downloadsUrl = "../${race.path}/downloads/",
                     eventUrl = "../${race.path}/",
@@ -210,7 +240,7 @@ object PublicResultsSiteRenderer {
             }
         )
         val files = mapOf(
-            "index.html" to seriesPageHtml(seriesName, generatedAtIso, unofficial, races)
+            "index.html" to seriesPageHtml(seriesName, generatedAtIso, publicationStatus, races)
                 .toByteArray(StandardCharsets.UTF_8),
             "data/series-results.json" to (json.encodeToString(document) + "\n")
                 .toByteArray(StandardCharsets.UTF_8)
@@ -221,6 +251,7 @@ object PublicResultsSiteRenderer {
             start = races.minOf(RenderedPublicResultsRace::start),
             resultCount = races.sumOf(RenderedPublicResultsRace::resultCount),
             unofficialResults = unofficial,
+            publicationStatus = publicationStatus,
             publicationId = "series:$seriesId",
             files = files,
             races = races
@@ -269,22 +300,14 @@ object PublicResultsSiteRenderer {
         start: String,
         generatedAtIso: String,
         resultCount: Int,
-        unofficialResults: Boolean,
+        publicationStatus: PublicResultsPublicationStatus,
         courseGraphics: List<RenderedCourseGraphic>
     ): String {
-        val resultsLabel = PublicResultsSiteCatalog.publicResultsLabel(unofficialResults)
-        val parentLabel = if (unofficialResults) {
-            "All published unofficial results"
-        } else {
-            "All published results"
-        }
+        val resultsLabel = publicationStatus.displayLabel
+        val parentLabel = "All published results"
         if (resultCount == 0) {
-            val comingSoon = PublicResultsSiteCatalog.comingSoonResultsLabel(unofficialResults)
-            val description = if (unofficialResults) {
-                "This page is ready for the event. Return after the race begins for unofficial results."
-            } else {
-                "This page is ready for the event. Return after the race begins for results."
-            }
+            val comingSoon = "$resultsLabel Coming Soon"
+            val description = "This page is ready for the event. Return after the race begins for results."
             return """
             <!doctype html>
             <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -340,20 +363,16 @@ object PublicResultsSiteRenderer {
     private fun seriesPageHtml(
         seriesName: String,
         generatedAtIso: String,
-        unofficialResults: Boolean,
+        publicationStatus: PublicResultsPublicationStatus,
         races: List<RenderedPublicResultsRace>
     ): String {
-        val resultsLabel = PublicResultsSiteCatalog.publicResultsLabel(unofficialResults)
-        val parentLabel = if (unofficialResults) {
-            "All published unofficial results"
-        } else {
-            "All published results"
-        }
+        val resultsLabel = publicationStatus.displayLabel
+        val parentLabel = "All published results"
         val raceCards = races.joinToString("\n") { race ->
             val status = if (race.resultCount == 0) {
-                PublicResultsSiteCatalog.comingSoonResultsLabel(race.unofficialResults)
+                "${race.publicationStatus.displayLabel} Coming Soon"
             } else {
-                "${race.resultCount} ${PublicResultsSiteCatalog.publicResultsLabel(race.unofficialResults).lowercase()}"
+                "${race.resultCount} ${race.publicationStatus.displayLabel.lowercase()}"
             }
             val diagrams = race.courseGraphics.joinToString("\n") { graphic ->
                 """<a class="diagram-link" href="../${html(race.path)}/$graphic"><img src="../${html(race.path)}/$graphic" alt="${html(race.name)} course diagram"></a>"""
@@ -376,7 +395,7 @@ object PublicResultsSiteRenderer {
           <p class="meta">Updated ${html(generatedAtIso)}</p>
           <a href="../">$parentLabel</a>
           <section class="series-races">$raceCards</section>
-          <p class="generated">${if (unofficialResults) "Unofficial results" else "Results"} generated by Radio-Oracle.</p>
+          <p class="generated">${publicationStatus.displayLabel} generated by Radio-Oracle.</p>
         </main></body></html>
         """.trimIndent() + "\n"
     }
@@ -427,6 +446,7 @@ private data class PublicResultsEventSummary(
     val generatedAt: String,
     val resultCount: Int,
     val unofficialResults: Boolean,
+    val publicationStatus: PublicResultsPublicationStatus,
     val publicationId: String,
     val courseGraphics: List<String>
 )
@@ -436,6 +456,7 @@ private data class PublicResultsSeriesDocument(
     val seriesName: String,
     val generatedAt: String,
     val unofficialResults: Boolean,
+    val publicationStatus: PublicResultsPublicationStatus,
     val races: List<PublicResultsSeriesRace>
 )
 
@@ -445,6 +466,7 @@ private data class PublicResultsSeriesRace(
     val start: String,
     val resultCount: Int,
     val unofficialResults: Boolean,
+    val publicationStatus: PublicResultsPublicationStatus,
     val dataUrl: String,
     val downloadsUrl: String,
     val eventUrl: String,

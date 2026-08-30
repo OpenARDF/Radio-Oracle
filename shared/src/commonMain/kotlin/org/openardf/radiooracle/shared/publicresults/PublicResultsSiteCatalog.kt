@@ -27,6 +27,7 @@ package org.openardf.radiooracle.shared.publicresults
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 
 @Serializable
 data class PublishedPublicResultsEntry(
@@ -36,8 +37,12 @@ data class PublishedPublicResultsEntry(
     val generatedAt: String,
     val resultCount: Int,
     val unofficialResults: Boolean,
+    val publicationStatus: PublicResultsPublicationStatus? = null,
     val publicationId: String? = null
-)
+) {
+    fun effectivePublicationLabel(): String =
+        publicationStatus?.displayLabel ?: PublicResultsSiteCatalog.publicResultsLabel(unofficialResults)
+}
 
 @Serializable
 private data class PublishedPublicResultsCatalog(
@@ -103,9 +108,9 @@ object PublicResultsSiteCatalog {
         } else {
             entries.joinToString(separator = "\n") { event ->
                 val publicationSummary = if (event.resultCount == 0) {
-                    "${comingSoonResultsLabel(event.unofficialResults)} | Scheduled ${html(event.start)}"
+                    "${event.effectivePublicationLabel()} Coming Soon | Scheduled ${html(event.start)}"
                 } else {
-                    "${event.resultCount} ${publicResultsLabel(event.unofficialResults).lowercase()} | " +
+                    "${event.resultCount} ${event.effectivePublicationLabel().lowercase()} | " +
                         "Published ${html(event.generatedAt)}"
                 }
                 """
@@ -164,7 +169,11 @@ object PublicResultsSiteCatalog {
     }
 
     fun publicResultsLabel(unofficialResults: Boolean): String =
-        if (unofficialResults) "Unofficial Results" else "Results"
+        if (unofficialResults) {
+            "Unofficial Results"
+        } else {
+            "Results"
+        }
 
     fun comingSoonResultsLabel(unofficialResults: Boolean): String =
         "${publicResultsLabel(unofficialResults)} Coming Soon"

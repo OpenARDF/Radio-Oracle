@@ -47,6 +47,7 @@ import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -268,6 +269,17 @@ class IofXmlExportsTest {
         assertTrue(xml.contains("<Time>1500</Time>"))
         assertTrue(xml.contains("<Family>NoTime</Family>"))
         assertTrue(xml.contains("<Status>Active</Status>"))
+    }
+
+    @Test
+    fun officialIofResultListIsCompleteAndIncludesBibNumber() {
+        val xml = IofXmlExports.resultList(
+            raceData(includeReadout = true),
+            publicationStatus = PublicResultsPublicationStatus.OFFICIAL
+        )
+
+        assertTrue(xml.contains("status=\"Complete\""))
+        assertTrue(xml.contains("<BibNumber>1007</BibNumber>"))
     }
 
     @Test

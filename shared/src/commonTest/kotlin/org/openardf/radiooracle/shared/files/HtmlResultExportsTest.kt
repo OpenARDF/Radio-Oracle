@@ -43,7 +43,6 @@ import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
 import kotlin.test.Test
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class HtmlResultExportsTest {
@@ -56,21 +55,25 @@ class HtmlResultExportsTest {
         assertTrue(html.contains("<h1>HTML &amp; Result Race</h1>"))
         assertTrue(html.contains("<h2>M21</h2>"))
         assertTrue(html.contains("<th>Place</th>"))
-        assertTrue(html.contains("<td class=\"num\">1.</td>"))
+        assertTrue(html.contains("<td class=\"num\">1</td>"))
         assertTrue(html.contains("<td>RUNNER Alice</td>"))
         assertTrue(html.contains("<td>OK &amp; Test</td>"))
         assertTrue(html.contains("<td class=\"num\">2</td>"))
         assertTrue(html.contains("<td>00:45:00</td>"))
-        assertTrue(html.contains("31 - 00:10:00 32 - 00:25:00 Finish - 00:10:00"))
+        assertTrue(html.contains("<th>Leg place</th>"))
+        assertTrue(html.contains("<td>31</td>"))
+        assertTrue(html.contains("<td>00:10:00</td>"))
+        assertTrue(html.contains("<td>32</td>"))
+        assertTrue(html.contains("<td>00:25:00</td>"))
+        assertTrue(html.contains("<td>Finish</td>"))
         assertTrue(html.contains("Generated with Radio-Oracle 1.0"))
     }
 
     @Test
-    fun usesShortStatusInsteadOfPlaceForNonOkResults() {
+    fun showsStatusForNonOkResults() {
         val html = HtmlResultExports.results(raceData(resultStatus = ResultStatus.MISPUNCHED))
 
-        assertTrue(html.contains("<td class=\"num\">MP</td>"))
-        assertFalse(html.contains("<td class=\"num\">1.</td>"))
+        assertTrue(html.contains("<td>Mispunched</td>"))
     }
 
     @Test
@@ -83,7 +86,8 @@ class HtmlResultExportsTest {
             )
         )
 
-        assertTrue(html.contains("F1 - 00:10:00 32 - 00:25:00 Finish - 00:10:00"))
+        assertTrue(html.contains("<td>F1</td>"))
+        assertTrue(html.contains("<td>00:10:00</td>"))
     }
 
     private fun raceData(

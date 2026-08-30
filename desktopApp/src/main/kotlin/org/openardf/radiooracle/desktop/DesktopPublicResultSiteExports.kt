@@ -31,7 +31,7 @@ import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
-import org.openardf.radiooracle.shared.event.supportsChampionshipAwards
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.files.FinalResultJsonExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
@@ -41,6 +41,7 @@ import org.openardf.radiooracle.shared.files.SplitResultLeg
 import org.openardf.radiooracle.shared.files.SplitResultPdfExports
 import org.openardf.radiooracle.shared.publicresults.PublishedPublicResultsEntry
 import org.openardf.radiooracle.shared.publicresults.PublicResultsSiteCatalog
+import org.openardf.radiooracle.shared.publicresults.PublicResultsPublicationRules
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -74,7 +75,8 @@ data class DesktopPublicResultSiteExportPaths(
 data class DesktopPublicResultSeriesRace(
     val projectFile: EventProjectFile,
     val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
-    val awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+    val awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+    val publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY
 )
 
 internal data class DesktopPublicResultCourseGraphic(
@@ -104,7 +106,8 @@ object DesktopPublicResultSiteExports {
     private data class SeriesRaceExport(
         val paths: DesktopPublicResultSiteExportPaths,
         val projectFile: EventProjectFile,
-        val courseGraphicPaths: List<Path>
+        val courseGraphicPaths: List<Path>,
+        val publicationStatus: PublicResultsPublicationStatus
     )
 
     fun export(
@@ -113,8 +116,10 @@ object DesktopPublicResultSiteExports {
         appVersion: String = "Desktop",
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY,
         generatedAt: Instant = Instant.now()
     ): DesktopPublicResultSiteExportPaths {
+        PublicResultsPublicationRules.requireReady(projectFile.raceData, publicationStatus)
         val eventPath = eventPath(projectFile, generatedAt)
         val eventDirectory = directory.resolve(eventPath)
         val rootDataDirectory = directory.resolve("data")
@@ -136,27 +141,39 @@ object DesktopPublicResultSiteExports {
         val splitResultsCsvPath = downloadsDirectory.resolve("split-results.csv")
         val splitResultsPdfPath = downloadsDirectory.resolve("split-results.pdf")
 
-        val unofficialResults = projectFile.raceData.race.supportsChampionshipAwards()
+        val unofficialResults = publicationStatus != PublicResultsPublicationStatus.OFFICIAL
         writeText(indexPath, indexHtml(projectFile.raceData.race.name, unofficialResults))
         writeText(assetsDirectory.resolve("site.css"), siteCss())
         writeText(assetsDirectory.resolve("site.js"), siteJs())
         writeText(directory.resolve("_headers"), headersText())
-        writeText(publicResultsPath, publicResultsJson(projectFile, generatedAt, awardDisplayMode))
+        writeText(
+            publicResultsPath,
+            publicResultsJson(projectFile, generatedAt, awardDisplayMode, publicationStatus)
+        )
         if (hasResults) {
             val finalResultsJson = FinalResultJsonExports.results(
                 projectFile.raceData,
                 protectedCourseInfoByCategoryId,
-                awardDisplayMode
+                awardDisplayMode,
+                publicationStatus
             )
             val liveResultsJson = LiveResultJsonExports.results(projectFile.raceData)
-            val iofResultListXml = IofXmlExports.resultList(projectFile.raceData)
+            val iofResultListXml = IofXmlExports.resultList(
+                projectFile.raceData,
+                publicationStatus = publicationStatus
+            )
             val printableResultsHtml = HtmlResultExports.results(
                 raceData = projectFile.raceData,
                 appVersion = appVersion,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                awardDisplayMode = awardDisplayMode
+                awardDisplayMode = awardDisplayMode,
+                publicationStatus = publicationStatus
             )
-            val splitResultReport = SplitResultExports.model(projectFile.raceData, awardDisplayMode)
+            val splitResultReport = SplitResultExports.model(
+                projectFile.raceData,
+                awardDisplayMode,
+                publicationStatus
+            )
             writeText(dataDirectory.resolve("final-results.json"), finalResultsJson)
             writeText(dataDirectory.resolve("live-results.json"), liveResultsJson)
             writeText(finalResultsPath, finalResultsJson)
@@ -184,6 +201,7 @@ object DesktopPublicResultSiteExports {
             generatedAt = generatedAt.toString(),
             resultCount = EventResultDetails.from(projectFile.raceData).size,
             unofficialResults = unofficialResults,
+            publicationStatus = publicationStatus,
             publicationId = "race:${projectFile.raceData.race.id}"
         )
         writeText(dataDirectory.resolve("event-summary.json"), eventSummaryJson(eventSummary))
@@ -226,12 +244,14 @@ object DesktopPublicResultSiteExports {
                 appVersion = appVersion,
                 protectedCourseInfoByCategoryId = race.protectedCourseInfoByCategoryId,
                 awardDisplayMode = race.awardDisplayMode,
+                publicationStatus = race.publicationStatus,
                 generatedAt = generatedAt
             )
             SeriesRaceExport(
                 paths = paths,
                 projectFile = race.projectFile,
-                courseGraphicPaths = exportCourseGraphics(paths, race)
+                courseGraphicPaths = exportCourseGraphics(paths, race),
+                publicationStatus = race.publicationStatus
             )
         }
         val seriesPath = seriesPath(seriesName, races.first().projectFile, generatedAt)
@@ -241,11 +261,21 @@ object DesktopPublicResultSiteExports {
         listOf(seriesDirectory, assetsDirectory, dataDirectory).forEach(Files::createDirectories)
         val indexPath = seriesDirectory.resolve("index.html")
         val publicResultsPath = dataDirectory.resolve("series-results.json")
-        val unofficialResults = races.any { it.projectFile.raceData.race.supportsChampionshipAwards() }
+        val publicationStatus = if (races.all {
+                it.publicationStatus == PublicResultsPublicationStatus.OFFICIAL
+            }) {
+            PublicResultsPublicationStatus.OFFICIAL
+        } else {
+            PublicResultsPublicationStatus.PRELIMINARY
+        }
+        val unofficialResults = publicationStatus != PublicResultsPublicationStatus.OFFICIAL
         writeText(indexPath, seriesIndexHtml(seriesName, unofficialResults))
         writeText(assetsDirectory.resolve("site.css"), siteCss())
         writeText(assetsDirectory.resolve("series-site.js"), seriesSiteJs())
-        writeText(publicResultsPath, seriesResultsJson(seriesName, raceExports, generatedAt))
+        writeText(
+            publicResultsPath,
+            seriesResultsJson(seriesName, raceExports, generatedAt, publicationStatus)
+        )
 
         val summary = PublishedEventSummary(
             path = seriesPath,
@@ -254,6 +284,7 @@ object DesktopPublicResultSiteExports {
             generatedAt = generatedAt.toString(),
             resultCount = races.sumOf { EventResultDetails.from(it.projectFile.raceData).size },
             unofficialResults = unofficialResults,
+            publicationStatus = publicationStatus,
             publicationId = seriesId?.let { "series:$it" }
         )
         val rootDataDirectory = directory.resolve("data")
@@ -383,13 +414,18 @@ object DesktopPublicResultSiteExports {
     private fun publicResultsJson(
         projectFile: EventProjectFile,
         generatedAt: Instant,
-        awardDisplayMode: EventAwardDisplayMode
+        awardDisplayMode: EventAwardDisplayMode,
+        publicationStatus: PublicResultsPublicationStatus
     ): String {
         val raceData = projectFile.raceData
         val results = EventResultDetails.from(raceData)
         val awards = EventAwardDetails.from(raceData, awardDisplayMode)
         val groupedResults = results.groupBy { it.categoryId.orEmpty() to it.categoryName }
-        val splitResultsById = SplitResultExports.model(raceData, awardDisplayMode).resultsById
+        val splitResultsById = SplitResultExports.model(
+            raceData,
+            awardDisplayMode,
+            publicationStatus
+        ).resultsById
         return buildString {
             append("{\n")
             append("  \"event\": {\n")
@@ -407,7 +443,11 @@ object DesktopPublicResultSiteExports {
             append(",\n")
             append("  \"resultCount\": ${results.size},\n")
             append("  \"publicationNotice\": ")
-            appendJsonString(awards.publicationNotice.takeIf { results.isNotEmpty() }.orEmpty())
+            appendJsonString(
+                PublicResultsPublicationRules.publicationNotice(publicationStatus)
+                    .takeIf { results.isNotEmpty() }
+                    .orEmpty()
+            )
             append(",\n")
             append("  \"awards\": ")
             appendAwardsJson(awards)
@@ -457,24 +497,24 @@ object DesktopPublicResultSiteExports {
         val resultsLabel = publicResultsLabel(unofficialResults)
         val comingSoonLabel = comingSoonResultsLabel(unofficialResults)
         val eyebrow = if (unofficialResults) {
-            "Radio-Oracle unofficial results"
+            "Radio-Oracle preliminary results"
         } else {
-            "Radio-Oracle public results"
+            "Radio-Oracle official results"
         }
         val parentLink = if (unofficialResults) {
-            "All published unofficial results"
+            "All published preliminary results"
         } else {
-            "All published results"
+            "All published official results"
         }
         val comingSoonDescription = if (unofficialResults) {
-            "This page is ready for the event. Return after the race begins for unofficial results."
+            "This page is ready for the event. Return after the race begins for preliminary results."
         } else {
-            "This page is ready for the event. Return after the race begins for results."
+            "This page is ready for the event. Return after the race begins for official results."
         }
         val footer = if (unofficialResults) {
-            "Unofficial results generated by Radio-Oracle."
+            "Preliminary results generated by Radio-Oracle."
         } else {
-            "Generated by Radio-Oracle."
+            "Official results generated by Radio-Oracle."
         }
         return """
         <!doctype html>
@@ -548,19 +588,19 @@ object DesktopPublicResultSiteExports {
     private fun seriesIndexHtml(seriesName: String, unofficialResults: Boolean): String {
         val resultsLabel = publicResultsLabel(unofficialResults)
         val eyebrow = if (unofficialResults) {
-            "Radio-Oracle Race Series unofficial results"
+            "Radio-Oracle Race Series preliminary results"
         } else {
-            "Radio-Oracle Race Series results"
+            "Radio-Oracle Race Series official results"
         }
         val parentLink = if (unofficialResults) {
-            "All published unofficial results"
+            "All published preliminary results"
         } else {
-            "All published results"
+            "All published official results"
         }
         val footer = if (unofficialResults) {
-            "Unofficial results generated by Radio-Oracle."
+            "Preliminary results generated by Radio-Oracle."
         } else {
-            "Generated by Radio-Oracle."
+            "Official results generated by Radio-Oracle."
         }
         return """
         <!doctype html>
@@ -591,14 +631,16 @@ object DesktopPublicResultSiteExports {
     private fun seriesResultsJson(
         seriesName: String,
         races: List<SeriesRaceExport>,
-        generatedAt: Instant
+        generatedAt: Instant,
+        publicationStatus: PublicResultsPublicationStatus
     ): String =
         buildJsonObject {
             put("seriesName", seriesName)
             put("generatedAt", generatedAt.toString())
+            put("publicationStatus", publicationStatus.name)
             put(
                 "unofficialResults",
-                races.any { it.projectFile.raceData.race.supportsChampionshipAwards() }
+                publicationStatus != PublicResultsPublicationStatus.OFFICIAL
             )
             put(
                 "races",
@@ -614,8 +656,9 @@ object DesktopPublicResultSiteExports {
                                 )
                                 put(
                                     "unofficialResults",
-                                    race.projectFile.raceData.race.supportsChampionshipAwards()
+                                    race.publicationStatus != PublicResultsPublicationStatus.OFFICIAL
                                 )
+                                put("publicationStatus", race.publicationStatus.name)
                                 put("dataUrl", "../${race.paths.eventPath}/data/public-results.json")
                                 put("downloadsUrl", "../${race.paths.eventPath}/downloads/")
                                 put(
@@ -665,7 +708,7 @@ object DesktopPublicResultSiteExports {
           return `<section class="course-diagrams" aria-label="2D course diagrams"><h3>2D Course Diagram${'$'}{graphics.length===1 ? "" : "s"}</h3><div class="course-diagram-grid">${'$'}{graphics.map((url,index)=>`<figure><img src="${'$'}{escapeHtml(url)}" alt="2D course diagram ${'$'}{index+1} for ${'$'}{escapeHtml(race.name)}"></figure>`).join("")}</div></section>`
         }
         function renderRace(root,race,data,raceIndex){
-          const resultsLabel=race.unofficialResults ? "Unofficial Results" : "Results";
+          const resultsLabel=race.unofficialResults ? "Preliminary Results" : "Official Results";
           if(data.resultCount===0){
             const comingSoonLabel=`${'$'}{resultsLabel} Coming Soon`;
             root.innerHTML=`<section class="series-race coming-soon"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1} | ${'$'}{comingSoonLabel}</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Scheduled ${'$'}{escapeHtml(data.event.start)}</p></div></div><section class="panel"><h3>${'$'}{comingSoonLabel}</h3><p>Return after this race begins for ${'$'}{resultsLabel.toLowerCase()}.</p></section></section>`;
@@ -697,7 +740,7 @@ object DesktopPublicResultSiteExports {
           return response.json()
         }).then(async manifest=>{
           const racesWithResults=manifest.races.filter(race=>race.resultCount>0).length;
-          const resultsLabel=manifest.unofficialResults ? "Unofficial Results" : "Results";
+          const resultsLabel=manifest.unofficialResults ? "Preliminary Results" : "Official Results";
           document.getElementById("series-meta").textContent=racesWithResults===0
             ? `${'$'}{manifest.races.length} scheduled races | ${'$'}{resultsLabel} Coming Soon`
             : `${'$'}{racesWithResults} of ${'$'}{manifest.races.length} races with ${'$'}{resultsLabel.toLowerCase()} | Published ${'$'}{manifest.generatedAt}`;
@@ -972,10 +1015,14 @@ object DesktopPublicResultSiteExports {
             .replace("'", "&#39;")
 
     private fun publicResultsLabel(unofficialResults: Boolean): String =
-        PublicResultsSiteCatalog.publicResultsLabel(unofficialResults)
+        if (unofficialResults) {
+            PublicResultsPublicationStatus.PRELIMINARY.displayLabel
+        } else {
+            PublicResultsPublicationStatus.OFFICIAL.displayLabel
+        }
 
     private fun comingSoonResultsLabel(unofficialResults: Boolean): String =
-        PublicResultsSiteCatalog.comingSoonResultsLabel(unofficialResults)
+        "${publicResultsLabel(unofficialResults)} Coming Soon"
 
     private fun eventSummaryJson(summary: PublishedEventSummary): String =
         buildJsonObject {
@@ -985,6 +1032,7 @@ object DesktopPublicResultSiteExports {
             put("generatedAt", summary.generatedAt)
             put("resultCount", summary.resultCount)
             put("unofficialResults", summary.unofficialResults)
+            put("publicationStatus", summary.publicationStatus.name)
             summary.publicationId?.let { put("publicationId", it) }
         }.toString() + "\n"
 
@@ -1014,6 +1062,15 @@ object DesktopPublicResultSiteExports {
         val resultCount = (this["resultCount"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
         val unofficialResults =
             (this["unofficialResults"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false
+        val publicationStatus = stringValue("publicationStatus")
+            ?.let { value ->
+                runCatching { PublicResultsPublicationStatus.valueOf(value) }.getOrNull()
+            }
+            ?: if (unofficialResults) {
+                PublicResultsPublicationStatus.PRELIMINARY
+            } else {
+                PublicResultsPublicationStatus.OFFICIAL
+            }
         val publicationId = stringValue("publicationId")
         return PublishedEventSummary(
             path,
@@ -1022,6 +1079,7 @@ object DesktopPublicResultSiteExports {
             generatedAt,
             resultCount,
             unofficialResults,
+            publicationStatus,
             publicationId
         )
     }
@@ -1036,6 +1094,7 @@ object DesktopPublicResultSiteExports {
         val generatedAt: String,
         val resultCount: Int,
         val unofficialResults: Boolean,
+        val publicationStatus: PublicResultsPublicationStatus,
         val publicationId: String?
     )
 
@@ -1047,6 +1106,7 @@ object DesktopPublicResultSiteExports {
             generatedAt = generatedAt,
             resultCount = resultCount,
             unofficialResults = unofficialResults,
+            publicationStatus = publicationStatus,
             publicationId = publicationId
         )
 
@@ -1058,6 +1118,11 @@ object DesktopPublicResultSiteExports {
             generatedAt = generatedAt,
             resultCount = resultCount,
             unofficialResults = unofficialResults,
+            publicationStatus = publicationStatus ?: if (unofficialResults) {
+                PublicResultsPublicationStatus.PRELIMINARY
+            } else {
+                PublicResultsPublicationStatus.OFFICIAL
+            },
             publicationId = publicationId
         )
 

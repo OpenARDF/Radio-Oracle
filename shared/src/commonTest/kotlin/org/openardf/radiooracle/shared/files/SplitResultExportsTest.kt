@@ -43,6 +43,8 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
+import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -50,6 +52,18 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SplitResultExportsTest {
+    @Test
+    fun appliesPublicationNoticeOnlyWhenPublishingStatusIsExplicit() {
+        assertNull(SplitResultExports.model(raceData()).publicationNotice)
+        assertEquals(
+            PRELIMINARY_RESULT_NOTICE,
+            SplitResultExports.model(
+                raceData(),
+                publicationStatus = PublicResultsPublicationStatus.PRELIMINARY
+            ).publicationNotice
+        )
+    }
+
     @Test
     fun ranksIdenticalDirectedLegsForEveryCompetitionFormat() {
         RaceType.entries.forEach { raceType ->

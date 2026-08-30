@@ -30,6 +30,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 
 class DesktopPublicResultsSiteMirrorTest {
     private val settings = DesktopCloudflarePagesPublishSettings(
@@ -68,6 +69,26 @@ class DesktopPublicResultsSiteMirrorTest {
 
         assertEquals(mirror, prepared)
         assertTrue(Files.exists(marker))
+    }
+
+    @Test
+    fun selectedOfficialStatusIsConsumedAndSavedAfterGeneration() {
+        val appData = Files.createTempDirectory("radio-oracle-app-data")
+
+        val prepared = DesktopPublicResultsSiteMirror.prepare(
+            settings = settings,
+            appDataDirectory = appData,
+            choosePublicationStatus = { PublicResultsPublicationStatus.OFFICIAL }
+        )
+        val status = DesktopPublicResultsPublicationSelection.consumeForGeneration()
+        DesktopPublicResultsPublicationSelection.completeGeneration(status)
+
+        assertEquals(DesktopPublicResultsSiteMirror.directory(settings, appData), prepared)
+        assertEquals(PublicResultsPublicationStatus.OFFICIAL, status)
+        assertEquals(
+            PublicResultsPublicationStatus.OFFICIAL,
+            DesktopPublicResultsPublicationSelection.publication("https://example.test", "now").status
+        )
     }
 
     @Test

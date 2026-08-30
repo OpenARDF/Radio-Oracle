@@ -54,6 +54,7 @@ import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsPublis
 import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsPublishingService
 import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsRetentionMode
 import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsTarget
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 
 class CloudflareResultsDialogFragment : DialogFragment() {
@@ -66,6 +67,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
     private lateinit var statusView: TextView
     private lateinit var diagramControls: View
     private lateinit var includeDiagrams: SwitchMaterial
+    private lateinit var officialResults: SwitchMaterial
     private lateinit var passwordLayout: TextInputLayout
     private lateinit var passwordInput: TextInputEditText
     private lateinit var publishButton: Button
@@ -91,6 +93,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         statusView = view.findViewById(R.id.cloudflare_status)
         diagramControls = view.findViewById(R.id.cloudflare_diagram_controls)
         includeDiagrams = view.findViewById(R.id.cloudflare_include_diagrams)
+        officialResults = view.findViewById(R.id.cloudflare_official_results)
         passwordLayout = view.findViewById(R.id.cloudflare_password_layout)
         passwordInput = view.findViewById(R.id.cloudflare_password)
         publishButton = view.findViewById(R.id.cloudflare_publish)
@@ -212,7 +215,12 @@ class CloudflareResultsDialogFragment : DialogFragment() {
                         settings = settings,
                         includeCourseDiagrams =
                             target?.needsRacePasswordForDiagrams == true && includeDiagrams.isChecked,
-                        racePassword = passwordInput.text?.toString()
+                        racePassword = passwordInput.text?.toString(),
+                        publicationStatus = if (officialResults.isChecked) {
+                            PublicResultsPublicationStatus.OFFICIAL
+                        } else {
+                            PublicResultsPublicationStatus.PRELIMINARY
+                        }
                     )
                 }
             }.onSuccess(::showPublished)
@@ -247,6 +255,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         settingsButton.isEnabled = !publishing
         closeButton.isEnabled = !publishing
         includeDiagrams.isEnabled = !publishing
+        officialResults.isEnabled = !publishing
         passwordInput.isEnabled = !publishing
     }
 

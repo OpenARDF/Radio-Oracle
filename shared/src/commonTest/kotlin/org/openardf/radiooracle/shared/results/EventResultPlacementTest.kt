@@ -57,7 +57,7 @@ class EventResultPlacementTest {
 
         val sorted = EventResultPlacement.sortByPlace(listOf(third, second, first))
 
-        assertEquals(listOf(1, 1, 2), sorted.map { it.readoutData!!.result.place })
+        assertEquals(listOf(1, 1, 3), sorted.map { it.readoutData!!.result.place })
     }
 
     @Test

@@ -28,6 +28,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.files.ArdfJsonExports
 import org.openardf.radiooracle.shared.files.EventCsvExports
 import org.openardf.radiooracle.shared.files.FinalResultJsonExports
@@ -269,29 +270,40 @@ object DesktopProjectFiles : ProjectFileStore {
         directory: Path,
         projectFile: EventProjectFile,
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
-    ): DesktopPublicResultSiteExportPaths =
-        DesktopPublicResultSiteExports.export(
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        publicationStatus: PublicResultsPublicationStatus =
+            DesktopPublicResultsPublicationSelection.consumeForGeneration()
+    ): DesktopPublicResultSiteExportPaths {
+        val paths = DesktopPublicResultSiteExports.export(
             directory = directory,
             projectFile = projectFile,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-            awardDisplayMode = awardDisplayMode
+            awardDisplayMode = awardDisplayMode,
+            publicationStatus = publicationStatus
         )
+        DesktopPublicResultsPublicationSelection.completeGeneration(publicationStatus)
+        return paths
+    }
 
     fun exportPublicResultsSeriesSite(
         directory: Path,
         seriesName: String,
         races: List<DesktopPublicResultSeriesRace>,
         seriesId: String? = null,
+        publicationStatus: PublicResultsPublicationStatus =
+            DesktopPublicResultsPublicationSelection.consumeForGeneration(),
         generatedAt: java.time.Instant = java.time.Instant.now()
-    ): DesktopPublicResultSiteExportPaths =
-        DesktopPublicResultSiteExports.exportSeries(
+    ): DesktopPublicResultSiteExportPaths {
+        val paths = DesktopPublicResultSiteExports.exportSeries(
             directory = directory,
             seriesName = seriesName,
-            races = races,
+            races = races.map { it.copy(publicationStatus = publicationStatus) },
             seriesId = seriesId,
             generatedAt = generatedAt
         )
+        DesktopPublicResultsPublicationSelection.completeGeneration(publicationStatus)
+        return paths
+    }
 
     private fun writeText(path: Path, text: String) {
         path.parent?.let { Files.createDirectories(it) }

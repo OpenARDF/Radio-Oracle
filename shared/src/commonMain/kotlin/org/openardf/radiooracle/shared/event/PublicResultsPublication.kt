@@ -26,11 +26,25 @@ package org.openardf.radiooracle.shared.event
 
 import kotlinx.serialization.Serializable
 
+/** Organizer-selected publication state for generated result websites and downloads. */
+@Serializable
+enum class PublicResultsPublicationStatus {
+    PRELIMINARY,
+    OFFICIAL;
+
+    val displayLabel: String
+        get() = when (this) {
+            PRELIMINARY -> "Preliminary Results"
+            OFFICIAL -> "Official Results"
+        }
+}
+
 /** Portable public-results location retained with a Race File or Race Series. */
 @Serializable
 data class PublicResultsPublication(
     val url: String,
-    val publishedAtIso: String
+    val publishedAtIso: String,
+    val status: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY
 ) {
     init {
         require(url.isNotBlank()) {

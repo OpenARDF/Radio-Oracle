@@ -26,6 +26,7 @@ package org.openardf.radiooracle.shared.files
 
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import kotlin.math.round
 
 /** Landscape-letter split report that can be generated on both desktop and Android. */
@@ -63,8 +64,9 @@ object SplitResultPdfExports {
 
     fun pdf(
         raceData: EventRaceData,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
-    ): ByteArray = pdf(SplitResultExports.model(raceData, awardDisplayMode))
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        publicationStatus: PublicResultsPublicationStatus? = null
+    ): ByteArray = pdf(SplitResultExports.model(raceData, awardDisplayMode, publicationStatus))
 
     fun pdf(report: SplitResultReport): ByteArray =
         SimpleSplitPdf.bytes(pageContents(report), PageWidth, PageHeight)

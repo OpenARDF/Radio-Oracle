@@ -33,6 +33,8 @@ import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventResultDetails
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
+import org.openardf.radiooracle.shared.publicresults.PublicResultsPublicationRules
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** A physical or synthetic endpoint used to identify a directed result leg. */
@@ -114,8 +116,10 @@ data class SplitResultReport(
 object SplitResultExports {
     fun model(
         raceData: EventRaceData,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        publicationStatus: PublicResultsPublicationStatus? = null
     ): SplitResultReport {
+        publicationStatus?.let { PublicResultsPublicationRules.requireReady(raceData, it) }
         val competitorsByResultId = raceData.competitorData
             .mapNotNull { competitorData ->
                 competitorData.readoutData?.result?.id?.let { resultId -> resultId to competitorData }
@@ -149,15 +153,20 @@ object SplitResultExports {
             raceName = raceData.race.name,
             startDateTimeIso = raceData.race.startDateTimeIso,
             raceLevel = raceData.race.raceLevel.name,
-            publicationNotice = awards.publicationNotice,
+            publicationNotice = if (publicationStatus == null) {
+                awards.publicationNotice
+            } else {
+                PublicResultsPublicationRules.publicationNotice(publicationStatus)
+            },
             categories = categories
         )
     }
 
     fun csv(
         raceData: EventRaceData,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
-    ): String = csv(model(raceData, awardDisplayMode))
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        publicationStatus: PublicResultsPublicationStatus? = null
+    ): String = csv(model(raceData, awardDisplayMode, publicationStatus))
 
     fun csv(report: SplitResultReport): String = buildString {
         appendCsvRow(

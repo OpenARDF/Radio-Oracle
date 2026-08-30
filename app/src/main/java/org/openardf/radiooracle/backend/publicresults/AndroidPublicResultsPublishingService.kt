@@ -33,6 +33,7 @@ import org.openardf.radiooracle.backend.shared.toEventRaceData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.publicresults.CloudflarePagesPublisher
 import org.openardf.radiooracle.shared.publicresults.PublicResultsRaceRenderRequest
 import java.time.Instant
@@ -156,7 +157,8 @@ class AndroidPublicResultsPublishingService(
         raceId: UUID,
         settings: AndroidCloudflarePagesPublishSettings,
         includeCourseDiagrams: Boolean,
-        racePassword: String?
+        racePassword: String?,
+        publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY
     ): AndroidPublicResultsPublishOutcome {
         require(settings.isComplete()) {
             "Complete Cloudflare Settings before publishing."
@@ -168,14 +170,18 @@ class AndroidPublicResultsPublishingService(
             val raceData = dataProcessor.getRaceData(raceId)
             AndroidPublicResultsSiteExports.exportRace(
                 directory = root,
-                race = raceData.renderRequest(includeCourseDiagrams, racePassword),
+                race = raceData.renderRequest(
+                    includeCourseDiagrams,
+                    racePassword,
+                    publicationStatus
+                ),
                 generatedAtIso = generatedAt,
                 appVersion = dataProcessor.getAppVersion()
             )
         } else {
             val races = series.orderedMembers().map { member ->
                 dataProcessor.getRaceData(member.localRaceId)
-                    .renderRequest(includeCourseDiagrams, racePassword)
+                    .renderRequest(includeCourseDiagrams, racePassword, publicationStatus)
             }
             AndroidPublicResultsSiteExports.exportSeries(
                 directory = root,
@@ -229,7 +235,8 @@ class AndroidPublicResultsPublishingService(
 
     private fun RaceData.renderRequest(
         includeCourseDiagrams: Boolean,
-        racePassword: String?
+        racePassword: String?,
+        publicationStatus: PublicResultsPublicationStatus
     ): PublicResultsRaceRenderRequest =
         PublicResultsRaceRenderRequest(
             projectFile = EventProjectFile(raceData = toEventRaceData()),
@@ -237,7 +244,8 @@ class AndroidPublicResultsPublishingService(
                 unlockedCourseInfo(racePassword)
             } else {
                 emptyMap()
-            }
+            },
+            publicationStatus = publicationStatus
         )
 
     private fun RaceData.unlockedCourseInfo(password: String?): Map<String, ProtectedCourseInfo> {

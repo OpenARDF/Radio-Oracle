@@ -42,6 +42,7 @@ import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_NAMED_FILE_SUFFIX
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_FILE_SUFFIX
 import org.openardf.radiooracle.shared.event.CompetitorStartBibChange
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.event.isEventSeriesArchiveFileName
 import org.openardf.radiooracle.shared.event.isEventSeriesFileName
 
@@ -304,6 +305,29 @@ object DesktopEventFileLocations {
 
 /** AWT-backed file chooser for desktop Race Files. */
 object DesktopFileDialogs {
+    fun choosePublicResultsPublicationStatus(): PublicResultsPublicationStatus? {
+        val preliminary = "Preliminary Results"
+        val official = "Official Results"
+        return when (
+            JOptionPane.showOptionDialog(
+                null,
+                "Preliminary Results can be published while data is still changing.\n\n" +
+                    "Official Results require every competitor to have a unique bib and either a result or DNS, " +
+                    "with no result errors or unmatched readouts.",
+                "Choose Results Status",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                arrayOf(preliminary, official, "Cancel"),
+                preliminary
+            )
+        ) {
+            0 -> PublicResultsPublicationStatus.PRELIMINARY
+            1 -> PublicResultsPublicationStatus.OFFICIAL
+            else -> null
+        }
+    }
+
     /** Returns true to use imported bibs, false to keep current bibs, or null to cancel. */
     fun chooseStartsCsvBibNumbers(path: Path, changes: List<CompetitorStartBibChange>): Boolean? {
         if (changes.isEmpty()) return true

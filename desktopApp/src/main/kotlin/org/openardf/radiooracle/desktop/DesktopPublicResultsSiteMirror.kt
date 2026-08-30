@@ -31,6 +31,8 @@ import java.security.MessageDigest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import org.openardf.radiooracle.shared.event.PublicResultsPublication
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 
 enum class DesktopPublicResultsRetentionMode(
     val displayLabel: String,
@@ -44,6 +46,39 @@ enum class DesktopPublicResultsRetentionMode(
         displayLabel = "Replace previous events",
         description = "Publish only the current race or series and remove all previous result pages."
     )
+}
+
+internal object DesktopPublicResultsPublicationSelection {
+    private var pendingStatus: PublicResultsPublicationStatus? = null
+    private var activeSelection = false
+    var lastGeneratedStatus: PublicResultsPublicationStatus =
+        PublicResultsPublicationStatus.PRELIMINARY
+        private set
+
+    fun begin(status: PublicResultsPublicationStatus?) {
+        pendingStatus = status
+    }
+
+    fun cancel() {
+        pendingStatus = null
+    }
+
+    fun consumeForGeneration(): PublicResultsPublicationStatus {
+        val status = pendingStatus
+        activeSelection = status != null
+        pendingStatus = null
+        return status ?: PublicResultsPublicationStatus.PRELIMINARY
+    }
+
+    fun completeGeneration(status: PublicResultsPublicationStatus) {
+        if (activeSelection) {
+            lastGeneratedStatus = status
+        }
+        activeSelection = false
+    }
+
+    fun publication(url: String, publishedAtIso: String): PublicResultsPublication =
+        PublicResultsPublication(url, publishedAtIso, lastGeneratedStatus)
 }
 
 internal object DesktopPublicResultsSiteMirror {
@@ -80,19 +115,30 @@ internal object DesktopPublicResultsSiteMirror {
     fun prepare(
         settings: DesktopCloudflarePagesPublishSettings,
         appDataDirectory: Path = DesktopAppDirectories.appDataDirectory(),
+        choosePublicationStatus: () -> PublicResultsPublicationStatus? = {
+            PublicResultsPublicationStatus.PRELIMINARY
+        },
         confirmReplacement: (Int) -> Boolean = { true }
     ): Path? {
+        val publicationStatus = choosePublicationStatus() ?: return null
+        DesktopPublicResultsPublicationSelection.begin(publicationStatus)
         val directory = directory(settings, appDataDirectory)
-        if (settings.retentionMode == DesktopPublicResultsRetentionMode.REPLACE_PREVIOUS) {
-            val retainedEntryCount = publishedEntryCount(directory)
-            if (retainedEntryCount > 0 && !confirmReplacement(retainedEntryCount)) {
-                return null
+        try {
+            if (settings.retentionMode == DesktopPublicResultsRetentionMode.REPLACE_PREVIOUS) {
+                val retainedEntryCount = publishedEntryCount(directory)
+                if (retainedEntryCount > 0 && !confirmReplacement(retainedEntryCount)) {
+                    DesktopPublicResultsPublicationSelection.cancel()
+                    return null
+                }
+                reset(directory, appDataDirectory)
+            } else {
+                Files.createDirectories(directory)
             }
-            reset(directory, appDataDirectory)
-        } else {
-            Files.createDirectories(directory)
+            return directory
+        } catch (error: Throwable) {
+            DesktopPublicResultsPublicationSelection.cancel()
+            throw error
         }
-        return directory
     }
 
     fun publishedEntryCount(directory: Path): Int {

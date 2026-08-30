@@ -44,6 +44,7 @@ import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.EventRace
@@ -516,7 +517,7 @@ class DesktopProjectFilesTest {
         assertTrue(rootIndex.contains("OpenARDF Results"))
         assertTrue(rootIndex.contains("""href="2026-05-31-desktop-file-race/""""))
         assertTrue(index.contains("Desktop File Race"))
-        assertTrue(index.contains("""href="../">All published results</a>"""))
+        assertTrue(index.contains("""href="../">All published preliminary results</a>"""))
         assertFalse(index.contains("Unofficial"))
         assertFalse(rootIndex.contains("unofficial"))
         assertTrue(index.contains("downloads/final-results.json"))
@@ -545,6 +546,20 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsOfficialPublicResultsWithCompleteIofAndNoPreliminaryNotice() {
+        val paths = DesktopProjectFiles.exportPublicResultsSite(
+            directory = Files.createTempDirectory("rom-desktop-official-results"),
+            projectFile = EventProjectFile(raceData = raceDataWithSplitReadout()),
+            publicationStatus = PublicResultsPublicationStatus.OFFICIAL
+        )
+
+        assertTrue(Files.readString(paths.indexHtml).contains("Official Results"))
+        assertTrue(Files.readString(paths.iofResultListXml).contains("status=\"Complete\""))
+        assertTrue(Files.readString(paths.iofResultListXml).contains("<BibNumber>1</BibNumber>"))
+        assertFalse(Files.readString(paths.printableResultsHtml).contains(PRELIMINARY_RESULT_NOTICE))
+    }
+
+    @Test
     fun exportsPublicResultsSiteAwardsAndPreliminaryNoticeForNonPracticeRaces() {
         val directory = Files.createTempDirectory("rom-desktop-public-results-site-awards")
 
@@ -558,9 +573,9 @@ class DesktopProjectFilesTest {
         val siteJs = Files.readString(paths.eventDirectory.resolve("assets").resolve("site.js"))
 
         assertTrue(index.contains("awards-panel"))
-        assertTrue(index.contains("Radio-Oracle unofficial results"))
-        assertTrue(index.contains("""href="../">All published unofficial results</a>"""))
-        assertTrue(index.contains("<h2>Unofficial Results</h2>"))
+        assertTrue(index.contains("Radio-Oracle preliminary results"))
+        assertTrue(index.contains("""href="../">All published preliminary results</a>"""))
+        assertTrue(index.contains("<h2>Preliminary Results</h2>"))
         assertTrue(siteJs.contains("renderAwards"))
         assertTrue(publicJson.contains("\"publicationNotice\": \"$PRELIMINARY_RESULT_NOTICE\""))
         assertTrue(publicJson.contains("\"usaAwards\":"))
@@ -609,8 +624,8 @@ class DesktopProjectFilesTest {
         assertTrue(manifest.contains("Second Series Race"))
         assertTrue(manifest.contains("Unfinished Series Race"))
         assertTrue(manifest.contains("\"resultCount\":0"))
-        assertTrue(manifest.contains("\"unofficialResults\":false"))
-        assertFalse(index.contains("Unofficial"))
+        assertTrue(manifest.contains("\"unofficialResults\":true"))
+        assertTrue(index.contains("Preliminary Results"))
         assertTrue(siteJs.contains("resultsLabel} Coming Soon"))
         assertTrue(siteJs.contains("Return after this race begins for"))
         assertTrue(siteJs.contains("courseGraphicsHtml(race)"))
@@ -655,11 +670,11 @@ class DesktopProjectFilesTest {
         assertTrue(manifest.contains("\"unofficialResults\":true"))
         assertTrue(eventData.contains("\"resultCount\": 0"))
         assertTrue(seriesIndex.contains("Championship Week"))
-        assertTrue(seriesIndex.contains("Radio-Oracle Race Series unofficial results"))
-        assertTrue(seriesIndex.contains("All published unofficial results"))
-        assertTrue(eventIndex.contains("<h2>Unofficial Results Coming Soon</h2>"))
-        assertTrue(eventIndex.contains("All published unofficial results"))
-        assertTrue(rootIndex.contains("Unofficial Results Coming Soon"))
+        assertTrue(seriesIndex.contains("Radio-Oracle Race Series preliminary results"))
+        assertTrue(seriesIndex.contains("All published preliminary results"))
+        assertTrue(eventIndex.contains("<h2>Preliminary Results Coming Soon</h2>"))
+        assertTrue(eventIndex.contains("All published preliminary results"))
+        assertTrue(rootIndex.contains("Preliminary Results Coming Soon"))
         assertFalse(
             Files.exists(
                 directory.resolve("2026-08-13-upcoming-championship/downloads/final-results.json")
@@ -678,8 +693,8 @@ class DesktopProjectFilesTest {
 
         val eventIndex = Files.readString(paths.indexHtml)
         val rootIndex = Files.readString(paths.rootIndexHtml)
-        assertTrue(eventIndex.contains("<h2>Results Coming Soon</h2>"))
-        assertTrue(rootIndex.contains("Results Coming Soon"))
+        assertTrue(eventIndex.contains("<h2>Preliminary Results Coming Soon</h2>"))
+        assertTrue(rootIndex.contains("Preliminary Results Coming Soon"))
         assertFalse(eventIndex.contains("Unofficial"))
         assertFalse(rootIndex.contains("Unofficial"))
     }
@@ -970,7 +985,8 @@ class DesktopProjectFilesTest {
             siNumber = 123456,
             siRent = false,
             startNumber = 1,
-            drawnStartTimeSeconds = null
+            drawnStartTimeSeconds = null,
+            bibNumber = "1"
         )
         return raceData().copy(
             categories = listOf(EventCategoryData(category, controlPoints = emptyList(), competitors = listOf(competitor))),

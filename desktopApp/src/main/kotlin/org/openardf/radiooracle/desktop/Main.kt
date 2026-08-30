@@ -4430,9 +4430,10 @@ fun main(args: Array<String>) = application {
             val currentProject = projectSession.currentProject ?: return
             val directory = DesktopPublicResultsSiteMirror.prepare(
                 settings = cloudflarePagesPublishSettings,
-                confirmReplacement = DesktopFileDialogs::confirmReplacePublicResultsSite
+                confirmReplacement = DesktopFileDialogs::confirmReplacePublicResultsSite,
+                choosePublicationStatus = DesktopFileDialogs::choosePublicResultsPublicationStatus
             ) ?: run {
-                projectStatusText = "Public results site replacement canceled."
+                projectStatusText = "Public results site generation canceled."
                 return
             }
             runCatching {
@@ -4599,7 +4600,7 @@ fun main(args: Array<String>) = application {
                 }.onSuccess { result ->
                     val publicUrl = DesktopCloudflarePagesPublisher.publicResultsUrl(result.url, publicResultSiteEventPath)
                     publishedPublicResultSiteUrl = publicUrl
-                    val publication = PublicResultsPublication(
+                    val publication = DesktopPublicResultsPublicationSelection.publication(
                         url = publicUrl,
                         publishedAtIso = java.time.Instant.now().toString()
                     )

@@ -24,20 +24,15 @@
 
 package org.openardf.radiooracle.shared.files
 
-import org.openardf.radiooracle.shared.domain.ResultStatus
-import org.openardf.radiooracle.shared.event.EventAliasPunch
 import org.openardf.radiooracle.shared.event.EventAwardCategoryDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
-import org.openardf.radiooracle.shared.event.EventCategoryData
-import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
-import org.openardf.radiooracle.shared.results.EventResultPlacement
-import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Shared printable HTML exports for desktop and non-Android result workflows. */
 object HtmlResultExports {
@@ -45,11 +40,10 @@ object HtmlResultExports {
         raceData: EventRaceData,
         appVersion: String = "Desktop",
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        publicationStatus: PublicResultsPublicationStatus? = null
     ): String {
-        val placedByCategory = raceData.competitorData
-            .groupBy { it.resultCategoryId() }
-            .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
+        val report = SplitResultExports.model(raceData, awardDisplayMode, publicationStatus)
         val awards = EventAwardDetails.from(raceData, awardDisplayMode)
 
         return buildString {
@@ -74,20 +68,18 @@ object HtmlResultExports {
             append(" | Level: ")
             appendHtml(raceData.race.raceLevel.name)
             append("</div>")
-            awards.publicationNotice?.let { notice ->
+            report.publicationNotice?.let { notice ->
                 append("<div class=\"notice\">")
                 appendHtml(notice)
                 append("</div>")
             }
-            raceData.categories
-                .sortedWith(compareBy({ it.category.order }, { it.category.name }))
-                .forEach { categoryData ->
-                    appendCategoryResults(
-                        categoryData,
-                        placedByCategory[categoryData.category.id] ?: emptyList(),
-                        raceData,
-                        protectedCourseInfoByCategoryId
-                    )
+            report.categories.forEach { category ->
+                appendCategoryResults(
+                    category = category,
+                    effectiveLengthMeters = protectedCourseInfoByCategoryId
+                        ?.get(category.id)
+                        ?.effectiveLengthMeters()
+                )
                 }
             appendAwards(awards)
             append("<div class=\"generated\">Generated with Radio-Oracle ")
@@ -98,63 +90,80 @@ object HtmlResultExports {
     }
 
     private fun StringBuilder.appendCategoryResults(
-        categoryData: EventCategoryData,
-        competitors: List<EventCompetitorData>,
-        raceData: EventRaceData,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
+        category: SplitResultCategory,
+        effectiveLengthMeters: Int?
     ) {
-        val resultCompetitors = competitors.filter { it.readoutData != null }
-        if (resultCompetitors.isEmpty()) return
-        val controlLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
-        val effectiveLength = protectedCourseInfoByCategoryId
-            ?.get(categoryData.category.id)
-            ?.effectiveLengthMeters()
+        if (category.results.isEmpty()) return
 
         append("<h2>")
-        appendHtml(categoryData.category.name)
+        appendHtml(category.name)
         append("</h2>")
-        if (effectiveLength != null) {
+        if (effectiveLengthMeters != null) {
             append("<p class=\"meta\">Effective length: ")
-            appendHtml("${effectiveLength / 1000.0} km")
+            appendHtml("${effectiveLengthMeters / 1000.0} km")
             append("</p>")
         }
         append("<table><thead><tr>")
-        listOf("Place", "Bib #", "Name", "Club", "Person ID", "Points", "Run time", "Splits").forEach { heading ->
+        listOf("Place", "Bib #", "Name", "Club", "Person ID", "Status", "Points", "Run time", "Transmitters").forEach { heading ->
             append("<th>")
             appendHtml(heading)
             append("</th>")
         }
         append("</tr></thead><tbody>")
-        resultCompetitors.forEach { competitorData ->
-            appendCompetitorResult(competitorData, controlLabelsByCode)
+        category.results.forEach { result ->
+            appendCompetitorResult(result)
         }
         append("</tbody></table>")
     }
 
     private fun StringBuilder.appendCompetitorResult(
-        competitorData: EventCompetitorData,
-        controlLabelsByCode: Map<Int, String>
+        result: SplitResultCompetitor
     ) {
-        val competitor = competitorData.competitorCategory.competitor
-        val readoutData = competitorData.readoutData ?: return
-        val result = readoutData.result
         append("<tr><td class=\"num\">")
-        appendHtml(result.placeText())
+        appendHtml(result.placeText)
         append("</td><td>")
-        appendHtml(competitor.bibNumber)
+        appendHtml(result.bibNumber)
         append("</td><td>")
-        appendHtml(competitor.fullName())
+        appendHtml(result.name)
         append("</td><td>")
-        appendHtml(competitor.club)
+        appendHtml(result.club)
         append("</td><td>")
-        appendHtml(competitor.index)
+        appendHtml(result.personId)
+        append("</td><td>")
+        appendHtml(result.statusText)
         append("</td><td class=\"num\">")
-        appendHtml(result.points.toString())
+        appendHtml(result.pointsText)
         append("</td><td>")
-        appendHtml(DurationFormatter.secondsToFormattedString(result.runTimeSeconds, useMinutes = false))
-        append("</td><td class=\"splits\">")
-        appendHtml(readoutData.punches.toResultSplitText(controlLabelsByCode))
+        appendHtml(result.runTimeText)
+        append("</td><td>")
+        appendHtml(result.transmittersText)
         append("</td></tr>")
+        if (result.splits.isNotEmpty()) {
+            append("<tr><td colspan=\"9\" class=\"splits\">")
+            append("<table><thead><tr>")
+            listOf("From", "Control", "Punch", "Leg", "Total", "Leg place").forEach { heading ->
+                append("<th>")
+                appendHtml(heading)
+                append("</th>")
+            }
+            append("</tr></thead><tbody>")
+            result.splits.forEach { split ->
+                append("<tr><td>")
+                appendHtml(split.from.label)
+                append("</td><td>")
+                appendHtml(split.control.label)
+                append("</td><td>")
+                appendHtml(split.punchStatusText)
+                append("</td><td>")
+                appendHtml(split.legTime)
+                append("</td><td>")
+                appendHtml(split.cumulativeTime)
+                append("</td><td class=\"num\">")
+                appendHtml(split.legPlaceText)
+                append("</td></tr>")
+            }
+            append("</tbody></table></td></tr>")
+        }
     }
 
     private fun StringBuilder.appendAwards(awards: EventAwardDetails) {
@@ -210,38 +219,6 @@ object HtmlResultExports {
         }
         append("</tbody></table>")
     }
-
-    private fun EventCompetitorData.resultCategoryId(): String? =
-        readoutData?.result?.categoryId ?: competitorCategory.category?.id ?: competitorCategory.competitor.categoryId
-
-    private fun org.openardf.radiooracle.shared.event.EventResult.placeText(): String =
-        if (resultStatus == ResultStatus.OK && place > 0) {
-            "$place."
-        } else {
-            resultStatus.toShortLabel()
-        }
-
-    private fun ResultStatus.toShortLabel(): String =
-        when (this) {
-            ResultStatus.OK -> "OK"
-            ResultStatus.MISPUNCHED -> "MP"
-            ResultStatus.NO_RANKING -> "NR"
-            ResultStatus.DISQUALIFIED -> "DSQ"
-            ResultStatus.DID_NOT_START -> "DNS"
-            ResultStatus.DID_NOT_FINISH -> "DNF"
-            ResultStatus.OVER_TIME_LIMIT -> "OVT"
-            ResultStatus.UNOFFICIAL -> "UNF"
-            ResultStatus.ERROR -> "ERR"
-        }
-
-    private fun List<EventAliasPunch>.toResultSplitText(
-        controlLabelsByCode: Map<Int, String>
-    ): String =
-        ResultSplitRows.from(this, controlLabelsByCode)
-            .joinToString(separator = " ") { split ->
-                val splitTime = DurationFormatter.secondsToFormattedString(split.splitSeconds, useMinutes = false)
-                "${split.label} - $splitTime"
-            }
 
     private fun StringBuilder.appendHtml(value: String) {
         value.forEach { char ->

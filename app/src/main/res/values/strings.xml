@@ -432,6 +432,8 @@
     <string name="cloudflare_results_target_series">Race Series: %1$s (%2$d races)</string>
     <string name="cloudflare_results_settings_incomplete">Complete Cloudflare Settings before publishing.</string>
     <string name="cloudflare_results_include_diagrams">Include 2D course diagrams</string>
+    <string name="cloudflare_results_official">Publish as Official Results</string>
+    <string name="cloudflare_results_official_hint">Official publishing checks that every competitor has a unique bib and either a result or DNS, with no result errors or unmatched readouts.</string>
     <string name="cloudflare_results_password">Race Password</string>
     <string name="cloudflare_results_password_hint">Required to unlock protected course geometry.</string>
     <string name="cloudflare_results_publish">Generate and Publish</string>
