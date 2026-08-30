@@ -34,7 +34,7 @@ import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
-import org.openardf.radiooracle.backend.results.ResultsProcessor
+import org.openardf.radiooracle.backend.shared.toEventRaceData
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.Race
@@ -43,13 +43,13 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.backend.room.enums.StandardCategoryType
-import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvFormat
 import org.openardf.radiooracle.shared.files.EventCsvImports
+import org.openardf.radiooracle.shared.files.SplitResultExports
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import java.io.IOException
 import java.io.InputStream
@@ -127,7 +127,7 @@ object CsvProcessor : FormatProcessor {
 
             DataType.RESULTS_FINAL, DataType.RESULTS_LIVE -> exportResults(
                 outStream,
-                ResultsProcessor.getResultWrapperFlowByRace(race.id, dataProcessor).first()
+                SplitResultExports.csv(dataProcessor.getRaceData(race.id).toEventRaceData())
             )
 
             DataType.READOUT_DATA -> {
@@ -499,15 +499,12 @@ object CsvProcessor : FormatProcessor {
         }
     }
 
-    /** Placeholder for final result CSV export, which is currently not implemented. */
+    /** Exports presentation-ready result splits using the same shared model as desktop and public results. */
     @Throws(IOException::class)
-    suspend fun exportResults(outStream: OutputStream, results: List<ResultWrapper>) {
+    suspend fun exportResults(outStream: OutputStream, csv: String) {
         val writer = outStream.bufferedWriter()
         withContext(Dispatchers.IO) {
-            for (res in results) {
-
-                writer.newLine()
-            }
+            writer.write(csv)
             writer.flush()
         }
     }

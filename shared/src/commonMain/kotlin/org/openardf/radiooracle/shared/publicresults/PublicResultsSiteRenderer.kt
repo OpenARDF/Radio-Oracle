@@ -36,6 +36,8 @@ import org.openardf.radiooracle.shared.files.FinalResultJsonExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
+import org.openardf.radiooracle.shared.files.SplitResultExports
+import org.openardf.radiooracle.shared.files.SplitResultPdfExports
 import java.nio.charset.StandardCharsets
 
 data class PublicResultsRaceRenderRequest(
@@ -122,6 +124,8 @@ object PublicResultsSiteRenderer {
                 request.protectedCourseInfoByCategoryId.takeIf { it.isNotEmpty() },
             awardDisplayMode = request.awardDisplayMode
         )
+        val splitResultsCsv = SplitResultExports.csv(raceData, request.awardDisplayMode)
+        val splitResultsPdf = SplitResultPdfExports.pdf(raceData, request.awardDisplayMode)
         val pageHtml = eventPageHtml(
             printableHtml = printableHtml,
             eventName = raceData.race.name,
@@ -157,6 +161,8 @@ object PublicResultsSiteRenderer {
                 putText("downloads/live-results.json", liveJson)
                 putText("downloads/iof-result-list.xml", iofXml)
                 putText("downloads/printable-results.html", printableHtml)
+                putText("downloads/split-results.csv", splitResultsCsv)
+                put("downloads/split-results.pdf", splitResultsPdf)
             }
         }
         return RenderedPublicResultsRace(
@@ -305,6 +311,8 @@ object PublicResultsSiteRenderer {
           <span>Updated ${html(generatedAtIso)}</span>
           <div class="downloads">
             <a href="downloads/printable-results.html">Printable HTML</a>
+            <a href="downloads/split-results.pdf">Split Results PDF</a>
+            <a href="downloads/split-results.csv">Split Results CSV</a>
             <a href="downloads/final-results.json">Final JSON</a>
             <a href="downloads/live-results.json">Live JSON</a>
             <a href="downloads/iof-result-list.xml">IOF XML</a>

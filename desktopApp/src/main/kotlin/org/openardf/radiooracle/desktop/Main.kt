@@ -4407,6 +4407,25 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun exportSplitResultPdf() {
+            val currentProject = projectSession.currentProject ?: return
+            DesktopFileDialogs.chooseExportSplitResultPdf(
+                DesktopSplitResultReportPdf.defaultFileName(currentProject)
+            )?.let { path ->
+                runCatching {
+                    DesktopProjectFiles.exportSplitResultsPdf(
+                        path,
+                        currentProject,
+                        currentDesktopAwardDisplayMode()
+                    )
+                    syncProjectState()
+                    projectStatusText = "Exported ${path.fileName}"
+                }.onFailure { error ->
+                    projectStatusText = "Export failed: ${error.message ?: error::class.simpleName}"
+                }
+            }
+        }
+
         fun generatePublicResultsSite() {
             val currentProject = projectSession.currentProject ?: return
             val directory = DesktopPublicResultsSiteMirror.prepare(
@@ -6194,6 +6213,8 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportPrintableStartListPdf,
                 DesktopNavAction.ExportReadoutsCsv,
                 DesktopNavAction.ExportResultsCsv,
+                DesktopNavAction.ExportSplitResultsCsv,
+                DesktopNavAction.ExportSplitResultsPdf,
                 DesktopNavAction.ExportArdfEventResultsCsv,
                 DesktopNavAction.ExportResultsText,
                 DesktopNavAction.ExportResultsHtml,
@@ -6486,6 +6507,13 @@ fun main(args: Array<String>) = application {
                     }
                     true
                 }
+                DesktopNavAction.ExportSplitResultsCsv -> {
+                    exportCsv("Export Split Results CSV", "split results") { path, project ->
+                        DesktopProjectFiles.exportSplitResultsCsv(path, project, currentDesktopAwardDisplayMode())
+                    }
+                    true
+                }
+                DesktopNavAction.ExportSplitResultsPdf -> exportSplitResultPdf().let { true }
                 DesktopNavAction.ExportArdfEventResultsCsv -> {
                     exportCsv("Export ARDFEvent Results CSV", "ardfevent results", DesktopProjectFiles::exportArdfEventResultsCsv)
                     true

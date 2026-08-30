@@ -29,20 +29,18 @@ import org.openardf.radiooracle.shared.event.EventAwardCategoryDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
-import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.supportsChampionshipAwards
-import org.openardf.radiooracle.shared.domain.PunchStatus
-import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.files.FinalResultJsonExports
 import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
-import org.openardf.radiooracle.shared.files.ResultSplitRows
+import org.openardf.radiooracle.shared.files.SplitResultExports
+import org.openardf.radiooracle.shared.files.SplitResultLeg
+import org.openardf.radiooracle.shared.files.SplitResultPdfExports
 import org.openardf.radiooracle.shared.publicresults.PublishedPublicResultsEntry
 import org.openardf.radiooracle.shared.publicresults.PublicResultsSiteCatalog
-import org.openardf.radiooracle.shared.time.DurationFormatter
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -68,7 +66,9 @@ data class DesktopPublicResultSiteExportPaths(
     val finalResultsJson: Path,
     val liveResultsJson: Path,
     val iofResultListXml: Path,
-    val printableResultsHtml: Path
+    val printableResultsHtml: Path,
+    val splitResultsCsv: Path,
+    val splitResultsPdf: Path
 )
 
 data class DesktopPublicResultSeriesRace(
@@ -107,15 +107,6 @@ object DesktopPublicResultSiteExports {
         val courseGraphicPaths: List<Path>
     )
 
-    private data class PublicResultSplit(
-        val control: String,
-        val status: String,
-        val legSeconds: Long,
-        val legTime: String,
-        val cumulativeTime: String,
-        val legPlace: String = ""
-    )
-
     fun export(
         directory: Path,
         projectFile: EventProjectFile,
@@ -142,6 +133,8 @@ object DesktopPublicResultSiteExports {
         val liveResultsPath = downloadsDirectory.resolve("live-results.json")
         val iofResultsPath = downloadsDirectory.resolve("iof-result-list.xml")
         val printableResultsPath = downloadsDirectory.resolve("printable-results.html")
+        val splitResultsCsvPath = downloadsDirectory.resolve("split-results.csv")
+        val splitResultsPdfPath = downloadsDirectory.resolve("split-results.pdf")
 
         val unofficialResults = projectFile.raceData.race.supportsChampionshipAwards()
         writeText(indexPath, indexHtml(projectFile.raceData.race.name, unofficialResults))
@@ -163,12 +156,15 @@ object DesktopPublicResultSiteExports {
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 awardDisplayMode = awardDisplayMode
             )
+            val splitResultReport = SplitResultExports.model(projectFile.raceData, awardDisplayMode)
             writeText(dataDirectory.resolve("final-results.json"), finalResultsJson)
             writeText(dataDirectory.resolve("live-results.json"), liveResultsJson)
             writeText(finalResultsPath, finalResultsJson)
             writeText(liveResultsPath, liveResultsJson)
             writeText(iofResultsPath, iofResultListXml)
             writeText(printableResultsPath, printableResultsHtml)
+            writeText(splitResultsCsvPath, SplitResultExports.csv(splitResultReport))
+            Files.write(splitResultsPdfPath, SplitResultPdfExports.pdf(splitResultReport))
         } else {
             listOf(
                 dataDirectory.resolve("final-results.json"),
@@ -176,7 +172,9 @@ object DesktopPublicResultSiteExports {
                 finalResultsPath,
                 liveResultsPath,
                 iofResultsPath,
-                printableResultsPath
+                printableResultsPath,
+                splitResultsCsvPath,
+                splitResultsPdfPath
             ).forEach(Files::deleteIfExists)
         }
         val eventSummary = PublishedEventSummary(
@@ -204,7 +202,9 @@ object DesktopPublicResultSiteExports {
             finalResultsJson = finalResultsPath,
             liveResultsJson = liveResultsPath,
             iofResultListXml = iofResultsPath,
-            printableResultsHtml = printableResultsPath
+            printableResultsHtml = printableResultsPath,
+            splitResultsCsv = splitResultsCsvPath,
+            splitResultsPdf = splitResultsPdfPath
         )
     }
 
@@ -277,7 +277,9 @@ object DesktopPublicResultSiteExports {
             finalResultsJson = first.finalResultsJson,
             liveResultsJson = first.liveResultsJson,
             iofResultListXml = first.iofResultListXml,
-            printableResultsHtml = first.printableResultsHtml
+            printableResultsHtml = first.printableResultsHtml,
+            splitResultsCsv = first.splitResultsCsv,
+            splitResultsPdf = first.splitResultsPdf
         )
     }
 
@@ -387,7 +389,7 @@ object DesktopPublicResultSiteExports {
         val results = EventResultDetails.from(raceData)
         val awards = EventAwardDetails.from(raceData, awardDisplayMode)
         val groupedResults = results.groupBy { it.categoryId.orEmpty() to it.categoryName }
-        val splitsByResultId = publicResultSplitsByResultId(projectFile, results)
+        val splitResultsById = SplitResultExports.model(raceData, awardDisplayMode).resultsById
         return buildString {
             append("{\n")
             append("  \"event\": {\n")
@@ -424,6 +426,8 @@ object DesktopPublicResultSiteExports {
                     append("        {")
                     append("\"place\": ")
                     appendJsonString(result.placeText.ifBlank { result.statusLabel })
+                    append(", \"bib\": ")
+                    appendJsonString(splitResultsById[result.id]?.bibNumber.orEmpty())
                     append(", \"competitor\": ")
                     appendJsonString(result.competitorName)
                     append(", \"status\": ")
@@ -435,7 +439,7 @@ object DesktopPublicResultSiteExports {
                     append(", \"punches\": ")
                     appendJsonString(result.punchCodesText)
                     append(", \"splits\": ")
-                    appendSplitsJson(splitsByResultId[result.id].orEmpty())
+                    appendSplitsJson(splitResultsById[result.id]?.splits.orEmpty())
                     append("}")
                 }
                 append("\n      ]\n")
@@ -443,91 +447,6 @@ object DesktopPublicResultSiteExports {
             }
             append("\n  ]\n")
             append("}\n")
-        }
-    }
-
-    private fun publicResultSplitsByResultId(
-        projectFile: EventProjectFile,
-        results: List<EventResultDetails>
-    ): Map<String, List<PublicResultSplit>> {
-        val raceData = projectFile.raceData
-        val controlLabelsByCode = raceData.controls.associate { control ->
-            control.siCode to (control.publicLabel?.takeIf(String::isNotBlank) ?: control.label)
-        }
-        val readoutsByResultId = raceData.competitorData
-            .mapNotNull { it.readoutData }
-            .associateBy { it.result.id }
-
-        return results
-            .groupBy { it.categoryId.orEmpty() to it.categoryName }
-            .values
-            .flatMap { categoryResults ->
-                val baseSplitsByResultId = categoryResults.associate { result ->
-                    result.id to readoutsByResultId[result.id]
-                        .publicSplits(
-                            controlLabelsByCode = controlLabelsByCode,
-                            useAliases = raceData.race.raceType != RaceType.ORIENTEERING
-                        )
-                }
-                val legPlacesByIndex = legPlacesByIndex(baseSplitsByResultId)
-                categoryResults.map { result ->
-                    val splits = baseSplitsByResultId.getValue(result.id)
-                    result.id to splits.mapIndexed { index, split ->
-                        split.copy(legPlace = legPlacesByIndex[index]?.get(result.id).orEmpty())
-                    }
-                }
-            }
-            .toMap()
-    }
-
-    private fun EventReadoutData?.publicSplits(
-        controlLabelsByCode: Map<Int, String>,
-        useAliases: Boolean
-    ): List<PublicResultSplit> {
-        if (this == null) {
-            return emptyList()
-        }
-        var cumulativeSeconds = 0L
-        return ResultSplitRows.from(punches, controlLabelsByCode, useControlLabels = useAliases)
-            .map { split ->
-                cumulativeSeconds += split.splitSeconds
-                PublicResultSplit(
-                    control = split.label,
-                    status = split.punchStatus.publicStatusLabel(),
-                    legSeconds = split.splitSeconds,
-                    legTime = DurationFormatter.secondsToFormattedString(split.splitSeconds, useMinutes = false),
-                    cumulativeTime = DurationFormatter.secondsToFormattedString(cumulativeSeconds, useMinutes = false)
-                )
-            }
-    }
-
-    private fun PunchStatus.publicStatusLabel(): String =
-        when (this) {
-            PunchStatus.VALID -> "OK"
-            PunchStatus.INVALID -> "MP"
-            PunchStatus.DUPLICATE -> "DP"
-            PunchStatus.UNKNOWN -> "AP"
-        }
-
-    private fun legPlacesByIndex(splitsByResultId: Map<String, List<PublicResultSplit>>): Map<Int, Map<String, String>> {
-        val maxSplitCount = splitsByResultId.values.maxOfOrNull { it.size } ?: 0
-        return (0 until maxSplitCount).associateWith { index ->
-            val rankedLegs = splitsByResultId
-                .mapNotNull { (resultId, splits) ->
-                    splits.getOrNull(index)?.let { split -> resultId to split.legSeconds }
-                }
-                .sortedBy { it.second }
-            val places = mutableMapOf<String, String>()
-            var previousSeconds: Long? = null
-            var currentPlace = 0
-            rankedLegs.forEachIndexed { position, (resultId, seconds) ->
-                if (previousSeconds != seconds) {
-                    currentPlace = position + 1
-                    previousSeconds = seconds
-                }
-                places[resultId] = currentPlace.toString()
-            }
-            places
         }
     }
 
@@ -576,6 +495,8 @@ object DesktopPublicResultSiteExports {
             </div>
             <nav id="download-links" class="download-links" aria-label="Downloads">
               <a href="downloads/printable-results.html">Printable HTML</a>
+              <a href="downloads/split-results.pdf">Split Results PDF</a>
+              <a href="downloads/split-results.csv">Split Results CSV</a>
               <a href="downloads/final-results.json">Final JSON</a>
               <a href="downloads/iof-result-list.xml">IOF XML</a>
             </nav>
@@ -717,24 +638,24 @@ object DesktopPublicResultSiteExports {
         function text(value){return String(value ?? "")}
         function escapeHtml(value){return text(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;")}
         function resultSearchText(result){
-          const splits=(result.splits || []).map(split=>`${'$'}{split.control} ${'$'}{split.status} ${'$'}{split.legTime} ${'$'}{split.cumulativeTime}`).join(" ");
-          return `${'$'}{result.place} ${'$'}{result.competitor} ${'$'}{result.status} ${'$'}{result.points} ${'$'}{result.runtime} ${'$'}{result.punches} ${'$'}{splits}`.toLowerCase()
+          const splits=(result.splits || []).map(split=>`${'$'}{split.from} ${'$'}{split.control} ${'$'}{split.status} ${'$'}{split.legTime} ${'$'}{split.cumulativeTime}`).join(" ");
+          return `${'$'}{result.place} ${'$'}{result.bib} ${'$'}{result.competitor} ${'$'}{result.status} ${'$'}{result.points} ${'$'}{result.runtime} ${'$'}{result.punches} ${'$'}{splits}`.toLowerCase()
         }
         function splitRowsHtml(result){
           const splits=result.splits || [];
           if(splits.length===0)return '<div class="empty-state">No split details available for this result.</div>';
-          return `<p class="split-detail-title">Splits for ${'$'}{escapeHtml(result.competitor)}</p><table><thead><tr><th>Control</th><th>Status</th><th>Leg</th><th>Total</th><th class="number">Leg place</th></tr></thead><tbody>${'$'}{splits.map(split=>`<tr><td>${'$'}{escapeHtml(split.control)}</td><td>${'$'}{escapeHtml(split.status)}</td><td>${'$'}{escapeHtml(split.legTime)}</td><td>${'$'}{escapeHtml(split.cumulativeTime)}</td><td class="number">${'$'}{escapeHtml(split.legPlace)}</td></tr>`).join("")}</tbody></table>`
+          return `<p class="split-detail-title">Splits for ${'$'}{escapeHtml(result.competitor)}</p><table><thead><tr><th>From</th><th>Control</th><th>Status</th><th>Leg</th><th>Total</th><th class="number">Leg place</th></tr></thead><tbody>${'$'}{splits.map(split=>`<tr><td>${'$'}{escapeHtml(split.from)}</td><td>${'$'}{escapeHtml(split.control)}</td><td>${'$'}{escapeHtml(split.status)}</td><td>${'$'}{escapeHtml(split.legTime)}</td><td>${'$'}{escapeHtml(split.cumulativeTime)}</td><td class="number">${'$'}{escapeHtml(split.legPlace)}</td></tr>`).join("")}</tbody></table>`
         }
         function resultRowsHtml(raceIndex,categoryIndex,resultIndex,result){
           const rowId=`split-${'$'}{raceIndex}-${'$'}{categoryIndex}-${'$'}{resultIndex}`;
-          return `<tr class="result-row" tabindex="0" role="button" aria-expanded="false" aria-controls="${'$'}{rowId}" data-split-target="${'$'}{rowId}"><td class="number">${'$'}{escapeHtml(result.place)}</td><td>${'$'}{escapeHtml(result.competitor)}<small class="expand-hint">Tap for splits</small></td><td>${'$'}{escapeHtml(result.status)}</td><td class="number">${'$'}{escapeHtml(result.points)}</td><td>${'$'}{escapeHtml(result.runtime)}</td><td class="punches">${'$'}{escapeHtml(result.punches)}</td></tr><tr id="${'$'}{rowId}" class="split-row" hidden><td colspan="6"><div class="split-detail">${'$'}{splitRowsHtml(result)}</div></td></tr>`
+          return `<tr class="result-row" tabindex="0" role="button" aria-expanded="false" aria-controls="${'$'}{rowId}" data-split-target="${'$'}{rowId}"><td class="number">${'$'}{escapeHtml(result.place)}</td><td class="number">${'$'}{escapeHtml(result.bib)}</td><td>${'$'}{escapeHtml(result.competitor)}<small class="expand-hint">Tap for splits</small></td><td>${'$'}{escapeHtml(result.status)}</td><td class="number">${'$'}{escapeHtml(result.points)}</td><td>${'$'}{escapeHtml(result.runtime)}</td><td class="punches">${'$'}{escapeHtml(result.punches)}</td></tr><tr id="${'$'}{rowId}" class="split-row" hidden><td colspan="7"><div class="split-detail">${'$'}{splitRowsHtml(result)}</div></td></tr>`
         }
         function resultsHtml(data,raceIndex,query=""){
           const normalized=query.trim().toLowerCase();
           const sections=data.categories.map((category,categoryIndex)=>{
             const rows=category.results.filter(result=>resultSearchText(result).includes(normalized));
             if(rows.length===0)return "";
-            return `<section class="category"><h3>${'$'}{escapeHtml(category.name)}</h3><table><thead><tr><th class="number">Place</th><th>Competitor</th><th>Status</th><th class="number">Points</th><th>Runtime</th><th>Punches</th></tr></thead><tbody>${'$'}{rows.map((result,resultIndex)=>resultRowsHtml(raceIndex,categoryIndex,resultIndex,result)).join("")}</tbody></table></section>`
+            return `<section class="category"><h3>${'$'}{escapeHtml(category.name)}</h3><table><thead><tr><th class="number">Place</th><th class="number">Bib</th><th>Competitor</th><th>Status</th><th class="number">Points</th><th>Runtime</th><th>Punches</th></tr></thead><tbody>${'$'}{rows.map((result,resultIndex)=>resultRowsHtml(raceIndex,categoryIndex,resultIndex,result)).join("")}</tbody></table></section>`
           }).join("");
           return sections || '<div class="empty-state">No matching results.</div>'
         }
@@ -750,7 +671,7 @@ object DesktopPublicResultSiteExports {
             root.innerHTML=`<section class="series-race coming-soon"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1} | ${'$'}{comingSoonLabel}</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Scheduled ${'$'}{escapeHtml(data.event.start)}</p></div></div><section class="panel"><h3>${'$'}{comingSoonLabel}</h3><p>Return after this race begins for ${'$'}{resultsLabel.toLowerCase()}.</p></section></section>`;
             return
           }
-          root.innerHTML=`<section class="series-race"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1}</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Start ${'$'}{escapeHtml(data.event.start)} | ${'$'}{data.resultCount} ${'$'}{resultsLabel.toLowerCase()}</p></div><nav class="download-links" aria-label="${'$'}{escapeHtml(race.name)} downloads"><a href="${'$'}{escapeHtml(race.downloadsUrl)}printable-results.html">Printable HTML</a><a href="${'$'}{escapeHtml(race.downloadsUrl)}iof-result-list.xml">IOF XML</a></nav></div>${'$'}{courseGraphicsHtml(race)}<section class="panel"><div class="panel-heading"><div><h3>${'$'}{resultsLabel}</h3><p>Category results, points, runtime, status, and punch order.</p></div><input type="search" placeholder="Filter this race" aria-label="Filter ${'$'}{escapeHtml(race.name)} results"></div><div class="race-results">${'$'}{resultsHtml(data,raceIndex)}</div></section></section>`;
+          root.innerHTML=`<section class="series-race"><div class="race-heading"><div><p class="eyebrow">Race ${'$'}{raceIndex+1}</p><h2>${'$'}{escapeHtml(data.event.name)}</h2><p class="summary">${'$'}{escapeHtml(data.event.format)} | ${'$'}{escapeHtml(data.event.level)} | Start ${'$'}{escapeHtml(data.event.start)} | ${'$'}{data.resultCount} ${'$'}{resultsLabel.toLowerCase()}</p></div><nav class="download-links" aria-label="${'$'}{escapeHtml(race.name)} downloads"><a href="${'$'}{escapeHtml(race.downloadsUrl)}printable-results.html">Printable HTML</a><a href="${'$'}{escapeHtml(race.downloadsUrl)}split-results.pdf">Split Results PDF</a><a href="${'$'}{escapeHtml(race.downloadsUrl)}split-results.csv">Split Results CSV</a><a href="${'$'}{escapeHtml(race.downloadsUrl)}iof-result-list.xml">IOF XML</a></nav></div>${'$'}{courseGraphicsHtml(race)}<section class="panel"><div class="panel-heading"><div><h3>${'$'}{resultsLabel}</h3><p>Category results, points, runtime, status, and punch order.</p></div><input type="search" placeholder="Filter this race" aria-label="Filter ${'$'}{escapeHtml(race.name)} results"></div><div class="race-results">${'$'}{resultsHtml(data,raceIndex)}</div></section></section>`;
           const input=root.querySelector("input[type=search]");
           input.addEventListener("input",event=>{root.querySelector(".race-results").innerHTML=resultsHtml(data,raceIndex,event.target.value)})
         }
@@ -849,17 +770,17 @@ object DesktopPublicResultSiteExports {
           document.getElementById("download-links").hidden=isComingSoon
         }
         function resultSearchText(result){
-          const splitText=(result.splits || []).map(split=>`${'$'}{split.control} ${'$'}{split.status} ${'$'}{split.legTime} ${'$'}{split.cumulativeTime} ${'$'}{split.legPlace}`).join(" ");
-          return `${'$'}{result.place} ${'$'}{result.competitor} ${'$'}{result.status} ${'$'}{result.points} ${'$'}{result.runtime} ${'$'}{result.punches} ${'$'}{splitText}`.toLowerCase()
+          const splitText=(result.splits || []).map(split=>`${'$'}{split.from} ${'$'}{split.control} ${'$'}{split.status} ${'$'}{split.legTime} ${'$'}{split.cumulativeTime} ${'$'}{split.legPlace}`).join(" ");
+          return `${'$'}{result.place} ${'$'}{result.bib} ${'$'}{result.competitor} ${'$'}{result.status} ${'$'}{result.points} ${'$'}{result.runtime} ${'$'}{result.punches} ${'$'}{splitText}`.toLowerCase()
         }
         function splitRowsHtml(result){
           const splits=result.splits || [];
           if(splits.length===0){return '<div class="empty-state">No split details available for this result.</div>'}
-          return `<p class="split-detail-title">Splits for ${'$'}{escapeHtml(result.competitor)}</p><table><thead><tr><th>Control</th><th>Status</th><th>Leg</th><th>Total</th><th class="number">Leg place</th></tr></thead><tbody>${'$'}{splits.map(split=>`<tr><td>${'$'}{escapeHtml(split.control)}</td><td>${'$'}{escapeHtml(split.status)}</td><td>${'$'}{escapeHtml(split.legTime)}</td><td>${'$'}{escapeHtml(split.cumulativeTime)}</td><td class="number">${'$'}{escapeHtml(split.legPlace)}</td></tr>`).join("")}</tbody></table>`
+          return `<p class="split-detail-title">Splits for ${'$'}{escapeHtml(result.competitor)}</p><table><thead><tr><th>From</th><th>Control</th><th>Status</th><th>Leg</th><th>Total</th><th class="number">Leg place</th></tr></thead><tbody>${'$'}{splits.map(split=>`<tr><td>${'$'}{escapeHtml(split.from)}</td><td>${'$'}{escapeHtml(split.control)}</td><td>${'$'}{escapeHtml(split.status)}</td><td>${'$'}{escapeHtml(split.legTime)}</td><td>${'$'}{escapeHtml(split.cumulativeTime)}</td><td class="number">${'$'}{escapeHtml(split.legPlace)}</td></tr>`).join("")}</tbody></table>`
         }
         function resultRowsHtml(categoryIndex,resultIndex,result){
           const rowId=`split-${'$'}{categoryIndex}-${'$'}{resultIndex}`;
-          return `<tr class="result-row" tabindex="0" role="button" aria-expanded="false" aria-controls="${'$'}{rowId}" data-split-target="${'$'}{rowId}"><td class="number">${'$'}{escapeHtml(result.place)}</td><td>${'$'}{escapeHtml(result.competitor)}<small class="expand-hint">Tap for splits</small></td><td>${'$'}{escapeHtml(result.status)}</td><td class="number">${'$'}{escapeHtml(result.points)}</td><td>${'$'}{escapeHtml(result.runtime)}</td><td class="punches">${'$'}{escapeHtml(result.punches)}</td></tr><tr id="${'$'}{rowId}" class="split-row" hidden><td colspan="6"><div class="split-detail">${'$'}{splitRowsHtml(result)}</div></td></tr>`
+          return `<tr class="result-row" tabindex="0" role="button" aria-expanded="false" aria-controls="${'$'}{rowId}" data-split-target="${'$'}{rowId}"><td class="number">${'$'}{escapeHtml(result.place)}</td><td class="number">${'$'}{escapeHtml(result.bib)}</td><td>${'$'}{escapeHtml(result.competitor)}<small class="expand-hint">Tap for splits</small></td><td>${'$'}{escapeHtml(result.status)}</td><td class="number">${'$'}{escapeHtml(result.points)}</td><td>${'$'}{escapeHtml(result.runtime)}</td><td class="punches">${'$'}{escapeHtml(result.punches)}</td></tr><tr id="${'$'}{rowId}" class="split-row" hidden><td colspan="7"><div class="split-detail">${'$'}{splitRowsHtml(result)}</div></td></tr>`
         }
         function toggleResultRow(row,forceCollapsed=false){
           const targetId=row.dataset.splitTarget;
@@ -881,7 +802,7 @@ object DesktopPublicResultSiteExports {
             visible+=rows.length;
             const section=document.createElement("section");
             section.className="category";
-            section.innerHTML=`<h3>${'$'}{escapeHtml(category.name)}</h3><table><thead><tr><th class="number">Place</th><th>Competitor</th><th>Status</th><th class="number">Points</th><th>Runtime</th><th>Punches</th></tr></thead><tbody>${'$'}{rows.map((result,resultIndex)=>resultRowsHtml(categoryIndex,resultIndex,result)).join("")}</tbody></table>`;
+            section.innerHTML=`<h3>${'$'}{escapeHtml(category.name)}</h3><table><thead><tr><th class="number">Place</th><th class="number">Bib</th><th>Competitor</th><th>Status</th><th class="number">Points</th><th>Runtime</th><th>Punches</th></tr></thead><tbody>${'$'}{rows.map((result,resultIndex)=>resultRowsHtml(categoryIndex,resultIndex,result)).join("")}</tbody></table>`;
             root.appendChild(section)
           });
           if(visible===0){root.innerHTML='<div class="empty-state">No matching results.</div>'}
@@ -970,20 +891,22 @@ object DesktopPublicResultSiteExports {
         append('"')
     }
 
-    private fun StringBuilder.appendSplitsJson(splits: List<PublicResultSplit>) {
+    private fun StringBuilder.appendSplitsJson(splits: List<SplitResultLeg>) {
         append("[")
         splits.forEachIndexed { index, split ->
             if (index > 0) append(", ")
-            append("{\"control\": ")
-            appendJsonString(split.control)
+            append("{\"from\": ")
+            appendJsonString(split.from.label)
+            append(", \"control\": ")
+            appendJsonString(split.control.label)
             append(", \"status\": ")
-            appendJsonString(split.status)
+            appendJsonString(split.punchStatusText)
             append(", \"legTime\": ")
             appendJsonString(split.legTime)
             append(", \"cumulativeTime\": ")
             appendJsonString(split.cumulativeTime)
             append(", \"legPlace\": ")
-            appendJsonString(split.legPlace)
+            appendJsonString(split.legPlaceText)
             append("}")
         }
         append("]")

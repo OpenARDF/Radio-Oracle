@@ -109,6 +109,8 @@ enum class DesktopNavAction {
     ExportPrintableStartListPdf,
     ExportReadoutsCsv,
     ExportResultsCsv,
+    ExportSplitResultsCsv,
+    ExportSplitResultsPdf,
     ExportArdfEventResultsCsv,
     ExportResultsText,
     ExportResultsHtml,
@@ -862,6 +864,8 @@ object DesktopNavigation {
                             workflow,
                             listOf(
                                 action("results.export-csv", "Export Results CSV...", workflow, DesktopNavAction.ExportResultsCsv),
+                                action("results.export-splits-csv", "Export Split Results CSV...", workflow, DesktopNavAction.ExportSplitResultsCsv),
+                                action("results.export-splits-pdf", "Export Split Results PDF...", workflow, DesktopNavAction.ExportSplitResultsPdf),
                                 action(
                                     "results.export-ardfevent",
                                     "Export ARDFEvent Results CSV...",
@@ -1504,6 +1508,10 @@ object DesktopNavigation {
             "Use Cloudflare Website to generate the public results site, preview the race folder locally, publish the generated site to Cloudflare Pages, and open the Cloudflare settings used by publishing.",
         "results.export-csv" to
             "Use Export Results CSV to write scored results as a spreadsheet-friendly file.",
+        "results.export-splits-csv" to
+            "Use Export Split Results CSV to write one row per visited control, including leg time, cumulative time, and place among identical directed legs.",
+        "results.export-splits-pdf" to
+            "Use Export Split Results PDF to write a printable category report with competitor summaries and split details.",
         "results.export-ardfevent" to
             "Use Export ARDFEvent Results CSV to write results for ARDFEvent-compatible consumers.",
         "results.export-text" to

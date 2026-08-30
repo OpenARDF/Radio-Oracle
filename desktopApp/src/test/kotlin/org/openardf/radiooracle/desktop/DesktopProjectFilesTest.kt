@@ -235,6 +235,26 @@ class DesktopProjectFilesTest {
     }
 
     @Test
+    fun exportsSharedSplitResultCsvAndPdfFiles() {
+        val directory = Files.createTempDirectory("rom-desktop-split-results")
+        val projectFile = EventProjectFile(raceData = raceDataWithSplitReadout())
+        val csvPath = directory.resolve("split-results.csv")
+        val pdfPath = directory.resolve("split-results.pdf")
+
+        DesktopProjectFiles.exportSplitResultsCsv(csvPath, projectFile)
+        DesktopProjectFiles.exportSplitResultsPdf(pdfPath, projectFile)
+
+        val csv = Files.readString(csvPath)
+        val pdf = Files.readString(pdfPath)
+        assertTrue(csv.contains("Split #;From;Control;SI Code;Punch Status;Leg Time"))
+        assertTrue(csv.contains(";Start;31;31;OK;00:05:00;300;"))
+        assertTrue(csv.contains(";31;Finish;;OK;00:15:00;900;"))
+        assertTrue(pdf.startsWith("%PDF-1.4"))
+        assertTrue(pdf.contains("Desktop File Race"))
+        assertTrue(pdf.contains("RUNNER Alice"))
+    }
+
+    @Test
     fun exportsRobisStartListCsvFile() {
         val directory = Files.createTempDirectory("rom-desktop-robis-start-list")
         val path = directory.resolve("robis-start-list.csv")
@@ -482,6 +502,8 @@ class DesktopProjectFilesTest {
         assertTrue(Files.exists(paths.liveResultsJson))
         assertTrue(Files.exists(paths.iofResultListXml))
         assertTrue(Files.exists(paths.printableResultsHtml))
+        assertTrue(Files.exists(paths.splitResultsCsv))
+        assertTrue(Files.exists(paths.splitResultsPdf))
         assertTrue(Files.exists(directory.resolve("_headers")))
         assertTrue(Files.exists(paths.eventDirectory.resolve("assets").resolve("site.css")))
         assertTrue(Files.exists(paths.eventDirectory.resolve("assets").resolve("site.js")))
@@ -498,20 +520,28 @@ class DesktopProjectFilesTest {
         assertFalse(index.contains("Unofficial"))
         assertFalse(rootIndex.contains("unofficial"))
         assertTrue(index.contains("downloads/final-results.json"))
+        assertTrue(index.contains("downloads/split-results.pdf"))
+        assertTrue(index.contains("downloads/split-results.csv"))
         val siteJs = Files.readString(paths.eventDirectory.resolve("assets").resolve("site.js"))
         assertTrue(siteJs.contains("data/public-results.json"))
         assertTrue(siteJs.contains("data-split-target"))
         assertTrue(siteJs.contains("Tap for splits"))
+        assertTrue(siteJs.contains("<th>From</th><th>Control</th>"))
+        assertTrue(siteJs.contains("result.bib"))
         assertTrue(publicJson.contains("\"name\": \"Desktop File Race\""))
         assertTrue(publicJson.contains("\"competitor\": \"RUNNER Alice\""))
         assertTrue(publicJson.contains("\"runtime\": \"00:20:00\""))
         assertTrue(publicJson.contains("\"splits\": ["))
+        assertTrue(publicJson.contains("\"bib\":"))
+        assertTrue(publicJson.contains("\"from\": \"Start\""))
         assertTrue(publicJson.contains("\"control\": \"31\""))
         assertTrue(publicJson.contains("\"control\": \"Finish\""))
         assertTrue(publicJson.contains("\"legTime\": \"00:05:00\""))
         assertTrue(publicJson.contains("\"legTime\": \"00:15:00\""))
         assertTrue(publicJson.contains("\"cumulativeTime\": \"00:20:00\""))
         assertTrue(Files.readString(paths.iofResultListXml).contains("<ResultList"))
+        assertTrue(Files.readString(paths.splitResultsCsv).contains("Leg Place"))
+        assertTrue(Files.readString(paths.splitResultsPdf).startsWith("%PDF-1.4"))
     }
 
     @Test

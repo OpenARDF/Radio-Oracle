@@ -35,6 +35,7 @@ import org.openardf.radiooracle.shared.files.HtmlResultExports
 import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
 import org.openardf.radiooracle.shared.files.ResultReportExports
+import org.openardf.radiooracle.shared.files.SplitResultExports
 import org.openardf.radiooracle.shared.files.RaceBackupJsonImports
 import org.openardf.radiooracle.shared.files.RaceBackupJsonExports
 import org.openardf.radiooracle.shared.files.TextResultExports
@@ -122,6 +123,22 @@ object DesktopProjectFiles : ProjectFileStore {
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ) {
         writeText(path, EventCsvExports.results(projectFile.raceData, awardDisplayMode))
+    }
+
+    fun exportSplitResultsCsv(
+        path: Path,
+        projectFile: EventProjectFile,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+    ) {
+        writeText(path, SplitResultExports.csv(projectFile.raceData, awardDisplayMode))
+    }
+
+    fun exportSplitResultsPdf(
+        path: Path,
+        projectFile: EventProjectFile,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+    ) {
+        DesktopSplitResultReportPdf.exportPdf(path, projectFile, awardDisplayMode)
     }
 
     fun exportArdfEventResultsCsv(path: Path, projectFile: EventProjectFile) {

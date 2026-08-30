@@ -137,7 +137,14 @@ class ResultsExportDialogFragment : DialogFragment() {
 
             DataFormat.CSV -> {
                 intent.type = "text/csv"
-                intent.putExtra(Intent.EXTRA_TITLE, "results.csv")
+                intent.putExtra(
+                    Intent.EXTRA_TITLE,
+                    if (getCurrentType() in setOf(DataType.RESULTS_FINAL, DataType.RESULTS_LIVE)) {
+                        "split-results.csv"
+                    } else {
+                        "results.csv"
+                    }
+                )
             }
 
             DataFormat.JSON -> {

@@ -147,6 +147,10 @@ class PublicResultsSupportTest {
         assertTrue(svg.contains("font-size=\"26\""))
         assertTrue("downloads/live-results.json" in rendered.files)
         assertTrue("downloads/iof-result-list.xml" in rendered.files)
+        assertTrue("downloads/split-results.csv" in rendered.files)
+        assertTrue("downloads/split-results.pdf" in rendered.files)
+        assertTrue(rendered.files.getValue("downloads/split-results.csv").decodeToString().contains("Leg Place"))
+        assertTrue(rendered.files.getValue("downloads/split-results.pdf").decodeToString().startsWith("%PDF-1.4"))
     }
 
     @Test

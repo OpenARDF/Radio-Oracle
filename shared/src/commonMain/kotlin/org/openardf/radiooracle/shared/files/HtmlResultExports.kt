@@ -119,7 +119,7 @@ object HtmlResultExports {
             append("</p>")
         }
         append("<table><thead><tr>")
-        listOf("Place", "Name", "Club", "Person ID", "Points", "Run time", "Splits").forEach { heading ->
+        listOf("Place", "Bib #", "Name", "Club", "Person ID", "Points", "Run time", "Splits").forEach { heading ->
             append("<th>")
             appendHtml(heading)
             append("</th>")
@@ -140,6 +140,8 @@ object HtmlResultExports {
         val result = readoutData.result
         append("<tr><td class=\"num\">")
         appendHtml(result.placeText())
+        append("</td><td>")
+        appendHtml(competitor.bibNumber)
         append("</td><td>")
         appendHtml(competitor.fullName())
         append("</td><td>")
