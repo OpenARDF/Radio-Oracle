@@ -887,14 +887,14 @@ object DesktopNavigation {
                             listOf(
                                 action(
                                     "results.generate-public-site",
-                                    "Generate Public Results Site...",
+                                    "Generate Public Results Preview...",
                                     workflow,
                                     DesktopNavAction.GeneratePublicResultsSite,
                                     section = DesktopSection.PublicResultsSite
                                 ),
                                 action(
                                     "results.publish-public-site",
-                                    "Publish Public Results Site",
+                                    "Publish or Update Public Results Site",
                                     workflow,
                                     DesktopNavAction.PublishPublicResultsSite,
                                     section = DesktopSection.PublicResultsSite
@@ -1505,7 +1505,7 @@ object DesktopNavigation {
         "results.exports.result-files" to
             "Use Result Files to export scored results and readouts in CSV, TXT, HTML, and ARDFEvent-compatible formats.",
         "results.exports.cloudflare-website" to
-            "Use Cloudflare Website to generate the public results site, preview the race folder locally, publish the generated site to Cloudflare Pages, and open the Cloudflare settings used by publishing.",
+            "Use Cloudflare Website to publish or update the current results in one operation, optionally generate a local preview, and manage the saved Cloudflare settings.",
         "results.export-csv" to
             "Use Export Results CSV to write scored results as a spreadsheet-friendly file.",
         "results.export-splits-csv" to
@@ -1525,9 +1525,9 @@ object DesktopNavigation {
         "results.export-report-pdf" to
             "Use Export Results Report PDF to write a printable report PDF with the same result rows as the HTML and XML report files.",
         "results.generate-public-site" to
-            "Use Generate Public Results Site to update Radio-Oracle's managed Cloudflare Pages site. Cloudflare Settings controls whether previously published events are retained or replaced.",
+            "Use Generate Public Results Preview when you want to inspect the current website locally without publishing it.",
         "results.publish-public-site" to
-            "Use Publish Public Results Site to deploy the generated public results site to Cloudflare Pages.",
+            "Use Publish or Update Public Results Site to regenerate and deploy the current race or series in one operation. Cloudflare Settings controls result status and whether previous events are retained.",
         "results.view-public-results" to
             "Use View Public Results after publishing to show the public race link and QR code for competitors and spectators.",
         "results.public-site-preview" to
@@ -1537,7 +1537,7 @@ object DesktopNavigation {
         "results.stop-public-site-preview" to
             "Use Stop Public Site Preview to shut down the generated public results site preview.",
         "results.cloudflare-settings" to
-            "Use Cloudflare Settings to enter the Pages project name, branch, account ID, and API token used when publishing the public results site.",
+            "Use Cloudflare Settings to enter the Pages project, credentials, retained-history choice, and Preliminary or Official website status.",
         "results.export-readouts" to
             "Use Export Readouts CSV to write downloaded and unmatched readout records for review or backup.",
         "results.exports-json-xml" to

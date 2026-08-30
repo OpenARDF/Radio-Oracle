@@ -26,6 +26,7 @@ package org.openardf.radiooracle.desktop
 
 import java.util.prefs.Preferences
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortDiscoveryMode
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortDiscoverySettings
 
@@ -76,7 +77,9 @@ data class DesktopCloudflarePagesPublishSettings(
     val accountId: String = "",
     val apiToken: String = "",
     val retentionMode: DesktopPublicResultsRetentionMode =
-        DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS
+        DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS,
+    val publicationStatus: PublicResultsPublicationStatus =
+        PublicResultsPublicationStatus.PRELIMINARY
 ) {
     fun normalized(): DesktopCloudflarePagesPublishSettings =
         copy(
@@ -114,6 +117,11 @@ internal fun desktopPublicResultsRetentionMode(value: String?): DesktopPublicRes
         DesktopPublicResultsRetentionMode.valueOf(value.orEmpty())
     }.getOrDefault(DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS)
 
+internal fun desktopPublicResultsPublicationStatus(value: String?): PublicResultsPublicationStatus =
+    runCatching {
+        PublicResultsPublicationStatus.valueOf(value.orEmpty())
+    }.getOrDefault(PublicResultsPublicationStatus.PRELIMINARY)
+
 object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
     private const val CHECK_FOR_UPDATES_KEY = "checkForRadioOracleUpdates"
     private const val SPORT_IDENT_PORT_DISCOVERY_MODE_KEY = "sportIdentPortDiscoveryMode"
@@ -123,6 +131,7 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
     private const val CLOUDFLARE_ACCOUNT_ID_KEY = "cloudflarePagesAccountId"
     private const val CLOUDFLARE_API_TOKEN_KEY = "cloudflarePagesApiToken"
     private const val CLOUDFLARE_RETENTION_MODE_KEY = "cloudflarePagesRetentionMode"
+    private const val CLOUDFLARE_PUBLICATION_STATUS_KEY = "cloudflarePagesPublicationStatus"
     private const val AWARD_DISPLAY_MODE_KEY = "awardDisplayMode"
     private const val WINDOW_X_KEY = "windowX"
     private const val WINDOW_Y_KEY = "windowY"
@@ -172,6 +181,12 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
                     CLOUDFLARE_RETENTION_MODE_KEY,
                     DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS.name
                 )
+            ),
+            publicationStatus = desktopPublicResultsPublicationStatus(
+                preferences.get(
+                    CLOUDFLARE_PUBLICATION_STATUS_KEY,
+                    PublicResultsPublicationStatus.PRELIMINARY.name
+                )
             )
         ).normalized()
 
@@ -182,6 +197,7 @@ object DesktopAppSettingsPreferences : DesktopAppSettingsStore {
         preferences.put(CLOUDFLARE_ACCOUNT_ID_KEY, normalized.accountId)
         preferences.put(CLOUDFLARE_API_TOKEN_KEY, normalized.apiToken)
         preferences.put(CLOUDFLARE_RETENTION_MODE_KEY, normalized.retentionMode.name)
+        preferences.put(CLOUDFLARE_PUBLICATION_STATUS_KEY, normalized.publicationStatus.name)
     }
 
     override fun awardDisplayMode(): EventAwardDisplayMode =

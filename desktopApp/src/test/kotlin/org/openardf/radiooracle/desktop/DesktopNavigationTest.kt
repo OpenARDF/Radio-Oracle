@@ -1475,8 +1475,8 @@ class DesktopNavigationTest {
         )
         assertEquals(
             listOf(
-                "Generate Public Results Site...",
-                "Publish Public Results Site",
+                "Generate Public Results Preview...",
+                "Publish or Update Public Results Site",
                 "Public Site Preview",
                 "View Public Results",
                 "Cloudflare Settings"
@@ -1522,7 +1522,7 @@ class DesktopNavigationTest {
                     selectedSection = DesktopSection.PublicResultsSite,
                     selectedItemId = "results.exports.cloudflare-website"
                 )
-            ).contains("generate the public results site")
+            ).contains("publish or update the current results in one operation")
         )
     }
 
@@ -1591,8 +1591,8 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.PublicResultsSite, backState.selectedSection)
         assertEquals(
             listOf(
-                "Generate Public Results Site...",
-                "Publish Public Results Site",
+                "Generate Public Results Preview...",
+                "Publish or Update Public Results Site",
                 "Public Site Preview",
                 "View Public Results",
                 "Cloudflare Settings"

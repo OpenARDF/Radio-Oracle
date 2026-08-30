@@ -165,6 +165,66 @@ class DesktopPublicResultsSiteMirrorTest {
         assertTrue(Files.exists(marker))
     }
 
+    @Test
+    fun stagedRetainedPublishDoesNotChangeMirrorUntilPromotion() {
+        val appData = Files.createTempDirectory("radio-oracle-app-data")
+        val mirror = DesktopPublicResultsSiteMirror.directory(settings, appData)
+        Files.createDirectories(mirror)
+        Files.writeString(mirror.resolve("existing.txt"), "published")
+
+        val staged = DesktopPublicResultsSiteMirror.stageForPublish(
+            settings.copy(publicationStatus = PublicResultsPublicationStatus.OFFICIAL),
+            appData
+        )
+        Files.writeString(staged.stagingDirectory.resolve("candidate.txt"), "candidate")
+
+        assertTrue(Files.exists(staged.stagingDirectory.resolve("existing.txt")))
+        assertFalse(Files.exists(mirror.resolve("candidate.txt")))
+        val publicationStatus = DesktopPublicResultsPublicationSelection.consumeForGeneration()
+        DesktopPublicResultsPublicationSelection.completeGeneration(publicationStatus)
+        assertEquals(PublicResultsPublicationStatus.OFFICIAL, publicationStatus)
+
+        val promoted = staged.promote()
+
+        assertEquals(mirror, promoted)
+        assertTrue(Files.exists(mirror.resolve("existing.txt")))
+        assertTrue(Files.exists(mirror.resolve("candidate.txt")))
+        assertFalse(Files.exists(staged.stagingDirectory))
+    }
+
+    @Test
+    fun discardedPublishCandidatePreservesExistingMirror() {
+        val appData = Files.createTempDirectory("radio-oracle-app-data")
+        val mirror = DesktopPublicResultsSiteMirror.directory(settings, appData)
+        Files.createDirectories(mirror)
+        Files.writeString(mirror.resolve("existing.txt"), "published")
+        val staged = DesktopPublicResultsSiteMirror.stageForPublish(settings, appData)
+        Files.writeString(staged.stagingDirectory.resolve("candidate.txt"), "candidate")
+
+        staged.discard()
+
+        assertTrue(Files.exists(mirror.resolve("existing.txt")))
+        assertFalse(Files.exists(mirror.resolve("candidate.txt")))
+        assertFalse(Files.exists(staged.stagingDirectory))
+    }
+
+    @Test
+    fun stagedReplacePublishStartsWithoutRetainedFiles() {
+        val appData = Files.createTempDirectory("radio-oracle-app-data")
+        val replacementSettings = settings.copy(
+            retentionMode = DesktopPublicResultsRetentionMode.REPLACE_PREVIOUS
+        )
+        val mirror = DesktopPublicResultsSiteMirror.directory(replacementSettings, appData)
+        Files.createDirectories(mirror)
+        Files.writeString(mirror.resolve("existing.txt"), "published")
+
+        val staged = DesktopPublicResultsSiteMirror.stageForPublish(replacementSettings, appData)
+
+        assertFalse(Files.exists(staged.stagingDirectory.resolve("existing.txt")))
+        assertTrue(Files.exists(mirror.resolve("existing.txt")))
+        staged.discard()
+    }
+
     private fun writeRacesJson(mirror: java.nio.file.Path, count: Int) {
         val dataDirectory = mirror.resolve("data")
         Files.createDirectories(dataDirectory)

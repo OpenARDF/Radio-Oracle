@@ -210,6 +210,7 @@ import org.openardf.radiooracle.shared.event.EventValidationRules
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.PublicResultsPublication
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.event.ResultRecalculationOutcome
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
@@ -860,12 +861,7 @@ fun main(args: Array<String>) = application {
         var localResultsWebServer by remember { mutableStateOf<DesktopPublicResultSitePreviewServer?>(null) }
         var localResultsWebServerUrl by remember { mutableStateOf<String?>(null) }
         var localResultsWebServerRefreshJob by remember { mutableStateOf<Job?>(null) }
-        var publicResultSiteDirectory by remember { mutableStateOf<Path?>(null) }
-        var publicResultSiteEventPath by remember { mutableStateOf<String?>(null) }
-        var publicResultSitePreviewServer by remember { mutableStateOf<DesktopPublicResultSitePreviewServer?>(null) }
-        var publicResultSitePreviewUrl by remember { mutableStateOf<String?>(null) }
-        var publishedPublicResultSiteUrl by remember { mutableStateOf<String?>(null) }
-        var isPublishingPublicResultSite by remember { mutableStateOf(false) }
+        var publicResultSiteState by remember { mutableStateOf(DesktopPublicResultsSiteUiState()) }
         var eventFileTransferServer by remember { mutableStateOf<DesktopEventFileTransferServer?>(null) }
         var eventFileTransferDialog by remember { mutableStateOf<DesktopEventFileTransferDialogState?>(null) }
         var eventFileTransferResultDialog by remember { mutableStateOf<DesktopEventFileTransferResultDialogState?>(null) }
@@ -957,7 +953,7 @@ fun main(args: Array<String>) = application {
         val activeAndroidFileReceiveServer by rememberUpdatedState(androidFileReceiveServer)
         val activeLocalResultsWebServer by rememberUpdatedState(localResultsWebServer)
         val activeLocalResultsWebServerRefreshJob by rememberUpdatedState(localResultsWebServerRefreshJob)
-        val activePublicResultSitePreviewServer by rememberUpdatedState(publicResultSitePreviewServer)
+        val activePublicResultSitePreviewServer by rememberUpdatedState(publicResultSiteState.previewServer)
 
         DisposableEffect(Unit) {
             onDispose {
@@ -1023,7 +1019,7 @@ fun main(args: Array<String>) = application {
         }
 
         LaunchedEffect(projectFile?.raceData?.race?.id, projectSession.currentPath) {
-            publishedPublicResultSiteUrl = null
+            publicResultSiteState = publicResultSiteState.copy(publishedUrl = null)
             localResultsWebServerRefreshJob?.cancel()
             localResultsWebServerRefreshJob = null
             localResultsWebServer?.stop()
@@ -3666,11 +3662,10 @@ fun main(args: Array<String>) = application {
                 normalized.copy(apiToken = "") !=
                 cloudflarePagesPublishSettings.copy(apiToken = "")
             ) {
-                publicResultSitePreviewServer?.stop()
-                publicResultSitePreviewServer = null
-                publicResultSiteDirectory = null
-                publicResultSiteEventPath = null
-                publicResultSitePreviewUrl = null
+                publicResultSiteState.previewServer?.stop()
+                publicResultSiteState = DesktopPublicResultsSiteUiState(
+                    publishedUrl = publicResultSiteState.publishedUrl
+                )
             }
             cloudflarePagesPublishSettings = normalized
             DesktopAppSettingsPreferences.setCloudflarePagesPublishSettings(normalized)
@@ -4431,17 +4426,17 @@ fun main(args: Array<String>) = application {
             val directory = DesktopPublicResultsSiteMirror.prepare(
                 settings = cloudflarePagesPublishSettings,
                 confirmReplacement = DesktopFileDialogs::confirmReplacePublicResultsSite,
-                choosePublicationStatus = DesktopFileDialogs::choosePublicResultsPublicationStatus
+                choosePublicationStatus = { cloudflarePagesPublishSettings.publicationStatus }
             ) ?: run {
                 projectStatusText = "Public results site generation canceled."
                 return
             }
             runCatching {
                 val paths = exportPublicResultsSiteForCurrentContext(directory, currentProject)
-                publicResultSiteDirectory = paths.directory
-                publicResultSiteEventPath = paths.eventPath
-                publishedPublicResultSiteUrl =
-                    publicResultsUrl(cloudflarePagesPublishSettings, paths.eventPath)
+                publicResultSiteState = publicResultSiteState.copy(
+                    directory = paths.directory,
+                    eventPath = paths.eventPath
+                )
                 syncProjectState()
                 projectStatusText = "Generated public results site at ${paths.eventDirectory}"
                 DesktopDebugLog.info(
@@ -4454,33 +4449,20 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun requestGeneratePublicResultsSite() {
-            val projects = publicResultSeriesRaces()?.second?.map(DesktopPublicResultSeriesRace::projectFile)
-                ?: listOfNotNull(projectSession.currentProject)
-            if (publicResultsNeedCourseUnlock(projects, protectedCoursePassword != null)) {
-                pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.GeneratePublicResultsSite
-                projectStatusText =
-                    "Unlock course data to include 2D course diagrams, or publish without diagrams."
-                return
-            }
-            generatePublicResultsSite()
-        }
-
         fun startPublicResultsSitePreview() {
-            val directory = publicResultSiteDirectory ?: run {
+            val directory = publicResultSiteState.directory ?: run {
                 projectStatusText = "Generate a public results site before starting preview."
                 return
             }
             runCatching {
-                publicResultSitePreviewServer?.stop()
+                publicResultSiteState.previewServer?.stop()
                 val server = DesktopPublicResultSitePreviewServer(directory)
                 val serverUrl = server.start()
-                val url = publicResultSiteEventPath
+                val url = publicResultSiteState.eventPath
                     ?.takeIf { it.isNotBlank() }
                     ?.let { path -> "$serverUrl${path.trim('/')}/" }
                     ?: serverUrl
-                publicResultSitePreviewServer = server
-                publicResultSitePreviewUrl = url
+                publicResultSiteState = publicResultSiteState.copy(previewServer = server, previewUrl = url)
                 browseExternalUrl(url).onSuccess {
                     projectStatusText = "Public results site preview running at $url"
                     DesktopDebugLog.info("PublicResults", projectStatusText)
@@ -4490,22 +4472,20 @@ fun main(args: Array<String>) = application {
                     DesktopDebugLog.warn("PublicResults", projectStatusText)
                 }
             }.onFailure { error ->
-                publicResultSitePreviewServer = null
-                publicResultSitePreviewUrl = null
+                publicResultSiteState = publicResultSiteState.copy(previewServer = null, previewUrl = null)
                 projectStatusText = "Public results site preview failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("PublicResults", projectStatusText)
             }
         }
 
         fun stopPublicResultsSitePreview() {
-            publicResultSitePreviewServer?.stop()
-            publicResultSitePreviewServer = null
-            publicResultSitePreviewUrl = null
+            publicResultSiteState.previewServer?.stop()
+            publicResultSiteState = publicResultSiteState.copy(previewServer = null, previewUrl = null)
             projectStatusText = "Public results site preview stopped."
         }
 
         fun openPublicResultsSitePreview() {
-            val runningUrl = publicResultSitePreviewUrl
+            val runningUrl = publicResultSiteState.previewUrl
             if (runningUrl != null) {
                 openExternalUrl(runningUrl)
                 return
@@ -4579,54 +4559,45 @@ fun main(args: Array<String>) = application {
         }
 
         fun publishPublicResultsSite() {
-            val directory = publicResultSiteDirectory ?: run {
-                projectStatusText = "Generate a public results site before publishing."
-                return
-            }
-            if (isPublishingPublicResultSite) {
-                projectStatusText = "Public results site publishing is already in progress."
-                return
-            }
-            isPublishingPublicResultSite = true
-            projectStatusText = "Publishing public results site to Cloudflare Pages..."
-            DesktopDebugLog.info("PublicResults", "$projectStatusText root=$directory")
-            appCoroutineScope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        publicResultSitePublisher.publish(
-                            cloudflarePagesPublishSettings.request(directory)
-                        )
-                    }
-                }.onSuccess { result ->
-                    val publicUrl = DesktopCloudflarePagesPublisher.publicResultsUrl(result.url, publicResultSiteEventPath)
-                    publishedPublicResultSiteUrl = publicUrl
-                    val publication = DesktopPublicResultsPublicationSelection.publication(
-                        url = publicUrl,
-                        publishedAtIso = java.time.Instant.now().toString()
+            DesktopPublicResultsPublishWorkflow.launch(
+                scope = appCoroutineScope,
+                settings = cloudflarePagesPublishSettings,
+                currentProject = projectSession.currentProject,
+                alreadyPublishing = publicResultSiteState.publishing,
+                publisher = publicResultSitePublisher,
+                manifestPath = currentSeriesManifestPath(),
+                projectSession = projectSession,
+                exportSite = ::exportPublicResultsSiteForCurrentContext,
+                updatePublishing = { publishing ->
+                    publicResultSiteState = publicResultSiteState.copy(publishing = publishing)
+                },
+                updateStatus = { projectStatusText = it },
+                onPublished = { outcome ->
+                    val completed = outcome.completed
+                    publicResultSiteState.previewServer?.stop()
+                    publicResultSiteState = publicResultSiteState.copy(
+                        directory = completed.mirrorDirectory,
+                        eventPath = completed.eventPath,
+                        previewServer = null,
+                        previewUrl = null,
+                        publishedUrl = outcome.publicUrl
                     )
-                    val persistenceError = runCatching {
-                        persistPublicResultsPublication(
-                            manifestPath = currentSeriesManifestPath(),
-                            projectSession = projectSession,
-                            publication = publication
-                        )?.let {
-                            projectFile = it
-                            syncProjectState()
-                        }
-                    }.exceptionOrNull()
-                    projectStatusText = if (persistenceError == null) {
-                        "Published public results site to $publicUrl and saved its link."
-                    } else {
-                        "Published public results site to $publicUrl, but its link could not be saved: " +
-                            (persistenceError.message ?: persistenceError::class.simpleName)
-                    }
-                    DesktopDebugLog.info("PublicResults", "$projectStatusText root=$directory project=${result.projectName} branch=${result.branch}")
-                }.onFailure { error ->
-                    projectStatusText = "Public results site publish failed: ${error.message ?: error::class.simpleName}"
-                    DesktopDebugLog.error("PublicResults", projectStatusText)
+                    if (outcome.updatedProject != null) syncProjectState()
                 }
-                isPublishingPublicResultSite = false
+            )
+        }
+
+        fun requestPublicResultsSite(publish: Boolean) {
+            val projects = publicResultSeriesRaces()?.second?.map(DesktopPublicResultSeriesRace::projectFile)
+                ?: listOfNotNull(projectSession.currentProject)
+            if (publicResultsNeedCourseUnlock(projects, protectedCoursePassword != null)) {
+                DesktopPublicResultsRequestedAction.rememberPublish(publish)
+                pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.GeneratePublicResultsSite
+                projectStatusText =
+                    "Unlock course data to include 2D course diagrams, or continue without diagrams."
+                return
             }
+            if (publish) publishPublicResultsSite() else generatePublicResultsSite()
         }
 
         fun exportResultsText() {
@@ -6149,12 +6120,12 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.PreviewLocalResultsWebPage,
                 DesktopNavAction.StartLocalResultsWebServer -> projectFile != null
                 DesktopNavAction.StopLocalResultsWebServer -> localResultsWebServerUrl != null
-                DesktopNavAction.OpenPublicResultsSitePreview -> publicResultSiteDirectory != null
+                DesktopNavAction.OpenPublicResultsSitePreview -> publicResultSiteState.directory != null
                 DesktopNavAction.PublishPublicResultsSite ->
-                    publicResultSiteDirectory != null &&
-                        !isPublishingPublicResultSite &&
+                    projectFile != null &&
+                        !publicResultSiteState.publishing &&
                         cloudflarePagesPublishSettings.isComplete()
-                DesktopNavAction.StopPublicResultsSitePreview -> publicResultSitePreviewUrl != null
+                DesktopNavAction.StopPublicResultsSitePreview -> publicResultSiteState.previewUrl != null
                 DesktopNavAction.SendRobis -> projectFile != null && !isSendingLiveResults
                 DesktopNavAction.SendEventFileToAndroid -> projectFile != null
                 DesktopNavAction.SendEventSeriesToAndroid,
@@ -6270,8 +6241,8 @@ fun main(args: Array<String>) = application {
                     "Generate a public results site before opening preview."
                 DesktopNavAction.PublishPublicResultsSite ->
                     when {
-                        publicResultSiteDirectory == null -> "Generate a public results site before publishing."
-                        isPublishingPublicResultSite -> "The public results site is already being published."
+                        projectFile == null -> "Open or create a Race File before publishing."
+                        publicResultSiteState.publishing -> "The public results site is already being published."
                         !cloudflarePagesPublishSettings.isComplete() ->
                             "Save complete Cloudflare Settings before publishing."
                         else -> "Public results site publishing is not available right now."
@@ -6540,11 +6511,11 @@ fun main(args: Array<String>) = application {
                     true
                 }
                 DesktopNavAction.GeneratePublicResultsSite -> {
-                    requestGeneratePublicResultsSite()
+                    requestPublicResultsSite(publish = false)
                     true
                 }
                 DesktopNavAction.PublishPublicResultsSite -> {
-                    publishPublicResultsSite()
+                    requestPublicResultsSite(publish = true)
                     true
                 }
                 DesktopNavAction.OpenPublicResultsSitePreview -> {
@@ -7116,7 +7087,11 @@ fun main(args: Array<String>) = application {
                                     drawStartListWithCurrentCourseData(request.interval, request.options)
                                 }
                             }
-                            CourseKmlKmzUnlockAction.GeneratePublicResultsSite -> generatePublicResultsSite()
+                            CourseKmlKmzUnlockAction.GeneratePublicResultsSite ->
+                                DesktopPublicResultsRequestedAction.continueRequestedAction(
+                                    ::generatePublicResultsSite,
+                                    ::publishPublicResultsSite
+                                )
                         }
                         true
                     } else {
@@ -7129,7 +7104,10 @@ fun main(args: Array<String>) = application {
                 },
                 onPublishWithoutDiagrams = {
                     pendingCourseKmlKmzUnlockAction = null
-                    generatePublicResultsSite()
+                    DesktopPublicResultsRequestedAction.continueRequestedAction(
+                        ::generatePublicResultsSite,
+                        ::publishPublicResultsSite
+                    )
                 }
             )
         }
@@ -7424,7 +7402,7 @@ fun main(args: Array<String>) = application {
             isReadoutAlertSoundEnabled = isReadoutAlertSoundEnabled,
             areAliasesEnabled = areAliasesEnabled,
             localResultsWebServerUrl = localResultsWebServerUrl,
-            publishedPublicResultSiteUrl = publishedPublicResultSiteUrl
+            publishedPublicResultSiteUrl = publicResultSiteState.publishedUrl
                 ?: loadedPublicResultsUrlState.savedUrl
                 ?: loadedPublicResultsUrlState.configuredUrl,
             printerDiagnostics = printerDiagnostics,
@@ -8266,17 +8244,17 @@ private fun PendingCourseUnlockDialog(
         CourseKmlKmzUnlockAction.ExportGpx,
         CourseKmlKmzUnlockAction.ExportOverlays -> "Export"
         CourseKmlKmzUnlockAction.GenerateStartList -> "Unlock and Generate"
-        CourseKmlKmzUnlockAction.GeneratePublicResultsSite -> "Unlock and Include Diagrams"
+        CourseKmlKmzUnlockAction.GeneratePublicResultsSite -> "Unlock and Continue"
     }
-    val publishesResults = action == CourseKmlKmzUnlockAction.GeneratePublicResultsSite
+    val publicResultsAction = action == CourseKmlKmzUnlockAction.GeneratePublicResultsSite
     CourseKmlKmzUnlockDialog(
         title = title,
         description = description,
         confirmLabel = confirmLabel,
         onUnlock = onUnlock,
         onCancel = onCancel,
-        alternateLabel = "Publish Without Diagrams".takeIf { publishesResults },
-        onAlternate = onPublishWithoutDiagrams.takeIf { publishesResults }
+        alternateLabel = "Continue Without Diagrams".takeIf { publicResultsAction },
+        onAlternate = onPublishWithoutDiagrams.takeIf { publicResultsAction }
     )
 }
 
@@ -13634,7 +13612,7 @@ private fun SectionWorkspace(
             WorkflowHomePanel(workflow)
         }
         if (section == DesktopSection.PublicResultsSite) {
-            PublicResultsSiteWorkflowPanel()
+            PublicResultsSiteWorkflowPanel(cloudflarePagesPublishSettings)
         }
         if (section == DesktopSection.PublicResultsLink) {
             PublicResultsSiteLinkPanel(
@@ -14984,6 +14962,7 @@ private fun CloudflarePagesPublishSettingsPanel(
     var accountIdDraft by remember(settings) { mutableStateOf(settings.accountId) }
     var apiTokenDraft by remember(settings) { mutableStateOf(settings.apiToken) }
     var retentionModeDraft by remember(settings) { mutableStateOf(settings.retentionMode) }
+    var publicationStatusDraft by remember(settings) { mutableStateOf(settings.publicationStatus) }
     var saveConfirmationText by remember { mutableStateOf<String?>(null) }
     val revealStateKey = projectFile?.raceData?.race?.id
     var isApiTokenVisible by remember(revealStateKey, settings.apiToken) { mutableStateOf(false) }
@@ -14994,7 +14973,8 @@ private fun CloudflarePagesPublishSettingsPanel(
         branch = branchDraft,
         accountId = accountIdDraft,
         apiToken = apiTokenDraft,
-        retentionMode = retentionModeDraft
+        retentionMode = retentionModeDraft,
+        publicationStatus = publicationStatusDraft
     )
     val draftSettings = rawDraftSettings.normalized()
     val disabledReason = cloudflarePagesSettingsDisabledReason(rawDraftSettings, draftSettings, savedSettings)
@@ -15069,6 +15049,36 @@ private fun CloudflarePagesPublishSettingsPanel(
         }
         Text(
             text = retentionModeDraft.description,
+            color = Color.DarkGray,
+            fontSize = 13.sp
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Website result status",
+                color = DesktopPalette.Black,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            EnumPicker(
+                selectedValue = publicationStatusDraft,
+                values = PublicResultsPublicationStatus.entries,
+                label = PublicResultsPublicationStatus::displayLabel,
+                onValueSelected = {
+                    publicationStatusDraft = it
+                    clearSaveConfirmation()
+                },
+                modifier = Modifier.width(280.dp)
+            )
+        }
+        Text(
+            text = if (publicationStatusDraft == PublicResultsPublicationStatus.OFFICIAL) {
+                "Official publishing checks every competitor, bib, result status, and unmatched readout before uploading."
+            } else {
+                "Preliminary publishing allows updates while results are still being reviewed."
+            },
             color = Color.DarkGray,
             fontSize = 13.sp
         )
@@ -24864,7 +24874,7 @@ private fun WorkflowHomePanel(workflow: DesktopWorkflow) {
 }
 
 @Composable
-private fun PublicResultsSiteWorkflowPanel() {
+private fun PublicResultsSiteWorkflowPanel(settings: DesktopCloudflarePagesPublishSettings) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -24878,12 +24888,12 @@ private fun PublicResultsSiteWorkflowPanel() {
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Save Cloudflare Settings once with the Pages project name, branch, account ID, API token, and published-history choice. Generate Public Results Site updates Radio-Oracle's managed site mirror. Public Site Preview opens the generated race or series locally for review. Publish Public Results Site uploads the complete managed mirror to Cloudflare Pages.",
+            text = "Save Cloudflare Settings once, then use Publish or Update Public Results Site after result changes. Radio-Oracle regenerates the current race or series, uploads it, and saves its public link in one operation.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
         Text(
-            text = "Generate after result changes, preview before publishing, then publish when the preview matches what web visitors should see.",
+            text = "Current website status: ${settings.publicationStatus.displayLabel}. Generate Public Results Preview remains available when you want to inspect a local copy without uploading.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )

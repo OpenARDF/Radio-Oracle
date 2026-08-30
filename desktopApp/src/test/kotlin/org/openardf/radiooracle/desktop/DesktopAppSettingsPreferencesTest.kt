@@ -27,6 +27,7 @@ package org.openardf.radiooracle.desktop
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 
 class DesktopAppSettingsPreferencesTest {
     @Test
@@ -62,6 +63,22 @@ class DesktopAppSettingsPreferencesTest {
         assertEquals(
             DesktopPublicResultsRetentionMode.RETAIN_PREVIOUS,
             desktopPublicResultsRetentionMode(null)
+        )
+    }
+
+    @Test
+    fun restoresSavedPublicationStatusWithPreliminaryAsSafeDefault() {
+        assertEquals(
+            PublicResultsPublicationStatus.OFFICIAL,
+            desktopPublicResultsPublicationStatus(PublicResultsPublicationStatus.OFFICIAL.name)
+        )
+        assertEquals(
+            PublicResultsPublicationStatus.PRELIMINARY,
+            desktopPublicResultsPublicationStatus("unknown")
+        )
+        assertEquals(
+            PublicResultsPublicationStatus.PRELIMINARY,
+            desktopPublicResultsPublicationStatus(null)
         )
     }
 }
