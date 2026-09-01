@@ -32,6 +32,7 @@ import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
+import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -57,9 +58,27 @@ class SIReaderService :
     private var siPort: SIPort? = null
     private var siJob: Job? = null
     private var observer: Observer<AppState>? = null
+    private val binder = LocalBinder()
 
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
+    override fun onBind(intent: Intent?): IBinder = binder
+
+    inner class LocalBinder : Binder() {
+        suspend fun inspectTimeSyncStation(): AndroidSportIdentTimeSyncInspection =
+            requirePort().inspectTimeSyncStation()
+
+        suspend fun syncTime(
+            writeEnabled: Boolean,
+            putStationToSleepAfterSync: Boolean,
+            expectedStationSerialNumber: Int
+        ): AndroidSportIdentTimeSyncResult =
+            requirePort().syncTime(
+                writeEnabled,
+                putStationToSleepAfterSync,
+                expectedStationSerialNumber
+            )
+
+        private fun requirePort(): SIPort =
+            siPort ?: error("Connect a SPORTident download station before syncing time.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -117,10 +136,13 @@ class SIReaderService :
             if (serialDevice != null) {
                 serialDevice!!.close()
             }
+            siPort = null
+            serialDevice = null
             device = null
             if (connection != null) {
                 connection?.close()
             }
+            connection = null
             stopForeground(STOP_FOREGROUND_REMOVE)
             dataProcessor.updateReaderState(
                 SIReaderState(

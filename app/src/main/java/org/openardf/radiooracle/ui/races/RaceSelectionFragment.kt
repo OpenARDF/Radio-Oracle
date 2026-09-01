@@ -68,6 +68,7 @@ import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_CONTENT_TYPE
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
+import org.openardf.radiooracle.ui.sportident.SportIdentTimeSyncDialogFragment
 import org.openardf.radiooracle.ui.transfer.DesktopFileTransferUploadDialogs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -197,6 +198,14 @@ class RaceSelectionFragment : Fragment() {
                 R.id.race_menu_global_settings -> {
                     // Navigate to settings screen.
                     findNavController().navigate(RaceSelectionFragmentDirections.openSettings())
+                    true
+                }
+
+                R.id.race_menu_sportident -> {
+                    SportIdentTimeSyncDialogFragment().show(
+                        parentFragmentManager,
+                        SportIdentTimeSyncDialogFragment.TAG
+                    )
                     true
                 }
 

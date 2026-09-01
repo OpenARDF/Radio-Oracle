@@ -25,22 +25,16 @@
 package org.openardf.radiooracle.desktop.usb
 
 import java.time.LocalDateTime
-import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
+import org.openardf.radiooracle.shared.sportident.SportIdentTimeSyncCommandStep
+import org.openardf.radiooracle.shared.sportident.SportIdentTimeSyncProtocol
 
-internal data class DesktopSportIdentTimeSyncCommandStep(
-    val label: String,
-    val command: Byte,
-    val payload: ByteArray
-) {
-    val frameBytes: ByteArray
-        get() = SportIdentProtocol.buildExtendedMessage(command, payload)
-}
+internal typealias DesktopSportIdentTimeSyncCommandStep = SportIdentTimeSyncCommandStep
 
 internal object DesktopSportIdentTimeSyncProtocol {
-    val SET_STATION_TIME_COMMAND: Byte = 0xF6.toByte()
-    val GET_STATION_TIME_COMMAND: Byte = 0xF7.toByte()
-    val POWER_OFF_COMMAND: Byte = 0xF8.toByte()
-    val APPLY_STATION_TIME_COMMAND: Byte = 0xF9.toByte()
+    val SET_STATION_TIME_COMMAND: Byte = SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND
+    val GET_STATION_TIME_COMMAND: Byte = SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND
+    val POWER_OFF_COMMAND: Byte = SportIdentTimeSyncProtocol.POWER_OFF_COMMAND
+    val APPLY_STATION_TIME_COMMAND: Byte = SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND
     val REMOTE_POWER_OFF_BYTES: ByteArray = byteArrayOf(
         0xFF.toByte(),
         0x40,
@@ -74,65 +68,29 @@ internal object DesktopSportIdentTimeSyncProtocol {
         )
 
     fun enterRemoteModeStep(): DesktopSportIdentTimeSyncCommandStep =
-        DesktopSportIdentTimeSyncCommandStep(
-            label = "Enter remote/config mode",
-            command = SportIdentProtocol.PROBE_COMMAND,
-            payload = byteArrayOf(0x53)
-        )
+        SportIdentTimeSyncProtocol.enterRemoteModeStep()
 
     fun selectDirectStationStep(): DesktopSportIdentTimeSyncCommandStep =
-        DesktopSportIdentTimeSyncCommandStep(
-            label = "Select direct station mode",
-            command = SportIdentProtocol.PROBE_COMMAND,
-            payload = byteArrayOf(0x4D)
-        )
+        SportIdentTimeSyncProtocol.selectDirectStationStep()
 
     fun readSystemInfoStep(): DesktopSportIdentTimeSyncCommandStep =
-        DesktopSportIdentTimeSyncCommandStep(
-            label = "Read long system information",
-            command = SportIdentProtocol.GET_SYSTEM_INFO,
-            payload = byteArrayOf(0x00, 0x80.toByte())
-        )
+        SportIdentTimeSyncProtocol.readSystemInfoStep()
 
     fun readCompatibleSystemInfoStep(): DesktopSportIdentTimeSyncCommandStep =
-        DesktopSportIdentTimeSyncCommandStep(
-            label = "Read compatible system information",
-            command = SportIdentProtocol.GET_SYSTEM_INFO,
-            payload = byteArrayOf(0x00, 0x75)
-        )
+        SportIdentTimeSyncProtocol.readCompatibleSystemInfoStep()
 
     fun readStationTimeStep(label: String): DesktopSportIdentTimeSyncCommandStep =
-        DesktopSportIdentTimeSyncCommandStep(
-            label = label,
-            command = GET_STATION_TIME_COMMAND,
-            payload = byteArrayOf()
-        )
+        SportIdentTimeSyncProtocol.readStationTimeStep(label)
 
     fun writeStationTimeStep(sourceTime: LocalDateTime): DesktopSportIdentTimeSyncCommandStep =
-        DesktopSportIdentTimeSyncCommandStep(
-            label = "Write station time",
-            command = SET_STATION_TIME_COMMAND,
-            payload = DesktopSportIdentStationTimeCodec.encodePayload(sourceTime)
-        )
+        SportIdentTimeSyncProtocol.writeStationTimeStep(sourceTime)
 
     fun applyStationTimeStep(): DesktopSportIdentTimeSyncCommandStep =
-        DesktopSportIdentTimeSyncCommandStep(
-            label = "Apply station time write",
-            command = APPLY_STATION_TIME_COMMAND,
-            payload = byteArrayOf(0x01)
-        )
+        SportIdentTimeSyncProtocol.applyStationTimeStep()
 
     fun powerOffStep(): DesktopSportIdentTimeSyncCommandStep =
-        DesktopSportIdentTimeSyncCommandStep(
-            label = "Put station to sleep",
-            command = POWER_OFF_COMMAND,
-            payload = byteArrayOf()
-        )
+        SportIdentTimeSyncProtocol.powerOffStep()
 
     fun exitRemoteModeStep(): DesktopSportIdentTimeSyncCommandStep =
-        DesktopSportIdentTimeSyncCommandStep(
-            label = "Exit remote/config mode",
-            command = SportIdentProtocol.PROBE_COMMAND,
-            payload = byteArrayOf(0x4D)
-        )
+        SportIdentTimeSyncProtocol.exitRemoteModeStep()
 }

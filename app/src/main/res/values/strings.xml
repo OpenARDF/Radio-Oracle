@@ -313,6 +313,27 @@
     <!-- =============================================== PREFERENCES ===============================================-->
     <string name="global_settings">Global Settings</string>
 
+    <!-- SPORTident tools -->
+    <string name="sportident_menu_title" translatable="false">SPORTident</string>
+    <string name="sportident_time_sync_title" translatable="false">SPORTident Time Sync</string>
+    <string name="sportident_time_sync_computer_time">Computer time: %1$s</string>
+    <string name="sportident_time_sync_connecting">Connecting to the SPORTident reader service…</string>
+    <string name="sportident_time_sync_disconnected">Connect a ready SPORTident download station.</string>
+    <string name="sportident_time_sync_inspecting">Inspecting the connected station…</string>
+    <string name="sportident_time_sync_inspect">Inspect Station</string>
+    <string name="sportident_time_sync_sync">Sync Time</string>
+    <string name="sportident_time_sync_syncing">Syncing device time to the station…</string>
+    <string name="sportident_time_sync_sleep_after">Put station to sleep after sync</string>
+    <string name="sportident_time_sync_guidance">Keep the target station awake and coupled to the download station. The station is inspected before time sync is enabled.</string>
+    <string name="sportident_time_sync_station_summary">Station %1$d%2$s; time %3$s; %4$s.</string>
+    <string name="sportident_time_sync_station_code"> (SI code %1$d)</string>
+    <string name="sportident_time_sync_confirm_title">Sync SPORTident station time?</string>
+    <string name="sportident_time_sync_confirm_message">Set station %1$d to this Android device’s current time? The station will be read back and verified after the write.</string>
+    <string name="sportident_time_sync_success">Synced station %1$d to %2$s. After sync, the station is %3$s.%4$s</string>
+    <string name="sportident_time_sync_attempts"> Succeeded on attempt %1$d.</string>
+    <string name="sportident_time_sync_failed">Time sync failed: %1$s</string>
+    <string name="sportident_time_sync_inspection_failed">Station inspection failed: %1$s</string>
+
     <string name="preferences_general">General</string>
     <string name="preferences_prints">Prints</string>
 

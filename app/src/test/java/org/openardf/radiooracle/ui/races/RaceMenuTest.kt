@@ -22,18 +22,34 @@
  * SOFTWARE.
  */
 
-package org.openardf.radiooracle.desktop.usb
+package org.openardf.radiooracle.ui.races
 
-import java.time.LocalDateTime
-import org.openardf.radiooracle.shared.sportident.SportIdentStationTime
-import org.openardf.radiooracle.shared.sportident.SportIdentStationTimeCodec
+import android.view.View
+import androidx.appcompat.widget.PopupMenu
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.openardf.radiooracle.R
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 
-internal typealias DesktopSportIdentStationTime = SportIdentStationTime
+@RunWith(RobolectricTestRunner::class)
+class RaceMenuTest {
+    @Test
+    fun sportIdentAppearsBetweenGlobalSettingsAndAbout() {
+        val context = RuntimeEnvironment.getApplication()
+        val popup = PopupMenu(context, View(context))
+        popup.menuInflater.inflate(R.menu.fragment_menu_race, popup.menu)
 
-internal object DesktopSportIdentStationTimeCodec {
-    fun encodePayload(sourceTime: LocalDateTime): ByteArray =
-        SportIdentStationTimeCodec.encodePayload(sourceTime)
-
-    fun decodePayload(data: ByteArray): DesktopSportIdentStationTime? =
-        SportIdentStationTimeCodec.decodePayload(data)
+        assertEquals(
+            listOf(
+                R.id.race_menu_event_series,
+                R.id.race_menu_global_settings,
+                R.id.race_menu_sportident,
+                R.id.race_menu_about
+            ),
+            (0 until popup.menu.size()).map { popup.menu.getItem(it).itemId }
+        )
+        assertEquals("SPORTident", popup.menu.findItem(R.id.race_menu_sportident).title.toString())
+    }
 }

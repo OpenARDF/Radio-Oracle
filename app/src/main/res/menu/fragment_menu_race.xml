@@ -13,6 +13,11 @@
         android:title="@string/global_settings" />
 
     <item
+        android:id="@+id/race_menu_sportident"
+        android:icon="@drawable/ic_sportident"
+        android:title="@string/sportident_menu_title" />
+
+    <item
         android:id="@+id/race_menu_about"
         android:title="@string/about_app_menu_title" />
 

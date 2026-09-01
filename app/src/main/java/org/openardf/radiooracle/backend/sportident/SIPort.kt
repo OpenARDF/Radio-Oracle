@@ -50,12 +50,17 @@ import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_PCARD_SER
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_REMOVED
 import org.openardf.radiooracle.backend.sportident.SIConstants.ZERO
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
+import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
+import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
+import org.openardf.radiooracle.shared.sportident.SportIdentTimeSyncCommandStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.lang.Integer.min
 import java.time.DateTimeException
 import java.time.LocalTime
@@ -67,6 +72,7 @@ class SIPort(
 ) {
 
     private val msgCache: ArrayList<ByteArray> = ArrayList()
+    private val stationAccessMutex = Mutex()
     private var extendedMode =
         false                            //  Marks if station uses SI extended mode
     private var serialNo: Int = 0                           //  Serial number of the SI station
@@ -74,6 +80,26 @@ class SIPort(
     private var stationModeCode: Int? = null
     private var lastReadCardId: Int? = null
     private var waitingForRaceLogged = false
+    private val timeSyncController = AndroidSportIdentTimeSyncController(
+        transport = object : AndroidSportIdentCommandTransport {
+            override fun sendWakePulse(): Boolean =
+                port.syncWrite(byteArrayOf(SIConstants.WAKEUP), TIME_SYNC_TIMEOUT_MS) == 1
+
+            override fun sendCommand(step: SportIdentTimeSyncCommandStep) =
+                if (writeMsg(step.command, step.payload, extended = true) == 0) {
+                    readMsg(TIME_SYNC_TIMEOUT_MS, step.command)?.let { reply ->
+                        SportIdentFrameParser.firstFrame(
+                            bytes = reply,
+                            commandFilter = step.command,
+                            requireValidCrc = true
+                        )
+                    }
+                } else {
+                    null
+                }
+        },
+        readerStationInfo = ::connectedStationInfo
+    )
 
     /**
      * Stores the temp readout data
@@ -99,22 +125,81 @@ class SIPort(
             while (true) {
                 delay(SIConstants.PERIOD)
 
-                if (dataProcessor.currentState.value!!.siReaderState.status == SIReaderStatus.DISCONNECTED && probeDevice()) {
-                    setStatusConnected()
-                }
-                if (dataProcessor.currentState.value!!.siReaderState.status != SIReaderStatus.DISCONNECTED) {
-                    val currentRace = dataProcessor.currentState.value!!.currentRace
-                    if (currentRace != null) {
-                        waitingForRaceLogged = false
-                        readCardOnce(currentRace)
-                    } else if (!waitingForRaceLogged) {
-                        waitingForRaceLogged = true
-                        DebugLog.warn("SI", "Reader connected but no race is selected; card readout is paused")
+                stationAccessMutex.withLock {
+                    if (dataProcessor.currentState.value!!.siReaderState.status == SIReaderStatus.DISCONNECTED && probeDevice()) {
+                        setStatusConnected()
+                    }
+                    if (dataProcessor.currentState.value!!.siReaderState.status != SIReaderStatus.DISCONNECTED) {
+                        val currentRace = dataProcessor.currentState.value!!.currentRace
+                        if (currentRace != null) {
+                            waitingForRaceLogged = false
+                            readCardOnce(currentRace)
+                        } else if (!waitingForRaceLogged) {
+                            waitingForRaceLogged = true
+                            DebugLog.warn("SI", "Reader connected but no race is selected; card readout is paused")
+                        }
                     }
                 }
             }
         }
         return job
+    }
+
+    suspend fun inspectTimeSyncStation(): AndroidSportIdentTimeSyncInspection =
+        stationAccessMutex.withLock {
+            ensureConnectedForTimeSync()
+            DebugLog.info("SI", "Inspecting SPORTident station clock")
+            timeSyncController.inspectDownloadStation().also { inspection ->
+                DebugLog.info(
+                    "SI",
+                    "Station clock inspected serial=${inspection.stationInfo.serialNumber} " +
+                        "deltaMs=${inspection.stationMinusComputerMillis} " +
+                        "coupled=${inspection.requiresCoupledStation}"
+                )
+            }
+        }
+
+    suspend fun syncTime(
+        writeEnabled: Boolean,
+        putStationToSleepAfterSync: Boolean,
+        expectedStationSerialNumber: Int
+    ): AndroidSportIdentTimeSyncResult =
+        stationAccessMutex.withLock {
+            ensureConnectedForTimeSync()
+            DebugLog.info(
+                "SI",
+                "Starting confirmed SPORTident time sync sleepAfter=$putStationToSleepAfterSync"
+            )
+            timeSyncController.syncTime(
+                writeEnabled = writeEnabled,
+                putStationToSleepAfterSync = putStationToSleepAfterSync,
+                expectedStationSerialNumber = expectedStationSerialNumber
+            ).also { result ->
+                DebugLog.info(
+                    "SI",
+                    "Station time sync complete serial=${result.stationInfo.serialNumber} " +
+                        "deltaMs=${result.confirmedStationMinusComputerMillis} attempts=${result.attempts}"
+                )
+            }
+        }
+
+    private fun ensureConnectedForTimeSync() {
+        check(
+            dataProcessor.currentState.value?.siReaderState?.status in
+                setOf(SIReaderStatus.CONNECTED, SIReaderStatus.CARD_READ)
+        ) {
+            "Connect a ready SPORTident download station before syncing time."
+        }
+    }
+
+    private fun connectedStationInfo(): SportIdentStationInfo {
+        check(serialNo > 0) { "SPORTident download station information is unavailable." }
+        return SportIdentStationInfo(
+            serialNumber = serialNo,
+            extendedMode = extendedMode,
+            stationCodeNumber = stationCodeNumber,
+            stationModeCode = stationModeCode
+        )
     }
 
 
@@ -889,5 +974,9 @@ class SIPort(
                 stationModeCode
             )
         )
+    }
+
+    companion object {
+        private const val TIME_SYNC_TIMEOUT_MS = 1_200
     }
 }
