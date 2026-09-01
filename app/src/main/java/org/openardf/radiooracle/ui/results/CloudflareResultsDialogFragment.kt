@@ -49,13 +49,35 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.publicresults.AndroidCloudflarePagesPublishSettings
 import org.openardf.radiooracle.backend.publicresults.AndroidCloudflarePagesSettingsStore
 import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsPublishOutcome
 import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsPublishingService
 import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsRetentionMode
 import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsTarget
 import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
+import org.openardf.radiooracle.shared.publicresults.isCloudflarePagesSettingsRejection
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+
+internal data class CloudflareResultsActionAvailability(
+    val publishEnabled: Boolean,
+    val viewEnabled: Boolean
+)
+
+internal fun cloudflareResultsActionAvailability(
+    hasTarget: Boolean,
+    hasPublishedUrl: Boolean,
+    settingsComplete: Boolean,
+    settingsRejected: Boolean,
+    publishing: Boolean
+): CloudflareResultsActionAvailability {
+    val websiteActionsEnabled =
+        hasTarget && settingsComplete && !settingsRejected && !publishing
+    return CloudflareResultsActionAvailability(
+        publishEnabled = websiteActionsEnabled,
+        viewEnabled = websiteActionsEnabled && hasPublishedUrl
+    )
+}
 
 class CloudflareResultsDialogFragment : DialogFragment() {
     private val selectedRaceViewModel: SelectedRaceViewModel by activityViewModels()
@@ -77,6 +99,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
     private lateinit var settingsButton: Button
     private lateinit var closeButton: Button
     private lateinit var progress: ProgressBar
+    private var publishing = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -115,14 +138,20 @@ class CloudflareResultsDialogFragment : DialogFragment() {
             )
         }
         closeButton.setOnClickListener { dismiss() }
+        updateActionAvailability()
         loadTarget()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (target != null) render()
     }
 
     private fun loadTarget() {
         val race = selectedRaceViewModel.getCurrentRace()
         if (race == null) {
             statusView.text = getString(R.string.cloudflare_results_not_published)
-            publishButton.isEnabled = false
+            updateActionAvailability()
             return
         }
         viewLifecycleOwner.lifecycleScope.launch {
@@ -139,7 +168,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
                     R.string.cloudflare_results_publish_failed,
                     it.message ?: it::class.simpleName
                 )
-                publishButton.isEnabled = false
+                updateActionAvailability()
             }
         }
     }
@@ -162,31 +191,46 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         diagramControls.visibility =
             if (value.needsRacePasswordForDiagrams) View.VISIBLE else View.GONE
         renderUrl(value.savedUrl)
-        publishButton.isEnabled = settings.isComplete()
-        if (!settings.isComplete()) {
-            statusView.text = getString(R.string.cloudflare_results_settings_incomplete)
-        } else if (statusView.text == getString(R.string.cloudflare_results_settings_incomplete)) {
+        val settingsRejected = AndroidCloudflarePagesSettingsStore.isRejected(
+            requireContext(),
+            settings
+        )
+        val settingsMessage = when {
+            !settings.isComplete() -> getString(R.string.cloudflare_results_settings_incomplete)
+            settingsRejected -> getString(R.string.cloudflare_results_settings_rejected)
+            else -> null
+        }
+        if (settingsMessage != null) {
+            statusView.text = settingsMessage
+        } else if (
+            statusView.text == getString(R.string.cloudflare_results_settings_incomplete) ||
+            statusView.text == getString(R.string.cloudflare_results_settings_rejected)
+        ) {
             statusView.text = ""
         }
+        updateActionAvailability(settings, settingsRejected)
     }
 
     private fun renderUrl(url: String?) {
         if (url.isNullOrBlank()) {
             urlView.text = getString(R.string.cloudflare_results_not_published)
             qrView.visibility = View.GONE
-            viewButton.isEnabled = false
             return
         }
         urlView.text = url
         qrView.setImageBitmap(qrCode(url))
         qrView.visibility = View.VISIBLE
-        viewButton.isEnabled = target?.canViewPublicResults == true
     }
 
     private fun confirmAndPublish() {
         val settings = AndroidCloudflarePagesSettingsStore.read(requireContext())
         if (!settings.isComplete()) {
             statusView.text = getString(R.string.cloudflare_results_settings_incomplete)
+            return
+        }
+        if (AndroidCloudflarePagesSettingsStore.isRejected(requireContext(), settings)) {
+            statusView.text = getString(R.string.cloudflare_results_settings_rejected)
+            updateActionAvailability(settings, settingsRejected = true)
             return
         }
         if (settings.retentionMode == AndroidPublicResultsRetentionMode.REPLACE_PREVIOUS) {
@@ -225,10 +269,18 @@ class CloudflareResultsDialogFragment : DialogFragment() {
                 }
             }.onSuccess(::showPublished)
                 .onFailure {
-                    statusView.text = getString(
-                        R.string.cloudflare_results_publish_failed,
-                        it.message ?: it::class.simpleName
-                    )
+                    if (it.isCloudflarePagesSettingsRejection()) {
+                        AndroidCloudflarePagesSettingsStore.recordRejection(
+                            requireContext(),
+                            settings
+                        )
+                        statusView.text = getString(R.string.cloudflare_results_settings_rejected)
+                    } else {
+                        statusView.text = getString(
+                            R.string.cloudflare_results_publish_failed,
+                            it.message ?: it::class.simpleName
+                        )
+                    }
                 }
             setPublishing(false)
         }
@@ -246,8 +298,8 @@ class CloudflareResultsDialogFragment : DialogFragment() {
     }
 
     private fun setPublishing(publishing: Boolean) {
+        this.publishing = publishing
         progress.visibility = if (publishing) View.VISIBLE else View.GONE
-        publishButton.isEnabled = !publishing
         publishButton.text = getString(
             if (publishing) R.string.cloudflare_results_publishing
             else R.string.cloudflare_results_publish
@@ -257,6 +309,26 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         includeDiagrams.isEnabled = !publishing
         officialResults.isEnabled = !publishing
         passwordInput.isEnabled = !publishing
+        updateActionAvailability()
+    }
+
+    private fun updateActionAvailability(
+        settings: AndroidCloudflarePagesPublishSettings =
+            AndroidCloudflarePagesSettingsStore.read(requireContext()),
+        settingsRejected: Boolean = AndroidCloudflarePagesSettingsStore.isRejected(
+            requireContext(),
+            settings
+        )
+    ) {
+        val availability = cloudflareResultsActionAvailability(
+            hasTarget = target != null,
+            hasPublishedUrl = target?.canViewPublicResults == true,
+            settingsComplete = settings.isComplete(),
+            settingsRejected = settingsRejected,
+            publishing = publishing
+        )
+        publishButton.isEnabled = availability.publishEnabled
+        viewButton.isEnabled = availability.viewEnabled
     }
 
     private fun openSavedUrl() {

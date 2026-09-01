@@ -26,6 +26,7 @@ package org.openardf.radiooracle.backend.publicresults
 
 import android.content.Context
 import androidx.preference.PreferenceManager
+import java.security.MessageDigest
 
 enum class AndroidPublicResultsRetentionMode {
     RETAIN_PREVIOUS,
@@ -71,6 +72,7 @@ object AndroidCloudflarePagesSettingsStore {
     const val ACCOUNT_ID_KEY = "cloudflarePagesAccountId"
     const val API_TOKEN_KEY = "cloudflarePagesApiToken"
     const val RETENTION_MODE_KEY = "cloudflarePagesRetentionMode"
+    private const val REJECTION_FINGERPRINT_KEY = "cloudflarePagesRejectedSettingsFingerprint"
 
     fun read(context: Context): AndroidCloudflarePagesPublishSettings {
         val preferences = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
@@ -106,5 +108,42 @@ object AndroidCloudflarePagesSettingsStore {
             .putString(API_TOKEN_KEY, value.apiToken)
             .putString(RETENTION_MODE_KEY, value.retentionMode.name)
             .apply()
+    }
+
+    fun isRejected(
+        context: Context,
+        settings: AndroidCloudflarePagesPublishSettings = read(context)
+    ): Boolean {
+        val rejectedFingerprint = PreferenceManager
+            .getDefaultSharedPreferences(context.applicationContext)
+            .getString(REJECTION_FINGERPRINT_KEY, null)
+        return rejectedFingerprint != null && rejectedFingerprint == settings.rejectionFingerprint()
+    }
+
+    fun recordRejection(context: Context, settings: AndroidCloudflarePagesPublishSettings) {
+        PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+            .edit()
+            .putString(REJECTION_FINGERPRINT_KEY, settings.rejectionFingerprint())
+            .apply()
+    }
+
+    fun clearRejection(context: Context) {
+        PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+            .edit()
+            .remove(REJECTION_FINGERPRINT_KEY)
+            .apply()
+    }
+
+    private fun AndroidCloudflarePagesPublishSettings.rejectionFingerprint(): String {
+        val value = normalized()
+        val input = listOf(
+            value.projectName,
+            value.branch,
+            value.accountId,
+            value.apiToken
+        ).joinToString("\u0000")
+        return MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte) }
     }
 }

@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.PublicResultsPublication
+import org.openardf.radiooracle.shared.publicresults.isCloudflarePagesSettingsRejection
 
 internal data class DesktopPublicResultsSiteUiState(
     val directory: Path? = null,
@@ -82,6 +83,23 @@ internal object DesktopPublicResultsRequestedAction {
     }
 }
 
+internal fun cloudflarePagesSettingsRejectionReason(error: Throwable): String? {
+    if (!error.isCloudflarePagesSettingsRejection()) {
+        return null
+    }
+    return "Cloudflare rejected the saved account, project, or API token. Update and save Cloudflare Settings."
+}
+
+internal fun cloudflarePagesSettingsDisabledReason(
+    settings: DesktopCloudflarePagesPublishSettings,
+    rejectionReason: String?
+): String? =
+    when {
+        !settings.isComplete() -> "Save complete Cloudflare Settings before using public-results website actions."
+        rejectionReason != null -> rejectionReason
+        else -> null
+    }
+
 /** One-operation generation, upload, and managed-mirror promotion for desktop publishing. */
 internal object DesktopPublicResultsPublishWorkflow {
     fun launch(
@@ -95,6 +113,7 @@ internal object DesktopPublicResultsPublishWorkflow {
         exportSite: (Path, EventProjectFile) -> DesktopPublicResultSiteExportPaths,
         updatePublishing: (Boolean) -> Unit,
         updateStatus: (String) -> Unit,
+        onPublishFailed: (Throwable) -> Unit = {},
         onPublished: (DesktopPublicResultsPublishOutcome) -> Unit
     ) {
         if (currentProject == null) return
@@ -125,6 +144,7 @@ internal object DesktopPublicResultsPublishWorkflow {
                     updateStatus(outcome.statusText)
                     DesktopDebugLog.info("PublicResults", outcome.statusText)
                 }.onFailure { error ->
+                    onPublishFailed(error)
                     val status =
                         "Public results website publish failed; the previous site mirror was preserved: " +
                             (error.message ?: error::class.simpleName)

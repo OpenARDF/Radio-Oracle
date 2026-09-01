@@ -879,6 +879,7 @@ fun main(args: Array<String>) = application {
         var cloudflarePagesPublishSettings by remember {
             mutableStateOf(DesktopAppSettingsPreferences.cloudflarePagesPublishSettings())
         }
+        var cloudflarePagesSettingsRejection by remember { mutableStateOf<String?>(null) }
         var updateCheckStatus by remember { mutableStateOf<DesktopAppUpdateStatus?>(null) }
         var appUpdateDialogStatus by remember { mutableStateOf<DesktopAppUpdateStatus?>(null) }
         var raceClockTick by remember { mutableStateOf(0L) }
@@ -3668,6 +3669,7 @@ fun main(args: Array<String>) = application {
                 )
             }
             cloudflarePagesPublishSettings = normalized
+            cloudflarePagesSettingsRejection = null
             DesktopAppSettingsPreferences.setCloudflarePagesPublishSettings(normalized)
             projectStatusText = "Cloudflare Pages publishing settings saved."
             return true
@@ -4421,17 +4423,17 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun generatePublicResultsSite() {
-            val currentProject = projectSession.currentProject ?: return
+        fun generatePublicResultsSite(): Boolean {
+            val currentProject = projectSession.currentProject ?: return false
             val directory = DesktopPublicResultsSiteMirror.prepare(
                 settings = cloudflarePagesPublishSettings,
                 confirmReplacement = DesktopFileDialogs::confirmReplacePublicResultsSite,
                 choosePublicationStatus = { cloudflarePagesPublishSettings.publicationStatus }
             ) ?: run {
                 projectStatusText = "Public results site generation canceled."
-                return
+                return false
             }
-            runCatching {
+            return runCatching {
                 val paths = exportPublicResultsSiteForCurrentContext(directory, currentProject)
                 publicResultSiteState = publicResultSiteState.copy(
                     directory = paths.directory,
@@ -4443,9 +4445,11 @@ fun main(args: Array<String>) = application {
                     "PublicResults",
                     "Generated public results site root=${paths.directory} event=${paths.eventPath} eventDirectory=${paths.eventDirectory}"
                 )
-            }.onFailure { error ->
+                true
+            }.getOrElse { error ->
                 projectStatusText = "Public results site generation failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("PublicResults", projectStatusText)
+                false
             }
         }
 
@@ -4484,13 +4488,10 @@ fun main(args: Array<String>) = application {
             projectStatusText = "Public results site preview stopped."
         }
 
-        fun openPublicResultsSitePreview() {
-            val runningUrl = publicResultSiteState.previewUrl
-            if (runningUrl != null) {
-                openExternalUrl(runningUrl)
-                return
+        fun previewPublicResultsSite() {
+            if (generatePublicResultsSite()) {
+                startPublicResultsSitePreview()
             }
-            startPublicResultsSitePreview()
         }
 
         fun startLocalResultsWebServer(sharedAddress: DesktopEventFileTransferAddress? = null, regenerate: Boolean = false) {
@@ -4572,7 +4573,11 @@ fun main(args: Array<String>) = application {
                     publicResultSiteState = publicResultSiteState.copy(publishing = publishing)
                 },
                 updateStatus = { projectStatusText = it },
+                onPublishFailed = { error ->
+                    cloudflarePagesSettingsRejection = cloudflarePagesSettingsRejectionReason(error)
+                },
                 onPublished = { outcome ->
+                    cloudflarePagesSettingsRejection = null
                     val completed = outcome.completed
                     publicResultSiteState.previewServer?.stop()
                     publicResultSiteState = publicResultSiteState.copy(
@@ -4597,7 +4602,7 @@ fun main(args: Array<String>) = application {
                     "Unlock course data to include 2D course diagrams, or continue without diagrams."
                 return
             }
-            if (publish) publishPublicResultsSite() else generatePublicResultsSite()
+            if (publish) publishPublicResultsSite() else previewPublicResultsSite()
         }
 
         fun exportResultsText() {
@@ -6120,11 +6125,14 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.PreviewLocalResultsWebPage,
                 DesktopNavAction.StartLocalResultsWebServer -> projectFile != null
                 DesktopNavAction.StopLocalResultsWebServer -> localResultsWebServerUrl != null
-                DesktopNavAction.OpenPublicResultsSitePreview -> publicResultSiteState.directory != null
+                DesktopNavAction.PreviewPublicResultsSite,
                 DesktopNavAction.PublishPublicResultsSite ->
                     projectFile != null &&
                         !publicResultSiteState.publishing &&
-                        cloudflarePagesPublishSettings.isComplete()
+                        cloudflarePagesSettingsDisabledReason(
+                            cloudflarePagesPublishSettings,
+                            cloudflarePagesSettingsRejection
+                        ) == null
                 DesktopNavAction.StopPublicResultsSitePreview -> publicResultSiteState.previewUrl != null
                 DesktopNavAction.SendRobis -> projectFile != null && !isSendingLiveResults
                 DesktopNavAction.SendEventFileToAndroid -> projectFile != null
@@ -6193,7 +6201,6 @@ fun main(args: Array<String>) = application {
                 DesktopNavAction.ExportResultReportHtml,
                 DesktopNavAction.ExportResultReportXml,
                 DesktopNavAction.ExportResultReportPdf,
-                DesktopNavAction.GeneratePublicResultsSite,
                 DesktopNavAction.ExportArdfJson,
                 DesktopNavAction.ExportAndroidRaceBackupJson,
                 DesktopNavAction.ExportLiveResultsJson,
@@ -6237,15 +6244,23 @@ fun main(args: Array<String>) = application {
                     "Open or create a Race File before starting the local web server."
                 DesktopNavAction.StopLocalResultsWebServer ->
                     "The local results web server is not running."
-                DesktopNavAction.OpenPublicResultsSitePreview ->
-                    "Generate a public results site before opening preview."
+                DesktopNavAction.PreviewPublicResultsSite ->
+                    when {
+                        projectFile == null -> "Open or create a Race File before previewing public results."
+                        publicResultSiteState.publishing -> "Wait for public-results publishing to finish."
+                        else -> cloudflarePagesSettingsDisabledReason(
+                            cloudflarePagesPublishSettings,
+                            cloudflarePagesSettingsRejection
+                        ) ?: "Public results preview is not available right now."
+                    }
                 DesktopNavAction.PublishPublicResultsSite ->
                     when {
                         projectFile == null -> "Open or create a Race File before publishing."
                         publicResultSiteState.publishing -> "The public results site is already being published."
-                        !cloudflarePagesPublishSettings.isComplete() ->
-                            "Save complete Cloudflare Settings before publishing."
-                        else -> "Public results site publishing is not available right now."
+                        else -> cloudflarePagesSettingsDisabledReason(
+                            cloudflarePagesPublishSettings,
+                            cloudflarePagesSettingsRejection
+                        ) ?: "Public results site publishing is not available right now."
                     }
                 DesktopNavAction.StopPublicResultsSitePreview ->
                     "The public results site preview is not running."
@@ -6510,16 +6525,12 @@ fun main(args: Array<String>) = application {
                     exportResultReportPdf()
                     true
                 }
-                DesktopNavAction.GeneratePublicResultsSite -> {
+                DesktopNavAction.PreviewPublicResultsSite -> {
                     requestPublicResultsSite(publish = false)
                     true
                 }
                 DesktopNavAction.PublishPublicResultsSite -> {
                     requestPublicResultsSite(publish = true)
-                    true
-                }
-                DesktopNavAction.OpenPublicResultsSitePreview -> {
-                    openPublicResultsSitePreview()
                     true
                 }
                 DesktopNavAction.StopPublicResultsSitePreview -> {
@@ -7089,7 +7100,7 @@ fun main(args: Array<String>) = application {
                             }
                             CourseKmlKmzUnlockAction.GeneratePublicResultsSite ->
                                 DesktopPublicResultsRequestedAction.continueRequestedAction(
-                                    ::generatePublicResultsSite,
+                                    ::previewPublicResultsSite,
                                     ::publishPublicResultsSite
                                 )
                         }
@@ -7105,7 +7116,7 @@ fun main(args: Array<String>) = application {
                 onPublishWithoutDiagrams = {
                     pendingCourseKmlKmzUnlockAction = null
                     DesktopPublicResultsRequestedAction.continueRequestedAction(
-                        ::generatePublicResultsSite,
+                        ::previewPublicResultsSite,
                         ::publishPublicResultsSite
                     )
                 }
@@ -7403,12 +7414,12 @@ fun main(args: Array<String>) = application {
             areAliasesEnabled = areAliasesEnabled,
             localResultsWebServerUrl = localResultsWebServerUrl,
             publishedPublicResultSiteUrl = publicResultSiteState.publishedUrl
-                ?: loadedPublicResultsUrlState.savedUrl
-                ?: loadedPublicResultsUrlState.configuredUrl,
+                ?: loadedPublicResultsUrlState.savedUrl,
             printerDiagnostics = printerDiagnostics,
             isUpdateCheckingEnabled = isUpdateCheckingEnabled,
             sportIdentPortDiscoveryMode = sportIdentPortDiscoveryMode,
             cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
+            cloudflarePagesSettingsRejection = cloudflarePagesSettingsRejection,
             raceClockTick = raceClockTick,
             isNavActionEnabled = ::isNavActionEnabled,
             disabledNavActionReason = ::disabledNavActionReason,
@@ -11834,6 +11845,7 @@ private fun RadioOManagerDesktopApp(
     sportIdentPortDiscoveryMode: DesktopSportIdentPortDiscoveryMode =
         DesktopSportIdentPortDiscoveryMode.SPORTIDENT_USB_ONLY,
     cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings = DesktopCloudflarePagesPublishSettings(),
+    cloudflarePagesSettingsRejection: String? = null,
     raceClockTick: Long = 0L,
     onRenameRace: (String) -> Unit = {},
     onUpdateRaceStartDateTime: (String) -> Unit = {},
@@ -12126,7 +12138,11 @@ private fun RadioOManagerDesktopApp(
                             navState = navState,
                             navigationReadiness = navigationReadiness,
                             bypassedDisabledNavigation = activeBypassedDisabledNavigation,
-                            hasCompleteCloudflareSettings = cloudflarePagesPublishSettings.isComplete(),
+                            cloudflareSettingsDisabledReason = cloudflarePagesSettingsDisabledReason(
+                                cloudflarePagesPublishSettings,
+                                cloudflarePagesSettingsRejection
+                            ),
+                            hasPublishedPublicResults = !publishedPublicResultSiteUrl.isNullOrBlank(),
                             isNavActionEnabled = isNavActionEnabled,
                             disabledNavActionReason = disabledNavActionReason,
                             courseAnalysisResult = courseAnalysisResult.takeIf {
@@ -12225,6 +12241,7 @@ private fun RadioOManagerDesktopApp(
                                     isUpdateCheckingEnabled = isUpdateCheckingEnabled,
                                     sportIdentPortDiscoveryMode = sportIdentPortDiscoveryMode,
                                     cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
+                                    cloudflarePagesSettingsRejection = cloudflarePagesSettingsRejection,
                                     raceClockTick = raceClockTick,
                                     onSendRobisLiveResults = onSendRobisLiveResults,
                                     onSetBackgroundLiveResultSendingEnabled = onSetBackgroundLiveResultSendingEnabled,
@@ -12271,6 +12288,7 @@ private fun RadioOManagerDesktopApp(
                                     onSetSportIdentPortDiscoveryMode = onSetSportIdentPortDiscoveryMode,
                                     onSetCloudflarePagesPublishSettings = onSetCloudflarePagesPublishSettings,
                                     isNavActionEnabled = isNavActionEnabled,
+                                    disabledNavActionReason = disabledNavActionReason,
                                     onOptimizeSeriesStartFairness = onOptimizeSeriesStartFairness,
                                     onOpenSeriesEvent = onOpenSeriesEvent,
                                     onUpdateEventSeriesName = onUpdateEventSeriesName,
@@ -13080,7 +13098,8 @@ private fun NavigationRail(
     navState: DesktopNavState,
     navigationReadiness: DesktopNavigationReadiness,
     bypassedDisabledNavigation: BypassedDisabledNavigation?,
-    hasCompleteCloudflareSettings: Boolean,
+    cloudflareSettingsDisabledReason: String?,
+    hasPublishedPublicResults: Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
     disabledNavActionReason: (DesktopNavAction) -> String?,
     courseAnalysisResult: DesktopCourseAnalysisSummary?,
@@ -13103,8 +13122,8 @@ private fun NavigationRail(
             bypassedDisabledNavigation?.workflow == DesktopWorkflow.ResultsExport &&
                 DesktopNavigation.isPreResultsCloudflareItem(item) &&
                 (
-                    !DesktopNavigation.requiresCompleteCloudflareSettings(item) ||
-                        hasCompleteCloudflareSettings
+                    !DesktopNavigation.requiresUsableCloudflareSettings(item) ||
+                        cloudflareSettingsDisabledReason == null
                     )
         val isNavigationEnabled =
             (
@@ -13112,8 +13131,12 @@ private fun NavigationRail(
                     isPreResultsCloudflareBypassEnabled
                 ) &&
                 (
-                    !DesktopNavigation.requiresCompleteCloudflareSettings(item) ||
-                        hasCompleteCloudflareSettings
+                    !DesktopNavigation.requiresUsableCloudflareSettings(item) ||
+                        cloudflareSettingsDisabledReason == null
+                    ) &&
+                (
+                    !DesktopNavigation.requiresPublishedPublicResults(item) ||
+                        hasPublishedPublicResults
                     )
         val actionEnabled = item.action?.let(isNavActionEnabled) ?: true
         val isEnabled = isNavigationEnabled && actionEnabled
@@ -13121,10 +13144,15 @@ private fun NavigationRail(
         val disabledReason = if (isEnabled) {
             null
         } else if (
-            DesktopNavigation.requiresCompleteCloudflareSettings(item) &&
-            !hasCompleteCloudflareSettings
+            DesktopNavigation.requiresUsableCloudflareSettings(item) &&
+            cloudflareSettingsDisabledReason != null
         ) {
-            "Save complete Cloudflare Settings before viewing public results."
+            cloudflareSettingsDisabledReason
+        } else if (
+            DesktopNavigation.requiresPublishedPublicResults(item) &&
+            !hasPublishedPublicResults
+        ) {
+            "Publish public results successfully before viewing the saved website."
         } else {
             DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, navigationReadiness)
                 ?: item.action?.let(disabledNavActionReason)
@@ -13539,6 +13567,7 @@ private fun SectionWorkspace(
     isUpdateCheckingEnabled: Boolean,
     sportIdentPortDiscoveryMode: DesktopSportIdentPortDiscoveryMode,
     cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings,
+    cloudflarePagesSettingsRejection: String?,
     raceClockTick: Long,
     onSendRobisLiveResults: () -> Unit,
     onSetBackgroundLiveResultSendingEnabled: (Boolean) -> Unit,
@@ -13584,6 +13613,7 @@ private fun SectionWorkspace(
     onSetSportIdentPortDiscoveryMode: (DesktopSportIdentPortDiscoveryMode) -> Unit,
     onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
     isNavActionEnabled: (DesktopNavAction) -> Boolean,
+    disabledNavActionReason: (DesktopNavAction) -> String?,
     onOptimizeSeriesStartFairness: () -> Unit,
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit,
     onUpdateEventSeriesName: (String) -> Boolean,
@@ -13612,7 +13642,14 @@ private fun SectionWorkspace(
             WorkflowHomePanel(workflow)
         }
         if (section == DesktopSection.PublicResultsSite) {
-            PublicResultsSiteWorkflowPanel(cloudflarePagesPublishSettings)
+            PublicResultsSiteWorkflowPanel(
+                settings = cloudflarePagesPublishSettings,
+                previewEnabled = isNavActionEnabled(DesktopNavAction.PreviewPublicResultsSite),
+                previewDisabledReason = disabledNavActionReason(DesktopNavAction.PreviewPublicResultsSite),
+                previewRunning = isNavActionEnabled(DesktopNavAction.StopPublicResultsSitePreview),
+                onPreview = { onNavAction(DesktopNavAction.PreviewPublicResultsSite) },
+                onStopPreview = { onNavAction(DesktopNavAction.StopPublicResultsSitePreview) }
+            )
         }
         if (section == DesktopSection.PublicResultsLink) {
             PublicResultsSiteLinkPanel(
@@ -13865,6 +13902,7 @@ private fun SectionWorkspace(
                 isUpdateCheckingEnabled = isUpdateCheckingEnabled,
                 awardDisplayMode = awardDisplayMode,
                 cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
+                cloudflarePagesSettingsRejection = cloudflarePagesSettingsRejection,
                 isCourseDataUnlocked = isProtectedCourseOrderUnlocked,
                 onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
                 onSetAwardDisplayMode = onSetAwardDisplayMode,
@@ -14817,6 +14855,7 @@ private fun AppSettingsPanel(
     isUpdateCheckingEnabled: Boolean,
     awardDisplayMode: EventAwardDisplayMode,
     cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings,
+    cloudflarePagesSettingsRejection: String?,
     isCourseDataUnlocked: Boolean,
     onSetUpdateCheckingEnabled: (Boolean) -> Unit,
     onSetAwardDisplayMode: (EventAwardDisplayMode) -> Unit,
@@ -14853,6 +14892,7 @@ private fun AppSettingsPanel(
         AppSettingsSection("Cloudflare Pages publishing") {
             CloudflarePagesPublishSettingsPanel(
                 settings = cloudflarePagesPublishSettings,
+                settingsRejection = cloudflarePagesSettingsRejection,
                 projectFile = projectFile,
                 onSave = onSetCloudflarePagesPublishSettings
             )
@@ -14954,6 +14994,7 @@ private fun raceAwardSettingsSummary(race: EventRace?): String =
 @Composable
 private fun CloudflarePagesPublishSettingsPanel(
     settings: DesktopCloudflarePagesPublishSettings,
+    settingsRejection: String?,
     projectFile: EventProjectFile?,
     onSave: (DesktopCloudflarePagesPublishSettings) -> Boolean
 ) {
@@ -14977,7 +15018,12 @@ private fun CloudflarePagesPublishSettingsPanel(
         publicationStatus = publicationStatusDraft
     )
     val draftSettings = rawDraftSettings.normalized()
-    val disabledReason = cloudflarePagesSettingsDisabledReason(rawDraftSettings, draftSettings, savedSettings)
+    val disabledReason = cloudflarePagesSettingsDisabledReason(
+        rawDraftSettings,
+        draftSettings,
+        savedSettings,
+        settingsRejection
+    )
     fun submitSettings() {
         if (disabledReason == null && onSave(draftSettings)) {
             saveConfirmationText = "Cloudflare Pages settings saved."
@@ -14988,6 +15034,14 @@ private fun CloudflarePagesPublishSettingsPanel(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        settingsRejection?.let { rejection ->
+            Text(
+                text = rejection,
+                color = DesktopPalette.Error,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             TextField(
                 value = projectNameDraft,
@@ -15248,14 +15302,16 @@ private fun cloudflareApiTokenRevealDisabledReason(
 private fun cloudflarePagesSettingsDisabledReason(
     rawDraftSettings: DesktopCloudflarePagesPublishSettings,
     draftSettings: DesktopCloudflarePagesPublishSettings,
-    savedSettings: DesktopCloudflarePagesPublishSettings
+    savedSettings: DesktopCloudflarePagesPublishSettings,
+    settingsRejection: String?
 ): String? =
     when {
         rawDraftSettings.projectName.isBlank() -> "Enter a Cloudflare Pages project name."
         rawDraftSettings.branch.isBlank() -> "Enter a Cloudflare Pages branch."
         rawDraftSettings.accountId.isBlank() -> "Enter the Cloudflare account ID."
         rawDraftSettings.apiToken.isBlank() -> "Enter a Cloudflare Pages API token."
-        draftSettings == savedSettings -> "Cloudflare Pages publishing settings are already saved."
+        draftSettings == savedSettings && settingsRejection == null ->
+            "Cloudflare Pages publishing settings are already saved."
         else -> null
     }
 
@@ -24874,7 +24930,14 @@ private fun WorkflowHomePanel(workflow: DesktopWorkflow) {
 }
 
 @Composable
-private fun PublicResultsSiteWorkflowPanel(settings: DesktopCloudflarePagesPublishSettings) {
+private fun PublicResultsSiteWorkflowPanel(
+    settings: DesktopCloudflarePagesPublishSettings,
+    previewEnabled: Boolean,
+    previewDisabledReason: String?,
+    previewRunning: Boolean,
+    onPreview: () -> Unit,
+    onStopPreview: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -24888,15 +24951,27 @@ private fun PublicResultsSiteWorkflowPanel(settings: DesktopCloudflarePagesPubli
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Save Cloudflare Settings once, then use Publish or Update Public Results Site after result changes. Radio-Oracle regenerates the current race or series, uploads it, and saves its public link in one operation.",
+            text = "Save Cloudflare Settings once, then use Publish or Update Results after result changes. Radio-Oracle regenerates the current race or series, uploads it, and saves its public link in one operation.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
         Text(
-            text = "Current website status: ${settings.publicationStatus.displayLabel}. Generate Public Results Preview remains available when you want to inspect a local copy without uploading.",
+            text = "Current website status: ${settings.publicationStatus.displayLabel}. Preview Current Results is optional and never uploads anything.",
             color = DesktopPalette.Black,
             fontSize = 14.sp
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            DisabledReasonTooltip(previewDisabledReason) {
+                Button(onClick = onPreview, enabled = previewEnabled) {
+                    ButtonLabel("Preview Current Results")
+                }
+            }
+            if (previewRunning) {
+                Button(onClick = onStopPreview) {
+                    ButtonLabel("Stop Preview")
+                }
+            }
+        }
     }
 }
 

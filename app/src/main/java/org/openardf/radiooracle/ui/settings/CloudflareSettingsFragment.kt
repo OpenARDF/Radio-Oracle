@@ -30,6 +30,7 @@ import android.view.View
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.preference.EditTextPreference
+import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.publicresults.AndroidCloudflarePagesSettingsStore
@@ -37,6 +38,17 @@ import org.openardf.radiooracle.backend.publicresults.AndroidCloudflarePagesSett
 class CloudflareSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences_cloudflare, rootKey)
+        listOf(
+            AndroidCloudflarePagesSettingsStore.PROJECT_NAME_KEY,
+            AndroidCloudflarePagesSettingsStore.BRANCH_KEY,
+            AndroidCloudflarePagesSettingsStore.ACCOUNT_ID_KEY,
+            AndroidCloudflarePagesSettingsStore.API_TOKEN_KEY
+        ).forEach { key ->
+            findPreference<Preference>(key)?.setOnPreferenceChangeListener { _, _ ->
+                AndroidCloudflarePagesSettingsStore.clearRejection(requireContext())
+                true
+            }
+        }
         val token = findPreference<EditTextPreference>(
             AndroidCloudflarePagesSettingsStore.API_TOKEN_KEY
         )

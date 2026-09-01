@@ -117,9 +117,8 @@ enum class DesktopNavAction {
     ExportResultReportHtml,
     ExportResultReportXml,
     ExportResultReportPdf,
-    GeneratePublicResultsSite,
+    PreviewPublicResultsSite,
     PublishPublicResultsSite,
-    OpenPublicResultsSitePreview,
     StopPublicResultsSitePreview,
     ExportArdfJson,
     ExportAndroidRaceBackupJson,
@@ -886,44 +885,15 @@ object DesktopNavigation {
                             workflow,
                             listOf(
                                 action(
-                                    "results.generate-public-site",
-                                    "Generate Public Results Preview...",
-                                    workflow,
-                                    DesktopNavAction.GeneratePublicResultsSite,
-                                    section = DesktopSection.PublicResultsSite
-                                ),
-                                action(
                                     "results.publish-public-site",
-                                    "Publish or Update Public Results Site",
+                                    "Publish or Update Results",
                                     workflow,
                                     DesktopNavAction.PublishPublicResultsSite,
                                     section = DesktopSection.PublicResultsSite
                                 ),
-                                group(
-                                    "results.public-site-preview",
-                                    "Public Site Preview",
-                                    workflow,
-                                    listOf(
-                                        action(
-                                            "results.open-public-site-preview",
-                                            "Open Public Site Preview",
-                                            workflow,
-                                            DesktopNavAction.OpenPublicResultsSitePreview,
-                                            section = DesktopSection.PublicResultsSite
-                                        ),
-                                        action(
-                                            "results.stop-public-site-preview",
-                                            "Stop Public Site Preview",
-                                            workflow,
-                                            DesktopNavAction.StopPublicResultsSitePreview,
-                                            section = DesktopSection.PublicResultsSite
-                                        )
-                                    ),
-                                    DesktopSection.PublicResultsSite
-                                ),
                                 item(
                                     "results.view-public-results",
-                                    "View Public Results",
+                                    "View Published Results",
                                     workflow,
                                     DesktopSection.PublicResultsLink
                                 ),
@@ -1157,16 +1127,15 @@ object DesktopNavigation {
         item.id in setOf(
             "results.exports",
             "results.exports.cloudflare-website",
-            "results.generate-public-site",
             "results.publish-public-site",
-            "results.public-site-preview",
-            "results.open-public-site-preview",
-            "results.stop-public-site-preview",
             "results.view-public-results",
             "results.cloudflare-settings"
         )
 
-    fun requiresCompleteCloudflareSettings(item: DesktopNavItem): Boolean =
+    fun requiresUsableCloudflareSettings(item: DesktopNavItem): Boolean =
+        item.id in setOf("results.publish-public-site", "results.view-public-results")
+
+    fun requiresPublishedPublicResults(item: DesktopNavItem): Boolean =
         item.id == "results.view-public-results"
 
     fun disabledItemReasonWithMenuOverrideHint(
@@ -1505,7 +1474,7 @@ object DesktopNavigation {
         "results.exports.result-files" to
             "Use Result Files to export scored results and readouts in CSV, TXT, HTML, and ARDFEvent-compatible formats.",
         "results.exports.cloudflare-website" to
-            "Use Cloudflare Website to publish or update the current results in one operation, optionally generate a local preview, and manage the saved Cloudflare settings.",
+            "Use Cloudflare Website to publish or update the current results in one operation, optionally preview the current results locally, and manage the saved Cloudflare settings.",
         "results.export-csv" to
             "Use Export Results CSV to write scored results as a spreadsheet-friendly file.",
         "results.export-splits-csv" to
@@ -1524,18 +1493,10 @@ object DesktopNavigation {
             "Use Export Results Report XML to write a report XML file with the same result rows as the HTML and PDF report files.",
         "results.export-report-pdf" to
             "Use Export Results Report PDF to write a printable report PDF with the same result rows as the HTML and XML report files.",
-        "results.generate-public-site" to
-            "Use Generate Public Results Preview when you want to inspect the current website locally without publishing it.",
         "results.publish-public-site" to
-            "Use Publish or Update Public Results Site to regenerate and deploy the current race or series in one operation. Cloudflare Settings controls result status and whether previous events are retained.",
+            "Use Publish or Update Results to regenerate and deploy the current race or series in one operation. Cloudflare Settings controls result status and whether previous events are retained.",
         "results.view-public-results" to
-            "Use View Public Results after publishing to show the public race link and QR code for competitors and spectators.",
-        "results.public-site-preview" to
-            "Use Public Site Preview to open or stop the local preview of the generated public results site.",
-        "results.open-public-site-preview" to
-            "Use Open Public Site Preview to start or reopen the generated public results site in your browser.",
-        "results.stop-public-site-preview" to
-            "Use Stop Public Site Preview to shut down the generated public results site preview.",
+            "Use View Published Results after publishing to show the saved public race link and QR code for competitors and spectators.",
         "results.cloudflare-settings" to
             "Use Cloudflare Settings to enter the Pages project, credentials, retained-history choice, and Preliminary or Official website status.",
         "results.export-readouts" to

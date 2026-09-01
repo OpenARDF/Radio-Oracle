@@ -30,6 +30,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.openardf.radiooracle.shared.publicresults.CloudflarePagesApiException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -196,9 +197,13 @@ class DesktopCloudflarePagesPublisherTest {
             publisher.publish(publishRequest(directory))
         }.exceptionOrNull()
 
-        assertTrue(error!!.message!!.contains("Invalid access token"))
+        assertTrue(error is CloudflarePagesApiException)
+        assertEquals(403, (error as CloudflarePagesApiException).statusCode)
+        assertEquals("Cloudflare Pages upload authorization", error.operation)
+        assertTrue(error.message!!.contains("Invalid access token"))
         assertTrue(error.message!!.contains("9109"))
         assertFalse(error.message!!.contains("api-token"))
+        assertTrue(cloudflarePagesSettingsRejectionReason(error)!!.contains("rejected"))
     }
 
     @Test
@@ -260,6 +265,27 @@ class DesktopCloudflarePagesPublisherTest {
 
         assertTrue(settings.isComplete())
         assertEquals("https://openardf-results.pages.dev", settings.publicSiteBaseUrl())
+    }
+
+    @Test
+    fun publicResultsActionsRequireCompleteSettingsAndHonorKnownRejection() {
+        val incomplete = DesktopCloudflarePagesPublishSettings()
+        val complete = incomplete.copy(accountId = "account", apiToken = "token")
+        val rejected = "Cloudflare rejected the saved settings."
+
+        assertTrue(cloudflarePagesSettingsDisabledReason(incomplete, null)!!.contains("complete"))
+        assertEquals(null, cloudflarePagesSettingsDisabledReason(complete, null))
+        assertEquals(rejected, cloudflarePagesSettingsDisabledReason(complete, rejected))
+        assertEquals(
+            null,
+            cloudflarePagesSettingsRejectionReason(
+                CloudflarePagesApiException(
+                    operation = "Cloudflare Pages asset upload",
+                    statusCode = 403,
+                    detail = "Forbidden"
+                )
+            )
+        )
     }
 
     private fun generatedSiteDirectory(): Path {

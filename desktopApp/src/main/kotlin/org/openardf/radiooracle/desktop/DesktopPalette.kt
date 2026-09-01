@@ -113,7 +113,7 @@ enum class DesktopSection(val label: String) {
     Results("Results"),
     AwardsResults("Awards Results"),
     PublicResultsSite("Cloudflare Website"),
-    PublicResultsLink("View Public Results"),
+    PublicResultsLink("View Published Results"),
     LiveResultsOverview("Live Results"),
     LocalResultsWebServer("Local Web Server"),
     RobisLiveResults("ROBIS"),

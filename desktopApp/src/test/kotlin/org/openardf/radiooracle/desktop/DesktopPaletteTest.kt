@@ -68,7 +68,7 @@ class DesktopPaletteTest {
                 "Results",
                 "Awards Results",
                 "Cloudflare Website",
-                "View Public Results",
+                "View Published Results",
                 "Live Results",
                 "Local Web Server",
                 "ROBIS",

@@ -1388,7 +1388,10 @@ class DesktopNavigationTest {
         val panelLocalActions = setOf(
             // Series Validation owns the results display, so its command belongs in that panel
             // instead of duplicating the same action in the left menu.
-            DesktopNavAction.ValidateEventSeries
+            DesktopNavAction.ValidateEventSeries,
+            // Cloudflare Website keeps optional preview lifecycle controls in its workflow panel.
+            DesktopNavAction.PreviewPublicResultsSite,
+            DesktopNavAction.StopPublicResultsSitePreview
         )
 
         assertEquals(DesktopNavAction.entries.toSet(), reachableActions + panelLocalActions)
@@ -1464,54 +1467,26 @@ class DesktopNavigationTest {
         assertFalse(
             resultFiles
                 .mapNotNull { it.action }
-                .any {
-                    it in setOf(
-                        DesktopNavAction.GeneratePublicResultsSite,
-                        DesktopNavAction.PublishPublicResultsSite,
-                        DesktopNavAction.OpenPublicResultsSitePreview,
-                        DesktopNavAction.StopPublicResultsSitePreview
-                    )
-                }
+                .any { it == DesktopNavAction.PublishPublicResultsSite }
         )
         assertEquals(
             listOf(
-                "Generate Public Results Preview...",
-                "Publish or Update Public Results Site",
-                "Public Site Preview",
-                "View Public Results",
+                "Publish or Update Results",
+                "View Published Results",
                 "Cloudflare Settings"
             ),
             cloudflareWebsite.children.map { it.label }
         )
-        assertEquals(
-            listOf(
-                "Open Public Site Preview",
-                "Stop Public Site Preview"
-            ),
-            cloudflareWebsite.children.first { it.label == "Public Site Preview" }.children.map { it.label }
-        )
         assertEquals(DesktopSection.PublicResultsSite, cloudflareWebsite.section)
         assertEquals(
             DesktopSection.PublicResultsLink,
-            cloudflareWebsite.children.first { it.label == "View Public Results" }.section
+            cloudflareWebsite.children.first { it.label == "View Published Results" }.section
         )
         assertEquals(
-            listOf(
-                DesktopNavAction.GeneratePublicResultsSite,
-                DesktopNavAction.PublishPublicResultsSite,
-                DesktopNavAction.OpenPublicResultsSitePreview,
-                DesktopNavAction.StopPublicResultsSitePreview
-            ),
+            listOf(DesktopNavAction.PublishPublicResultsSite),
             flatten(cloudflareWebsite.children)
                 .mapNotNull { it.action }
-                .filter {
-                    it in setOf(
-                        DesktopNavAction.GeneratePublicResultsSite,
-                        DesktopNavAction.PublishPublicResultsSite,
-                        DesktopNavAction.OpenPublicResultsSitePreview,
-                        DesktopNavAction.StopPublicResultsSitePreview
-                    )
-                }
+                .filter { it == DesktopNavAction.PublishPublicResultsSite }
         )
         assertEquals(DesktopSection.Settings, cloudflareWebsite.children.first { it.label == "Cloudflare Settings" }.section)
         assertTrue(
@@ -1532,11 +1507,7 @@ class DesktopNavigationTest {
         val allowedIds = setOf(
             "results.exports",
             "results.exports.cloudflare-website",
-            "results.generate-public-site",
             "results.publish-public-site",
-            "results.public-site-preview",
-            "results.open-public-site-preview",
-            "results.stop-public-site-preview",
             "results.view-public-results",
             "results.cloudflare-settings"
         )
@@ -1551,19 +1522,34 @@ class DesktopNavigationTest {
             )
         )
         assertTrue(
-            DesktopNavigation.requiresCompleteCloudflareSettings(
+            DesktopNavigation.requiresUsableCloudflareSettings(
+                resultItems.first { it.id == "results.publish-public-site" }
+            )
+        )
+        assertTrue(
+            DesktopNavigation.requiresUsableCloudflareSettings(
                 resultItems.first { it.id == "results.view-public-results" }
             )
         )
         assertFalse(
-            DesktopNavigation.requiresCompleteCloudflareSettings(
+            DesktopNavigation.requiresUsableCloudflareSettings(
                 resultItems.first { it.id == "results.cloudflare-settings" }
+            )
+        )
+        assertTrue(
+            DesktopNavigation.requiresPublishedPublicResults(
+                resultItems.first { it.id == "results.view-public-results" }
+            )
+        )
+        assertFalse(
+            DesktopNavigation.requiresPublishedPublicResults(
+                resultItems.first { it.id == "results.publish-public-site" }
             )
         )
     }
 
     @Test
-    fun viewPublicResultsReturnsToCloudflareWebsiteMenuOnBack() {
+    fun viewPublishedResultsReturnsToCloudflareWebsiteMenuOnBack() {
         val resultsState = DesktopNavState().switchWorkflow(DesktopWorkflow.ResultsExport)
         val exportsState = DesktopNavigation.selectItem(
             resultsState,
@@ -1575,11 +1561,11 @@ class DesktopNavigationTest {
         ).state
         val viewPublicResultsState = DesktopNavigation.selectItem(
             cloudflareWebsiteState,
-            DesktopNavigation.currentItems(cloudflareWebsiteState).first { it.label == "View Public Results" }
+            DesktopNavigation.currentItems(cloudflareWebsiteState).first { it.label == "View Published Results" }
         ).state
 
         assertEquals(
-            "Results/File Export > Exports > Cloudflare Website > View Public Results",
+            "Results/File Export > Exports > Cloudflare Website > View Published Results",
             DesktopNavigation.breadcrumb(viewPublicResultsState)
         )
         assertEquals(DesktopSection.PublicResultsLink, viewPublicResultsState.selectedSection)
@@ -1591,10 +1577,8 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.PublicResultsSite, backState.selectedSection)
         assertEquals(
             listOf(
-                "Generate Public Results Preview...",
-                "Publish or Update Public Results Site",
-                "Public Site Preview",
-                "View Public Results",
+                "Publish or Update Results",
+                "View Published Results",
                 "Cloudflare Settings"
             ),
             DesktopNavigation.currentItems(backState).map { it.label }

@@ -111,6 +111,21 @@ data class CloudflarePagesHttpResponse(
     val body: String
 )
 
+class CloudflarePagesApiException(
+    val operation: String,
+    val statusCode: Int,
+    detail: String
+) : IllegalStateException("$operation failed: $detail")
+
+fun Throwable.isCloudflarePagesSettingsRejection(): Boolean {
+    val apiError = generateSequence(this) { it.cause }
+        .filterIsInstance<CloudflarePagesApiException>()
+        .firstOrNull()
+        ?: return false
+    return apiError.operation == "Cloudflare Pages upload authorization" &&
+        apiError.statusCode in setOf(400, 401, 403, 404)
+}
+
 fun interface CloudflarePagesHttpTransport {
     fun send(request: CloudflarePagesHttpRequest): CloudflarePagesHttpResponse
 }
@@ -305,13 +320,16 @@ class CloudflarePagesPublisher(
         }.getOrNull()
         val success = document?.get("success")?.jsonPrimitive?.booleanOrNull
         if (response.statusCode !in 200..299 || success == false || document == null) {
-            throw IllegalStateException(apiFailureMessage(operation, response, document))
+            throw CloudflarePagesApiException(
+                operation = operation,
+                statusCode = response.statusCode,
+                detail = apiFailureDetail(response, document)
+            )
         }
         return document["result"] ?: JsonNull
     }
 
-    private fun apiFailureMessage(
-        operation: String,
+    private fun apiFailureDetail(
         response: CloudflarePagesHttpResponse,
         document: JsonObject?
     ): String {
@@ -325,7 +343,7 @@ class CloudflarePagesPublisher(
         val detail = errors.joinToString("; ").ifBlank {
             response.body.trim().take(500).ifBlank { "HTTP ${response.statusCode}" }
         }
-        return "$operation failed: $detail"
+        return detail
     }
 
     private fun httpRequest(
