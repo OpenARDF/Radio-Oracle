@@ -86,7 +86,7 @@ class SIPort(
             override fun sendWakePulse(): Boolean =
                 port.syncWrite(byteArrayOf(SIConstants.WAKEUP), TIME_SYNC_TIMEOUT_MS) == 1
 
-            override fun sendCommand(step: SportIdentTimeSyncCommandStep): SportIdentFrame? {
+            override fun sendCommand(step: SportIdentTimeSyncCommandStep): AndroidSportIdentCommandResult {
                 val commandHex = (step.command.toInt() and 0xff)
                     .toString(16)
                     .padStart(2, '0')
@@ -100,7 +100,7 @@ class SIPort(
                         "SI",
                         "Time sync command write failed label=${step.label} command=0x$commandHex"
                     )
-                    return null
+                    return AndroidSportIdentCommandResult.NoReply
                 }
 
                 val reply = readMsg(TIME_SYNC_TIMEOUT_MS, step.command)
@@ -109,7 +109,15 @@ class SIPort(
                         "SI",
                         "Time sync command timed out label=${step.label} command=0x$commandHex"
                     )
-                    return null
+                    return AndroidSportIdentCommandResult.NoReply
+                }
+                if (reply.size == 1 && reply[0] == SIConstants.NAK) {
+                    DebugLog.warn(
+                        "SI",
+                        "Time sync command negatively acknowledged label=${step.label} " +
+                            "command=0x$commandHex"
+                    )
+                    return AndroidSportIdentCommandResult.NegativeAcknowledgement
                 }
                 val frame = SportIdentFrameParser.firstFrame(
                     bytes = reply,
@@ -122,14 +130,14 @@ class SIPort(
                         "Time sync command returned invalid frame label=${step.label} " +
                             "command=0x$commandHex bytes=${reply.size}"
                     )
-                    return null
+                    return AndroidSportIdentCommandResult.NoReply
                 }
                 DebugLog.debug(
                     "SI",
                     "Time sync command reply label=${step.label} command=0x$commandHex " +
                         "dataBytes=${frame.data.size}"
                 )
-                return frame
+                return AndroidSportIdentCommandResult.Reply(frame)
             }
         },
         readerStationInfo = ::connectedStationInfo

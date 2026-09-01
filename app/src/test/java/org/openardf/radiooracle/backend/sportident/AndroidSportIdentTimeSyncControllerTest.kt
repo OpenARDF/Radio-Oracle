@@ -268,6 +268,70 @@ class AndroidSportIdentTimeSyncControllerTest {
     }
 
     @Test
+    fun syncReportsExplicitWriteNegativeAcknowledgementWithoutRetrying() {
+        val targetTime = LocalDateTime.parse("2026-09-01T10:00:00.125")
+        val transport = FakeTransport(
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                targetTime.minusMinutes(1),
+                tick = 0
+            ),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            negativeAcknowledgementCommandIndices = setOf(3)
+        )
+        val controller = controller(transport, listOf(targetTime))
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            controller.syncTime(
+                writeEnabled = true,
+                putStationToSleepAfterSync = false,
+                expectedStationSerialNumber = 781234
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("Reseat the station on the coupling stick"))
+        assertEquals(
+            1,
+            transport.commands.count { it == SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND }
+        )
+        assertFalse(transport.commands.contains(SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND))
+    }
+
+    @Test
+    fun syncDoesNotRetryAmbiguousWriteTimeout() {
+        val targetTime = LocalDateTime.parse("2026-09-01T10:00:00.125")
+        val transport = FakeTransport(
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                targetTime.minusMinutes(1),
+                tick = 0
+            ),
+            null,
+            frame(SportIdentProtocol.PROBE_COMMAND)
+        )
+        val controller = controller(transport, listOf(targetTime))
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            controller.syncTime(
+                writeEnabled = true,
+                putStationToSleepAfterSync = false,
+                expectedStationSerialNumber = 781234
+            )
+        }
+
+        assertEquals("SPORTident station did not reply to Write station time.", error.message)
+        assertEquals(
+            1,
+            transport.commands.count { it == SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND }
+        )
+        assertFalse(transport.commands.contains(SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND))
+    }
+
+    @Test
     fun syncRefusesToWriteWhenTargetChangedAfterInspection() {
         val transport = FakeTransport(
             frame(SportIdentProtocol.PROBE_COMMAND),
@@ -312,15 +376,24 @@ class AndroidSportIdentTimeSyncControllerTest {
         )
     }
 
-    private class FakeTransport(vararg replies: SportIdentFrame?) : AndroidSportIdentCommandTransport {
+    private class FakeTransport(
+        vararg replies: SportIdentFrame?,
+        private val negativeAcknowledgementCommandIndices: Set<Int> = emptySet()
+    ) : AndroidSportIdentCommandTransport {
         private val replies = replies.toMutableList()
         val commands = mutableListOf<Byte>()
 
         override fun sendWakePulse(): Boolean = true
 
-        override fun sendCommand(step: SportIdentTimeSyncCommandStep): SportIdentFrame? {
+        override fun sendCommand(step: SportIdentTimeSyncCommandStep): AndroidSportIdentCommandResult {
+            val commandIndex = commands.size
             commands += step.command
-            return if (replies.isEmpty()) null else replies.removeAt(0)
+            if (commandIndex in negativeAcknowledgementCommandIndices) {
+                return AndroidSportIdentCommandResult.NegativeAcknowledgement
+            }
+            val frame = if (replies.isEmpty()) null else replies.removeAt(0)
+            return frame?.let(AndroidSportIdentCommandResult::Reply)
+                ?: AndroidSportIdentCommandResult.NoReply
         }
     }
 
