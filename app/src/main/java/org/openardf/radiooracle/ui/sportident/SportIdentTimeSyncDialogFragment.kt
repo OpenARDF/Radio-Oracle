@@ -274,7 +274,8 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
         )
     }
 
-    private fun formatDelta(deltaMillis: Long): String {
+    private fun formatDelta(deltaMillis: Long?): String {
+        if (deltaMillis == null) return getString(R.string.sportident_time_sync_readback_unavailable)
         if (deltaMillis == 0L) return "aligned with the Android device"
         val duration = if (abs(deltaMillis) < 1_000L) {
             "${abs(deltaMillis)} ms"

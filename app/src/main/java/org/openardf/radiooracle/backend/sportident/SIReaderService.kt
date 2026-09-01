@@ -100,6 +100,26 @@ class SIReaderService :
 
     private fun startService(newDevice: UsbDevice, context: Context) {
         if (newDevice.vendorId == SI_VENDOR_ID && newDevice.productId == SI_PRODUCT_ID) {
+            if (
+                SIReaderServiceStartRules.shouldReuseActiveReader(
+                    activeDeviceId = device?.deviceId,
+                    requestedDeviceId = newDevice.deviceId,
+                    hasPort = siPort != null,
+                    jobActive = siJob?.isActive == true
+                )
+            ) {
+                DebugLog.info(
+                    "SI",
+                    "Reader service already active for SPORTident device " +
+                        "${newDevice.vendorId}:${newDevice.productId}; reusing connection"
+                )
+                return
+            }
+
+            if (device != null || siPort != null || serialDevice != null || connection != null) {
+                DebugLog.warn("SI", "Replacing stale SPORTident reader connection")
+                releaseReaderResources(updateReaderState = true)
+            }
             DebugLog.info("SI", "Reader service accepted SPORTident device ${newDevice.vendorId}:${newDevice.productId}")
             device = newDevice
             startSIDevice()
@@ -123,35 +143,47 @@ class SIReaderService :
     }
 
     private fun stopService(removedDevice: UsbDevice) {
-        if (removedDevice.vendorId == SI_VENDOR_ID && removedDevice.productId == SI_PRODUCT_ID) {
+        if (
+            removedDevice.vendorId == SI_VENDOR_ID &&
+            removedDevice.productId == SI_PRODUCT_ID &&
+            device?.deviceId == removedDevice.deviceId
+        ) {
             DebugLog.info("SI", "Reader service stopping for SPORTident device ${removedDevice.vendorId}:${removedDevice.productId}")
-            siJob?.cancel()
-
-            // Remove the observer if registered
-            if (observer != null) {
-                dataProcessor.currentState.removeObserver(observer!!)
-                observer = null
-            }
-
-            if (serialDevice != null) {
-                serialDevice!!.close()
-            }
-            siPort = null
-            serialDevice = null
-            device = null
-            if (connection != null) {
-                connection?.close()
-            }
-            connection = null
+            releaseReaderResources(updateReaderState = true)
             stopForeground(STOP_FOREGROUND_REMOVE)
+            DebugLog.info("SI", "Reader service stopped")
+        }
+    }
+
+    override fun onDestroy() {
+        releaseReaderResources(updateReaderState = true)
+        super.onDestroy()
+    }
+
+    private fun releaseReaderResources(updateReaderState: Boolean) {
+        siJob?.cancel()
+        siJob = null
+
+        observer?.let(dataProcessor.currentState::removeObserver)
+        observer = null
+
+        runCatching { serialDevice?.close() }
+        serialDevice = null
+        siPort = null
+
+        runCatching { connection?.close() }
+        connection = null
+        device = null
+
+        if (updateReaderState) {
             dataProcessor.updateReaderState(
                 SIReaderState(
                     SIReaderStatus.DISCONNECTED,
                     null,
-                    null, null
+                    null,
+                    null
                 )
             )
-            DebugLog.info("SI", "Reader service stopped")
         }
     }
 
@@ -213,4 +245,14 @@ class SIReaderService :
         const val USB_DEVICE = "USB_DEVICE"
         private const val NOTIFICATION_ID = 1
     }
+}
+
+internal object SIReaderServiceStartRules {
+    fun shouldReuseActiveReader(
+        activeDeviceId: Int?,
+        requestedDeviceId: Int,
+        hasPort: Boolean,
+        jobActive: Boolean
+    ): Boolean =
+        activeDeviceId == requestedDeviceId && hasPort && jobActive
 }

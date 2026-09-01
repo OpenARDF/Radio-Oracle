@@ -50,6 +50,7 @@ import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_PCARD_SER
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_REMOVED
 import org.openardf.radiooracle.backend.sportident.SIConstants.ZERO
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
+import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
@@ -85,18 +86,51 @@ class SIPort(
             override fun sendWakePulse(): Boolean =
                 port.syncWrite(byteArrayOf(SIConstants.WAKEUP), TIME_SYNC_TIMEOUT_MS) == 1
 
-            override fun sendCommand(step: SportIdentTimeSyncCommandStep) =
-                if (writeMsg(step.command, step.payload, extended = true) == 0) {
-                    readMsg(TIME_SYNC_TIMEOUT_MS, step.command)?.let { reply ->
-                        SportIdentFrameParser.firstFrame(
-                            bytes = reply,
-                            commandFilter = step.command,
-                            requireValidCrc = true
-                        )
-                    }
-                } else {
-                    null
+            override fun sendCommand(step: SportIdentTimeSyncCommandStep): SportIdentFrame? {
+                val commandHex = (step.command.toInt() and 0xff)
+                    .toString(16)
+                    .padStart(2, '0')
+                    .uppercase()
+                DebugLog.debug(
+                    "SI",
+                    "Time sync command send label=${step.label} command=0x$commandHex"
+                )
+                if (writeMsg(step.command, step.payload, extended = true) != 0) {
+                    DebugLog.warn(
+                        "SI",
+                        "Time sync command write failed label=${step.label} command=0x$commandHex"
+                    )
+                    return null
                 }
+
+                val reply = readMsg(TIME_SYNC_TIMEOUT_MS, step.command)
+                if (reply == null) {
+                    DebugLog.warn(
+                        "SI",
+                        "Time sync command timed out label=${step.label} command=0x$commandHex"
+                    )
+                    return null
+                }
+                val frame = SportIdentFrameParser.firstFrame(
+                    bytes = reply,
+                    commandFilter = step.command,
+                    requireValidCrc = true
+                )
+                if (frame == null) {
+                    DebugLog.warn(
+                        "SI",
+                        "Time sync command returned invalid frame label=${step.label} " +
+                            "command=0x$commandHex bytes=${reply.size}"
+                    )
+                    return null
+                }
+                DebugLog.debug(
+                    "SI",
+                    "Time sync command reply label=${step.label} command=0x$commandHex " +
+                        "dataBytes=${frame.data.size}"
+                )
+                return frame
+            }
         },
         readerStationInfo = ::connectedStationInfo
     )
@@ -170,16 +204,25 @@ class SIPort(
                 "SI",
                 "Starting confirmed SPORTident time sync sleepAfter=$putStationToSleepAfterSync"
             )
-            timeSyncController.syncTime(
-                writeEnabled = writeEnabled,
-                putStationToSleepAfterSync = putStationToSleepAfterSync,
-                expectedStationSerialNumber = expectedStationSerialNumber
-            ).also { result ->
-                DebugLog.info(
+            try {
+                timeSyncController.syncTime(
+                    writeEnabled = writeEnabled,
+                    putStationToSleepAfterSync = putStationToSleepAfterSync,
+                    expectedStationSerialNumber = expectedStationSerialNumber
+                ).also { result ->
+                    DebugLog.info(
+                        "SI",
+                        "Station time sync complete serial=${result.stationInfo.serialNumber} " +
+                            "deltaMs=${result.confirmedStationMinusComputerMillis} attempts=${result.attempts} " +
+                            "sleepConfirmed=${result.stationPowerStateWrite?.confirmed}"
+                    )
+                }
+            } catch (error: Throwable) {
+                DebugLog.error(
                     "SI",
-                    "Station time sync complete serial=${result.stationInfo.serialNumber} " +
-                        "deltaMs=${result.confirmedStationMinusComputerMillis} attempts=${result.attempts}"
+                    "Station time sync failed: ${error.message ?: error::class.simpleName}"
                 )
+                throw error
             }
         }
 

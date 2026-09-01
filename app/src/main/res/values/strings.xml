@@ -332,6 +332,7 @@
     <string name="sportident_time_sync_success">Synced station %1$d to %2$s. After sync, the station is %3$s.%4$s</string>
     <string name="sportident_time_sync_attempts"> Succeeded on attempt %1$d.</string>
     <string name="sportident_time_sync_failed">Time sync failed: %1$s</string>
+    <string name="sportident_time_sync_readback_unavailable">post-sync readback unavailable</string>
     <string name="sportident_time_sync_inspection_failed">Station inspection failed: %1$s</string>
 
     <string name="preferences_general">General</string>

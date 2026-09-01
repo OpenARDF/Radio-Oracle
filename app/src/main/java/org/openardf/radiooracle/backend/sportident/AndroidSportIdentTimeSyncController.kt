@@ -51,7 +51,7 @@ data class AndroidSportIdentTimeSyncResult(
     val beforeTime: LocalDateTime,
     val confirmedTime: LocalDateTime,
     val computerTimeAfterSync: LocalDateTime,
-    val confirmedStationMinusComputerMillis: Long,
+    val confirmedStationMinusComputerMillis: Long?,
     val attempts: Int,
     val stationPowerStateWrite: AndroidSportIdentStationPowerStateWriteResult?
 )
@@ -112,23 +112,27 @@ internal class AndroidSportIdentTimeSyncController(
             val outcome = runCatching {
                 syncOnce(
                     attempt = attemptIndex + 1,
-                    putStationToSleepAfterSync = putStationToSleepAfterSync,
-                    deferPowerOff = attemptIndex < MAX_WRITE_ATTEMPTS - 1,
                     expectedStationSerialNumber = expectedStationSerialNumber,
                     onWriteStarted = { writeStarted = true }
                 )
             }
-            val result = outcome.getOrNull()
-            if (result != null) {
+            val initialResult = outcome.getOrNull()
+            if (initialResult != null) {
+                val result = initialResult.withFallbackPostSyncEstimate(
+                    expectedStationSerialNumber = expectedStationSerialNumber
+                )
+                val postSyncDeltaMillis = result.confirmedStationMinusComputerMillis
                 if (
-                    abs(result.confirmedStationMinusComputerMillis) <= CORRECTION_THRESHOLD_MILLIS ||
+                    postSyncDeltaMillis == null ||
+                    abs(postSyncDeltaMillis) <= CORRECTION_THRESHOLD_MILLIS ||
                     attemptIndex == MAX_WRITE_ATTEMPTS - 1
                 ) {
-                    return if (
-                        putStationToSleepAfterSync &&
-                        result.stationPowerStateWrite == null
-                    ) {
-                        result.copy(stationPowerStateWrite = sleepStationInSeparateTransaction())
+                    return if (putStationToSleepAfterSync) {
+                        result.copy(
+                            stationPowerStateWrite = sleepStationInSeparateTransaction(
+                                expectedStationSerialNumber = result.stationInfo.serialNumber
+                            )
+                        )
                     } else {
                         result
                     }
@@ -172,8 +176,6 @@ internal class AndroidSportIdentTimeSyncController(
 
     private fun syncOnce(
         attempt: Int,
-        putStationToSleepAfterSync: Boolean,
-        deferPowerOff: Boolean,
         expectedStationSerialNumber: Int?,
         onWriteStarted: () -> Unit
     ): AndroidSportIdentTimeSyncResult {
@@ -204,15 +206,16 @@ internal class AndroidSportIdentTimeSyncController(
 
             requireReply(SportIdentTimeSyncProtocol.applyStationTimeStep())
             val computerTimeAfterSync = currentTime().truncatedTo(ChronoUnit.MILLIS)
-            val appliedTime = requireReply(
+            val postSyncDelta = transport.sendCommand(
                 SportIdentTimeSyncProtocol.readStationTimeStep("Read station time after apply")
-            ).data.decodeStationTime("post-apply station time")
-            val postSyncDelta = Duration.between(
-                computerTimeAfterSync,
-                appliedTime.preciseDateTime
-            ).toMillis()
-            val shouldPowerOff = putStationToSleepAfterSync &&
-                (!deferPowerOff || abs(postSyncDelta) <= CORRECTION_THRESHOLD_MILLIS)
+            )?.data?.let { data ->
+                SportIdentStationTimeCodec.decodePayload(data)?.let { appliedTime ->
+                    Duration.between(
+                        computerTimeAfterSync,
+                        appliedTime.preciseDateTime
+                    ).toMillis()
+                }
+            }
 
             AndroidSportIdentTimeSyncResult(
                 stationInfo = stationInfo,
@@ -222,21 +225,65 @@ internal class AndroidSportIdentTimeSyncController(
                 computerTimeAfterSync = computerTimeAfterSync,
                 confirmedStationMinusComputerMillis = postSyncDelta,
                 attempts = attempt,
-                stationPowerStateWrite = if (shouldPowerOff) attemptStationPowerOff() else null
+                stationPowerStateWrite = null
             )
         }
     }
 
-    private fun sleepStationInSeparateTransaction(): AndroidSportIdentStationPowerStateWriteResult {
+    private fun AndroidSportIdentTimeSyncResult.withFallbackPostSyncEstimate(
+        expectedStationSerialNumber: Int?
+    ): AndroidSportIdentTimeSyncResult {
+        if (confirmedStationMinusComputerMillis != null) return this
+
+        val inspection = runCatching { inspectDownloadStation() }.getOrNull()
+            ?.takeIf { inspected ->
+                expectedStationSerialNumber == null ||
+                    inspected.stationInfo.serialNumber == expectedStationSerialNumber
+            }
+            ?: return this
+        return copy(
+            computerTimeAfterSync = inspection.computerTime,
+            confirmedStationMinusComputerMillis = inspection.stationMinusComputerMillis
+        )
+    }
+
+    private fun sleepStationInSeparateTransaction(
+        expectedStationSerialNumber: Int
+    ): AndroidSportIdentStationPowerStateWriteResult {
         val accessMode = readerStationInfo().timeSyncAccessMode()
-        return runCatching {
-            withStationTransaction(accessMode) { attemptStationPowerOff() }
-        }.getOrElse { error ->
-            AndroidSportIdentStationPowerStateWriteResult(
-                confirmed = false,
-                message = "Station sleep command failed: ${error.message ?: error::class.simpleName}."
-            )
+        var lastResult: AndroidSportIdentStationPowerStateWriteResult? = null
+        repeat(SEPARATE_POWER_OFF_ATTEMPTS) { attemptIndex ->
+            val result = runCatching {
+                withStationTransaction(accessMode) {
+                    val stationInfo = readStationInfo(accessMode)
+                    check(stationInfo.serialNumber == expectedStationSerialNumber) {
+                        "The connected target changed before sleep: expected station " +
+                            "$expectedStationSerialNumber but found ${stationInfo.serialNumber}."
+                    }
+                    attemptStationPowerOff()
+                }
+            }.getOrElse { error ->
+                AndroidSportIdentStationPowerStateWriteResult(
+                    confirmed = false,
+                    message = "Station sleep command failed: ${error.message ?: error::class.simpleName}."
+                )
+            }
+            if (result.confirmed) {
+                return if (attemptIndex == 0) {
+                    result
+                } else {
+                    result.copy(message = "${result.message} Succeeded on attempt ${attemptIndex + 1}.")
+                }
+            }
+            lastResult = result
+            if (attemptIndex < SEPARATE_POWER_OFF_ATTEMPTS - 1) {
+                sleepMillis(SEPARATE_POWER_OFF_RETRY_DELAY_MS)
+            }
         }
+        return lastResult ?: AndroidSportIdentStationPowerStateWriteResult(
+            confirmed = false,
+            message = "Station sleep command was not attempted."
+        )
     }
 
     private fun attemptStationPowerOff(): AndroidSportIdentStationPowerStateWriteResult {
@@ -329,6 +376,8 @@ internal class AndroidSportIdentTimeSyncController(
         private const val INSPECTION_RETRY_DELAY_MS = 250L
         private const val MAX_WRITE_ATTEMPTS = 2
         private const val WRITE_RETRY_DELAY_MS = 150L
+        private const val SEPARATE_POWER_OFF_ATTEMPTS = 2
+        private const val SEPARATE_POWER_OFF_RETRY_DELAY_MS = 250L
         private const val CORRECTION_THRESHOLD_MILLIS = 100L
         private const val CONFIRMATION_TOLERANCE_MILLIS = 2_000L
     }

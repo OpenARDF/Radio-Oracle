@@ -96,6 +96,9 @@ class AndroidSportIdentTimeSyncControllerTest {
             stationTimeFrame(SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND, targetTime, tick = 128),
             frame(SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND),
             stationTimeFrame(SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND, targetTime, tick = 128),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
             frame(SportIdentTimeSyncProtocol.POWER_OFF_COMMAND),
             frame(SportIdentProtocol.PROBE_COMMAND)
         )
@@ -120,7 +123,116 @@ class AndroidSportIdentTimeSyncControllerTest {
                 SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
                 SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
                 SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
                 SportIdentTimeSyncProtocol.POWER_OFF_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND
+            ),
+            transport.commands
+        )
+    }
+
+    @Test
+    fun syncUsesFreshReadbackAndSeparateSleepWhenImmediatePostApplyReadTimesOut() {
+        val targetTime = LocalDateTime.parse("2026-09-01T10:00:00.500")
+        val computerAfterApply = LocalDateTime.parse("2026-09-01T10:00:00.525")
+        val fallbackComputerTime = LocalDateTime.parse("2026-09-01T10:00:00.550")
+        val transport = FakeTransport(
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                targetTime.minusMinutes(1),
+                tick = 0
+            ),
+            stationTimeFrame(SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND, targetTime, tick = 128),
+            frame(SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND),
+            null,
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND, targetTime, tick = 128),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            frame(SportIdentTimeSyncProtocol.POWER_OFF_COMMAND),
+            frame(SportIdentProtocol.PROBE_COMMAND)
+        )
+        val controller = controller(
+            transport,
+            listOf(targetTime, computerAfterApply, fallbackComputerTime)
+        )
+
+        val result = controller.syncTime(
+            writeEnabled = true,
+            putStationToSleepAfterSync = true,
+            expectedStationSerialNumber = 781234
+        )
+
+        assertEquals(-50L, result.confirmedStationMinusComputerMillis)
+        assertEquals(true, result.stationPowerStateWrite?.confirmed)
+        assertEquals(
+            listOf(
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentTimeSyncProtocol.POWER_OFF_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND
+            ),
+            transport.commands
+        )
+    }
+
+    @Test
+    fun syncStillSucceedsWhenImmediateAndFallbackPostApplyReadsTimeOut() {
+        val targetTime = LocalDateTime.parse("2026-09-01T10:00:00.500")
+        val computerAfterApply = LocalDateTime.parse("2026-09-01T10:00:00.525")
+        val transport = FakeTransport(
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                targetTime.minusMinutes(1),
+                tick = 0
+            ),
+            stationTimeFrame(SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND, targetTime, tick = 128),
+            frame(SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND),
+            null,
+            null
+        )
+        val controller = controller(
+            transport = transport,
+            currentTimes = listOf(targetTime, computerAfterApply),
+            readerStationModeCode = 5
+        )
+
+        val result = controller.syncTime(
+            writeEnabled = true,
+            putStationToSleepAfterSync = false,
+            expectedStationSerialNumber = 781234
+        )
+
+        assertEquals(targetTime.withNano(0), result.confirmedTime)
+        assertEquals(null, result.confirmedStationMinusComputerMillis)
+        assertEquals(
+            listOf(
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
                 SportIdentProtocol.PROBE_COMMAND
             ),
             transport.commands
@@ -181,7 +293,8 @@ class AndroidSportIdentTimeSyncControllerTest {
 
     private fun controller(
         transport: FakeTransport,
-        currentTimes: List<LocalDateTime>
+        currentTimes: List<LocalDateTime>,
+        readerStationModeCode: Int = 8
     ): AndroidSportIdentTimeSyncController {
         val times = ArrayDeque(currentTimes)
         return AndroidSportIdentTimeSyncController(
@@ -191,7 +304,7 @@ class AndroidSportIdentTimeSyncControllerTest {
                     serialNumber = 554896,
                     extendedMode = true,
                     stationCodeNumber = 1,
-                    stationModeCode = 8
+                    stationModeCode = readerStationModeCode
                 )
             },
             currentTime = { times.removeFirst() },
@@ -199,15 +312,15 @@ class AndroidSportIdentTimeSyncControllerTest {
         )
     }
 
-    private class FakeTransport(vararg replies: SportIdentFrame) : AndroidSportIdentCommandTransport {
-        private val replies = ArrayDeque(replies.toList())
+    private class FakeTransport(vararg replies: SportIdentFrame?) : AndroidSportIdentCommandTransport {
+        private val replies = replies.toMutableList()
         val commands = mutableListOf<Byte>()
 
         override fun sendWakePulse(): Boolean = true
 
         override fun sendCommand(step: SportIdentTimeSyncCommandStep): SportIdentFrame? {
             commands += step.command
-            return replies.removeFirstOrNull()
+            return if (replies.isEmpty()) null else replies.removeAt(0)
         }
     }
 
