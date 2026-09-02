@@ -822,7 +822,8 @@ class EventProjectEditorTest {
             competitorId = "comp-1",
             club = " OK Test ",
             bibNumber = " B101 ",
-            callSign = " K0ARDF "
+            callSign = " K0ARDF ",
+            siRent = true
         )
 
         val competitor = updated.raceData.competitorData.single().competitorCategory.competitor
@@ -830,6 +831,7 @@ class EventProjectEditorTest {
         assertEquals("B101", competitor.bibNumber)
         assertEquals("K0ARDF", competitor.callSign)
         assertEquals("", competitor.index)
+        assertTrue(competitor.siRent)
     }
 
     @Test
@@ -1034,6 +1036,31 @@ class EventProjectEditorTest {
         }
         assertFailsWith<IllegalArgumentException> {
             EventProjectEditor.updateCompetitorNumbers(original, "missing", "3", "3333")
+        }
+    }
+
+    @Test
+    fun updatesCompetitorSiRentalStatus() {
+        val original = projectFile(
+            competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner"),
+                competitorData("comp-2", "Bob", "Racer")
+            )
+        )
+
+        val rented = EventProjectEditor.updateCompetitorSiRental(original, "comp-2", true)
+        val returned = EventProjectEditor.updateCompetitorSiRental(rented, "comp-2", false)
+
+        assertFalse(original.raceData.competitorData[1].competitorCategory.competitor.siRent)
+        assertTrue(rented.raceData.competitorData[1].competitorCategory.competitor.siRent)
+        assertFalse(returned.raceData.competitorData[1].competitorCategory.competitor.siRent)
+        assertFalse(rented.raceData.competitorData[0].competitorCategory.competitor.siRent)
+    }
+
+    @Test
+    fun rejectsUnknownCompetitorSiRentalUpdate() {
+        assertFailsWith<IllegalArgumentException> {
+            EventProjectEditor.updateCompetitorSiRental(projectFile(), "missing", true)
         }
     }
 

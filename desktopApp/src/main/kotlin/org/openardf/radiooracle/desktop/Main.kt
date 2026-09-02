@@ -677,7 +677,8 @@ private val CompetitorTrailingTableColumns = listOf(
     FixedTableColumn("Category", 136.dp),
     FixedTableColumn("Start no.", 86.dp),
     FixedTableColumn("Start time", 104.dp),
-    FixedTableColumn("SI no.", 110.dp)
+    FixedTableColumn("SI no.", 110.dp),
+    FixedTableColumn("Rent Chip", 96.dp, TextAlign.Center)
 )
 
 private fun competitorAwardEligibilityTableColumns(awardScopes: List<EventAwardScope>): List<FixedTableColumn> =
@@ -720,7 +721,8 @@ private val CompetitorTableColumnHints = mapOf(
     "Category" to "Competition category assigned to this competitor.",
     "Start no." to "Race-specific start number used by this Race File and its start list.",
     "Start time" to "Drawn start time in minutes and seconds from the race start, such as 012:00.",
-    "SI no." to "SPORTident card number assigned to this competitor."
+    "SI no." to "SPORTident card number assigned to this competitor.",
+    "Rent Chip" to "Checked when the competitor is using a rented SPORTident card."
 )
 
 private val ResultTableColumns = listOf(
@@ -7684,17 +7686,19 @@ fun main(args: Array<String>) = application {
                     bibNumber,
                     callSign,
                     usaChampEligible,
-                    region2ChampEligible ->
+                    region2ChampEligible,
+                    siRent ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.updateCompetitorClubBibCallSign(
+                        updateCompetitorIdentityOrRental(
                             projectFile = currentProject,
                             competitorId = competitorId,
                             club = club,
                             bibNumber = bibNumber,
                             callSign = callSign,
                             usaChampEligible = usaChampEligible,
-                            region2ChampEligible = region2ChampEligible
+                            region2ChampEligible = region2ChampEligible,
+                            siRent = siRent
                         )
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -11805,6 +11809,31 @@ internal data class EventSeriesUiContext(
     val seriesName: String
 )
 
+private fun updateCompetitorIdentityOrRental(
+    projectFile: EventProjectFile,
+    competitorId: String,
+    club: String,
+    bibNumber: String,
+    callSign: String,
+    usaChampEligible: Boolean?,
+    region2ChampEligible: Boolean?,
+    siRent: Boolean?
+): EventProjectFile =
+    if (siRent != null && usaChampEligible == null && region2ChampEligible == null) {
+        EventProjectEditor.updateCompetitorSiRental(projectFile, competitorId, siRent)
+    } else {
+        EventProjectEditor.updateCompetitorClubBibCallSign(
+            projectFile = projectFile,
+            competitorId = competitorId,
+            club = club,
+            bibNumber = bibNumber,
+            callSign = callSign,
+            usaChampEligible = usaChampEligible,
+            region2ChampEligible = region2ChampEligible,
+            siRent = siRent
+        )
+    }
+
 /**
  * Builds the launchable desktop app shell.
  *
@@ -11859,8 +11888,8 @@ private fun RadioOManagerDesktopApp(
     onRemoveCategory: (String, Boolean) -> Unit = { _, _ -> },
     onRenameCompetitor: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorNumbers: (String, String, String) -> Unit = { _, _, _ -> },
-    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit =
-        { _, _, _, _, _, _ -> },
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?, Boolean?) -> Unit =
+        { _, _, _, _, _, _, _ -> },
     onUpdateCompetitorBirthYear: (String, String) -> Unit = { _, _ -> },
     onUpdateCompetitorStartTime: (String, String) -> Unit = { _, _ -> },
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit = { _, _ -> },
@@ -13527,7 +13556,7 @@ private fun SectionWorkspace(
     onRemoveCategory: (String, Boolean) -> Unit,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
-    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?, Boolean?) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
@@ -14018,7 +14047,7 @@ private fun SetupSectionWorkspaceContent(
     onCancelCompetitorImportReview: () -> Unit,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
-    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?, Boolean?) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean,
@@ -18009,7 +18038,7 @@ private fun CompetitorDetailsPanel(
     awardScopes: List<EventAwardScope>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
-    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?, Boolean?) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAddCompetitor: (String, String, String, String, String, String, String?, String, String) -> Boolean,
@@ -18258,7 +18287,7 @@ private fun CompetitorExistingRows(
     awardScopes: List<EventAwardScope>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
-    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?, Boolean?) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAssignCompetitorCategory: (String, String?) -> Unit,
@@ -18267,10 +18296,13 @@ private fun CompetitorExistingRows(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         orderedCompetitors.forEach { competitor ->
             key(competitor.id) {
+                var isRentedSiCard by remember(competitor.id, competitor.isRentedSiCard) {
+                    mutableStateOf(competitor.isRentedSiCard)
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(rentedSiRowBackgroundColor(competitor.isRentedSiCard)),
+                        .background(rentedSiRowBackgroundColor(isRentedSiCard)),
                     horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
                     verticalAlignment = Alignment.Top
                 ) {
@@ -18283,6 +18315,19 @@ private fun CompetitorExistingRows(
                             awardScopes = awardScopes,
                             onRenameCompetitor = onRenameCompetitor,
                             onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
+                            isRentedSiCard = isRentedSiCard,
+                            onSiRentalChange = { checked ->
+                                isRentedSiCard = checked
+                                onUpdateCompetitorClubIdentity(
+                                    competitor.id,
+                                    competitor.club,
+                                    competitor.bibNumber,
+                                    competitor.callSign,
+                                    null,
+                                    null,
+                                    checked
+                                )
+                            },
                             onUpdateCompetitorClubIdentity = onUpdateCompetitorClubIdentity,
                             onUpdateCompetitorBirthYear = onUpdateCompetitorBirthYear,
                             onUpdateCompetitorStartTime = onUpdateCompetitorStartTime,
@@ -18387,6 +18432,7 @@ private fun CompetitorAddRow(
             label = "SI",
             onCommit = onCommit
         )
+        Spacer(modifier = Modifier.width(tableColumns[categoryColumnIndex + 4].width))
     }
 }
 
@@ -18435,7 +18481,9 @@ private fun CompetitorDetailRow(
     awardScopes: List<EventAwardScope>,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
-    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit,
+    isRentedSiCard: Boolean,
+    onSiRentalChange: (Boolean) -> Unit,
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?, Boolean?) -> Unit,
     onUpdateCompetitorBirthYear: (String, String) -> Unit,
     onUpdateCompetitorStartTime: (String, String) -> Unit,
     onAssignCompetitorCategory: (String, String?) -> Unit
@@ -18482,7 +18530,8 @@ private fun CompetitorDetailRow(
                 bibNumberDraft,
                 callSignDraft,
                 competitor.usaChampEligible,
-                competitor.region2ChampEligible
+                competitor.region2ChampEligible,
+                null
             )
         }
         if (birthYearDraft != competitor.birthYearText) {
@@ -18555,6 +18604,8 @@ private fun CompetitorDetailRow(
             onStartTimeChange = { startTimeDraft = it },
             siNumberDraft = siNumberDraft,
             onSiNumberChange = { siNumberDraft = it },
+            isRentedSiCard = isRentedSiCard,
+            onSiRentalChange = onSiRentalChange,
             onCommit = ::applyPendingDrafts
         )
     }
@@ -18648,7 +18699,7 @@ private fun CompetitorAwardEligibilityCells(
     awardScopes: List<EventAwardScope>,
     tableColumns: List<FixedTableColumn>,
     warningText: String,
-    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?) -> Unit
+    onUpdateCompetitorClubIdentity: (String, String, String, String, Boolean?, Boolean?, Boolean?) -> Unit
 ) {
     awardScopes.forEachIndexed { index, scope ->
         val columnWidth = tableColumns[CompetitorBaseTableColumns.size + index].width
@@ -18675,7 +18726,8 @@ private fun CompetitorAwardEligibilityCells(
                         competitor.bibNumber,
                         competitor.callSign,
                         if (scope == EventAwardScope.NATIONAL) checked else competitor.usaChampEligible,
-                        region2ChampEligible
+                        region2ChampEligible,
+                        null
                     )
                 },
                 width = columnWidth
@@ -18699,6 +18751,8 @@ private fun CompetitorAssignmentCells(
     onStartTimeChange: (String) -> Unit,
     siNumberDraft: String,
     onSiNumberChange: (String) -> Unit,
+    isRentedSiCard: Boolean,
+    onSiRentalChange: (Boolean) -> Unit,
     onCommit: () -> Unit
 ) {
     ControlWarningTooltip(warningText) {
@@ -18733,6 +18787,28 @@ private fun CompetitorAssignmentCells(
         textStyle = textFieldStyle,
         onCommit = onCommit
     )
+    RentalChipCheckbox(
+        checked = isRentedSiCard,
+        onCheckedChange = onSiRentalChange,
+        width = tableColumns[categoryColumnIndex + 4].width
+    )
+}
+
+@Composable
+private fun RentalChipCheckbox(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    width: Dp
+) {
+    Box(
+        modifier = Modifier.width(width),
+        contentAlignment = Alignment.Center
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
 }
 
 @Composable

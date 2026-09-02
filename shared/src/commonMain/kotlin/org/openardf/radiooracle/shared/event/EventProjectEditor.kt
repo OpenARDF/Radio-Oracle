@@ -996,7 +996,8 @@ object EventProjectEditor {
         callSign: String,
         personId: String? = null,
         usaChampEligible: Boolean? = null,
-        region2ChampEligible: Boolean? = null
+        region2ChampEligible: Boolean? = null,
+        siRent: Boolean? = null
     ): EventProjectFile {
         val trimmedBibNumber = bibNumber.trim()
         val trimmedCallSign = normalizedCompetitorCallSign(callSign)
@@ -1030,7 +1031,8 @@ object EventProjectEditor {
                             bibNumber = trimmedBibNumber,
                             callSign = trimmedCallSign,
                             usaChampEligible = usaChampEligible ?: competitor.usaChampEligible,
-                            region2ChampEligible = region2ChampEligible ?: competitor.region2ChampEligible
+                            region2ChampEligible = region2ChampEligible ?: competitor.region2ChampEligible,
+                            siRent = siRent ?: competitor.siRent
                         )
                     )
                 )
@@ -1424,6 +1426,36 @@ object EventProjectEditor {
             } else {
                 data
             }
+        }
+
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(competitorData = competitorData)
+        )
+    }
+
+    /** Returns a copy of the Race File with one competitor's SI-card rental status changed. */
+    fun updateCompetitorSiRental(
+        projectFile: EventProjectFile,
+        competitorId: String,
+        isRentedSiCard: Boolean
+    ): EventProjectFile {
+        var foundCompetitor = false
+        val competitorData = projectFile.raceData.competitorData.map { data ->
+            val competitorCategory = data.competitorCategory
+            val competitor = competitorCategory.competitor
+            if (competitor.id == competitorId) {
+                foundCompetitor = true
+                data.copy(
+                    competitorCategory = competitorCategory.copy(
+                        competitor = competitor.copy(siRent = isRentedSiCard)
+                    )
+                )
+            } else {
+                data
+            }
+        }
+        require(foundCompetitor) {
+            "Competitor was not found: $competitorId"
         }
 
         return projectFile.copy(
