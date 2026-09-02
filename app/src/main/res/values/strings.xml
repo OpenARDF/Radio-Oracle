@@ -214,6 +214,8 @@
     <string name="competitor_delete_readout_data">Also Delete Readout Data (If Exist)</string>
     <string name="competitor_delete_all_confirmation">Do you really want to delete all competitors? This action CAN\'T be undone!</string>
     <string name="competitor_rent_chip">Rent Chip</string>
+    <string name="readout_si_number_title">SI #</string>
+    <string name="readout_rented_si_number_title">Rented SI #</string>
 
     <string name="competitor_hint_code">Code</string>
     <string name="competitor_hint_time_format" translatable="false">HH:MM:SS</string>

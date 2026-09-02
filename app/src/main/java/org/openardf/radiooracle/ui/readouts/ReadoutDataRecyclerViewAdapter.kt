@@ -59,6 +59,7 @@ class ReadoutDataRecyclerViewAdapter(
 
     override fun onBindViewHolder(holder: ReadoutViewHolder, position: Int) {
         val item = values[position]
+        val isRentedSiCard = item.competitorCategory?.competitor?.siRent == true
 
         if (item.competitorCategory?.competitor != null) {
             holder.competitorView.text = item.competitorCategory!!.competitor.getFullName().take(30)
@@ -77,6 +78,7 @@ class ReadoutDataRecyclerViewAdapter(
         } else {
             "-"
         }
+        holder.siNumberTitleView.setText(readoutSiNumberTitleResource(isRentedSiCard))
 
         holder.clubView.text =
             if (item.competitorCategory?.competitor?.club?.isNotEmpty() == true) {
@@ -126,7 +128,7 @@ class ReadoutDataRecyclerViewAdapter(
             holder.itemView.setBackgroundResource(R.color.red_result_err)
         } else if (item.result.competitorId == null) {
             holder.itemView.setBackgroundResource(R.color.orange_reading)
-        } else if (item.competitorCategory?.competitor?.siRent == true) {
+        } else if (isRentedSiCard) {
             holder.itemView.setBackgroundResource(R.color.yellow_warning)
         } else {
             holder.itemView.setBackgroundResource(R.color.white)
@@ -169,6 +171,7 @@ class ReadoutDataRecyclerViewAdapter(
 
     inner class ReadoutViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         var competitorView: TextView = view.findViewById(R.id.readout_item_competitor)
+        var siNumberTitleView: TextView = view.findViewById(R.id.readout_title_si_number)
         var siNumberView: TextView = view.findViewById(R.id.readout_item_si_number)
         var clubView: TextView = view.findViewById(R.id.readout_item_club)
         var runTimeView: TextView = view.findViewById(R.id.readout_item_run_time)
@@ -190,3 +193,6 @@ class ReadoutDataRecyclerViewAdapter(
         }
     }
 }
+
+internal fun readoutSiNumberTitleResource(isRentedSiCard: Boolean): Int =
+    if (isRentedSiCard) R.string.readout_rented_si_number_title else R.string.readout_si_number_title
