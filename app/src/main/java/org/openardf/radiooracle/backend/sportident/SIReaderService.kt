@@ -46,6 +46,7 @@ import org.openardf.radiooracle.backend.sportident.SIConstants.SI_PRODUCT_ID
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_VENDOR_ID
 import org.openardf.radiooracle.shared.device.SIReaderState
 import org.openardf.radiooracle.shared.device.SIReaderStatus
+import org.openardf.radiooracle.shared.sportident.SportIdentStationBackupSnapshot
 import kotlinx.coroutines.Job
 
 
@@ -77,8 +78,13 @@ class SIReaderService :
                 expectedStationSerialNumber
             )
 
+        suspend fun readStationBackup(
+            onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> }
+        ): SportIdentStationBackupSnapshot =
+            requirePort().readStationBackup(onProgress)
+
         private fun requirePort(): SIPort =
-            siPort ?: error("Connect a SPORTident download station before syncing time.")
+            siPort ?: error("Connect a SPORTident download station before using station tools.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

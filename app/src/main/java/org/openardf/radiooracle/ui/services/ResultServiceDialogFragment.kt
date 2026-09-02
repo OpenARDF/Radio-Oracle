@@ -41,6 +41,7 @@ import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.network.ResultServiceProcessor
@@ -219,6 +220,7 @@ class ResultServiceDialogFragment : DialogFragment() {
             intervalLayout.error = getString(R.string.general_invalid)
         }
 
+        if (!valid) SoundProcessor.makeErrorSound(requireContext())
         return valid
     }
 

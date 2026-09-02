@@ -25,7 +25,12 @@
 package org.openardf.radiooracle.backend.sounds
 
 import android.content.Context
+import android.media.AudioManager
 import android.media.MediaPlayer
+import android.media.ToneGenerator
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.shared.sound.SoundType
 
@@ -33,13 +38,47 @@ import org.openardf.radiooracle.shared.sound.SoundType
 object SoundProcessor {
     /** Plays the sound associated with the supplied readout type. */
     fun makeSound(context: Context, type: SoundType) {
+        if (type == SoundType.ERROR_UNKNOWN) {
+            makeErrorSound(context)
+            return
+        }
         val sound = when (type) {
-            SoundType.ERROR_UNKNOWN -> R.raw.si_error
+            SoundType.ERROR_UNKNOWN -> error("Handled above")
             SoundType.DUPLICATE -> R.raw.si_duplicate
             SoundType.RENT -> R.raw.si_rent
         }
 
         val mediaPlayer = MediaPlayer.create(context, sound)
+        mediaPlayer.setOnCompletionListener(MediaPlayer::release)
+        mediaPlayer.setOnErrorListener { player, _, _ ->
+            player.release()
+            true
+        }
         mediaPlayer.start()
     }
+
+    /** Plays one short, restrained cue for a user-visible error. */
+    @Synchronized
+    fun makeErrorSound(context: Context) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastErrorSoundAtMs < ERROR_SOUND_DEBOUNCE_MS) return
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        if (audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION) == 0) return
+        lastErrorSoundAtMs = now
+        runCatching {
+            ToneGenerator(AudioManager.STREAM_NOTIFICATION, ERROR_TONE_VOLUME_PERCENT).also { tone ->
+                tone.startTone(ToneGenerator.TONE_PROP_NACK, ERROR_TONE_DURATION_MS)
+                Handler(Looper.getMainLooper()).postDelayed(
+                    { tone.release() },
+                    ERROR_TONE_DURATION_MS + ERROR_TONE_RELEASE_DELAY_MS
+                )
+            }
+        }
+    }
+
+    private var lastErrorSoundAtMs = 0L
+    private const val ERROR_SOUND_DEBOUNCE_MS = 750L
+    private const val ERROR_TONE_VOLUME_PERCENT = 35
+    private const val ERROR_TONE_DURATION_MS = 180
+    private const val ERROR_TONE_RELEASE_DELAY_MS = 100L
 }

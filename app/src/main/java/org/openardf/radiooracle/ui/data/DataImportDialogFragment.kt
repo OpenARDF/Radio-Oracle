@@ -42,6 +42,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.constants.DataFormat
 import org.openardf.radiooracle.backend.files.constants.DataType
@@ -213,6 +214,9 @@ class DataImportDialogFragment : DialogFragment() {
                 if (warnings.isNotEmpty()) {
                     errorText += warnings.joinToString(separator = "\n", postfix = "\n")
                 }
+                if (data!!.invalidLines.isNotEmpty()) {
+                    SoundProcessor.makeErrorSound(requireContext())
+                }
                 errorView.text = errorText
             } else if (warnings.isNotEmpty()) {
                 errorView.text = warnings.joinToString(separator = "\n")
@@ -227,11 +231,13 @@ class DataImportDialogFragment : DialogFragment() {
             dataPreviewLayout.visibility = View.VISIBLE
 
         } catch (e: IllegalArgumentException) {
+            SoundProcessor.makeErrorSound(requireContext())
             errorView.text = e.message
             dataPreviewLayout.visibility = View.GONE
         }
         // Generic error message for other exceptions
         catch (e: Exception) {
+            SoundProcessor.makeErrorSound(requireContext())
             errorView.text = getString(R.string.data_import_file_error)
             dataPreviewLayout.visibility = View.GONE
         }

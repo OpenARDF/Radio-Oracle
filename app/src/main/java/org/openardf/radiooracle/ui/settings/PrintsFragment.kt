@@ -44,6 +44,7 @@ import androidx.preference.PreferenceManager
 import androidx.preference.SeekBarPreference
 import androidx.preference.SwitchPreference
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.results.ResultsProcessor
@@ -165,6 +166,7 @@ class PrintsFragment : PreferenceFragmentCompat() {
             //Warning about missing bluetooth
             else {
                 logWarn("Bluetooth is not supported on this device")
+                SoundProcessor.makeErrorSound(requireContext())
                 val toast = Toast.makeText(
                     requireContext(),
                     requireContext().getString(R.string.print_bluetooth_not_supported),

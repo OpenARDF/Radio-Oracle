@@ -53,6 +53,9 @@ object SportIdentStationMode {
     const val READOUT_MODE_CODE = 5
     const val SI_MASTER_MODE_CODE = 8
 
+    fun isPunchBackupModeCode(code: Int): Boolean =
+        (code and MODE_CODE_MASK) in PUNCH_BACKUP_MODE_CODES
+
     fun isReadoutModeCode(code: Int): Boolean =
         code == READOUT_MODE_CODE || code == SI_MASTER_MODE_CODE
 
@@ -61,12 +64,22 @@ object SportIdentStationMode {
 
     fun labelForModeCode(code: Int): String =
         when (code) {
-            1 -> "CLEAR"
-            2 -> "CHECK"
+            1 -> "SIAC SPECIAL"
+            2 -> "CONTROL"
             3 -> "START"
             4 -> "FINISH"
             READOUT_MODE_CODE -> "READOUT"
+            6 -> "CLEAR (legacy)"
+            7 -> "CLEAR"
             SI_MASTER_MODE_CODE -> "SI MASTER"
+            10 -> "CHECK"
+            11 -> "PRINTOUT"
+            12 -> "START TRIGGER"
+            13 -> "FINISH TRIGGER"
+            18 -> "BEACON CONTROL"
+            19 -> "BEACON START"
+            20 -> "BEACON FINISH"
+            21 -> "BEACON READOUT"
             else -> flaggedModeLabel(code) ?: "MODE 0x${code.toHexByte()}"
         }
 
@@ -89,6 +102,7 @@ object SportIdentStationMode {
 
     private const val MODE_CODE_MASK = 0x1f
     private const val MODE_FLAG_MASK = 0xe0
+    private val PUNCH_BACKUP_MODE_CODES = setOf(2, 3, 4, 6, 7, 10)
 }
 
 object SportIdentStationInfoParser {

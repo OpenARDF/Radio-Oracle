@@ -1144,10 +1144,13 @@ class DesktopNavigationTest {
         assertEquals(DesktopSection.KmlRouteGenerator, courseTools.children.first { it.label == "Route Generator" }.section)
         assertFalse(courseTools.children.first { it.label == "Route Generator" }.requiresEventFile)
         val sportIdentTools = tools.children.first { it.label == "SPORTident" }
+        val punchHistory = sportIdentTools.children.first { it.label == "Punch History" }
         val timeSync = sportIdentTools.children.first { it.label == "Time Sync" }
         assertEquals(DesktopSection.SportIdentTools, sportIdentTools.section)
+        assertEquals(DesktopSection.SportIdentStationBackup, punchHistory.section)
         assertEquals(DesktopSection.SportIdentTimeSync, timeSync.section)
         assertFalse(sportIdentTools.requiresEventFile)
+        assertFalse(punchHistory.requiresEventFile)
         assertFalse(timeSync.requiresEventFile)
     }
 

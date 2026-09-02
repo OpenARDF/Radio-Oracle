@@ -53,6 +53,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
+import org.openardf.radiooracle.shared.sportident.SportIdentStationBackupSnapshot
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
 import org.openardf.radiooracle.shared.sportident.SportIdentTimeSyncCommandStep
 import kotlinx.coroutines.CoroutineScope
@@ -81,65 +82,73 @@ class SIPort(
     private var stationModeCode: Int? = null
     private var lastReadCardId: Int? = null
     private var waitingForRaceLogged = false
-    private val timeSyncController = AndroidSportIdentTimeSyncController(
-        transport = object : AndroidSportIdentCommandTransport {
-            override fun sendWakePulse(): Boolean =
-                port.syncWrite(byteArrayOf(SIConstants.WAKEUP), TIME_SYNC_TIMEOUT_MS) == 1
+    private val commandTransport = object : AndroidSportIdentCommandTransport {
+        override fun sendWakePulse(): Boolean {
+            val sent = port.syncWrite(byteArrayOf(SIConstants.WAKEUP), TIME_SYNC_TIMEOUT_MS) == 1
+            DebugLog.debug("SI", "Station wake pulse sent=$sent")
+            return sent
+        }
 
-            override fun sendCommand(step: SportIdentTimeSyncCommandStep): AndroidSportIdentCommandResult {
-                val commandHex = (step.command.toInt() and 0xff)
-                    .toString(16)
-                    .padStart(2, '0')
-                    .uppercase()
-                DebugLog.debug(
+        override fun sendCommand(step: SportIdentTimeSyncCommandStep): AndroidSportIdentCommandResult {
+            val commandHex = (step.command.toInt() and 0xff)
+                .toString(16)
+                .padStart(2, '0')
+                .uppercase()
+            DebugLog.debug(
+                "SI",
+                "Station command send label=${step.label} command=0x$commandHex"
+            )
+            if (writeMsg(step.command, step.payload, extended = true) != 0) {
+                DebugLog.warn(
                     "SI",
-                    "Time sync command send label=${step.label} command=0x$commandHex"
+                    "Station command write failed label=${step.label} command=0x$commandHex"
                 )
-                if (writeMsg(step.command, step.payload, extended = true) != 0) {
-                    DebugLog.warn(
-                        "SI",
-                        "Time sync command write failed label=${step.label} command=0x$commandHex"
-                    )
-                    return AndroidSportIdentCommandResult.NoReply
-                }
-
-                val reply = readMsg(TIME_SYNC_TIMEOUT_MS, step.command)
-                if (reply == null) {
-                    DebugLog.warn(
-                        "SI",
-                        "Time sync command timed out label=${step.label} command=0x$commandHex"
-                    )
-                    return AndroidSportIdentCommandResult.NoReply
-                }
-                if (reply.size == 1 && reply[0] == SIConstants.NAK) {
-                    DebugLog.warn(
-                        "SI",
-                        "Time sync command negatively acknowledged label=${step.label} " +
-                            "command=0x$commandHex"
-                    )
-                    return AndroidSportIdentCommandResult.NegativeAcknowledgement
-                }
-                val frame = SportIdentFrameParser.firstFrame(
-                    bytes = reply,
-                    commandFilter = step.command,
-                    requireValidCrc = true
-                )
-                if (frame == null) {
-                    DebugLog.warn(
-                        "SI",
-                        "Time sync command returned invalid frame label=${step.label} " +
-                            "command=0x$commandHex bytes=${reply.size}"
-                    )
-                    return AndroidSportIdentCommandResult.NoReply
-                }
-                DebugLog.debug(
-                    "SI",
-                    "Time sync command reply label=${step.label} command=0x$commandHex " +
-                        "dataBytes=${frame.data.size}"
-                )
-                return AndroidSportIdentCommandResult.Reply(frame)
+                return AndroidSportIdentCommandResult.NoReply
             }
-        },
+
+            val reply = readMsg(TIME_SYNC_TIMEOUT_MS, step.command)
+            if (reply == null) {
+                DebugLog.warn(
+                    "SI",
+                    "Station command timed out label=${step.label} command=0x$commandHex"
+                )
+                return AndroidSportIdentCommandResult.NoReply
+            }
+            if (reply.size == 1 && reply[0] == SIConstants.NAK) {
+                DebugLog.warn(
+                    "SI",
+                    "Station command negatively acknowledged label=${step.label} " +
+                        "command=0x$commandHex"
+                )
+                return AndroidSportIdentCommandResult.NegativeAcknowledgement
+            }
+            val frame = SportIdentFrameParser.firstFrame(
+                bytes = reply,
+                commandFilter = step.command,
+                requireValidCrc = true
+            )
+            if (frame == null) {
+                DebugLog.warn(
+                    "SI",
+                    "Station command returned invalid frame label=${step.label} " +
+                        "command=0x$commandHex bytes=${reply.size}"
+                )
+                return AndroidSportIdentCommandResult.NoReply
+            }
+            DebugLog.debug(
+                "SI",
+                "Station command reply label=${step.label} command=0x$commandHex " +
+                    "dataBytes=${frame.data.size}"
+            )
+            return AndroidSportIdentCommandResult.Reply(frame)
+        }
+    }
+    private val timeSyncController = AndroidSportIdentTimeSyncController(
+        transport = commandTransport,
+        readerStationInfo = ::connectedStationInfo
+    )
+    private val stationBackupController = AndroidSportIdentStationBackupController(
+        transport = commandTransport,
         readerStationInfo = ::connectedStationInfo
     )
 
@@ -234,12 +243,41 @@ class SIPort(
             }
         }
 
+    suspend fun readStationBackup(
+        onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> }
+    ): SportIdentStationBackupSnapshot =
+        stationAccessMutex.withLock {
+            ensureConnectedForStationMaintenance()
+            DebugLog.info("SI", "Starting read-only SPORTident station backup download")
+            try {
+                stationBackupController.readBackup(onProgress).also { snapshot ->
+                    DebugLog.info(
+                        "SI",
+                        "Station backup read complete serial=${snapshot.stationInfo.serialNumber} " +
+                            "records=${snapshot.records.size} " +
+                            "unreadable=${snapshot.unreadableRecordAddresses.size} " +
+                            "overflowed=${snapshot.metadata.overflowed}"
+                    )
+                }
+            } catch (error: Throwable) {
+                DebugLog.error(
+                    "SI",
+                    "Station backup read failed: ${error.message ?: error::class.simpleName}"
+                )
+                throw error
+            }
+        }
+
     private fun ensureConnectedForTimeSync() {
+        ensureConnectedForStationMaintenance()
+    }
+
+    private fun ensureConnectedForStationMaintenance() {
         check(
             dataProcessor.currentState.value?.siReaderState?.status in
                 setOf(SIReaderStatus.CONNECTED, SIReaderStatus.CARD_READ)
         ) {
-            "Connect a ready SPORTident download station before syncing time."
+            "Connect a ready SPORTident download station before using station tools."
         }
     }
 

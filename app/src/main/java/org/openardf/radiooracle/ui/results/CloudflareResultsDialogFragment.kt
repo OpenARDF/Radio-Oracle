@@ -49,6 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.publicresults.AndroidCloudflarePagesPublishSettings
 import org.openardf.radiooracle.backend.publicresults.AndroidCloudflarePagesSettingsStore
 import org.openardf.radiooracle.backend.publicresults.AndroidPublicResultsPublishOutcome
@@ -164,6 +165,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
                 target = it
                 render()
             }.onFailure {
+                SoundProcessor.makeErrorSound(requireContext())
                 statusView.text = getString(
                     R.string.cloudflare_results_publish_failed,
                     it.message ?: it::class.simpleName
@@ -269,6 +271,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
                 }
             }.onSuccess(::showPublished)
                 .onFailure {
+                    SoundProcessor.makeErrorSound(requireContext())
                     if (it.isCloudflarePagesSettingsRejection()) {
                         AndroidCloudflarePagesSettingsStore.recordRejection(
                             requireContext(),

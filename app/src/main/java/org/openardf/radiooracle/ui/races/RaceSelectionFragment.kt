@@ -58,6 +58,7 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.nambimobile.widgets.efab.FabOption
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
 import org.openardf.radiooracle.backend.files.EventFileTransferDownloader
 import org.openardf.radiooracle.backend.files.EventFileTransferUploads
@@ -304,6 +305,7 @@ class RaceSelectionFragment : Fragment() {
     }
 
     private fun displayAlert(message: String, titleRes: Int = R.string.race_import_failure) {
+        SoundProcessor.makeErrorSound(requireContext())
         val alertDialog = AlertDialog.Builder(requireContext()).create()
         alertDialog.setTitle(getString(titleRes))
         alertDialog.setMessage(message)

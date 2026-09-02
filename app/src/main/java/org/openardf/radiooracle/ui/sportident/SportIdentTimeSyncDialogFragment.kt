@@ -31,15 +31,20 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.annotation.StringRes
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.checkbox.MaterialCheckBox
+import com.google.android.material.color.MaterialColors
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -52,10 +57,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.sportident.AndroidSportIdentTimeSyncInspection
 import org.openardf.radiooracle.backend.sportident.AndroidSportIdentTimeSyncResult
 import org.openardf.radiooracle.backend.sportident.SIReaderService
 import org.openardf.radiooracle.shared.device.SIReaderStatus
+import org.openardf.radiooracle.shared.sportident.SportIdentStationBackupRecord
+import org.openardf.radiooracle.shared.sportident.SportIdentStationBackupSnapshot
 
 /** Android entry point for read-only station inspection and confirmed SPORTident time sync. */
 class SportIdentTimeSyncDialogFragment : DialogFragment() {
@@ -65,12 +73,21 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
     private lateinit var inspectButton: Button
     private lateinit var syncButton: Button
     private lateinit var sleepAfterCheckBox: MaterialCheckBox
+    private lateinit var backupFilterView: EditText
+    private lateinit var backupReadButton: Button
+    private lateinit var backupShowButton: Button
+    private lateinit var backupSummaryView: TextView
+    private lateinit var backupRecordsView: TextView
 
     private var binder: SIReaderService.LocalBinder? = null
     private var isBound = false
     private var operationJob: Job? = null
     private var clockJob: Job? = null
     private var lastInspection: AndroidSportIdentTimeSyncInspection? = null
+    private var backupSnapshot: SportIdentStationBackupSnapshot? = null
+    private var stationStatusNormalColor: Int = 0
+    private var backupStatusNormalColor: Int = 0
+    private var statusErrorColor: Int = 0
     private val dataProcessor by lazy { DataProcessor.get() }
 
     private val serviceConnection = object : ServiceConnection {
@@ -83,7 +100,7 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
         override fun onServiceDisconnected(name: ComponentName?) {
             binder = null
             lastInspection = null
-            stationStatusView.setText(R.string.sportident_time_sync_disconnected)
+            showStationStatus(R.string.sportident_time_sync_disconnected, isError = true)
             updateButtons(isBusy = false)
         }
     }
@@ -97,13 +114,26 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
         inspectButton = view.findViewById(R.id.sportident_time_sync_inspect)
         syncButton = view.findViewById(R.id.sportident_time_sync_run)
         sleepAfterCheckBox = view.findViewById(R.id.sportident_time_sync_sleep_after)
+        backupFilterView = view.findViewById(R.id.sportident_backup_filter)
+        backupReadButton = view.findViewById(R.id.sportident_backup_read)
+        backupShowButton = view.findViewById(R.id.sportident_backup_show)
+        backupSummaryView = view.findViewById(R.id.sportident_backup_summary)
+        backupRecordsView = view.findViewById(R.id.sportident_backup_records)
+        stationStatusNormalColor = stationStatusView.currentTextColor
+        backupStatusNormalColor = backupSummaryView.currentTextColor
+        statusErrorColor = MaterialColors.getColor(
+            stationStatusView,
+            android.R.attr.colorError
+        )
 
         inspectButton.setOnClickListener { inspectStation() }
         syncButton.setOnClickListener { confirmTimeSync() }
+        backupReadButton.setOnClickListener { readStationBackup() }
+        backupShowButton.setOnClickListener { showBackupResults() }
         dataProcessor.currentState.observe(this) { state ->
             if (state.siReaderState.status == SIReaderStatus.DISCONNECTED) {
                 lastInspection = null
-                stationStatusView.setText(R.string.sportident_time_sync_disconnected)
+                showStationStatus(R.string.sportident_time_sync_disconnected, isError = true)
                 updateButtons(isBusy = operationJob?.isActive == true)
             } else if (binder == null && !isBound && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
                 bindReaderService()
@@ -111,7 +141,7 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
         }
 
         return AlertDialog.Builder(requireContext())
-            .setTitle(R.string.sportident_time_sync_title)
+            .setTitle(R.string.sportident_tools_title)
             .setView(view)
             .setPositiveButton(R.string.general_close, null)
             .create()
@@ -119,6 +149,12 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
 
     override fun onStart() {
         super.onStart()
+        (dialog as? AlertDialog)?.let { alertDialog ->
+            alertDialog.findViewById<TextView>(resources.getIdentifier("alertTitle", "id", "android"))
+                ?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23f)
+            alertDialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                ?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+        }
         startComputerClock()
         bindReaderService()
     }
@@ -135,10 +171,10 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
     }
 
     private fun bindReaderService() {
-        stationStatusView.setText(R.string.sportident_time_sync_connecting)
+        showStationStatus(R.string.sportident_time_sync_connecting)
         val state = dataProcessor.currentState.value?.siReaderState
         if (state == null || state.status == SIReaderStatus.DISCONNECTED) {
-            stationStatusView.setText(R.string.sportident_time_sync_disconnected)
+            showStationStatus(R.string.sportident_time_sync_disconnected, isError = true)
             updateButtons(isBusy = false)
             return
         }
@@ -148,7 +184,7 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
             0
         )
         if (!isBound) {
-            stationStatusView.setText(R.string.sportident_time_sync_disconnected)
+            showStationStatus(R.string.sportident_time_sync_disconnected, isError = true)
             updateButtons(isBusy = false)
         }
     }
@@ -168,23 +204,26 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
 
     private fun inspectStation() {
         val activeBinder = binder ?: run {
-            stationStatusView.setText(R.string.sportident_time_sync_disconnected)
+            showStationStatus(R.string.sportident_time_sync_disconnected, isError = true)
             return
         }
         operationJob?.cancel()
         operationJob = lifecycleScope.launch {
             lastInspection = null
-            stationStatusView.setText(R.string.sportident_time_sync_inspecting)
+            showStationStatus(R.string.sportident_time_sync_inspecting)
             updateButtons(isBusy = true)
             runCatching {
                 withContext(Dispatchers.IO) { activeBinder.inspectTimeSyncStation() }
             }.onSuccess { inspection ->
                 lastInspection = inspection
-                stationStatusView.text = inspection.summaryText()
+                showStationStatus(inspection.summaryText())
             }.onFailure { error ->
-                stationStatusView.text = getString(
-                    R.string.sportident_time_sync_inspection_failed,
-                    error.message ?: error::class.simpleName
+                showStationStatus(
+                    getString(
+                        R.string.sportident_time_sync_inspection_failed,
+                        error.message ?: error::class.simpleName
+                    ),
+                    isError = true
                 )
             }
             updateButtons(isBusy = false)
@@ -213,7 +252,7 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
         operationJob = lifecycleScope.launch {
             var inspectAgain = false
             lastInspection = null
-            stationStatusView.setText(R.string.sportident_time_sync_syncing)
+            showStationStatus(R.string.sportident_time_sync_syncing)
             updateButtons(isBusy = true)
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -224,12 +263,15 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
                     )
                 }
             }.onSuccess { result ->
-                stationStatusView.text = result.successText()
+                showStationStatus(result.successText())
                 inspectAgain = !sleepAfterCheckBox.isChecked
             }.onFailure { error ->
-                stationStatusView.text = getString(
-                    R.string.sportident_time_sync_failed,
-                    error.message ?: error::class.simpleName
+                showStationStatus(
+                    getString(
+                        R.string.sportident_time_sync_failed,
+                        error.message ?: error::class.simpleName
+                    ),
+                    isError = true
                 )
             }
             operationJob = null
@@ -243,6 +285,124 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
         inspectButton.isEnabled = binder != null && !isBusy
         syncButton.isEnabled = binder != null && lastInspection != null && !isBusy
         sleepAfterCheckBox.isEnabled = !isBusy
+        backupReadButton.isEnabled = binder != null && !isBusy
+        backupReadButton.setText(
+            if (isBusy) R.string.sportident_backup_reading_button else R.string.sportident_backup_read
+        )
+        backupShowButton.isEnabled = backupSnapshot != null && !isBusy
+        backupFilterView.isEnabled = !isBusy
+    }
+
+    private fun readStationBackup() {
+        val activeBinder = binder ?: run {
+            showBackupStatus(R.string.sportident_time_sync_disconnected, isError = true)
+            Toast.makeText(requireContext(), R.string.sportident_time_sync_disconnected, Toast.LENGTH_LONG).show()
+            return
+        }
+        operationJob?.cancel()
+        operationJob = lifecycleScope.launch {
+            backupSnapshot = null
+            backupRecordsView.text = ""
+            showBackupStatus(R.string.sportident_backup_reading)
+            updateButtons(isBusy = true)
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    activeBinder.readStationBackup { completed, total ->
+                        if (total > 0 && (completed == total || completed % PROGRESS_UPDATE_INTERVAL == 0)) {
+                            backupSummaryView.post {
+                                showBackupStatus("Reading station punch history: $completed / $total records…")
+                            }
+                        }
+                    }
+                }
+            }.onSuccess { snapshot ->
+                backupSnapshot = snapshot
+                showBackupResults()
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.sportident_backup_complete, snapshot.records.size),
+                    Toast.LENGTH_LONG
+                ).show()
+            }.onFailure { error ->
+                val message = getString(
+                    R.string.sportident_backup_failed,
+                    error.message ?: error::class.simpleName
+                )
+                showBackupStatus(message, isError = true)
+                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+            }
+            operationJob = null
+            updateButtons(isBusy = false)
+        }
+    }
+
+    private fun showBackupResults() {
+        val snapshot = backupSnapshot ?: return
+        val filterText = backupFilterView.text?.toString()?.trim().orEmpty()
+        val cardNumberFilter = filterText.toIntOrNull()
+        val matchingRecords = if (filterText.isEmpty()) {
+            snapshot.records
+        } else if (cardNumberFilter == null) {
+            emptyList()
+        } else {
+            snapshot.records.filter { it.cardNumber == cardNumberFilter }
+        }
+        val visibleRecords = if (filterText.isEmpty()) {
+            matchingRecords.takeLast(MAX_UNFILTERED_RECORDS)
+        } else {
+            matchingRecords.takeLast(MAX_FILTERED_RECORDS)
+        }.asReversed()
+        val stationCode = snapshot.stationInfo.stationCodeNumber?.let { ", SI code $it" }.orEmpty()
+        val overflowText = if (snapshot.metadata.overflowed) "; ring buffer has wrapped" else ""
+        val unreadableText = snapshot.unreadableRecordAddresses.takeIf { it.isNotEmpty() }
+            ?.let { "; ${it.size} unreadable record(s)" }
+            .orEmpty()
+        val displayText = when {
+            filterText.isNotEmpty() && cardNumberFilter == null -> "Enter a valid numeric SI-Card number."
+            matchingRecords.isEmpty() && filterText.isNotEmpty() -> "No records for SI-Card $filterText."
+            matchingRecords.isEmpty() -> "No punch records were found."
+            else -> visibleRecords.joinToString("\n") { it.displayText() }
+        }
+        val shownText = if (visibleRecords.size < matchingRecords.size) {
+            "; showing newest ${visibleRecords.size}"
+        } else {
+            ""
+        }
+        showBackupStatus(
+            "Station ${snapshot.stationInfo.serialNumber}$stationCode: ${snapshot.records.size} record(s)" +
+                overflowText + unreadableText + shownText + "."
+        )
+        backupRecordsView.text = displayText
+    }
+
+    private fun showStationStatus(@StringRes stringResource: Int, isError: Boolean = false) {
+        showStationStatus(getString(stringResource), isError)
+    }
+
+    private fun showStationStatus(text: CharSequence, isError: Boolean = false) {
+        stationStatusView.setTextColor(if (isError) statusErrorColor else stationStatusNormalColor)
+        stationStatusView.text = text
+        if (isError) SoundProcessor.makeErrorSound(requireContext())
+    }
+
+    private fun showBackupStatus(@StringRes stringResource: Int, isError: Boolean = false) {
+        showBackupStatus(getString(stringResource), isError)
+    }
+
+    private fun showBackupStatus(text: CharSequence, isError: Boolean = false) {
+        backupSummaryView.setTextColor(if (isError) statusErrorColor else backupStatusNormalColor)
+        backupSummaryView.text = text
+        if (isError) SoundProcessor.makeErrorSound(requireContext())
+    }
+
+    private fun SportIdentStationBackupRecord.displayText(): String {
+        val dateText = recordedDate?.format(BACKUP_DATE_FORMAT)
+            ?: dayOfWeek?.name?.take(3)
+            ?: "Unknown date"
+        val statusText = errorLabel?.let { label ->
+            "$halfDay $label: ${errorDescription ?: "punch failed"}"
+        } ?: recordedTime?.format(BACKUP_TIME_FORMAT).orEmpty()
+        return "$cardNumber  $dateText $statusText"
     }
 
     private fun AndroidSportIdentTimeSyncInspection.summaryText(): String {
@@ -289,5 +449,10 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
     companion object {
         const val TAG = "SportIdentTimeSyncDialog"
         private val DISPLAY_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+        private val BACKUP_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        private val BACKUP_TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
+        private const val MAX_UNFILTERED_RECORDS = 200
+        private const val MAX_FILTERED_RECORDS = 1_000
+        private const val PROGRESS_UPDATE_INTERVAL = 25
     }
 }

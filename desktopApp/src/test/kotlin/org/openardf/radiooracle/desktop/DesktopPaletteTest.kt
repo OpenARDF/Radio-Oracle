@@ -55,6 +55,7 @@ class DesktopPaletteTest {
                 "Race Validator",
                 "Course Tools",
                 "SPORTident",
+                "Punch History",
                 "Time Sync",
                 "Move Course",
                 "Create Course",

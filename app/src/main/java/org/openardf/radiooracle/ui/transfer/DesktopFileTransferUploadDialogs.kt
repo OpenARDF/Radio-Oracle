@@ -37,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUploader
 
@@ -119,6 +120,7 @@ object DesktopFileTransferUploadDialogs {
     }
 
     private fun displayAlert(fragment: Fragment, message: String) {
+        SoundProcessor.makeErrorSound(fragment.requireContext())
         AlertDialog.Builder(fragment.requireContext())
             .setTitle(R.string.general_unknown_error)
             .setMessage(message)

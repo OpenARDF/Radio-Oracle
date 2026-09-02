@@ -13,10 +13,19 @@
         android:orientation="vertical">
 
         <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/sportident_time_sync_section"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textSize="21sp"
+            android:textStyle="bold" />
+
+        <TextView
             android:id="@+id/sportident_time_sync_computer_time"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textAppearance="?attr/textAppearanceBodyMedium" />
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textSize="18sp" />
 
         <TextView
             android:id="@+id/sportident_time_sync_station_status"
@@ -25,6 +34,7 @@
             android:layout_marginTop="12dp"
             android:text="@string/sportident_time_sync_connecting"
             android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textSize="18sp"
             android:textStyle="bold" />
 
         <ProgressBar
@@ -42,7 +52,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:checked="true"
-            android:text="@string/sportident_time_sync_sleep_after" />
+            android:text="@string/sportident_time_sync_sleep_after"
+            android:textSize="18sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -56,7 +67,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:enabled="false"
-                android:text="@string/sportident_time_sync_inspect" />
+                android:text="@string/sportident_time_sync_inspect"
+                android:textSize="17sp" />
 
             <Button
                 android:id="@+id/sportident_time_sync_run"
@@ -64,7 +76,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:enabled="false"
-                android:text="@string/sportident_time_sync_sync" />
+                android:text="@string/sportident_time_sync_sync"
+                android:textSize="17sp" />
         </LinearLayout>
 
         <TextView
@@ -72,7 +85,85 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="@string/sportident_time_sync_guidance"
-            android:textAppearance="?attr/textAppearanceBodySmall" />
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textSize="17sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="16dp"
+            android:background="?android:attr/listDivider" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/sportident_backup_section"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textSize="21sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/sportident_backup_ready"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textSize="17sp" />
+
+        <EditText
+            android:id="@+id/sportident_backup_filter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="@string/sportident_backup_filter_hint"
+            android:inputType="number"
+            android:maxLines="1"
+            android:textSize="18sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/sportident_backup_read"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:enabled="false"
+                android:text="@string/sportident_backup_read"
+                android:textSize="17sp" />
+
+            <Button
+                android:id="@+id/sportident_backup_show"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:enabled="false"
+                android:text="@string/sportident_backup_show"
+                android:textSize="17sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/sportident_backup_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/sportident_backup_ready"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/sportident_backup_records"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="monospace"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textSize="17sp"
+            android:textIsSelectable="true" />
 
     </LinearLayout>
 </ScrollView>

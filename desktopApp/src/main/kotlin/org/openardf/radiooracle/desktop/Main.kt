@@ -13737,6 +13737,13 @@ private fun SectionWorkspace(
         if (section == DesktopSection.SportIdentTools) {
             SportIdentToolsPanel()
         }
+        if (section == DesktopSection.SportIdentStationBackup) {
+            SportIdentStationBackupPanel(
+                isReaderConnected = siReaderState.severity == DesktopSiReaderSeverity.CONNECTED,
+                isStationBusy = isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard,
+                siPortMutex = siPortMutex
+            )
+        }
         if (section == DesktopSection.SportIdentTimeSync) {
             SportIdentTimeSyncPanel(
                 siReaderState = siReaderState,
@@ -14132,7 +14139,7 @@ private fun SetupSectionWorkspaceContent(
 @Composable
 private fun SportIdentToolsPanel() {
     Text(
-        text = "This area is a placeholder for future SPORTident tools.",
+        text = "Choose Punch History to search a field station's stored SI-Card visits, or Time Sync to inspect and synchronize its clock.",
         color = DesktopPalette.Black,
         fontSize = 14.sp
     )

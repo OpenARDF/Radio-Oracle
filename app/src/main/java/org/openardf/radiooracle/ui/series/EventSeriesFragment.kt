@@ -55,6 +55,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.files.EventFileTransferDownloader
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_ARCHIVE_CONTENT_TYPE
@@ -353,6 +354,7 @@ class EventSeriesFragment : Fragment() {
                 val seriesName = input.text.toString().trim()
                 if (seriesName.isBlank()) {
                     input.error = getString(R.string.event_series_name_required)
+                    SoundProcessor.makeErrorSound(requireContext())
                 } else {
                     dialog.dismiss()
                     renameSeries(item, seriesName)
@@ -465,6 +467,7 @@ class EventSeriesFragment : Fragment() {
     }
 
     private fun displayAlert(message: String) {
+        SoundProcessor.makeErrorSound(requireContext())
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.general_unknown_error)
             .setMessage(message)

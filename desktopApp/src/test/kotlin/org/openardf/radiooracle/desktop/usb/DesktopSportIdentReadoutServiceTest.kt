@@ -85,7 +85,7 @@ class DesktopSportIdentReadoutServiceTest {
             service.downloadOne()
         }
 
-        assertEquals("SI station 554900 is in CHECK mode instead of READOUT/SI MASTER.", error.message)
+        assertEquals("SI station 554900 is in CONTROL mode instead of READOUT/SI MASTER.", error.message)
         assertFalse(port.isOpen)
         assertTrue(port.closed)
     }

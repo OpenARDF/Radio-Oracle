@@ -43,6 +43,7 @@ import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.ui.serializableCompat
@@ -148,14 +149,17 @@ class InternetImportDialogFragment : DialogFragment() {
                         )
 
                     } catch (e: Exception) {
+                        SoundProcessor.makeErrorSound(requireContext())
                         errorTextView.text = e.message
                     }
 
                 } else {
+                    SoundProcessor.makeErrorSound(requireContext())
                     errorTextView.text = getString(R.string.result_service_status_no_network)
                 }
             } else {
                 apiKeyEditText.error = getString(R.string.general_required)
+                SoundProcessor.makeErrorSound(requireContext())
             }
         }
 

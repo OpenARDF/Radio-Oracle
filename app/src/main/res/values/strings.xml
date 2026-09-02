@@ -317,6 +317,7 @@
 
     <!-- SPORTident tools -->
     <string name="sportident_menu_title" translatable="false">SPORTident</string>
+    <string name="sportident_tools_title" translatable="false">SPORTident Tools</string>
     <string name="sportident_time_sync_title" translatable="false">SPORTident Time Sync</string>
     <string name="sportident_time_sync_computer_time">Computer time: %1$s</string>
     <string name="sportident_time_sync_connecting">Connecting to the SPORTident reader service…</string>
@@ -336,6 +337,16 @@
     <string name="sportident_time_sync_failed">Time sync failed: %1$s</string>
     <string name="sportident_time_sync_readback_unavailable">post-sync readback unavailable</string>
     <string name="sportident_time_sync_inspection_failed">Station inspection failed: %1$s</string>
+    <string name="sportident_time_sync_section">Station Time Sync</string>
+    <string name="sportident_backup_section">Field Station Punch History</string>
+    <string name="sportident_backup_filter_hint">SI-Card number (optional)</string>
+    <string name="sportident_backup_read">Read History</string>
+    <string name="sportident_backup_reading_button">Reading…</string>
+    <string name="sportident_backup_show">Filter</string>
+    <string name="sportident_backup_ready">Couple the field station to the download station. Read History wakes it if needed and does not clear or change it.</string>
+    <string name="sportident_backup_reading">Reading station punch history…</string>
+    <string name="sportident_backup_complete">Read %1$d punch-history record(s).</string>
+    <string name="sportident_backup_failed">Punch-history read failed: %1$s</string>
 
     <string name="preferences_general">General</string>
     <string name="preferences_prints">Prints</string>

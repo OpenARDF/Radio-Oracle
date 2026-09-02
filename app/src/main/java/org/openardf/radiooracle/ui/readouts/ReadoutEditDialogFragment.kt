@@ -43,6 +43,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputLayout
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
 import org.openardf.radiooracle.backend.room.entity.Punch
@@ -402,6 +403,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
             valid = false
         }
 
+        if (!valid) SoundProcessor.makeErrorSound(requireContext())
         return valid
     }
 

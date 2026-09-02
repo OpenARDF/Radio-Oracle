@@ -38,6 +38,7 @@ import androidx.navigation.fragment.navArgs
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.wrappers.AliasEditItemWrapper
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 
@@ -131,6 +132,8 @@ class AliasEditDialogFragment : DialogFragment() {
                 val values = adapter.getSortedAliases()
                 selectedRaceViewModel.createOrUpdateAliases(values, args.raceId)
                 dialog?.dismiss()
+            } else {
+                SoundProcessor.makeErrorSound(requireContext())
             }
         }
     }

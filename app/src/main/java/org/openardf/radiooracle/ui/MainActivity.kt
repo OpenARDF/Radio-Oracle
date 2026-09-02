@@ -55,6 +55,7 @@ import org.openardf.radiooracle.backend.AppState
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.FileProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.databinding.ActivityMainBinding
@@ -75,6 +76,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var siStatusTextView: TextView
     private lateinit var dataProcessor: DataProcessor
     private var lastSiStationModeWarningKey: String? = null
+    private var lastSiReaderStatus: SIReaderStatus? = null
     private var keepScreenOpen = false
     private var consumedSeriesArchiveUri: String? = null
 
@@ -328,6 +330,7 @@ class MainActivity : AppCompatActivity() {
                     Toast.LENGTH_LONG
                 ).show()
             }.onFailure { error ->
+                SoundProcessor.makeErrorSound(this@MainActivity)
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle(R.string.event_series_import_title)
                     .setMessage(error.message ?: getString(R.string.event_series_import_invalid))
@@ -385,6 +388,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun setStationObserver() {
         val siObserver = Observer<AppState> { newState ->
+            val enteredErrorState = newState.siReaderState.status == SIReaderStatus.ERROR &&
+                lastSiReaderStatus != SIReaderStatus.ERROR
             showSiStationModeWarningIfNeeded(newState)
             when (newState.siReaderState.status) {
                 SIReaderStatus.CONNECTED -> {
@@ -458,6 +463,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 SIReaderStatus.ERROR -> {
+                    if (enteredErrorState) SoundProcessor.makeErrorSound(this@MainActivity)
                     if (newState.siReaderState.stationId != null && newState.siReaderState.cardId != null) {
                         siStatusTextView.text =
                             getString(
@@ -483,6 +489,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+            lastSiReaderStatus = newState.siReaderState.status
         }
         DataProcessor.get().currentState.observe(this, siObserver)
     }

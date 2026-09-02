@@ -39,6 +39,7 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.constants.DataFormat
 import org.openardf.radiooracle.backend.files.constants.DataType
@@ -192,6 +193,7 @@ class ResultsExportDialogFragment : DialogFragment() {
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             startActivity(intent)
         } catch (e: Exception) {
+            SoundProcessor.makeErrorSound(requireContext())
             Log.e("File intent opening", e.stackTraceToString())
             val err = e.message ?: e.toString()
             errorText.text = requireContext().getString(

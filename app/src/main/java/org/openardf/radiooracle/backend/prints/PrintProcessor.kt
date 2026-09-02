@@ -32,6 +32,7 @@ import com.dantsu.escposprinter.EscPosCharsetEncoding
 import com.dantsu.escposprinter.EscPosPrinter
 import com.dantsu.escposprinter.connection.bluetooth.BluetoothConnection
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
@@ -184,6 +185,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
     }
 
     private fun makeToast(message: String) {
+        SoundProcessor.makeErrorSound(appContext)
         CoroutineScope(Dispatchers.Main).launch {
             Toast.makeText(
                 appContext, message, Toast.LENGTH_LONG

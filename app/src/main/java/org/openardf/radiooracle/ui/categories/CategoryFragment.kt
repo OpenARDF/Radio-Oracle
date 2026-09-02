@@ -49,6 +49,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.openardf.radiooracle.BottomNavDirections
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Race
@@ -240,6 +241,7 @@ class CategoryFragment : Fragment() {
                 val seriesName = input.text.toString().trim()
                 if (seriesName.isBlank()) {
                     input.error = getString(R.string.event_series_name_required)
+                    SoundProcessor.makeErrorSound(requireContext())
                 } else {
                     dialog.dismiss()
                     createSeriesFromCurrentEvent(seriesName)
@@ -318,6 +320,7 @@ class CategoryFragment : Fragment() {
     }
 
     private fun showEventSeriesMembershipError(error: Exception) {
+        SoundProcessor.makeErrorSound(requireContext())
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.event_series_membership_error)
             .setMessage(error.message ?: getString(R.string.event_series_membership_error))

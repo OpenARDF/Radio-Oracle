@@ -42,6 +42,7 @@ import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.room.entity.Alias
@@ -243,6 +244,7 @@ class CategoryEditDialogFragment : DialogFragment() {
                 valid = false
             }
         }
+        if (!valid) SoundProcessor.makeErrorSound(requireContext())
         return valid
     }
 
