@@ -162,6 +162,7 @@ internal class AndroidSportIdentTimeSyncController(
     ): AndroidSportIdentTimeSyncInspection =
         withStationTransaction(accessMode) {
             val stationInfo = readStationInfo(accessMode)
+            paceRemoteCommand(accessMode)
             val computerTime = currentTime().truncatedTo(ChronoUnit.MILLIS)
             val stationTime = requireReply(
                 SportIdentTimeSyncProtocol.readStationTimeStep("Read station time for inspection")
@@ -195,6 +196,7 @@ internal class AndroidSportIdentTimeSyncController(
                 "The connected target changed after inspection: expected station " +
                     "$expectedStationSerialNumber but found ${stationInfo.serialNumber}. Inspect again before syncing."
             }
+            paceRemoteCommand(accessMode)
             val beforeTime = requireReply(
                 SportIdentTimeSyncProtocol.readStationTimeStep("Read station time before write")
             ).data.decodeStationTime("before-write station time").dateTime
@@ -210,6 +212,7 @@ internal class AndroidSportIdentTimeSyncController(
             }
 
             requireReply(SportIdentTimeSyncProtocol.applyStationTimeStep())
+            paceRemoteCommand(accessMode)
             val computerTimeAfterSync = currentTime().truncatedTo(ChronoUnit.MILLIS)
             val postSyncDelta = transport.sendCommand(
                 SportIdentTimeSyncProtocol.readStationTimeStep("Read station time after apply")
@@ -265,6 +268,7 @@ internal class AndroidSportIdentTimeSyncController(
                         "The connected target changed before sleep: expected station " +
                             "$expectedStationSerialNumber but found ${stationInfo.serialNumber}."
                     }
+                    paceRemoteCommand(accessMode)
                     attemptStationPowerOff()
                 }
             }.getOrElse { error ->
@@ -312,6 +316,9 @@ internal class AndroidSportIdentTimeSyncController(
         check(transport.sendWakePulse()) { "SPORTident station wake pulse could not be sent." }
         try {
             requireReply(accessMode.initialStep())
+            if (accessMode == AndroidSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
+                sleepMillis(REMOTE_MODE_SETTLE_DELAY_MS)
+            }
             return block()
         } finally {
             if (accessMode == AndroidSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
@@ -324,7 +331,8 @@ internal class AndroidSportIdentTimeSyncController(
         val frame = requireReply(
             step = accessMode.systemInfoStep(),
             attempts = READ_ONLY_COMMAND_ATTEMPTS,
-            failureMessage = accessMode.systemInfoFailureMessage()
+            failureMessage = accessMode.systemInfoFailureMessage(),
+            retryDelayMillis = READ_ONLY_RETRY_DELAY_MS
         )
         return SportIdentStationInfoParser.fromSystemInfoFrame(frame)
             ?: error("SPORTident station returned unreadable system info.")
@@ -333,12 +341,22 @@ internal class AndroidSportIdentTimeSyncController(
     private fun requireReply(
         step: SportIdentTimeSyncCommandStep,
         attempts: Int = 1,
-        failureMessage: String = "SPORTident station did not reply to ${step.label}."
+        failureMessage: String = "SPORTident station did not reply to ${step.label}.",
+        retryDelayMillis: Long = 0L
     ): SportIdentFrame {
-        repeat(attempts) {
+        repeat(attempts) { attemptIndex ->
             transport.sendCommand(step).replyOrNull()?.let { return it }
+            if (attemptIndex < attempts - 1 && retryDelayMillis > 0L) {
+                sleepMillis(retryDelayMillis)
+            }
         }
         error(failureMessage)
+    }
+
+    private fun paceRemoteCommand(accessMode: AndroidSportIdentTimeSyncAccessMode) {
+        if (accessMode == AndroidSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
+            sleepMillis(REMOTE_COMMAND_SPACING_DELAY_MS)
+        }
     }
 
     private fun writeStationTime(): Pair<LocalDateTime, SportIdentFrame> {
@@ -400,6 +418,9 @@ internal class AndroidSportIdentTimeSyncController(
 
     companion object {
         private const val READ_ONLY_COMMAND_ATTEMPTS = 3
+        private const val READ_ONLY_RETRY_DELAY_MS = 150L
+        private const val REMOTE_MODE_SETTLE_DELAY_MS = 250L
+        private const val REMOTE_COMMAND_SPACING_DELAY_MS = 75L
         private const val INSPECTION_ATTEMPTS = 4
         private const val INSPECTION_RETRY_DELAY_MS = 250L
         private const val MAX_WRITE_ATTEMPTS = 2

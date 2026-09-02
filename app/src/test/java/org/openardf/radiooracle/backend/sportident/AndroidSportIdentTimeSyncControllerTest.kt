@@ -69,6 +69,41 @@ class AndroidSportIdentTimeSyncControllerTest {
     }
 
     @Test
+    fun inspectionWaitsForCoupledStationReadinessAndBacksOffMetadataNaks() {
+        val computerTime = LocalDateTime.parse("2026-09-01T10:00:00")
+        val stationTime = computerTime.plusSeconds(2)
+        val sleeps = mutableListOf<Long>()
+        val transport = FakeTransport(
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND, stationTime, tick = 0),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            negativeAcknowledgementCommandIndices = setOf(1, 2)
+        )
+        val controller = controller(
+            transport = transport,
+            currentTimes = listOf(computerTime),
+            sleepMillis = { sleeps += it }
+        )
+
+        val inspection = controller.inspectDownloadStation()
+
+        assertEquals(781234, inspection.stationInfo.serialNumber)
+        assertEquals(
+            listOf(
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND
+            ),
+            transport.commands
+        )
+        assertEquals(listOf(250L, 150L, 150L, 75L), sleeps)
+    }
+
+    @Test
     fun syncRequiresExplicitConfirmationBeforeSendingAnyCommand() {
         val transport = FakeTransport()
         val controller = controller(transport, emptyList())
@@ -131,6 +166,47 @@ class AndroidSportIdentTimeSyncControllerTest {
             ),
             transport.commands
         )
+    }
+
+    @Test
+    fun syncKeepsWriteAndApplyContiguousWhilePacingReadOnlyCommands() {
+        val targetTime = LocalDateTime.parse("2026-09-01T10:00:00.500")
+        val computerAfter = LocalDateTime.parse("2026-09-01T10:00:00.550")
+        val transport = FakeTransport(
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                targetTime.minusMinutes(1),
+                tick = 0
+            ),
+            stationTimeFrame(SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND, targetTime, tick = 128),
+            frame(SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND),
+            stationTimeFrame(SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND, targetTime, tick = 128),
+            frame(SportIdentProtocol.PROBE_COMMAND)
+        )
+        val sleepsAfterCommand = mutableListOf<Pair<Int, Long>>()
+        val controller = controller(
+            transport = transport,
+            currentTimes = listOf(targetTime, computerAfter),
+            sleepMillis = { delay -> sleepsAfterCommand += transport.commands.size to delay }
+        )
+
+        controller.syncTime(
+            writeEnabled = true,
+            putStationToSleepAfterSync = false,
+            expectedStationSerialNumber = 781234
+        )
+
+        assertEquals(
+            listOf(
+                1 to 250L,
+                2 to 75L,
+                5 to 75L
+            ),
+            sleepsAfterCommand
+        )
+        assertFalse(sleepsAfterCommand.any { (commandCount, _) -> commandCount == 3 || commandCount == 4 })
     }
 
     @Test
@@ -358,7 +434,8 @@ class AndroidSportIdentTimeSyncControllerTest {
     private fun controller(
         transport: FakeTransport,
         currentTimes: List<LocalDateTime>,
-        readerStationModeCode: Int = 8
+        readerStationModeCode: Int = 8,
+        sleepMillis: (Long) -> Unit = {}
     ): AndroidSportIdentTimeSyncController {
         val times = ArrayDeque(currentTimes)
         return AndroidSportIdentTimeSyncController(
@@ -372,7 +449,7 @@ class AndroidSportIdentTimeSyncControllerTest {
                 )
             },
             currentTime = { times.removeFirst() },
-            sleepMillis = {}
+            sleepMillis = sleepMillis
         )
     }
 
