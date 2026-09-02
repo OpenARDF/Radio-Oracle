@@ -49,6 +49,8 @@ object DesktopPalette {
     const val NAVIGATION_BACKGROUND_ARGB = 0xFFEAF4FFL
     const val SERIES_NAVIGATION_ARGB = 0xFFFFD59EL
     const val TOOLS_NAVIGATION_ARGB = 0xFFFFF176L
+    const val RENTED_SI_BACKGROUND_ARGB = 0xFFFFFF00L
+    const val RENTED_SI_TEXT_ARGB = 0xFF0D47A1L
     const val LIGHT_GREY_ARGB = 0xFFCBC8C8L
 
     val Primary = Color(PRIMARY_ARGB)
@@ -67,6 +69,8 @@ object DesktopPalette {
     val NavigationBackground = Color(NAVIGATION_BACKGROUND_ARGB)
     val SeriesNavigation = Color(SERIES_NAVIGATION_ARGB)
     val ToolsNavigation = Color(TOOLS_NAVIGATION_ARGB)
+    val RentedSiBackground = Color(RENTED_SI_BACKGROUND_ARGB)
+    val RentedSiText = Color(RENTED_SI_TEXT_ARGB)
     val LightGrey = Color(LIGHT_GREY_ARGB)
 }
 

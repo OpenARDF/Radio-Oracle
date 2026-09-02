@@ -48,6 +48,7 @@ class EventCompetitorDetailsTest {
         assertEquals("101", rows[0].startNumberText)
         assertEquals("10:15", rows[0].startTimeText)
         assertEquals("123456", rows[0].siNumberText)
+        assertEquals(true, rows[0].isRentedSiCard)
         assertEquals(true, rows[0].usaChampEligible)
         assertEquals(false, rows[0].region2ChampEligible)
         assertEquals(emptyList(), rows[0].warningReasons)
@@ -59,6 +60,7 @@ class EventCompetitorDetailsTest {
         assertEquals("102", rows[1].startNumberText)
         assertEquals("", rows[1].startTimeText)
         assertEquals("", rows[1].siNumberText)
+        assertEquals(false, rows[1].isRentedSiCard)
         assertEquals(false, rows[1].usaChampEligible)
         assertEquals(true, rows[1].region2ChampEligible)
         assertEquals(listOf("No SI number is assigned.", "No category is assigned."), rows[1].warningReasons)
@@ -163,7 +165,7 @@ class EventCompetitorDetailsTest {
                     isMan = true,
                     birthYear = birthYear,
                     siNumber = siNumber,
-                    siRent = false,
+                    siRent = firstName == "Alice",
                     startNumber = startNumber,
                     drawnStartTimeSeconds = if (firstName == "Alice") 10 * 60L + 15 else null,
                     usaChampEligible = usaChampEligible,

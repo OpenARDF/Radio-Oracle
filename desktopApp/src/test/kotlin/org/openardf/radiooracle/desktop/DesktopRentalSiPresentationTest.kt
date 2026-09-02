@@ -22,32 +22,31 @@
  * SOFTWARE.
  */
 
-package org.openardf.radiooracle.ui.readouts
+package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.openardf.radiooracle.R
 
-class ReadoutDataRecyclerViewAdapterTest {
+class DesktopRentalSiPresentationTest {
     @Test
-    fun siNumberTitleIdentifiesStandardCard() {
-        assertEquals(R.string.readout_si_number_title, readoutSiNumberTitleResource(false))
+    fun rentalRowsUseAndroidAlignedYellowAndBlue() {
+        assertEquals(0xFFFFFF00L, DesktopPalette.RENTED_SI_BACKGROUND_ARGB)
+        assertEquals(0xFF0D47A1L, DesktopPalette.RENTED_SI_TEXT_ARGB)
+        assertEquals(DesktopPalette.RentedSiBackground, rentedSiRowBackgroundColor(true))
+        assertEquals(DesktopPalette.RentedSiText, readoutSiNumberTextColor(true, false))
     }
 
     @Test
-    fun siNumberTitleIdentifiesRentedCard() {
-        assertEquals(R.string.readout_rented_si_number_title, readoutSiNumberTitleResource(true))
+    fun readoutSiNumberTextIdentifiesRentalStatus() {
+        assertEquals("Rented SI # 1234567", readoutSiNumberDisplayText("1234567", true))
+        assertEquals("SI # 1234567", readoutSiNumberDisplayText("1234567", false))
+        assertEquals("SI # -", readoutSiNumberDisplayText("", false))
     }
 
     @Test
-    fun rentedSiNumberUsesBlueText() {
-        assertEquals(R.color.readout_rented_si_text, readoutSiNumberTextColorResource(true, false))
-        assertEquals(R.color.readout_rented_si_text, readoutSiNumberTextColorResource(true, true))
-    }
-
-    @Test
-    fun standardSiNumberPreservesStatusTextColor() {
-        assertEquals(R.color.black, readoutSiNumberTextColorResource(false, false))
-        assertEquals(R.color.red_error, readoutSiNumberTextColorResource(false, true))
+    fun standardRowsPreserveExistingPresentation() {
+        assertEquals(androidx.compose.ui.graphics.Color.Transparent, rentedSiRowBackgroundColor(false))
+        assertEquals(DesktopPalette.Black, readoutSiNumberTextColor(false, false))
+        assertEquals(DesktopPalette.Error, readoutSiNumberTextColor(false, true))
     }
 }

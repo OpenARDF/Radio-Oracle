@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.ui.competitors
 
 import android.app.AlertDialog
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
@@ -47,7 +48,6 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import de.codecrafters.tableview.SortableTableView
 import de.codecrafters.tableview.toolkit.SimpleTableHeaderAdapter
-import de.codecrafters.tableview.toolkit.TableDataRowBackgroundProviders
 import org.openardf.radiooracle.BottomNavDirections
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
@@ -274,17 +274,16 @@ class CompetitorFragment : Fragment() {
 
         competitorTableView.headerAdapter = adapter
 
-        val colorEvenRows =
-            requireContext().resources.getColor(R.color.white, null)
-        val colorOddRows =
-            requireContext().resources.getColor(R.color.light_grey, null)
-
-        competitorTableView.setDataRowBackgroundProvider(
-            TableDataRowBackgroundProviders.alternatingRowColors(
-                colorEvenRows,
-                colorOddRows
+        competitorTableView.setDataRowBackgroundProvider { rowIndex, competitorData ->
+            ColorDrawable(
+                requireContext().getColor(
+                    competitorRowBackgroundColorResource(
+                        rowIndex = rowIndex,
+                        isRentedSiCard = competitorData.competitorCategory.competitor.siRent
+                    )
+                )
             )
-        )
+        }
     }
 
     /**
@@ -460,3 +459,10 @@ class CompetitorFragment : Fragment() {
         _binding = null
     }
 }
+
+internal fun competitorRowBackgroundColorResource(rowIndex: Int, isRentedSiCard: Boolean): Int =
+    when {
+        isRentedSiCard -> R.color.yellow_warning
+        rowIndex % 2 == 0 -> R.color.white
+        else -> R.color.light_grey
+    }

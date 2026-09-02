@@ -46,6 +46,7 @@ data class EventCompetitorDetails(
     val startTimeText: String,
     val siNumberText: String,
     val hasReadout: Boolean,
+    val isRentedSiCard: Boolean,
     val warningReasons: List<String> = emptyList()
 ) {
     companion object {
@@ -84,6 +85,7 @@ data class EventCompetitorDetails(
                         } ?: "",
                         siNumberText = competitor.siNumber?.toString() ?: "",
                         hasReadout = competitorData.readoutData != null,
+                        isRentedSiCard = competitor.siRent,
                         warningReasons = competitorWarningReasons(competitor, category, eventYear)
                     )
                 }

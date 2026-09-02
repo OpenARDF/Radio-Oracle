@@ -23,4 +23,5 @@
     <color name="control_role_special_background">#D8E9FF</color>
     <color name="readout_progress_fill">#FFE6A3</color>
     <color name="readout_progress_track">#EFFBEF</color>
+    <color name="readout_rented_si_text">#0D47A1</color>
 </resources>

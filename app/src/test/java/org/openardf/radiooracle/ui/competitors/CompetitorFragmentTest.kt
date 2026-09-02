@@ -22,32 +22,22 @@
  * SOFTWARE.
  */
 
-package org.openardf.radiooracle.ui.readouts
+package org.openardf.radiooracle.ui.competitors
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.openardf.radiooracle.R
 
-class ReadoutDataRecyclerViewAdapterTest {
+class CompetitorFragmentTest {
     @Test
-    fun siNumberTitleIdentifiesStandardCard() {
-        assertEquals(R.string.readout_si_number_title, readoutSiNumberTitleResource(false))
+    fun rentedSiCardUsesYellowRowBackground() {
+        assertEquals(R.color.yellow_warning, competitorRowBackgroundColorResource(0, true))
+        assertEquals(R.color.yellow_warning, competitorRowBackgroundColorResource(1, true))
     }
 
     @Test
-    fun siNumberTitleIdentifiesRentedCard() {
-        assertEquals(R.string.readout_rented_si_number_title, readoutSiNumberTitleResource(true))
-    }
-
-    @Test
-    fun rentedSiNumberUsesBlueText() {
-        assertEquals(R.color.readout_rented_si_text, readoutSiNumberTextColorResource(true, false))
-        assertEquals(R.color.readout_rented_si_text, readoutSiNumberTextColorResource(true, true))
-    }
-
-    @Test
-    fun standardSiNumberPreservesStatusTextColor() {
-        assertEquals(R.color.black, readoutSiNumberTextColorResource(false, false))
-        assertEquals(R.color.red_error, readoutSiNumberTextColorResource(false, true))
+    fun standardRowsKeepAlternatingBackgrounds() {
+        assertEquals(R.color.white, competitorRowBackgroundColorResource(0, false))
+        assertEquals(R.color.light_grey, competitorRowBackgroundColorResource(1, false))
     }
 }

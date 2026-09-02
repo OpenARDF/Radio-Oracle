@@ -745,7 +745,7 @@ private val AwardTableColumns = listOf(
 )
 
 private val ReadoutBaseTableColumns = listOf(
-    FixedTableColumn("SI no.", 112.dp),
+    FixedTableColumn("SI card", 176.dp),
     FixedTableColumn("Competitor", 240.dp),
     FixedTableColumn("Status", 136.dp),
     FixedTableColumn("Points", 80.dp),
@@ -17030,7 +17030,13 @@ private fun ReadoutDetailsPanel(
             ) {
                 readouts.forEach { readout ->
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                rentedSiRowBackgroundColor(
+                                    readout.isRentedSiCard && readout.resultStatus != ResultStatus.ERROR
+                                )
+                            ),
                         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -17207,13 +17213,18 @@ private fun ReadoutDetailRow(
 ) {
     var selectedCompetitorId by remember(readout.id) { mutableStateOf<String?>(null) }
     val textColor = if (readout.hasWarning) DesktopPalette.Error else DesktopPalette.Black
+    val siNumberTextColor = readoutSiNumberTextColor(readout.isRentedSiCard, readout.hasWarning)
 
     Row(
         modifier = Modifier.width(fixedTableWidth(tableColumns)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FixedTableText(readout.siNumberText, ReadoutBaseTableColumns[0].width, color = textColor)
+        FixedTableText(
+            readoutSiNumberDisplayText(readout.siNumberText, readout.isRentedSiCard),
+            ReadoutBaseTableColumns[0].width,
+            color = siNumberTextColor
+        )
         FixedTableText(readout.competitorName, ReadoutBaseTableColumns[1].width, color = textColor)
         ResultStatusPicker(
             selectedStatus = readout.resultStatus,
@@ -18250,7 +18261,9 @@ private fun CompetitorExistingRows(
         orderedCompetitors.forEach { competitor ->
             key(competitor.id) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(rentedSiRowBackgroundColor(competitor.isRentedSiCard)),
                     horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
                     verticalAlignment = Alignment.Top
                 ) {
@@ -24198,6 +24211,21 @@ private fun FixedTableText(text: String, width: Dp, color: Color = DesktopPalett
         overflow = TextOverflow.Ellipsis
     )
 }
+
+internal fun rentedSiRowBackgroundColor(isRentedSiCard: Boolean): Color =
+    if (isRentedSiCard) DesktopPalette.RentedSiBackground else Color.Transparent
+
+internal fun readoutSiNumberDisplayText(siNumberText: String, isRentedSiCard: Boolean): String {
+    val displayNumber = siNumberText.ifBlank { "-" }
+    return if (isRentedSiCard) "Rented SI # $displayNumber" else "SI # $displayNumber"
+}
+
+internal fun readoutSiNumberTextColor(isRentedSiCard: Boolean, hasWarning: Boolean): Color =
+    when {
+        isRentedSiCard -> DesktopPalette.RentedSiText
+        hasWarning -> DesktopPalette.Error
+        else -> DesktopPalette.Black
+    }
 
 private fun appendPublicControlLabel(controlPointsText: String, publicLabel: String): String {
     val token = pickerControlToken(publicLabel)

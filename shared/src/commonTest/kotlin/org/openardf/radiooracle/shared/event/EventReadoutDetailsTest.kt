@@ -51,12 +51,14 @@ class EventReadoutDetailsTest {
         assertEquals("Foxhole 32", rows[0].punchCodesText)
         assertEquals(false, rows[0].hasWarning)
         assertEquals(null, rows[0].issueExplanation)
+        assertEquals(true, rows[0].isRentedSiCard)
 
         assertEquals("unmatched", rows[1].id)
         assertEquals("654321", rows[1].siNumberText)
         assertEquals("", rows[1].competitorName)
         assertEquals(ResultStatus.NO_RANKING, rows[1].resultStatus)
         assertEquals(true, rows[1].automaticStatus)
+        assertEquals(false, rows[1].isRentedSiCard)
         assertEquals("No ranking", rows[1].statusLabel)
         assertEquals("41", rows[1].punchCodesText)
     }
@@ -238,7 +240,7 @@ class EventReadoutDetailsTest {
             isMan = false,
             birthYear = null,
             siNumber = 123456,
-            siRent = false,
+            siRent = true,
             startNumber = 1,
             drawnStartTimeSeconds = null
         )

@@ -139,6 +139,12 @@ class ReadoutDataRecyclerViewAdapter(
             ContextCompat.getColor(context, R.color.black)
         }
         holder.setTextColor(textColor)
+        holder.setSiNumberTextColor(
+            ContextCompat.getColor(
+                context,
+                readoutSiNumberTextColorResource(isRentedSiCard, displayState.hasWarning)
+            )
+        )
 
         holder.moreBtn.setOnClickListener {
             showContextMenu(holder.moreBtn, position, item)
@@ -191,8 +197,20 @@ class ReadoutDataRecyclerViewAdapter(
             readoutTimeView.setTextColor(color)
             categoryView.setTextColor(color)
         }
+
+        fun setSiNumberTextColor(color: Int) {
+            siNumberTitleView.setTextColor(color)
+            siNumberView.setTextColor(color)
+        }
     }
 }
 
 internal fun readoutSiNumberTitleResource(isRentedSiCard: Boolean): Int =
     if (isRentedSiCard) R.string.readout_rented_si_number_title else R.string.readout_si_number_title
+
+internal fun readoutSiNumberTextColorResource(isRentedSiCard: Boolean, hasWarning: Boolean): Int =
+    when {
+        isRentedSiCard -> R.color.readout_rented_si_text
+        hasWarning -> R.color.red_error
+        else -> R.color.black
+    }

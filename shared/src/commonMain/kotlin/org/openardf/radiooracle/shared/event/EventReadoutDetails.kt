@@ -47,7 +47,8 @@ data class EventReadoutDetails(
     val runTimeText: String,
     val punchCodesText: String,
     val hasWarning: Boolean,
-    val issueExplanation: String?
+    val issueExplanation: String?,
+    val isRentedSiCard: Boolean
 ) {
     companion object {
         /** Builds readout display rows for competitor-linked and unmatched readouts. */
@@ -62,6 +63,7 @@ data class EventReadoutDetails(
                     readoutData = readoutData,
                     competitorName = competitorData.competitorCategory.competitor.fullName(),
                     matched = true,
+                    isRentedSiCard = competitorData.competitorCategory.competitor.siRent,
                     raceType = raceData.race.raceType,
                     useAliases = useAliases,
                     controlLabelsByCode = controlLabelsByCode
@@ -72,6 +74,7 @@ data class EventReadoutDetails(
                     readoutData = readoutData,
                     competitorName = readoutData.result.cardName ?: "",
                     matched = false,
+                    isRentedSiCard = false,
                     raceType = raceData.race.raceType,
                     useAliases = useAliases,
                     controlLabelsByCode = controlLabelsByCode
@@ -84,6 +87,7 @@ data class EventReadoutDetails(
             readoutData: EventReadoutData,
             competitorName: String,
             matched: Boolean,
+            isRentedSiCard: Boolean,
             raceType: RaceType,
             useAliases: Boolean,
             controlLabelsByCode: Map<Int, String>
@@ -116,7 +120,8 @@ data class EventReadoutDetails(
                         }
                     },
                 hasWarning = readoutData.hasReadoutWarning(),
-                issueExplanation = readoutData.readoutIssueExplanation()
+                issueExplanation = readoutData.readoutIssueExplanation(),
+                isRentedSiCard = isRentedSiCard
             )
         }
     }
