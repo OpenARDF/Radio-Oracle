@@ -1,6 +1,6 @@
 # Radio-Oracle Multiplatform Roadmap
 
-Status reviewed: 2026-07-25.
+Status reviewed: 2026-09-02.
 
 Radio-Oracle is no longer an Android-only app with a hypothetical desktop beta.
 It is a shared Kotlin project with Android race-day workflows, a desktop Race
@@ -8,6 +8,11 @@ File workflow, desktop packaging through jDeploy, and growing shared race,
 import/export, Course Analyzer, Race Series, and validation services. This
 roadmap now tracks the work that remains after the initial multiplatform
 foundation and desktop race-admin milestones.
+
+This is a forward-looking document. Completed work belongs in release notes and
+project history and is summarized here only when needed to explain the current
+state. Conditional ideas without an active requirement should be added only
+when they are prioritized.
 
 ## Current State
 
@@ -32,6 +37,12 @@ SPORTident cards from attached READOUT/SI MASTER stations, supports desktop
 system printing for finish-ticket text, sends ROBIS live results, provides local
 and public result-site workflows, packages through jDeploy, and includes Course
 Analyzer, Race Validator, Race Series, and testing tools.
+
+Android and desktop now share the public-results generation and Cloudflare
+publishing behavior, including split reports and award exports. SPORTident
+station tools on both platforms include clock inspection/synchronization and
+read-only field-station Punch History; the Race Series workflow also includes
+explicit competitor matching and reconciliation overrides.
 
 ## Validation Gates
 
@@ -150,82 +161,8 @@ vendored or configured IOF 3.0 schema first, then validate any supported Radio
 Orienteering extension schema as an additional layer. Do not make routine
 validation depend on remote GitHub schema URLs. When importing, align ambiguous
 terms with Radio-Oracle's model before persisting them; for example, be precise
-about `Separator` versus spectator controls, `Beacon` versus finish beacons,
-and `ValidPunches` versus Radio-Oracle scoring and status rules.
-
-## Completed Milestones
-
-These items were roadmap goals earlier, but are now implemented enough that they
-should be treated as current project foundation rather than future work.
-
-### Shared Foundation
-
-- Shared race models and tested Android mapper paths exist.
-- Core race validation, result placement, ranking, course evaluation, category
-  and control assignment policies, competitor identity fields, and many display
-  helpers are shared.
-- CSV, TXT, HTML, IOF XML, ARDF JSON-facing policy, ROBIS request metadata, and
-  selected import/export paths have shared implementations and tests.
-- The desktop smoke target and desktop app test suite are part of the normal
-  verification surface.
-
-### Desktop Race-Admin App
-
-- Desktop can create, open, edit, save, and export Race Files.
-- Desktop setup workflows cover race settings, categories, controls,
-  competitors, start lists, readouts, results, imports, exports, and live result
-  settings.
-- Desktop can read SPORTident card downloads from attached READOUT/SI MASTER
-  stations, including continuous readout behavior, while Android remains the more
-  mature race-day reader.
-- Desktop finish-ticket text uses the shared ticket renderer and can be sent to
-  desktop system printing.
-- Desktop ROBIS live-result sending exists, including background sending
-  settings.
-
-### Packaging And Deployment
-
-- jDeploy is the selected public install path.
-- GitHub-release jDeploy publication and npm/Trusted Publishing workflows exist.
-- Package-preflight, local-smoke, release-preflight, and registry-smoke scripts
-  are documented in `desktop-prep.md`.
-- Android, desktop, and npm/jDeploy version alignment is part of the release
-  process.
-
-### ARDFEvent Compatibility Work
-
-- The canonical Radio-Oracle competitor CSV remains the primary round-trip CSV
-  format.
-- ARDFEvent-compatible registration CSV import is supported as an alternate
-  profile.
-- Desktop ROBIS start-list CSV export is available without changing the
-  canonical Radio-Oracle start-list CSV.
-- Desktop ARDFEvent-style results CSV export is available.
-- Result exports also include TXT, HTML, IOF XML, and related shared export
-  paths.
-
-### Course Analyzer
-
-- Course Analyzer evaluates saved and imported route data, calculates ideal
-  route candidates, handles effective length when elevation data is available,
-  applies USA rules checks, reports wait-time renumbering, exports PDF/KML, and
-  documents current limitations.
-- Classic route search is exhaustive within the current control-count limits.
-  Sprint loops are optimized separately with bounded permutations. Larger
-  Foxoring routes use a documented non-exhaustive hybrid heuristic.
-- KML/KMZ and GPX course import paths support protected control locations, route
-  geometry, route assumptions, circular LineString filtering, and per-leg
-  `SS=#.##` speed factors.
-
-### Race Series And Start Fairness
-
-- Race Series manifests group existing Race Files without duplicating core
-  race data.
-- Desktop Race Series workflows support validation, clean export, competitor
-  matching reports, start-fairness summaries, and start-fairness optimization.
-- Android can store, list, import, export, and transfer `.roseries` archives.
-- The shared balanced-thirds start-list engine is used by series-aware start
-  balancing tools.
+about spectator controls, `Beacon` versus finish beacons, and `ValidPunches`
+versus Radio-Oracle scoring and status rules.
 
 ## Active Boundaries
 
@@ -233,11 +170,10 @@ These are deliberate limits in the current app, not necessarily defects.
 
 - Android remains the primary race-day platform for mature USB readout and
   Bluetooth ESC/POS printing.
-- Desktop SPORTident support is useful, but additional station diagnostics,
-  multi-station coordination, and configuration writes require more hardware
-  validation.
-- Desktop Bluetooth printer transport remains a separate future adapter. Desktop
-  printing currently uses system printing.
+- Desktop and Android SPORTident tools now cover readout, time synchronization,
+  and read-only field-station Punch History. Live punch streaming, deeper
+  diagnostics, multi-station coordination, and additional configuration writes
+  still require more hardware validation.
 - Local results web server exposure should stay loopback/local unless LAN
   exposure is explicitly hardened and selected.
 - OCheckList/new-card import remains future work until sample files or schema
@@ -320,31 +256,24 @@ These are deliberate limits in the current app, not necessarily defects.
   documented startup and retry cases. Characterize the double-`STX` wakeup
   sequence, legacy base-protocol station detection, and bounded NAK retry/backoff
   on real expendable hardware before changing the currently proven readout path.
-- Add a read-only Station Maintenance surface for attached SPORTident stations.
-  It should show station serial number, reported function/mode, code number,
-  firmware/config metadata when available, protocol flags, and explicit warnings
-  when a download box is not in READOUT/SI MASTER mode.
-- Add Station Maintenance diagnostics for attached download stations, including
-  response-timing tests and settings comparison tests across known-good and
-  suspect units. Diagnostics should warn and log when possible, but only
-  hard-block downloads when the station cannot be opened, cannot answer the
-  protocol, or reports a clearly non-download mode.
-- Extend Station Maintenance to read coupled non-reader stations through a USB
-  master/download station after the remote/coupled-station protocol is verified.
-- Add read-only station backup inspection and recovery. Read the backup pointer,
-  overflow state, and ring-buffer records in bounded chunks; decode both complete
-  card images and six-/eight-byte punch records; identify gaps and duplicates;
-  and preview recovered readouts before importing them into a Race File. Keep
-  backup erase/reset as a separate destructive maintenance action with explicit
-  confirmation and immediate read-back verification.
+- Extend the current station inspection tools with response-timing tests and
+  settings comparison tests across known-good and suspect download stations.
+  Diagnostics should warn and log when possible, but only hard-block downloads
+  when the station cannot be opened, cannot answer the protocol, or reports a
+  clearly non-download mode.
+- Extend read-only Punch History into a reviewed race-recovery workflow. Detect
+  gaps and duplicates, preview candidate recovered readouts, and require an
+  explicit selection before importing anything into a Race File. If backup
+  erase/reset is ever added, keep it as a separate destructive maintenance
+  action with explicit confirmation and immediate read-back verification.
 - Treat live trigger/punch record ingestion as a follow-on to backup recovery.
   Preserve station and card identity, subsecond time, and backup-memory record
   addresses so missed auto-send records can be detected, recovered, deduplicated,
   and audited rather than accepted as an unverified best-effort stream.
-- Treat station writes as a later guarded maintenance phase. A "set attached
-  download box to READOUT" action may be added only after the SPORTident
-  configuration write transaction is verified against real hardware and has
-  immediate read-back validation.
+- Keep configuration writes beyond the existing clock synchronization behind a
+  guarded maintenance phase. A "set attached download box to READOUT" action may
+  be added only after the configuration transaction is verified against real
+  hardware and has immediate read-back validation.
 - Add explicit multi-download-station support so desktop can detect multiple
   connected stations, show their serial numbers/modes/ports, let the user choose
   or assign active stations, and prevent independent readout loops from fighting
@@ -354,17 +283,11 @@ These are deliberate limits in the current app, not necessarily defects.
   selected control punches, preserve an auditable before/after trail, and then
   recompute status, score, splits, places, exports, and sent/unsent state.
 
-### Printing And Live Results
+### Live Results Providers
 
-- Keep Android Bluetooth ESC/POS printing validated against target hardware.
-- Add desktop printer transport abstractions only when system printing is not
-  sufficient for a needed race-day workflow.
 - Add non-ROBIS live-result providers after their network/result-service logic is
   isolated from Android WorkManager and represented through shared provider
   interfaces.
-- Harden LAN/public result display choices so operators can distinguish local
-  preview, loopback server, LAN exposure, generated public site, and Cloudflare
-  publication.
 
 ### Competition And Series
 
@@ -372,19 +295,42 @@ These are deliberate limits in the current app, not necessarily defects.
   tools should remain opt-in and additive.
 - Move desktop-only Race Series reporting and optimization helpers into shared
   code as they stabilize.
-- Extend Race Series with scoring and eligibility rules for championship
-  standings.
-- Add explicit cross-race competitor identity and reconciliation support for
-  cases where SI numbers, start numbers, categories, or registration details are
-  incomplete or change across days.
-- Add competition scoring calculations for overall standings, with configurable
-  point/placement rules, category scope, absent-result handling, eligibility, and
-  tie-break behavior.
+- Extend Race Series with championship overall scoring, including configurable
+  point/placement rules, category scope, absent-result handling, eligibility,
+  and tie-break behavior.
 - Add championship exports for overall standings, per-race contributions, and
   start-slot fairness traces as derived outputs over linked Race Files plus
   lightweight series metadata.
 - Add a Competition View only after the underlying series metadata,
   reconciliation, scoring, and export behavior is stable.
+
+### Course Designer
+
+- Add a first-class visual Course Designer for placing controls, creating
+  category routes and simple graphics, editing KML-compatible appearance, and
+  applying the result to a Race File or exporting only the authored overlays.
+- Make `Course Design` a primary item under `Setup`. Develop it alongside the
+  current `Controls` group, then replace that group only after the designer also
+  exposes the controls table, imports, exports, elevation data, review,
+  protection, and destructive actions operators currently rely on.
+- Start with offline JPG/PNG maps using world files, explicit coordinates, or
+  manual calibration. Add GeoTIFF and broad CRS handling after the coordinate
+  model is stable, and treat robust GeoPDF support as a later, separately
+  validated milestone.
+- Keep a versioned editable Radio-Oracle course-design document as the source of
+  truth. KML/KMZ remains an interchange output and should omit the base map by
+  default.
+- Reuse existing Radio-Oracle KML/KMZ parsing, styles, exports, 2D rendering,
+  import review, protected-course rules, category matching, and Course Analyzer
+  behavior rather than creating a parallel course subsystem.
+- Use Purple Pen as the principal course-editor UX and algorithm reference. Use
+  QGIS and OpenOrienteering Mapper as geospatial workflow references and
+  evaluate permissively licensed supporting components, especially GDAL, PROJ,
+  PDFBox, and PDFium, without embedding GPL application code into an
+  otherwise MIT-only distribution by accident.
+- Follow the complete workflow, architecture, component/licensing assessment,
+  staged implementation, compatibility rules, risks, and acceptance criteria in
+  [`course-designer-plan.md`](course-designer-plan.md).
 
 ### Course Analyzer And Route Intelligence
 
@@ -407,13 +353,13 @@ These are deliberate limits in the current app, not necessarily defects.
 
 #### Course-File Authoring And KML Boundaries
 
-- Continue supporting ordinary KML/KMZ course construction outside
-  Radio-Oracle. Suitable visual authoring tools include QGIS, OCAD,
-  OpenOrienteering Mapper, ArcGIS Earth/Pro, Google My Maps, and other editors
-  that preserve named point placemarks and named route `LineString` objects.
-  QGIS is the preferred free general-purpose desktop option, while OCAD and
-  OpenOrienteering Mapper are the natural choices when the course is designed
-  against an orienteering map.
+- Until the native Course Designer reaches parity, continue supporting ordinary
+  KML/KMZ course construction outside Radio-Oracle. Suitable visual authoring
+  tools include QGIS, OCAD, OpenOrienteering Mapper, ArcGIS Earth/Pro, Google My
+  Maps, and other editors that preserve named point placemarks and named route
+  `LineString` objects. QGIS is the preferred free general-purpose desktop
+  option, while OCAD and OpenOrienteering Mapper are natural choices when the
+  course is designed against an orienteering map.
 - Keep tool limitations visible in operator guidance. ArcGIS Earth is a close
   direct KML/KMZ editor but its desktop application is Windows-only; ArcGIS Pro
   is a licensed professional GIS; Google My Maps is suitable for simple
