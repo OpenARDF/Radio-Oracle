@@ -30,6 +30,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
@@ -344,20 +345,100 @@ class AndroidSportIdentTimeSyncControllerTest {
     }
 
     @Test
-    fun syncReportsExplicitWriteNegativeAcknowledgementWithoutRetrying() {
-        val targetTime = LocalDateTime.parse("2026-09-01T10:00:00.125")
+    fun syncRetriesExplicitWriteNegativeAcknowledgementInFreshVerifiedTransaction() {
+        val firstTargetTime = LocalDateTime.parse("2026-09-01T10:00:00.125")
+        val retryTargetTime = LocalDateTime.parse("2026-09-01T10:00:00.500")
+        val computerAfter = LocalDateTime.parse("2026-09-01T10:00:00.550")
         val transport = FakeTransport(
             frame(SportIdentProtocol.PROBE_COMMAND),
             systemInfoFrame(serial = 781234, stationCode = 45),
             stationTimeFrame(
                 SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
-                targetTime.minusMinutes(1),
+                firstTargetTime.minusMinutes(1),
                 tick = 0
+            ),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                retryTargetTime.minusMinutes(1),
+                tick = 0
+            ),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
+                retryTargetTime,
+                tick = 128
+            ),
+            frame(SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                retryTargetTime,
+                tick = 128
             ),
             frame(SportIdentProtocol.PROBE_COMMAND),
             negativeAcknowledgementCommandIndices = setOf(3)
         )
-        val controller = controller(transport, listOf(targetTime))
+        val controller = controller(
+            transport,
+            listOf(firstTargetTime, retryTargetTime, computerAfter)
+        )
+
+        val result = controller.syncTime(
+            writeEnabled = true,
+            putStationToSleepAfterSync = false,
+            expectedStationSerialNumber = 781234
+        )
+
+        assertEquals(2, result.attempts)
+        assertEquals(retryTargetTime, result.sourceTime)
+        assertEquals(
+            2,
+            transport.commands.count { it == SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND }
+        )
+        assertEquals(
+            listOf(
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND,
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND
+            ),
+            transport.commands
+        )
+    }
+
+    @Test
+    fun syncStopsAfterSecondExplicitWriteNegativeAcknowledgement() {
+        val firstTargetTime = LocalDateTime.parse("2026-09-01T10:00:00.125")
+        val retryTargetTime = LocalDateTime.parse("2026-09-01T10:00:00.500")
+        val transport = FakeTransport(
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                firstTargetTime.minusMinutes(1),
+                tick = 0
+            ),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            stationTimeFrame(
+                SportIdentTimeSyncProtocol.GET_STATION_TIME_COMMAND,
+                retryTargetTime.minusMinutes(1),
+                tick = 0
+            ),
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            negativeAcknowledgementCommandIndices = setOf(3, 8)
+        )
+        val controller = controller(transport, listOf(firstTargetTime, retryTargetTime))
 
         val error = assertThrows(IllegalStateException::class.java) {
             controller.syncTime(
@@ -369,7 +450,7 @@ class AndroidSportIdentTimeSyncControllerTest {
 
         assertTrue(error.message.orEmpty().contains("Reseat the station on the coupling stick"))
         assertEquals(
-            1,
+            2,
             transport.commands.count { it == SportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND }
         )
         assertFalse(transport.commands.contains(SportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND))
@@ -462,15 +543,15 @@ class AndroidSportIdentTimeSyncControllerTest {
 
         override fun sendWakePulse(): Boolean = true
 
-        override fun sendCommand(step: SportIdentTimeSyncCommandStep): AndroidSportIdentCommandResult {
+        override fun sendCommand(step: SportIdentTimeSyncCommandStep): SportIdentCommandResult {
             val commandIndex = commands.size
             commands += step.command
             if (commandIndex in negativeAcknowledgementCommandIndices) {
-                return AndroidSportIdentCommandResult.NegativeAcknowledgement
+                return SportIdentCommandResult.NegativeAcknowledgement
             }
             val frame = if (replies.isEmpty()) null else replies.removeAt(0)
-            return frame?.let(AndroidSportIdentCommandResult::Reply)
-                ?: AndroidSportIdentCommandResult.NoReply
+            return frame?.let(SportIdentCommandResult::Reply)
+                ?: SportIdentCommandResult.NoReply
         }
     }
 

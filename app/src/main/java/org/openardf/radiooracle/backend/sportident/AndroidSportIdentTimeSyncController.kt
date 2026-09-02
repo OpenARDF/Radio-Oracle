@@ -28,6 +28,8 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
+import org.openardf.radiooracle.shared.sportident.SportIdentExplicitWriteRejectedException
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfoParser
@@ -35,6 +37,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentStationTime
 import org.openardf.radiooracle.shared.sportident.SportIdentStationTimeCodec
 import org.openardf.radiooracle.shared.sportident.SportIdentTimeSyncCommandStep
 import org.openardf.radiooracle.shared.sportident.SportIdentTimeSyncProtocol
+import org.openardf.radiooracle.shared.sportident.SportIdentTimeSyncRetryPolicy
 
 data class AndroidSportIdentTimeSyncInspection(
     val readerStationInfo: SportIdentStationInfo,
@@ -63,13 +66,7 @@ data class AndroidSportIdentStationPowerStateWriteResult(
 
 internal interface AndroidSportIdentCommandTransport {
     fun sendWakePulse(): Boolean
-    fun sendCommand(step: SportIdentTimeSyncCommandStep): AndroidSportIdentCommandResult
-}
-
-internal sealed class AndroidSportIdentCommandResult {
-    data class Reply(val frame: SportIdentFrame) : AndroidSportIdentCommandResult()
-    data object NegativeAcknowledgement : AndroidSportIdentCommandResult()
-    data object NoReply : AndroidSportIdentCommandResult()
+    fun sendCommand(step: SportIdentTimeSyncCommandStep): SportIdentCommandResult
 }
 
 private enum class AndroidSportIdentTimeSyncAccessMode {
@@ -149,7 +146,16 @@ internal class AndroidSportIdentTimeSyncController(
 
             val failure = outcome.exceptionOrNull()
                 ?: IllegalStateException("SPORTident time sync failed.")
-            if (writeStarted || attemptIndex == MAX_WRITE_ATTEMPTS - 1) throw failure
+            if (
+                !SportIdentTimeSyncRetryPolicy.canRetry(
+                    error = failure,
+                    writeStarted = writeStarted,
+                    attemptIndex = attemptIndex,
+                    maxAttempts = MAX_WRITE_ATTEMPTS
+                )
+            ) {
+                throw failure
+            }
             lastFailure = failure
             sleepMillis(WRITE_RETRY_DELAY_MS)
         }
@@ -298,7 +304,7 @@ internal class AndroidSportIdentTimeSyncController(
     private fun attemptStationPowerOff(): AndroidSportIdentStationPowerStateWriteResult {
         val confirmed = transport.sendCommand(
             SportIdentTimeSyncProtocol.powerOffStep()
-        ) is AndroidSportIdentCommandResult.Reply
+        ) is SportIdentCommandResult.Reply
         return AndroidSportIdentStationPowerStateWriteResult(
             confirmed = confirmed,
             message = if (confirmed) {
@@ -366,19 +372,13 @@ internal class AndroidSportIdentTimeSyncController(
                 SportIdentTimeSyncProtocol.writeStationTimeStep(targetTime)
             )
         ) {
-            is AndroidSportIdentCommandResult.Reply -> targetTime to response.frame
-            AndroidSportIdentCommandResult.NoReply ->
+            is SportIdentCommandResult.Reply -> targetTime to response.frame
+            SportIdentCommandResult.NoReply ->
                 error("SPORTident station did not reply to Write station time.")
-            AndroidSportIdentCommandResult.NegativeAcknowledgement -> error(
-                "SPORTident station rejected Write station time. Reseat the station on the " +
-                    "coupling stick and inspect it again. If rejection continues, disconnect and " +
-                    "reconnect the USB download station before retrying."
-            )
+            SportIdentCommandResult.NegativeAcknowledgement ->
+                throw SportIdentExplicitWriteRejectedException()
         }
     }
-
-    private fun AndroidSportIdentCommandResult.replyOrNull(): SportIdentFrame? =
-        (this as? AndroidSportIdentCommandResult.Reply)?.frame
 
     private fun ByteArray.decodeStationTime(context: String): SportIdentStationTime =
         SportIdentStationTimeCodec.decodePayload(this)

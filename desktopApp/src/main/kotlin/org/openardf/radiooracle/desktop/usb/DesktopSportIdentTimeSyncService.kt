@@ -28,9 +28,13 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
+import org.openardf.radiooracle.shared.sportident.SportIdentExplicitWriteRejectedException
+import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfoParser
+import org.openardf.radiooracle.shared.sportident.SportIdentTimeSyncRetryPolicy
 
 data class DesktopSportIdentTimeSyncInspection(
     val portInfo: DesktopSerialPortInfo?,
@@ -226,6 +230,7 @@ internal class DesktopSportIdentTimeSyncService(
 
         var lastFailure: Throwable? = null
         var leadForAttempt = secondBoundaryLeadMillis
+        var expectedStationSerialNumber: Int? = null
         repeat(maxAttempts) { attemptIndex ->
             var writeCommandStarted = false
             try {
@@ -239,6 +244,17 @@ internal class DesktopSportIdentTimeSyncService(
                     putStationToSleepAfterSync = putStationToSleepAfterSync,
                     correctionThresholdMillis = correctionThresholdMillis,
                     canUseCorrectionAttempt = attemptIndex < maxAttempts - 1,
+                    onStationIdentified = { stationInfo ->
+                        check(
+                            expectedStationSerialNumber == null ||
+                                expectedStationSerialNumber == stationInfo.serialNumber
+                        ) {
+                            "The connected target changed during time sync: expected station " +
+                                "$expectedStationSerialNumber but found ${stationInfo.serialNumber}. " +
+                                "Inspect again before syncing."
+                        }
+                        expectedStationSerialNumber = stationInfo.serialNumber
+                    },
                     onWriteCommandStarted = { writeCommandStarted = true }
                 )
                 val result = initialResult.withFallbackPostSyncEstimate()
@@ -255,7 +271,14 @@ internal class DesktopSportIdentTimeSyncService(
                     return result.withOptionalSeparateStationPowerOff(putStationToSleepAfterSync)
                 }
             } catch (error: Throwable) {
-                if (writeCommandStarted || attemptIndex == maxAttempts - 1) {
+                if (
+                    !SportIdentTimeSyncRetryPolicy.canRetry(
+                        error = error,
+                        writeStarted = writeCommandStarted,
+                        attemptIndex = attemptIndex,
+                        maxAttempts = maxAttempts
+                    )
+                ) {
                     throw error
                 }
                 lastFailure = error
@@ -275,6 +298,7 @@ internal class DesktopSportIdentTimeSyncService(
         putStationToSleepAfterSync: Boolean,
         correctionThresholdMillis: Long,
         canUseCorrectionAttempt: Boolean,
+        onStationIdentified: (SportIdentStationInfo) -> Unit,
         onWriteCommandStarted: () -> Unit
     ): DesktopSportIdentTimeSyncResult {
         val preparedPort = prepareTimeSyncPort()
@@ -299,6 +323,7 @@ internal class DesktopSportIdentTimeSyncService(
             )
             val stationInfo = SportIdentStationInfoParser.fromSystemInfoFrame(systemInfoFrame)
                 ?: error("SPORTident station returned unreadable system info.")
+            onStationIdentified(stationInfo)
 
             val beforeTime = requireReply(
                 port = port,
@@ -313,7 +338,7 @@ internal class DesktopSportIdentTimeSyncService(
             )
             val targetTime = targetTimeSelection.targetTime
             onWriteCommandStarted()
-            val confirmedStationTime = requireReply(
+            val confirmedStationTime = requireWriteReply(
                 port = port,
                 step = DesktopSportIdentTimeSyncProtocol.writeStationTimeStep(targetTime)
             ).data.decodeStationTime("write acknowledgement station time")
@@ -731,7 +756,7 @@ internal class DesktopSportIdentTimeSyncService(
         step: DesktopSportIdentTimeSyncCommandStep,
         attempts: Int = 1,
         failureMessage: String = "SPORTident station did not reply to ${step.label}."
-    ): org.openardf.radiooracle.shared.sportident.SportIdentFrame {
+    ): SportIdentFrame {
         require(attempts > 0) { "SPORTident command attempts must be positive." }
         repeat(attempts) {
             commandClient.sendCommand(
@@ -742,6 +767,24 @@ internal class DesktopSportIdentTimeSyncService(
         }
         error(failureMessage)
     }
+
+    private fun requireWriteReply(
+        port: DesktopSerialPort,
+        step: DesktopSportIdentTimeSyncCommandStep
+    ): SportIdentFrame =
+        when (
+            val result = commandClient.sendCommandResult(
+                port = port,
+                command = step.command,
+                data = step.payload
+            )
+        ) {
+            is SportIdentCommandResult.Reply -> result.frame
+            SportIdentCommandResult.NegativeAcknowledgement ->
+                throw SportIdentExplicitWriteRejectedException()
+            SportIdentCommandResult.NoReply ->
+                error("SPORTident station did not reply to ${step.label}.")
+        }
 
     private fun ByteArray.decodeStationTime(context: String): DesktopSportIdentStationTime =
         DesktopSportIdentStationTimeCodec.decodePayload(this)

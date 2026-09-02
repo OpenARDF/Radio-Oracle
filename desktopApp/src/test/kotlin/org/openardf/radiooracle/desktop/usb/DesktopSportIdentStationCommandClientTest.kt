@@ -28,6 +28,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentUsbDevice
 
@@ -109,6 +110,20 @@ class DesktopSportIdentStationCommandClientTest {
         )
 
         assertNull(frame)
+    }
+
+    @Test
+    fun reportsRawNegativeAcknowledgementDistinctFromNoReply() {
+        val port = ChunkedPort(readChunks = listOf(byteArrayOf(SportIdentProtocol.NAK)))
+        val client = DesktopSportIdentStationCommandClient(nowMillis = advancingClock())
+
+        val result = client.sendCommandResult(
+            port = port,
+            command = SportIdentProtocol.GET_SYSTEM_INFO,
+            data = byteArrayOf(0x00, 0x07)
+        )
+
+        assertEquals(SportIdentCommandResult.NegativeAcknowledgement, result)
     }
 
     private class ChunkedPort(

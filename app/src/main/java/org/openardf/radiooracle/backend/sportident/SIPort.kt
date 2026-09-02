@@ -50,6 +50,7 @@ import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_PCARD_SER
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_REMOVED
 import org.openardf.radiooracle.backend.sportident.SIConstants.ZERO
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
@@ -82,6 +83,13 @@ class SIPort(
     private var stationModeCode: Int? = null
     private var lastReadCardId: Int? = null
     private var waitingForRaceLogged = false
+    private val cardCommandReader = AndroidSportIdentCardCommandReader(
+        writeCommand = { command, payload ->
+            writeMsg(command, payload, extendedMode) == 0
+        },
+        readChunk = ::readPortChunk,
+        cacheUnexpectedFrame = ::enqueueCache
+    )
     private val commandTransport = object : AndroidSportIdentCommandTransport {
         override fun sendWakePulse(): Boolean {
             val sent = port.syncWrite(byteArrayOf(SIConstants.WAKEUP), TIME_SYNC_TIMEOUT_MS) == 1
@@ -89,7 +97,7 @@ class SIPort(
             return sent
         }
 
-        override fun sendCommand(step: SportIdentTimeSyncCommandStep): AndroidSportIdentCommandResult {
+        override fun sendCommand(step: SportIdentTimeSyncCommandStep): SportIdentCommandResult {
             val commandHex = (step.command.toInt() and 0xff)
                 .toString(16)
                 .padStart(2, '0')
@@ -103,7 +111,7 @@ class SIPort(
                     "SI",
                     "Station command write failed label=${step.label} command=0x$commandHex"
                 )
-                return AndroidSportIdentCommandResult.NoReply
+                return SportIdentCommandResult.NoReply
             }
 
             val reply = readMsg(TIME_SYNC_TIMEOUT_MS, step.command)
@@ -112,7 +120,7 @@ class SIPort(
                     "SI",
                     "Station command timed out label=${step.label} command=0x$commandHex"
                 )
-                return AndroidSportIdentCommandResult.NoReply
+                return SportIdentCommandResult.NoReply
             }
             if (reply.size == 1 && reply[0] == SIConstants.NAK) {
                 DebugLog.warn(
@@ -120,7 +128,7 @@ class SIPort(
                     "Station command negatively acknowledged label=${step.label} " +
                         "command=0x$commandHex"
                 )
-                return AndroidSportIdentCommandResult.NegativeAcknowledgement
+                return SportIdentCommandResult.NegativeAcknowledgement
             }
             val frame = SportIdentFrameParser.firstFrame(
                 bytes = reply,
@@ -133,14 +141,14 @@ class SIPort(
                     "Station command returned invalid frame label=${step.label} " +
                         "command=0x$commandHex bytes=${reply.size}"
                 )
-                return AndroidSportIdentCommandResult.NoReply
+                return SportIdentCommandResult.NoReply
             }
             DebugLog.debug(
                 "SI",
                 "Station command reply label=${step.label} command=0x$commandHex " +
                     "dataBytes=${frame.data.size}"
             )
-            return AndroidSportIdentCommandResult.Reply(frame)
+            return SportIdentCommandResult.Reply(frame)
         }
     }
     private val timeSyncController = AndroidSportIdentTimeSyncController(
@@ -342,7 +350,8 @@ class SIPort(
 
             //If the readout was valid, process the data further
             if (valid) {
-                if (dataProcessor.processCardDataForCurrentRaceOrSeries(cardData, race) == true) {
+                val stored = dataProcessor.processCardDataForCurrentRaceOrSeries(cardData, race) == true
+                if (stored) {
                     lastReadCardId = cardData.siNumber
                     DebugLog.info(
                         "SI",
@@ -359,6 +368,50 @@ class SIPort(
             }
         }
     }
+
+    private fun readCardCommandReply(
+        cardData: CardData,
+        family: String,
+        stage: String,
+        command: Byte,
+        payload: ByteArray?,
+        expectedReplyBytes: Int
+    ): ByteArray? {
+        val result = cardCommandReader.read(
+            command = command,
+            payload = payload,
+            expectedReplyBytes = expectedReplyBytes
+        )
+        result.attempts.forEachIndexed { index, attempt ->
+            attempt.failure?.let { failure ->
+                val retrying = index < result.attempts.lastIndex
+                DebugLog.warn(
+                    "SI",
+                    "Card command failed id=${cardData.siNumber} family=$family stage=$stage " +
+                        "command=${hexByte(command)} attempt=${attempt.attemptNumber} " +
+                        "reason=$failure retrying=$retrying"
+                )
+            }
+        }
+        if (result.reply != null && result.attempts.size > 1) {
+            DebugLog.info(
+                "SI",
+                "Card command recovered id=${cardData.siNumber} family=$family stage=$stage " +
+                    "attempts=${result.attempts.size}"
+            )
+        }
+        return result.reply
+    }
+
+    private fun cardFamilyLabel(cardType: Byte): String = when (cardType) {
+        SI_CARD5 -> "SI5"
+        SI_CARD6 -> "SI6"
+        SI_CARD8_9_SIAC -> "SI8_9_SIAC"
+        else -> "UNKNOWN"
+    }
+
+    private fun hexByte(value: Byte): String =
+        "0x" + (value.toInt() and 0xff).toString(16).padStart(2, '0').uppercase()
 
     /**
      * Write the given message using the SI protocol
@@ -416,6 +469,16 @@ class SIPort(
 
     private fun enqueueCache(buffer: ByteArray) {
         msgCache.add(buffer)
+    }
+
+    private fun readPortChunk(timeoutMillis: Int): ByteArray {
+        val buffer = ByteArray(CARD_READ_BUFFER_BYTES)
+        val bytesRead = port.syncRead(buffer, timeoutMillis)
+        return if (bytesRead > 0) {
+            buffer.copyOfRange(0, bytesRead)
+        } else {
+            ByteArray(0)
+        }
     }
 
 
@@ -645,10 +708,17 @@ class SIPort(
     }
 
     private fun card5Readout(cardData: CardData): Boolean {
-
-        writeMsg(SIConstants.GET_SI_CARD5, null, extendedMode)
-        val reply: ByteArray? = readMsg(5000, SIConstants.GET_SI_CARD5)
-        if (reply != null && card5EntryParse(reply, cardData)) {
+        val family = cardFamilyLabel(cardData.cardType)
+        val reply = readCardCommandReply(
+            cardData = cardData,
+            family = family,
+            stage = "payload",
+            command = SIConstants.GET_SI_CARD5,
+            payload = null,
+            expectedReplyBytes = SI5_REPLY_BYTES
+        )
+        val parsed = reply != null && card5EntryParse(reply, cardData)
+        if (parsed) {
             writeAck()
             return true
         }
@@ -739,7 +809,7 @@ class SIPort(
     }
 
     private fun card6Readout(cardData: CardData): Boolean {
-
+        val family = cardFamilyLabel(cardData.cardType)
         val reply = ByteArray(7 * 128)
         val msg = byteArrayOf(ZERO)
         val blocks = byteArrayOf(0, 6, 7, 2, 3, 4, 5)
@@ -747,9 +817,15 @@ class SIPort(
         while (i < 7) {
 
             msg[0] = blocks[i]
-            writeMsg(SIConstants.GET_SI_CARD6, msg, extendedMode)
-            val tmpReply: ByteArray? = readMsg(5000, SIConstants.GET_SI_CARD6)
-            if (tmpReply == null || tmpReply.size != 128 + 6 + 3) {
+            val tmpReply = readCardCommandReply(
+                cardData = cardData,
+                family = family,
+                stage = "block=${byteToUnsignedInt(blocks[i])}",
+                command = SIConstants.GET_SI_CARD6,
+                payload = msg,
+                expectedReplyBytes = CARD_BLOCK_REPLY_BYTES
+            )
+            if (tmpReply == null || tmpReply.size != CARD_BLOCK_REPLY_BYTES) {
                 return false
             }
             System.arraycopy(tmpReply, 6, reply, i * 128, 128)
@@ -762,7 +838,8 @@ class SIPort(
             }
             i++
         }
-        if (card6EntryParse(reply, cardData)) {
+        val parsed = card6EntryParse(reply, cardData)
+        if (parsed) {
             writeAck()
             return true
         }
@@ -813,15 +890,21 @@ class SIPort(
     }
 
     private fun card89SiacReadout(cardData: CardData): Boolean {
-
+        val family = cardFamilyLabel(cardData.cardType)
         //Request the first block with service data
         val msg = byteArrayOf(ZERO)
         val reply: ByteArray
 
-        writeMsg(GET_SI_CARD8_9_SIAC, msg, extendedMode)
-        var tmpReply: ByteArray? = readMsg(5000, GET_SI_CARD8_9_SIAC)
+        var tmpReply = readCardCommandReply(
+            cardData = cardData,
+            family = family,
+            stage = "block=0",
+            command = GET_SI_CARD8_9_SIAC,
+            payload = msg,
+            expectedReplyBytes = CARD_BLOCK_REPLY_BYTES
+        )
 
-        if (tmpReply == null || tmpReply.size != 128 + 6 + 3) {
+        if (tmpReply == null || tmpReply.size != CARD_BLOCK_REPLY_BYTES) {
             return false
         }
 
@@ -842,10 +925,16 @@ class SIPort(
         //Read the punch data blocks from the device
         while (i <= blockCount) {
             msg[0] = i.toByte() //Request a block by number
-            writeMsg(GET_SI_CARD8_9_SIAC, msg, extendedMode)
-            tmpReply = readMsg(5000, GET_SI_CARD8_9_SIAC)
+            tmpReply = readCardCommandReply(
+                cardData = cardData,
+                family = family,
+                stage = "block=$i",
+                command = GET_SI_CARD8_9_SIAC,
+                payload = msg,
+                expectedReplyBytes = CARD_BLOCK_REPLY_BYTES
+            )
 
-            if (tmpReply == null || tmpReply.size != 128 + 6 + 3) {
+            if (tmpReply == null || tmpReply.size != CARD_BLOCK_REPLY_BYTES) {
                 // EMIT card read failed
                 return false
             }
@@ -854,7 +943,8 @@ class SIPort(
         }
 
         //Parse the punchData and return status
-        return if (card9EntryParse(reply, cardData)) {
+        val parsed = card9EntryParse(reply, cardData)
+        return if (parsed) {
             writeAck()
             true
         } else {
@@ -1066,6 +1156,9 @@ class SIPort(
     }
 
     companion object {
+        private const val CARD_READ_BUFFER_BYTES = 4_096
+        private const val SI5_REPLY_BYTES = 136
+        private const val CARD_BLOCK_REPLY_BYTES = 137
         private const val TIME_SYNC_TIMEOUT_MS = 1_200
     }
 }

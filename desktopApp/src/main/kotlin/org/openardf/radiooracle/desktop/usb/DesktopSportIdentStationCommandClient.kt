@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop.usb
 
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 
@@ -37,10 +38,18 @@ internal class DesktopSportIdentStationCommandClient(
         command: Byte,
         data: ByteArray = byteArrayOf(),
         replyCommand: Byte = command
-    ): SportIdentFrame? {
+    ): SportIdentFrame? =
+        sendCommandResult(port, command, data, replyCommand).replyOrNull()
+
+    fun sendCommandResult(
+        port: DesktopSerialPort,
+        command: Byte,
+        data: ByteArray = byteArrayOf(),
+        replyCommand: Byte = command
+    ): SportIdentCommandResult {
         val request = SportIdentProtocol.buildExtendedMessage(command, data)
         if (port.write(request) != request.size) {
-            return null
+            return SportIdentCommandResult.NoReply
         }
 
         val deadline = nowMillis() + readTimeoutMs
@@ -50,11 +59,16 @@ internal class DesktopSportIdentStationCommandClient(
             nowMillis = nowMillis
         )
         while (nowMillis() < deadline) {
-            val frame = stream.nextFrame(deadline) ?: return null
-            if (frame.command == replyCommand) {
-                return frame
+            when (val result = stream.nextCommandResult(deadline)) {
+                is SportIdentCommandResult.Reply -> {
+                    if (result.frame.command == replyCommand) {
+                        return result
+                    }
+                }
+                SportIdentCommandResult.NegativeAcknowledgement -> return result
+                SportIdentCommandResult.NoReply -> return result
             }
         }
-        return null
+        return SportIdentCommandResult.NoReply
     }
 }

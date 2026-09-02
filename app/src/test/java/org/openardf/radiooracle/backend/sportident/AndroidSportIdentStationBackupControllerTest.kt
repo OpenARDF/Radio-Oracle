@@ -28,6 +28,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
@@ -105,7 +106,7 @@ class AndroidSportIdentStationBackupControllerTest {
             return true
         }
 
-        override fun sendCommand(step: SportIdentTimeSyncCommandStep): AndroidSportIdentCommandResult {
+        override fun sendCommand(step: SportIdentTimeSyncCommandStep): SportIdentCommandResult {
             steps += step
             if (
                 step.command == SportIdentProtocol.PROBE_COMMAND &&
@@ -113,13 +114,13 @@ class AndroidSportIdentStationBackupControllerTest {
             ) {
                 remoteSelectionAttempts += 1
                 if (remoteSelectionAttempts <= failedRemoteSelections) {
-                    return AndroidSportIdentCommandResult.NoReply
+                    return SportIdentCommandResult.NoReply
                 }
             }
             if (step.command == SportIdentProtocol.GET_SYSTEM_INFO) {
                 metadataAttempts += 1
                 if (metadataAttempts <= failedMetadataReplies) {
-                    return AndroidSportIdentCommandResult.NegativeAcknowledgement
+                    return SportIdentCommandResult.NegativeAcknowledgement
                 }
             }
             val frame = when (step.command) {
@@ -127,7 +128,7 @@ class AndroidSportIdentStationBackupControllerTest {
                 SportIdentProtocol.GET_BACKUP -> backupFrame(step.payload)
                 else -> frame(step.command, byteArrayOf())
             }
-            return AndroidSportIdentCommandResult.Reply(frame)
+            return SportIdentCommandResult.Reply(frame)
         }
     }
 

@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop.usb
 
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
@@ -66,6 +67,26 @@ internal class DesktopSportIdentFrameStream(
         return nextBufferedFrame(requireValidCrc)
     }
 
+    fun nextCommandResult(
+        deadlineMillis: Long,
+        requireValidCrc: Boolean = true
+    ): SportIdentCommandResult {
+        while (nowMillis() < deadlineMillis) {
+            nextBufferedCommandResult(requireValidCrc)?.let { return it }
+            trimBufferedCommandNoise()
+
+            val raw = port.read(maxReadBytes)
+            if (raw.isEmpty()) {
+                trace("quiet serial read")
+                continue
+            }
+            lastRawRead = raw
+            trace("raw ${raw.toHexString()}")
+            buffered += raw
+        }
+        return nextBufferedCommandResult(requireValidCrc) ?: SportIdentCommandResult.NoReply
+    }
+
     private fun nextBufferedFrame(requireValidCrc: Boolean): SportIdentFrame? {
         val frame = SportIdentFrameParser.firstFrame(
             buffered,
@@ -79,6 +100,31 @@ internal class DesktopSportIdentFrameStream(
         return frame
     }
 
+    private fun nextBufferedCommandResult(requireValidCrc: Boolean): SportIdentCommandResult? {
+        val frameStart = buffered.indexOfFirst { it == SportIdentProtocol.STX }
+        val nakStart = buffered.indexOfFirst { it == SportIdentProtocol.NAK }
+        if (nakStart >= 0 && (frameStart < 0 || nakStart < frameStart)) {
+            trace("negative acknowledgement")
+            buffered = buffered.copyOfRange(nakStart + 1, buffered.size)
+            return SportIdentCommandResult.NegativeAcknowledgement
+        }
+
+        val frame = SportIdentFrameParser.firstFrame(
+            buffered,
+            requireValidCrc = requireValidCrc
+        ) ?: return null
+        trace(
+            "frame command=${frame.command.toHexString()} dataBytes=${frame.data.size} " +
+                "raw=${frame.raw.toHexString()}"
+        )
+        discardThrough(frame.raw)
+        return if (frame.command == SportIdentProtocol.NAK) {
+            SportIdentCommandResult.NegativeAcknowledgement
+        } else {
+            SportIdentCommandResult.Reply(frame)
+        }
+    }
+
     private fun discardThrough(rawFrame: ByteArray) {
         val start = buffered.indexOf(rawFrame)
         if (start < 0) {
@@ -90,6 +136,18 @@ internal class DesktopSportIdentFrameStream(
 
     private fun trimBufferedNoise() {
         val start = buffered.indexOfFirst { it == SportIdentProtocol.STX }
+        buffered = when {
+            start < 0 -> ByteArray(0)
+            start > 0 -> buffered.copyOfRange(start, buffered.size)
+            buffered.size > MAX_BUFFER_BYTES -> buffered.takeLast(MAX_BUFFER_BYTES).toByteArray()
+            else -> buffered
+        }
+    }
+
+    private fun trimBufferedCommandNoise() {
+        val start = buffered.indexOfFirst {
+            it == SportIdentProtocol.STX || it == SportIdentProtocol.NAK
+        }
         buffered = when {
             start < 0 -> ByteArray(0)
             start > 0 -> buffered.copyOfRange(start, buffered.size)

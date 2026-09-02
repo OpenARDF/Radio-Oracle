@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.backend.sportident
 
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentStationBackupProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentStationBackupRecord
@@ -92,7 +93,7 @@ internal class AndroidSportIdentStationBackupController(
             var keepSelected = false
             try {
                 selectedThisAttempt = transport.sendWakePulse() &&
-                    transport.sendCommand(accessMode.initialStep()) is AndroidSportIdentCommandResult.Reply
+                    transport.sendCommand(accessMode.initialStep()) is SportIdentCommandResult.Reply
                 if (selectedThisAttempt) {
                     if (accessMode == AndroidSportIdentBackupAccessMode.RELAY_COUPLED) {
                         sleepMillis(REMOTE_MODE_SETTLE_DELAY_MS)
@@ -129,7 +130,7 @@ internal class AndroidSportIdentStationBackupController(
     ): SportIdentFrame? {
         repeat(attempts) { attemptIndex ->
             val response = transport.sendCommand(step)
-            if (response is AndroidSportIdentCommandResult.Reply) return response.frame
+            if (response is SportIdentCommandResult.Reply) return response.frame
             if (attemptIndex < attempts - 1) sleepMillis(retryDelayMillis)
         }
         return null
@@ -143,7 +144,7 @@ internal class AndroidSportIdentStationBackupController(
     ): SportIdentFrame {
         repeat(attempts) { attemptIndex ->
             val response = transport.sendCommand(step)
-            if (response is AndroidSportIdentCommandResult.Reply) return response.frame
+            if (response is SportIdentCommandResult.Reply) return response.frame
             if (attemptIndex < attempts - 1 && retryDelayMillis > 0L) {
                 sleepMillis(retryDelayMillis)
             }

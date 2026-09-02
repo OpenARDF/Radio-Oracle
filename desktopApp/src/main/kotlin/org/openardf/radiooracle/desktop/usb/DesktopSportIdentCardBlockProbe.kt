@@ -26,10 +26,13 @@ package org.openardf.radiooracle.desktop.usb
 
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlockParser
+import org.openardf.radiooracle.shared.sportident.SportIdentCardCommandReader
 import org.openardf.radiooracle.shared.sportident.SportIdentCardEvent
-import org.openardf.radiooracle.shared.sportident.SportIdentCardEventParser
+import org.openardf.radiooracle.shared.sportident.SportIdentCardReadFailure
+import org.openardf.radiooracle.shared.sportident.SportIdentCardReadRetryPolicy
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
+import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 
 fun main(args: Array<String>) {
@@ -104,7 +107,12 @@ class DesktopSportIdentCardBlockReader(
     private val writeTimeoutMs: Int = 5000,
     private val openWaitTimeMs: Int = 200,
     private val postAckSettleMs: Long = 500,
-    private val onProgress: (String) -> Unit = {}
+    private val onProgress: (String) -> Unit = {},
+    private val sleepMillis: (Long) -> Unit = Thread::sleep,
+    private val nowMillis: () -> Long = { System.nanoTime() / 1_000_000L },
+    private val cardReadAttemptTimeoutMs: Int = SportIdentCardCommandReader.DEFAULT_ATTEMPT_TIMEOUT_MS,
+    private val cardReadRetryDelayMs: Long = SportIdentCardCommandReader.DEFAULT_RETRY_DELAY_MS,
+    private val cardReadMaxAttempts: Int = SportIdentCardReadRetryPolicy.DEFAULT_MAX_ATTEMPTS
 ) {
     fun readFirstSi8Or9OrSiacBlockAfterInsert(
         port: DesktopSerialPort,
@@ -117,7 +125,7 @@ class DesktopSportIdentCardBlockReader(
         baudRate: Int
     ): DesktopSportIdentCardBlockDownload {
         try {
-            port.configure(baudRate, readTimeoutMs, writeTimeoutMs)
+            port.configure(baudRate, minOf(readTimeoutMs, cardReadAttemptTimeoutMs), writeTimeoutMs)
             if (!port.open(openWaitTimeMs)) {
                 error("Failed to open serial port ${port.info.systemPortPath}.")
             }
@@ -163,17 +171,29 @@ class DesktopSportIdentCardBlockReader(
         port: DesktopSerialPort,
         inserted: SportIdentCardEvent.Inserted
     ): DesktopSportIdentCardBlockDownload {
+        val commandReader = SportIdentCardCommandReader(
+            writeCommand = { command, payload ->
+                val request = SportIdentProtocol.buildExtendedMessage(command, payload ?: byteArrayOf())
+                port.write(request) == request.size
+            },
+            readChunk = { _ -> port.read(MAX_FRAME_BYTES) },
+            sleepMillis = sleepMillis,
+            nowMillis = nowMillis,
+            attemptTimeoutMillis = cardReadAttemptTimeoutMs,
+            retryDelayMillis = cardReadRetryDelayMs,
+            maxAttempts = cardReadMaxAttempts
+        )
         val blocks = when (inserted.cardType) {
             SportIdentProtocol.SI_CARD5 -> emptyList()
-            SportIdentProtocol.SI_CARD6 -> readSi6BlocksOnOpenPort(port)
-            SportIdentProtocol.SI_CARD8_9_SIAC -> readSi8Or9OrSiacBlocksOnOpenPort(port)
+            SportIdentProtocol.SI_CARD6 -> readSi6BlocksOnOpenPort(commandReader)
+            SportIdentProtocol.SI_CARD8_9_SIAC -> readSi8Or9OrSiacBlocksOnOpenPort(commandReader)
             else -> error(
-                "Only SI5/SI6/SI8/SI9/SIAC download is supported by this diagnostic; " +
+                "Only SI5/SI6/SI8/SI9/SIAC card download is supported; " +
                     "got ${inserted.cardType.toHexString()}."
             )
         }
         val readout = when (inserted.cardType) {
-            SportIdentProtocol.SI_CARD5 -> readSi5ReadoutOnOpenPort(port)
+            SportIdentProtocol.SI_CARD5 -> readSi5ReadoutOnOpenPort(commandReader)
             SportIdentProtocol.SI_CARD6 -> SportIdentCardReadoutParser.parseSi6(combineSi6BlocksForAndroidParser(blocks))
             SportIdentProtocol.SI_CARD8_9_SIAC -> SportIdentCardReadoutParser.parseSi8Or9OrSiac(
                 combineBlocksForAndroidParser(blocks)
@@ -184,57 +204,30 @@ class DesktopSportIdentCardBlockReader(
         return DesktopSportIdentCardBlockDownload(inserted, blocks, readout)
     }
 
-    private fun readSi5ReadoutOnOpenPort(port: DesktopSerialPort): SportIdentCardReadout {
-        val request = SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.GET_SI_CARD5)
-        val written = port.write(request)
-        if (written != request.size) {
-            error("Failed to write SI5 card request.")
-        }
-
-        val deadline = System.currentTimeMillis() + readTimeoutMs
-        val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
-        var lastUnexpectedShape: String? = null
-        while (System.currentTimeMillis() < deadline) {
-            val frame = stream.nextFrame(deadline, requireValidCrc = false) ?: break
-            val event = SportIdentCardEventParser.fromFrame(frame)
-            if (event is SportIdentCardEvent.Removed) {
-                error(
-                    "SI card ${event.siNumber} was removed before it could be downloaded. " +
-                        "Keep the card seated until the download finishes."
-                )
-            }
-
-            if (frame.command != SportIdentProtocol.GET_SI_CARD5) {
-                continue
-            }
-
-            if (frame.crcValid == false) {
-                lastUnexpectedShape =
-                    "command=${frame.command.toHexString()} dataBytes=${frame.data.size} " +
-                        "crcValid=${frame.crcValid} raw=${frame.raw.toHexString()}"
-                continue
-            }
-            val readout = SportIdentCardReadoutParser.parseSi5(frame.data)
-            if (readout != null) {
-                onProgress("Downloaded SI5 card payload; keep the card seated.")
-                return readout
-            }
-        }
-
-        error(
-            lastUnexpectedShape?.let { "SI5 card response had unexpected shape: $it" }
-                ?: stream.lastRawRead?.let { "No valid SI5 card response received. Last raw read: ${it.toHexString()}" }
-                ?: "No valid SI5 card response received."
+    private fun readSi5ReadoutOnOpenPort(
+        commandReader: SportIdentCardCommandReader
+    ): SportIdentCardReadout {
+        val reply = readCardCommandReply(
+            commandReader = commandReader,
+            command = SportIdentProtocol.GET_SI_CARD5,
+            payload = null,
+            expectedReplyBytes = SI5_REPLY_BYTES,
+            description = "SI5 card payload"
         )
+        val frame = requireNotNull(SportIdentFrameParser.firstFrame(reply, requireValidCrc = true))
+        val readout = SportIdentCardReadoutParser.parseSi5(frame.data)
+            ?: error("Downloaded SI5 card payload could not be parsed.")
+        onProgress("Downloaded SI5 card payload; keep the card seated.")
+        return readout
     }
 
-    private fun readSi6BlocksOnOpenPort(port: DesktopSerialPort): List<SportIdentCardBlock> =
+    private fun readSi6BlocksOnOpenPort(
+        commandReader: SportIdentCardCommandReader
+    ): List<SportIdentCardBlock> =
         buildList {
-            val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
             for (blockNumber in SI6_BLOCK_READ_ORDER) {
                 val block = readCardBlockOnOpenPort(
-                    port = port,
-                    stream = stream,
+                    commandReader = commandReader,
                     blockNumber = blockNumber,
                     command = SportIdentProtocol.GET_SI_CARD6,
                     parser = SportIdentCardBlockParser::si6Block
@@ -246,11 +239,11 @@ class DesktopSportIdentCardBlockReader(
             }
         }
 
-    private fun readSi8Or9OrSiacBlocksOnOpenPort(port: DesktopSerialPort): List<SportIdentCardBlock> {
-        val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
+    private fun readSi8Or9OrSiacBlocksOnOpenPort(
+        commandReader: SportIdentCardCommandReader
+    ): List<SportIdentCardBlock> {
         val firstBlock = readCardBlockOnOpenPort(
-            port = port,
-            stream = stream,
+            commandReader = commandReader,
             blockNumber = 0,
             command = SportIdentProtocol.GET_SI_CARD8_9_SIAC,
             parser = SportIdentCardBlockParser::si8Or9OrSiacBlock
@@ -258,8 +251,7 @@ class DesktopSportIdentCardBlockReader(
         val nextBlocks = if (firstBlock.data.cardSeries() == SI_CARD10_11_SIAC_SERIES) {
             (4..7).map {
                 readCardBlockOnOpenPort(
-                    port = port,
-                    stream = stream,
+                    commandReader = commandReader,
                     blockNumber = it,
                     command = SportIdentProtocol.GET_SI_CARD8_9_SIAC,
                     parser = SportIdentCardBlockParser::si8Or9OrSiacBlock
@@ -268,8 +260,7 @@ class DesktopSportIdentCardBlockReader(
         } else {
             listOf(
                 readCardBlockOnOpenPort(
-                    port = port,
-                    stream = stream,
+                    commandReader = commandReader,
                     blockNumber = 1,
                     command = SportIdentProtocol.GET_SI_CARD8_9_SIAC,
                     parser = SportIdentCardBlockParser::si8Or9OrSiacBlock
@@ -280,68 +271,61 @@ class DesktopSportIdentCardBlockReader(
     }
 
     private fun readCardBlockOnOpenPort(
-        port: DesktopSerialPort,
-        blockNumber: Int,
-        command: Byte,
-        parser: (Int, org.openardf.radiooracle.shared.sportident.SportIdentFrame) -> SportIdentCardBlock?
-    ): SportIdentCardBlock =
-        readCardBlockOnOpenPort(
-            port = port,
-            stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES),
-            blockNumber = blockNumber,
-            command = command,
-            parser = parser
-        )
-
-    private fun readCardBlockOnOpenPort(
-        port: DesktopSerialPort,
-        stream: DesktopSportIdentFrameStream,
+        commandReader: SportIdentCardCommandReader,
         blockNumber: Int,
         command: Byte,
         parser: (Int, org.openardf.radiooracle.shared.sportident.SportIdentFrame) -> SportIdentCardBlock?
     ): SportIdentCardBlock {
-
-        val request = SportIdentProtocol.buildExtendedMessage(
-            command,
-            byteArrayOf(blockNumber.toByte())
+        val reply = readCardCommandReply(
+            commandReader = commandReader,
+            command = command,
+            payload = byteArrayOf(blockNumber.toByte()),
+            expectedReplyBytes = CARD_BLOCK_REPLY_BYTES,
+            description = "SI card block $blockNumber"
         )
-        val written = port.write(request)
-        if (written != request.size) {
-            error("Failed to write SI card block request.")
+        val frame = requireNotNull(SportIdentFrameParser.firstFrame(reply, requireValidCrc = true))
+        val block = parser(blockNumber, frame)
+            ?: error("Downloaded SI card block $blockNumber could not be parsed.")
+        onProgress("Downloaded block $blockNumber; keep the card seated.")
+        return block
+    }
+
+    private fun readCardCommandReply(
+        commandReader: SportIdentCardCommandReader,
+        command: Byte,
+        payload: ByteArray?,
+        expectedReplyBytes: Int,
+        description: String
+    ): ByteArray {
+        val result = commandReader.read(command, payload, expectedReplyBytes)
+        result.reply?.let { reply ->
+            if (result.attempts.size > 1) {
+                onProgress("Recovered $description on attempt ${result.attempts.size}.")
+            }
+            return reply
         }
 
-        val deadline = System.currentTimeMillis() + readTimeoutMs
-        var lastUnexpectedShape: String? = null
-        while (System.currentTimeMillis() < deadline) {
-            val frame = stream.nextFrame(deadline, requireValidCrc = false) ?: break
-            val event = SportIdentCardEventParser.fromFrame(frame)
-            if (event is SportIdentCardEvent.Removed) {
-                error(
-                    "SI card ${event.siNumber} was removed before block $blockNumber could be downloaded. " +
-                        "Keep the card seated until the download finishes."
-                )
-            }
-
-            if (frame.command != command) {
-                continue
-            }
-
-            if (frame.crcValid == true) {
-                val block = parser(blockNumber, frame)
-                if (block != null) {
-                    onProgress("Downloaded block $blockNumber; keep the card seated.")
-                    return block
-                }
-            }
-
-            lastUnexpectedShape =
-                "command=${frame.command.toHexString()} dataBytes=${frame.data.size} " +
-                    "crcValid=${frame.crcValid} raw=${frame.raw.toHexString()}"
+        val failure = result.attempts.lastOrNull()?.failure
+            ?: SportIdentCardReadFailure.NO_COMPLETE_REPLY
+        val attempts = result.attempts.size
+        val message = when (failure) {
+            SportIdentCardReadFailure.CARD_REMOVED ->
+                "SI card was removed before $description could be downloaded. " +
+                    "Keep the card seated until the download finishes."
+            SportIdentCardReadFailure.WRITE_FAILED ->
+                "Failed to write the $description request after $attempts attempts."
+            SportIdentCardReadFailure.NEGATIVE_ACKNOWLEDGEMENT ->
+                "SPORTident station rejected the $description request after $attempts attempts."
+            SportIdentCardReadFailure.NO_COMPLETE_REPLY ->
+                "No complete $description response was received after $attempts attempts."
+            SportIdentCardReadFailure.INVALID_FRAME ->
+                "$description response remained incomplete after $attempts attempts."
+            SportIdentCardReadFailure.INVALID_CRC ->
+                "$description response failed CRC validation after $attempts attempts."
+            SportIdentCardReadFailure.UNEXPECTED_REPLY_SIZE ->
+                "$description response had an unexpected size after $attempts attempts."
         }
-
-        error(lastUnexpectedShape?.let { "SI card block response had unexpected shape: $it" }
-            ?: stream.lastRawRead?.let { "No valid SI card block response received. Last raw read: ${it.toHexString()}" }
-            ?: "No valid SI card block response received.")
+        error(message)
     }
 
     private fun writeAck(port: DesktopSerialPort) {
@@ -356,6 +340,8 @@ class DesktopSportIdentCardBlockReader(
 
     private companion object {
         const val MAX_FRAME_BYTES = 512
+        const val SI5_REPLY_BYTES = 136
+        const val CARD_BLOCK_REPLY_BYTES = 137
         const val SI_CARD10_11_SIAC_SERIES = 15
         val SI6_BLOCK_READ_ORDER = listOf(0, 6, 7, 2, 3, 4, 5)
     }

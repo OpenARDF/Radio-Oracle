@@ -993,6 +993,133 @@ class DesktopSportIdentTimeSyncServiceTest {
     }
 
     @Test
+    fun writeTimeWithReadBackRetriesExplicitWriteNakInFreshVerifiedTransaction() {
+        val targetTime = LocalDateTime.parse("2026-06-27T03:10:18")
+        val port = FakePort(
+            readChunksByOpen = listOf(
+                listOf(remoteModeReply(), normalModeReply()),
+                listOf(
+                    remoteModeReply(),
+                    systemInfoReply(),
+                    stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
+                    byteArrayOf(SportIdentProtocol.NAK),
+                    normalModeReply()
+                ),
+                listOf(remoteModeReply(), normalModeReply()),
+                listOf(
+                    remoteModeReply(),
+                    systemInfoReply(),
+                    stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
+                    stationWriteReply(targetTime, tick = 0x05),
+                    applyReply(),
+                    stationTimeReply(targetTime, tick = 0x05),
+                    normalModeReply()
+                )
+            )
+        )
+        val service = DesktopSportIdentTimeSyncService(
+            portProvider = FakePortProvider(listOf(port)),
+            commandClient = fastCommandClient(),
+            sleepMillis = {}
+        )
+
+        val result = service.writeTimeWithReadBack(
+            sourceTime = targetTime,
+            writeEnabled = true,
+            toleranceSeconds = 0
+        )
+
+        assertEquals(2, result.attempts)
+        val writtenCommands = port.writeRequests.map {
+            SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command
+        }
+        assertEquals(2, writtenCommands.count { it == DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND })
+        assertEquals(1, writtenCommands.count { it == DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND })
+    }
+
+    @Test
+    fun writeTimeWithReadBackDoesNotRetryAmbiguousWriteNoReply() {
+        val targetTime = LocalDateTime.parse("2026-06-27T03:10:18")
+        val port = FakePort(
+            readChunksByOpen = listOf(
+                listOf(remoteModeReply(), normalModeReply()),
+                listOf(
+                    remoteModeReply(),
+                    systemInfoReply(),
+                    stationTimeReply(targetTime.minusMinutes(1), tick = 0x01)
+                )
+            )
+        )
+        val service = DesktopSportIdentTimeSyncService(
+            portProvider = FakePortProvider(listOf(port)),
+            commandClient = fastCommandClient(),
+            sleepMillis = {}
+        )
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            service.writeTimeWithReadBack(
+                sourceTime = targetTime,
+                writeEnabled = true,
+                toleranceSeconds = 0
+            )
+        }
+
+        assertEquals("SPORTident station did not reply to Write station time.", error.message)
+        val writtenCommands = port.writeRequests.map {
+            SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command
+        }
+        assertEquals(1, writtenCommands.count { it == DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND })
+        assertFalse(writtenCommands.contains(DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND))
+    }
+
+    @Test
+    fun writeTimeWithReadBackRefusesChangedStationOnExplicitNakRetry() {
+        val targetTime = LocalDateTime.parse("2026-06-27T03:10:18")
+        val port = FakePort(
+            readChunksByOpen = listOf(
+                listOf(remoteModeReply(), normalModeReply()),
+                listOf(
+                    remoteModeReply(),
+                    systemInfoReply(serialNumber = 554896),
+                    stationTimeReply(targetTime.minusMinutes(1), tick = 0x01),
+                    byteArrayOf(SportIdentProtocol.NAK),
+                    normalModeReply()
+                ),
+                listOf(remoteModeReply(), normalModeReply()),
+                listOf(
+                    remoteModeReply(),
+                    systemInfoReply(serialNumber = 575748),
+                    normalModeReply()
+                )
+            )
+        )
+        val service = DesktopSportIdentTimeSyncService(
+            portProvider = FakePortProvider(listOf(port)),
+            commandClient = fastCommandClient(),
+            sleepMillis = {}
+        )
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            service.writeTimeWithReadBack(
+                sourceTime = targetTime,
+                writeEnabled = true,
+                toleranceSeconds = 0
+            )
+        }
+
+        assertEquals(
+            "The connected target changed during time sync: expected station 554896 but found 575748. " +
+                "Inspect again before syncing.",
+            error.message
+        )
+        val writtenCommands = port.writeRequests.map {
+            SportIdentFrameParser.firstFrame(it, requireValidCrc = true)?.command
+        }
+        assertEquals(1, writtenCommands.count { it == DesktopSportIdentTimeSyncProtocol.SET_STATION_TIME_COMMAND })
+        assertFalse(writtenCommands.contains(DesktopSportIdentTimeSyncProtocol.APPLY_STATION_TIME_COMMAND))
+    }
+
+    @Test
     fun writeTimeWithReadBackFailsWhenReadBackIsOutsideTolerance() {
         val targetTime = LocalDateTime.parse("2026-06-27T03:10:18")
         val port = FakePort(
@@ -1084,13 +1211,13 @@ class DesktopSportIdentTimeSyncServiceTest {
                 data = byteArrayOf(0x00, marker, 0x4D)
             )
 
-        fun systemInfoReply(): ByteArray {
+        fun systemInfoReply(serialNumber: Int = 554896): ByteArray {
             val data = ByteArray(21)
             data[1] = 0x01
-            data[3] = 0x00
-            data[4] = 0x08
-            data[5] = 0x77
-            data[6] = 0x90.toByte()
+            data[3] = ((serialNumber ushr 24) and 0xff).toByte()
+            data[4] = ((serialNumber ushr 16) and 0xff).toByte()
+            data[5] = ((serialNumber ushr 8) and 0xff).toByte()
+            data[6] = (serialNumber and 0xff).toByte()
             data[20] = 0x08
             return SportIdentProtocol.buildExtendedMessage(
                 command = SportIdentProtocol.GET_SYSTEM_INFO,
