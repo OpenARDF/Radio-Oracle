@@ -59,6 +59,7 @@ import org.mockito.Mockito.`when`
 import java.time.LocalTime
 import java.time.Duration
 import java.time.LocalDateTime
+import java.util.UUID
 
 class ResultJsonTests {
     val dataProcessor = mock(DataProcessor::class.java)
@@ -192,5 +193,51 @@ class ResultJsonTests {
         val valid = stream.bufferedReader().use { it.readText() }.filterNot { it.isWhitespace() }
 
         assertEquals(valid, out)
+    }
+
+    @Test
+    fun finalResultsSortCategoriesWomenFirstAndOmitCategoriesWithoutResults() {
+        val race = Race()
+        val categories = listOf("M21", "W16", "W21").mapIndexed { index, name ->
+            Category(name).apply {
+                raceId = race.id
+                order = index
+            }
+        }
+        val competitorData = categories.mapIndexed { index, category ->
+            val competitor = Competitor().apply {
+                id = UUID.nameUUIDFromBytes("competitor-$index".toByteArray())
+                raceId = race.id
+                categoryId = category.id
+                firstName = category.name
+                lastName = "Runner"
+            }
+            CompetitorData(
+                competitorCategory = CompetitorCategory(competitor, category),
+                readoutData = if (category.name == "W16") {
+                    null
+                } else {
+                    ReadoutData(
+                        Result().apply {
+                            this.raceId = race.id
+                            competitorId = competitor.id
+                            place = 1
+                        },
+                        emptyList()
+                    )
+                }
+            )
+        }
+        val raceData = RaceData(
+            race = race,
+            categories = categories.map { category -> CategoryData(category, emptyList(), emptyList()) },
+            aliases = emptyList(),
+            competitorData = competitorData,
+            unmatchedReadoutData = emptyList()
+        )
+
+        val exported = FinalResultJsonAdapter(dataProcessor).toJson(raceData)
+
+        assertEquals(listOf("W21", "M21"), exported.categories.map { it.category_name })
     }
 }

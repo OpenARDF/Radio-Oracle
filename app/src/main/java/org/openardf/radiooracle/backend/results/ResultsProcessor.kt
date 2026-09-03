@@ -63,6 +63,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.openardf.radiooracle.shared.results.CourseEvaluator
 import org.openardf.radiooracle.shared.results.EventResultPlacement
+import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.sound.SoundType
 import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
@@ -798,7 +799,14 @@ object ResultsProcessor {
                 competitorData = result.value.toMutableList(),
                 finished = result.value.size
             )
-        }.sortedBy { it.category?.order }
+        }.sortedWith { left, right ->
+            when {
+                left.category == null && right.category == null -> 0
+                left.category == null -> 1
+                right.category == null -> -1
+                else -> EventCategorySort.compareNames(left.category.name, right.category.name)
+            }
+        }
     }
 
     fun List<CompetitorData>.toReadoutStatistics(): StatisticsWrapper {
@@ -832,9 +840,9 @@ object ResultsProcessor {
         raceId: UUID,
         dataProcessor: DataProcessor
     ): List<CompetitorData> {
-        val grouped = dataProcessor.getCompetitorDataFlowByRace(raceId).first()
-            .groupByCategoryAndSortByPlace()
-        return grouped.values.flatten().toList()
+        return dataProcessor.getCompetitorDataFlowByRace(raceId).first()
+            .toResultWrappers()
+            .flatMap { it.competitorData }
     }
 
     /**

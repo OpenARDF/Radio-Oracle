@@ -28,7 +28,9 @@ import com.squareup.moshi.ToJson;
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.json.temps.AliasJson
 import org.openardf.radiooracle.backend.files.json.temps.FinalResultsJson
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
+import org.openardf.radiooracle.shared.event.EventCategorySort
 
 /** Moshi adapter for exporting final results from a complete race aggregate. */
 class FinalResultJsonAdapter(val dataProcessor: DataProcessor) {
@@ -38,10 +40,37 @@ class FinalResultJsonAdapter(val dataProcessor: DataProcessor) {
         val categoryAdapter = CategoryJsonAdapter(raceData.race.id)
         val competitorAdapter = CompetitorJsonAdapter(raceData.race, dataProcessor)
 
+        val categoryIdsWithResults = raceData.competitorData.mapNotNull { competitorData ->
+            if (competitorData.readoutData == null) {
+                null
+            } else {
+                competitorData.competitorCategory.category?.id
+                    ?: competitorData.competitorCategory.competitor.categoryId
+            }
+        }.toSet()
+        val sortedCategories = raceData.categories
+            .filter { it.category.id in categoryIdsWithResults }
+            .sortedWith { left, right ->
+                EventCategorySort.compareNames(left.category.name, right.category.name)
+            }
+        val categoryNamesById = raceData.categories.associate { it.category.id to it.category.name }
+        val sortedCompetitors = raceData.competitorData.sortedWith(
+            EventCategorySort.byName { competitorData: CompetitorData ->
+                competitorData.competitorCategory.category?.name
+                    ?: categoryNamesById[competitorData.competitorCategory.competitor.categoryId].orEmpty()
+            }.thenBy {
+                it.readoutData?.result?.place?.takeIf { place -> place > 0 } ?: Int.MAX_VALUE
+            }.thenBy {
+                it.competitorCategory.competitor.lastName
+            }.thenBy {
+                it.competitorCategory.competitor.firstName
+            }
+        )
+
         return FinalResultsJson(
-            categories = raceData.categories.map { cat -> categoryAdapter.toJson(cat) },
+            categories = sortedCategories.map { cat -> categoryAdapter.toJson(cat) },
             aliases = raceData.aliases.map { al -> AliasJson(al.siCode, al.name) },
-            competitors = raceData.competitorData.map { cd -> competitorAdapter.toJson(cd) },
+            competitors = sortedCompetitors.map { cd -> competitorAdapter.toJson(cd) },
         )
     }
 }

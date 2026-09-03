@@ -191,28 +191,24 @@ object EventCsvExports {
             }
     }
 
-    fun ardfEventResults(raceData: EventRaceData): String =
-        "Kategorie;Pořadí;Jméno;Person ID;Čas;TX;Status;Kontroly\n" +
-            raceData.competitorData
-                .sortedWith(
-                    compareBy<EventCompetitorData>(
-                        { raceData.categoryNameFor(it.competitorCategory.competitor.categoryId) },
-                        { it.readoutData?.result?.place?.takeIf { place -> place > 0 } ?: Int.MAX_VALUE },
-                        { it.competitorCategory.competitor.fullName() }
-                    )
-                )
-                .mapNotNull { competitorData ->
-                    val readoutData = competitorData.readoutData ?: return@mapNotNull null
+    fun ardfEventResults(raceData: EventRaceData): String {
+        val competitorDataByResultId = raceData.competitorData.mapNotNull { competitorData ->
+            competitorData.readoutData?.result?.id?.let { resultId -> resultId to competitorData }
+        }.toMap()
+        return "Kategorie;Pořadí;Jméno;Person ID;Čas;TX;Status;Kontroly\n" +
+            EventResultDetails.from(raceData)
+                .mapNotNull { resultDetails ->
+                    val competitorData = competitorDataByResultId[resultDetails.id] ?: return@mapNotNull null
+                    val readoutData = requireNotNull(competitorData.readoutData)
                     val result = readoutData.result
                     val competitor = competitorData.competitorCategory.competitor
-                    val categoryName = raceData.categoryNameFor(competitor.categoryId)
                     val controlOrder = readoutData.punches
                         .map { it.punch }
                         .filter { it.punchType == SIRecordType.CONTROL }
                         .sortedBy { it.order }
                         .joinToString(" ") { it.siCode.toString() }
                     EventCsvRows.ardfEventResultRow(
-                        categoryName = categoryName,
+                        categoryName = resultDetails.categoryName,
                         placeText = if (result.place > 0) result.place.toString() else "",
                         competitorName = competitor.fullName(),
                         index = competitor.index,
@@ -223,6 +219,7 @@ object EventCsvExports {
                     )
                 }
                 .joinToString(separator = "\n", postfix = "\n")
+    }
 
     private fun <T> List<T>.joinRows(row: (T) -> String): String =
         joinToString(separator = "\n", postfix = if (isEmpty()) "" else "\n", transform = row)

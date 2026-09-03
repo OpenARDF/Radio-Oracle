@@ -36,6 +36,7 @@ import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
+import org.openardf.radiooracle.shared.event.resultCategories
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -57,8 +58,7 @@ object ResultReportExports {
             startDateTimeIso = raceData.race.startDateTimeIso,
             raceLevel = raceData.race.raceLevel.name,
             publicationNotice = awards.publicationNotice,
-            categories = raceData.categories
-                .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+            categories = raceData.resultCategories()
                 .mapNotNull { categoryData ->
                     categoryReport(
                         categoryData = categoryData,

@@ -27,6 +27,7 @@ package org.openardf.radiooracle.desktop
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.openardf.radiooracle.shared.event.EventInForestDetails
+import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.EventStartListDetails
@@ -161,7 +162,7 @@ class DesktopLocalResultServer(
             append(""","category_count":${categories.size}""")
             append(""","categories":[""")
             categories
-                .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+                .sortedWith(EventCategorySort.byDisplayName)
                 .forEachIndexed { index, categoryData ->
                     if (index > 0) append(',')
                     val categoryId = categoryData.category.id
@@ -308,7 +309,7 @@ class DesktopLocalResultServer(
             appendLocalNavigation()
             append("<table><thead><tr><th>Category</th><th>Competitors</th><th>Results</th></tr></thead><tbody>")
             raceData?.competitionCategories(includeResultCategoryIds = false)
-                ?.sortedWith(compareBy({ it.category.order }, { it.category.name }))
+                ?.sortedWith(EventCategorySort.byDisplayName)
                 ?.forEach { categoryData ->
                     val categoryId = categoryData.category.id
                     val competitors = raceData.competitorData.filter { data ->

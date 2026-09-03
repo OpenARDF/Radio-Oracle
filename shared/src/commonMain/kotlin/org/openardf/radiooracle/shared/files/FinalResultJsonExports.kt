@@ -42,6 +42,7 @@ import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
@@ -51,6 +52,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
+import org.openardf.radiooracle.shared.event.resultCategories
 import org.openardf.radiooracle.shared.event.resultPublicationNotice
 import org.openardf.radiooracle.shared.publicresults.PublicResultsPublicationRules
 import org.openardf.radiooracle.shared.time.DurationFormatter
@@ -78,7 +80,8 @@ object FinalResultJsonExports {
         raceData: EventRaceData,
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
-        publicationStatus: PublicResultsPublicationStatus? = null
+        publicationStatus: PublicResultsPublicationStatus? = null,
+        includeCategoriesWithoutResults: Boolean = false
     ): FinalResultsJson {
         publicationStatus?.let { PublicResultsPublicationRules.requireReady(raceData, it) }
         val controlsById = raceData.controls.associateBy { it.id }
@@ -89,11 +92,21 @@ object FinalResultJsonExports {
             } else {
                 PublicResultsPublicationRules.publicationNotice(publicationStatus)
             },
-            categories = raceData.competitionCategories()
+            categories = if (includeCategoriesWithoutResults) {
+                raceData.competitionCategories()
+            } else {
+                raceData.resultCategories()
+            }
                 .map { it.toFinalCategory(controlsById, protectedCourseInfoByCategoryId) },
             aliases = androidAliases(raceData),
             competitors = raceData.competitorData
-                .map { it.toFinalCompetitor(raceData) },
+                .map { it.toFinalCompetitor(raceData) }
+                .sortedWith(
+                    EventCategorySort.byName<FinalCompetitorJson> { it.competitorCategory }
+                        .thenBy { it.result?.place?.takeIf { place -> place > 0 } ?: Int.MAX_VALUE }
+                        .thenBy { it.lastName }
+                        .thenBy { it.firstName }
+                ),
             awards = awards.takeIf { it.hasAwards }?.toFinalAwards()
         )
     }

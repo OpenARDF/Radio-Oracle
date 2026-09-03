@@ -45,8 +45,7 @@ data class EventResultDetails(
     val pointsText: String,
     val runTimeText: String,
     val punchCodesText: String,
-    val hasWarning: Boolean,
-    private val categorySortOrder: Int = Int.MAX_VALUE
+    val hasWarning: Boolean
 ) {
     companion object {
         /** Builds display rows for competitors that currently have readout/result data. */
@@ -66,15 +65,13 @@ data class EventResultDetails(
                     readoutData = readoutData,
                     categoryId = category?.id ?: resultCategoryId,
                     categoryName = category?.name ?: resultCategoryId?.let { "Unknown category" } ?: "Uncategorized",
-                    categoryOrder = category?.order ?: Int.MAX_VALUE,
                     competitorName = competitor.fullName(),
                     raceType = raceData.race.raceType,
                     useAliases = useAliases,
                     controlLabelsByCode = controlLabelsByCode
                 )
             }.sortedWith(
-                compareBy<EventResultDetails> { it.categorySortOrder }
-                    .thenBy { it.categoryName }
+                EventCategorySort.byName<EventResultDetails> { it.categoryName }
                     .thenBy { if (it.place > 0) it.place else Int.MAX_VALUE }
                     .thenBy { it.competitorName }
             )
@@ -84,7 +81,6 @@ data class EventResultDetails(
             readoutData: EventReadoutData,
             categoryId: String?,
             categoryName: String,
-            categoryOrder: Int,
             competitorName: String,
             raceType: RaceType,
             useAliases: Boolean,
@@ -96,7 +92,6 @@ data class EventResultDetails(
                 id = result.id,
                 categoryId = categoryId,
                 categoryName = categoryName,
-                categorySortOrder = categoryOrder,
                 place = result.place,
                 placeText = if (result.place > 0) result.place.toString() else "",
                 competitorName = competitorName,

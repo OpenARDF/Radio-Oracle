@@ -81,6 +81,28 @@ class ResultComparatorUnitTests {
     }
 
     @Test
+    fun resultWrappersSortWomenThenMenFromYoungestToOldest() {
+        val categories = listOf("M80", "W35", "M16", "W16", "M21", "W21").mapIndexed { index, name ->
+            Category(name).apply { order = index }
+        }
+
+        val wrappers = ResultsProcessor.run {
+            categories.map { category ->
+                competitorData(
+                    category.name,
+                    result = result(category.name, points = 1, runTime = Duration.ofMinutes(10)),
+                    category = category
+                )
+            }.toResultWrappers()
+        }
+
+        assertEquals(
+            listOf("W16", "W21", "W35", "M16", "M21", "M80"),
+            wrappers.map { it.category?.name }
+        )
+    }
+
+    @Test
     fun readoutStatisticsSkipCompetitorsWithoutReadouts() {
         val missing = competitorData("missing", result = null)
         val finished = competitorData(

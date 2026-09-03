@@ -225,7 +225,7 @@ class IofXmlExportsTest {
     }
 
     @Test
-    fun omitsCategoriesWithoutCompetitorsFromIofStartAndResultLists() {
+    fun omitsCategoriesWithoutCompetitorsFromStartListsAndWithoutResultsFromResultLists() {
         val startXml = IofXmlExports.startList(raceData())
         val resultXml = IofXmlExports.resultList(raceData(includeReadout = true))
 
@@ -267,8 +267,30 @@ class IofXmlExportsTest {
         assertTrue(xml.contains("<Time>600</Time>"))
         assertTrue(xml.contains("<ControlCode>32</ControlCode>"))
         assertTrue(xml.contains("<Time>1500</Time>"))
-        assertTrue(xml.contains("<Family>NoTime</Family>"))
-        assertTrue(xml.contains("<Status>Active</Status>"))
+        assertFalse(xml.contains("<Family>NoTime</Family>"))
+        assertFalse(xml.contains("<Status>Active</Status>"))
+    }
+
+    @Test
+    fun resultListSortsWomenBeforeMenRegardlessOfStoredOrder() {
+        val base = raceData(includeSecondCategory = true, includeReadout = true)
+        val withBothResults = base.copy(
+            competitorData = base.competitorData.map { competitorData ->
+                if (competitorData.readoutData == null) {
+                    competitorData.copy(
+                        readoutData = readout(ResultStatus.OK).let { readout ->
+                            readout.copy(result = readout.result.copy(id = "result-w21"))
+                        }
+                    )
+                } else {
+                    competitorData
+                }
+            }
+        )
+
+        val xml = IofXmlExports.resultList(withBothResults)
+
+        assertTrue(xml.indexOf("<Name>W21</Name>") < xml.indexOf("<Name>M21</Name>"))
     }
 
     @Test
@@ -315,7 +337,6 @@ class IofXmlExportsTest {
 
         val imported = IofXmlImports.resultList(xml)
         val finished = imported.parsedData.entries.first { it.person.familyName == "Runner" }
-        val active = imported.parsedData.entries.first { it.person.familyName == "NoTime" }
 
         assertEquals(emptyList(), imported.unsupportedItems)
         assertEquals("IOF & Start Race", imported.parsedData.eventName)
@@ -331,9 +352,7 @@ class IofXmlExportsTest {
         assertEquals("OK", finished.status)
         assertEquals(listOf(31, 32), finished.splitControls)
         assertEquals(listOf(600L, 1500L), finished.splitTimes.map { it.timeSeconds })
-        assertEquals("W21", active.className)
-        assertEquals("Active", active.status)
-        assertEquals(null, active.controlCard)
+        assertEquals(1, imported.parsedData.entries.size)
     }
 
     private fun raceData(

@@ -36,6 +36,7 @@ import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
+import org.openardf.radiooracle.shared.event.resultCategories
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -82,8 +83,7 @@ object TextResultExports {
         includeSplits: Boolean,
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
     ) {
-        raceData.categories
-            .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+        raceData.resultCategories()
             .forEach { categoryData ->
                 appendCategoryRows(
                     categoryData,

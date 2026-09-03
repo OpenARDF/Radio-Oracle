@@ -34,6 +34,10 @@ object EventCategorySort {
     fun compareNames(left: String, right: String): Int =
         categoryNameKey(left).compareTo(categoryNameKey(right))
 
+    /** Builds a comparator for any category-bearing result or export model. */
+    fun <T> byName(name: (T) -> String): Comparator<T> =
+        Comparator { left, right -> compareNames(name(left), name(right)) }
+
     private fun categoryNameKey(name: String): CategoryNameKey {
         val trimmed = name.trim()
         val prefix = trimmed.takeWhile { it.isLetter() }.uppercase()

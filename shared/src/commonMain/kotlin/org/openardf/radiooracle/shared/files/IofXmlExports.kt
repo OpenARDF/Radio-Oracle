@@ -43,6 +43,7 @@ import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
 import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
+import org.openardf.radiooracle.shared.event.resultCategories
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.results.IofResultStatus
 import org.openardf.radiooracle.shared.publicresults.PublicResultsPublicationRules
@@ -154,8 +155,7 @@ object IofXmlExports {
             append("""<ResultList xmlns="$IOF_NAMESPACE" iofVersion="3.0" creator="${creator.xmlEscaped()}" status="$resultListStatus">""")
             append('\n')
             appendEvent(raceData, raceStart)
-            raceData.competitionCategories()
-                .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+            raceData.resultCategories()
                 .forEach { categoryData ->
                     appendClassResult(
                         categoryData = categoryData,

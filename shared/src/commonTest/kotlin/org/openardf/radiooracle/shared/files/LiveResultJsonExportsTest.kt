@@ -179,6 +179,27 @@ class LiveResultJsonExportsTest {
         assertEquals("W21", rows.single().competitorCategory)
     }
 
+    @Test
+    fun sortsRowsWomenFirstAndByAscendingAge() {
+        val names = listOf("M80", "W35", "M16", "W16", "M21", "W21")
+        val rows = LiveResultJsonExports.resultRows(
+            raceData(
+                competitors = names.mapIndexed { index, name ->
+                    competitorData(
+                        id = "competitor-$index",
+                        category = category().copy(id = "category-$index", name = name, order = index),
+                        readout = readout("result-$index")
+                    )
+                }
+            )
+        )
+
+        assertEquals(
+            listOf("W16", "W21", "W35", "M16", "M21", "M80"),
+            rows.map { it.competitorCategory }
+        )
+    }
+
     private fun raceData(
         competitors: List<EventCompetitorData>? = null,
         resultStatus: ResultStatus = ResultStatus.OK,

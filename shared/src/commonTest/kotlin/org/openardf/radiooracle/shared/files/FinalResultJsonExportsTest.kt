@@ -148,20 +148,24 @@ class FinalResultJsonExportsTest {
     }
 
     @Test
-    fun omitsCategoriesWithoutCompetitorsFromFinalResultCategoryDefinitions() {
+    fun sortsResultCategoriesAndOmitsCategoriesWithoutResults() {
         val base = raceData()
-        val emptyCategory = category().copy(id = "empty", name = "W21", isMan = false, order = 2)
+        val emptyCategory = category().copy(id = "empty", name = "W16", isMan = false, order = 2)
+        val resultCategory = category().copy(id = "result", name = "W21", isMan = false, order = 3)
         val document = FinalResultJsonExports.resultDocument(
             base.copy(
-                categories = base.categories + EventCategoryData(
-                    category = emptyCategory,
-                    controlPoints = emptyList(),
-                    competitors = emptyList()
+                categories = base.categories + listOf(
+                    EventCategoryData(emptyCategory, controlPoints = emptyList(), competitors = emptyList()),
+                    EventCategoryData(resultCategory, controlPoints = emptyList(), competitors = emptyList())
+                ),
+                competitorData = base.competitorData + listOf(
+                    competitorData("empty", emptyCategory, readout = null),
+                    competitorData("result", resultCategory, readout("result-w21"))
                 )
             )
         )
 
-        assertEquals(listOf("M21"), document.categories.map { it.categoryName })
+        assertEquals(listOf("W21", "M21"), document.categories.map { it.categoryName })
     }
 
     @Test

@@ -89,7 +89,6 @@ data class EventAwardDetails(
                     ?: competitors.firstNotNullOfOrNull { it.competitorCategory.category?.name }
                     ?: categoryId?.let { "Unknown category" }
                     ?: "Uncategorized"
-                val categoryOrder = categoryData?.category?.order ?: Int.MAX_VALUE
                 val overallPlaced = EventResultPlacement.sortByPlace(competitors)
                 val overallPlaceByResultId = overallPlaced.mapNotNull { competitorData ->
                     val result = competitorData.readoutData?.result ?: return@mapNotNull null
@@ -124,12 +123,11 @@ data class EventAwardDetails(
                     EventAwardCategoryDetails(
                         categoryId = categoryId,
                         categoryName = categoryName,
-                        categorySortOrder = categoryOrder,
                         usaAwards = usaAwards,
                         region2Awards = region2Awards
                     )
                 }
-            }.sortedWith(compareBy<EventAwardCategoryDetails> { it.categorySortOrder }.thenBy { it.categoryName })
+            }.sortedWith(EventCategorySort.byName { it.categoryName })
 
             return EventAwardDetails(publicationNotice, awardScopes, categories)
         }
@@ -204,7 +202,6 @@ data class EventAwardDetails(
 data class EventAwardCategoryDetails(
     val categoryId: String?,
     val categoryName: String,
-    val categorySortOrder: Int,
     val usaAwards: List<EventAwardWinnerDetails>,
     val region2Awards: List<EventAwardWinnerDetails>
 )

@@ -51,7 +51,10 @@ object RaceBackupJsonExports {
         json.encodeToString(raceDocument(raceData))
 
     fun raceDocument(raceData: EventRaceData): RaceBackupJson {
-        val finalResults = FinalResultJsonExports.resultDocument(raceData)
+        val finalResults = FinalResultJsonExports.resultDocument(
+            raceData,
+            includeCategoriesWithoutResults = true
+        )
         return RaceBackupJson(
             raceName = raceData.race.name,
             raceStart = raceData.race.startDateTimeIso,

@@ -37,6 +37,7 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
@@ -44,8 +45,8 @@ import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
-import org.openardf.radiooracle.shared.event.competitionCategories
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
+import org.openardf.radiooracle.shared.event.resultCategories
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
 /** Standards-facing ARDF JSON export helpers. */
@@ -91,14 +92,18 @@ object ArdfJsonExports {
             raceLevel = race.raceLevel.name,
             raceTimeLimit = race.timeLimitSeconds.toMinutes(),
             raceApiKey = race.apiKey.takeIf { it.isNotBlank() },
-            categories = competitionCategories()
-                .sortedWith(compareBy({ it.category.order }, { it.category.name }))
+            categories = resultCategories()
                 .map { it.toArdfCategory(race, controlsById, protectedCourseInfoByCategoryId) },
             aliases = FinalResultJsonExports.androidAliases(this)
                 .map { it.toArdfAlias() },
             competitors = competitorData
-                .sortedWith(compareBy({ it.competitorCategory.competitor.startNumber }, { it.competitorCategory.competitor.fullName() }))
-                .map { it.toArdfCompetitor(this) },
+                .map { it.toArdfCompetitor(this) }
+                .sortedWith(
+                    EventCategorySort.byName<ArdfCompetitor> { it.competitorCategory }
+                        .thenBy { it.result?.place?.takeIf { place -> place > 0 } ?: Int.MAX_VALUE }
+                        .thenBy { it.lastName }
+                        .thenBy { it.firstName }
+                ),
             unmatchedResults = unmatchedReadoutData
                 .map { it.toArdfUnmatchedResult(this) }
         )

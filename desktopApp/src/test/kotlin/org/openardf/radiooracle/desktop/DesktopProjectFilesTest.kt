@@ -816,8 +816,8 @@ class DesktopProjectFilesTest {
             )
         )
 
-        assertEquals(listOf("M21", "W21"), courses.map { it.categoryName })
-        assertEquals(listOf("course-one.kml", "course-two.kml"), courses.map { it.courseInfo.sourceName })
+        assertEquals(listOf("W21", "M21"), courses.map { it.categoryName })
+        assertEquals(listOf("course-two.kml", "course-one.kml"), courses.map { it.courseInfo.sourceName })
     }
 
     @Test

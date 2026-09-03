@@ -33,6 +33,7 @@ import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
+import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
@@ -73,7 +74,12 @@ object LiveResultJsonExports {
                 competitorCategory = categoryName,
                 result = readoutData.toLiveResultJson(raceData)
             )
-        }
+        }.sortedWith(
+            EventCategorySort.byName<LiveResultCompetitorJson> { it.competitorCategory }
+                .thenBy { it.result.place.takeIf { place -> place > 0 } ?: Int.MAX_VALUE }
+                .thenBy { it.lastName }
+                .thenBy { it.firstName }
+        )
 
     private fun EventRaceData.categoryNameFor(categoryId: String?): String =
         categoryId?.let { id -> categories.firstOrNull { it.category.id == id }?.category?.name } ?: ""

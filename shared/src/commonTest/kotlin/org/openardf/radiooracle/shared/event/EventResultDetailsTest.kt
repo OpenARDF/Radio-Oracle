@@ -119,6 +119,27 @@ class EventResultDetailsTest {
         assertEquals(listOf("FIRST Alice", "THIRD Cara", "SECOND Bob"), rows.map { it.competitorName })
     }
 
+    @Test
+    fun ignoresStoredOrderAndSortsResultCategoriesWomenFirstByAge() {
+        val m21 = category("m21", "M21", 0)
+        val w35 = category("w35", "W35", 1)
+        val m16 = category("m16", "M16", 2)
+        val w16 = category("w16", "W16", 3)
+        val rows = EventResultDetails.from(
+            raceData(
+                categories = listOf(m21, w35, m16, w16),
+                competitorData = listOf(
+                    competitorData("m21", "m21", m21.category, "A", "M21", points = 1, place = 0),
+                    competitorData("w35", "w35", w35.category, "B", "W35", points = 1, place = 0),
+                    competitorData("m16", "m16", m16.category, "C", "M16", points = 1, place = 0),
+                    competitorData("w16", "w16", w16.category, "D", "W16", points = 1, place = 0)
+                )
+            )
+        )
+
+        assertEquals(listOf("W16", "W35", "M16", "M21"), rows.map { it.categoryName })
+    }
+
     private fun raceData(
         categories: List<EventCategoryData>,
         competitorData: List<EventCompetitorData>

@@ -36,4 +36,22 @@ class EventCategorySortTest {
 
         assertEquals(listOf("W55", "W65", "M19", "M21", "M50", "M60"), sorted)
     }
+
+    @Test
+    fun sortsWomenThenMenFromYoungestToOldest() {
+        val names = listOf(
+            "M80", "W75", "M21", "W21", "M50", "W16", "M19", "W45",
+            "M70", "W35", "M16", "W65", "M60", "W19", "M40", "W55"
+        )
+
+        val sorted = names.sortedWith(EventCategorySort::compareNames)
+
+        assertEquals(
+            listOf(
+                "W16", "W19", "W21", "W35", "W45", "W55", "W65", "W75",
+                "M16", "M19", "M21", "M40", "M50", "M60", "M70", "M80"
+            ),
+            sorted
+        )
+    }
 }

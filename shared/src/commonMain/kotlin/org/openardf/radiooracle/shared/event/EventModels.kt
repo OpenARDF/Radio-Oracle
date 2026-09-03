@@ -369,3 +369,16 @@ fun EventRaceData.competitionCategories(includeResultCategoryIds: Boolean = true
     val categoryIds = associatedCategoryIds(includeResultCategoryIds)
     return categories.filter { it.category.id in categoryIds }
 }
+
+/** Returns only categories with a current readout/result, in canonical results display order. */
+fun EventRaceData.resultCategories(): List<EventCategoryData> {
+    val categoryIds = competitorData.mapNotNull { data ->
+        val result = data.readoutData?.result ?: return@mapNotNull null
+        result.categoryId
+            ?: data.competitorCategory.category?.id
+            ?: data.competitorCategory.competitor.categoryId
+    }.toSet()
+    return categories
+        .filter { it.category.id in categoryIds }
+        .sortedWith(EventCategorySort.byDisplayName)
+}
