@@ -2087,6 +2087,7 @@ class DesktopCourseAnalyzerTest {
     @Test
     fun foxoringRouteMapKeepsCatalogFastLabelsWhenSavedAnalyzerLabelsLostTheF() {
         val baseProject = sprintProjectFile(includeSpectator = false)
+        val assignedControlIds = setOf("control-fast-1", "control-fast-2", "control-beacon")
         val projectFile = baseProject.copy(
             raceData = baseProject.raceData.copy(
                 race = baseProject.raceData.race.copy(raceType = RaceType.FOXORING),
@@ -2096,27 +2097,33 @@ class DesktopCourseAnalyzerTest {
                         "control-fast-2" -> control.copy(label = "2F", publicLabel = "2F")
                         else -> control
                     }
+                },
+                categories = baseProject.raceData.categories.map { categoryData ->
+                    categoryData.copy(
+                        controlPoints = categoryData.controlPoints.filter { controlPoint ->
+                            controlPoint.controlId in assignedControlIds
+                        }
+                    )
                 }
             )
         )
         val baseInfo = sprintProtectedInfo(includeSpectator = false)
-        val includedIds = setOf("control-fast-1", "control-fast-2", "control-beacon")
         val protectedInfo = baseInfo.copy(
             idealOrder = "1 2 Beacon",
             sourceName = "Course Analyzer calculated route",
             controlPoints = baseInfo.controlPoints
-                .filter { it.controlId in includedIds }
+                .filter { it.controlId in assignedControlIds }
                 .map { control ->
                     when (control.controlId) {
-                        "control-fast-1" -> control.copy(label = "1")
-                        "control-fast-2" -> control.copy(label = "2")
+                        "control-fast-1" -> control.copy(controlId = "control-slow-1", label = "1")
+                        "control-fast-2" -> control.copy(controlId = "control-slow-2", label = "2")
                         else -> control
                     }
                 },
             courseObjects = baseInfo.courseObjects.mapNotNull { courseObject ->
                 when (courseObject.id) {
-                    "control-fast-1" -> courseObject.copy(label = "1")
-                    "control-fast-2" -> courseObject.copy(label = "2")
+                    "control-fast-1" -> courseObject.copy(id = "control-slow-1", label = "1")
+                    "control-fast-2" -> courseObject.copy(id = "control-slow-2", label = "2")
                     "control-slow-1", "control-slow-2" -> null
                     else -> courseObject
                 }
@@ -2135,6 +2142,11 @@ class DesktopCourseAnalyzerTest {
             .map { it.label }
         assertEquals(setOf("1F", "2F"), routeMapLabels.toSet())
         assertEquals(2, routeMapLabels.size)
+        val routeMap = requireNotNull(summary.providedRouteSection?.routeMap)
+        assertEquals(
+            listOf("S", "1F", "2F", "B", "F"),
+            routeMap.routePointIndexes.map { routeMap.points[it].label }
+        )
     }
 
     @Test

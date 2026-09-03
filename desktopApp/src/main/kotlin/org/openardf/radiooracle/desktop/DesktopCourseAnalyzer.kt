@@ -419,16 +419,28 @@ object DesktopCourseAnalyzer {
             ?: courseInfo.idealOrder.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
         val raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)
-        val allProtectedControls = protectedAssignedControls(projectFile, courseInfo, null, raceType)
+        val allProtectedControls = protectedAssignedControls(
+            projectFile,
+            courseInfo,
+            null,
+            raceType,
+            categoryAssignedControls
+        )
         val terminalBeaconControl = allProtectedControls.firstOrNull { it.type == ControlPointType.BEACON }
             ?: categoryAssignedControls.firstOrNull { it.type == ControlPointType.BEACON }
-        val protectedRouteControls = protectedAssignedControls(projectFile, courseInfo, idealOrderText, raceType)
+        val protectedRouteControls = protectedAssignedControls(
+            projectFile,
+            courseInfo,
+            idealOrderText,
+            raceType,
+            categoryAssignedControls
+        )
             .withTerminalBeacon(terminalBeaconControl)
         val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls.withTerminalBeacon(terminalBeaconControl) }
         val providedControls = idealOrderText
             ?.let { idealOrder ->
                 runCatching {
-                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, courseInfo)
+                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, courseInfo, raceType)
                     ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
                 }.getOrNull()
             }
@@ -500,12 +512,16 @@ object DesktopCourseAnalyzer {
             ?: courseInfo?.idealOrder?.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
         val allProtectedControls = courseInfo
-            ?.let { protectedAssignedControls(projectFile, it, null, raceType) }
+            ?.let {
+                protectedAssignedControls(projectFile, it, null, raceType, categoryAssignedControls)
+            }
             .orEmpty()
         val terminalBeaconControl = allProtectedControls.firstOrNull { it.type == ControlPointType.BEACON }
             ?: categoryAssignedControls.firstOrNull { it.type == ControlPointType.BEACON }
         val protectedRouteControls = courseInfo
-            ?.let { protectedAssignedControls(projectFile, it, idealOrderText, raceType) }
+            ?.let {
+                protectedAssignedControls(projectFile, it, idealOrderText, raceType, categoryAssignedControls)
+            }
             .orEmpty()
             .withTerminalBeacon(terminalBeaconControl)
         val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls.withTerminalBeacon(terminalBeaconControl) }
@@ -631,7 +647,7 @@ object DesktopCourseAnalyzer {
         val providedControlsFromOrder = idealOrderText
             ?.let { idealOrder ->
                 runCatching {
-                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, courseInfo)
+                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, courseInfo, raceType)
                     ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
                 }.getOrElse { error ->
                     missing += "Saved route order could not be resolved: ${error.message ?: error::class.simpleName}."
@@ -1220,9 +1236,11 @@ object DesktopCourseAnalyzer {
         projectFile: EventProjectFile,
         courseInfo: ProtectedCourseInfo,
         idealOrderText: String?,
-        raceType: RaceType
+        raceType: RaceType,
+        categoryAssignedControls: List<EventControl>
     ): List<EventControl> {
         val controlsById = projectFile.raceData.controls.associateBy { it.id }
+        val assignedControlsById = categoryAssignedControls.associateBy { it.id }
         val projectControls = projectFile.raceData.controls
             .filter {
                 it.type == ControlPointType.CONTROL ||
@@ -1231,7 +1249,9 @@ object DesktopCourseAnalyzer {
             }
         val protectedControls = courseInfo.controlPoints
             .map { protectedControl ->
-                controlsById[protectedControl.controlId]
+                assignedControlsById[protectedControl.controlId]
+                    ?: categoryAssignedControls.foxoringControlFor(protectedControl, raceType)
+                    ?: controlsById[protectedControl.controlId]
                     ?: projectControls.firstOrNull { it.matchesProtectedControl(protectedControl) }
                     ?: protectedControl.toEventControl(projectFile.raceData.race.id)
             }
@@ -1262,7 +1282,7 @@ object DesktopCourseAnalyzer {
             ?.let { idealOrder ->
                 runCatching {
                     val controlsByProtectedOrder = protectedControls.associateBy { it.id }
-                    resolveProtectedIdealOrderControlIds(idealOrder, protectedControls, courseInfo)
+                    resolveProtectedIdealOrderControlIds(idealOrder, protectedControls, courseInfo, raceType)
                         .mapNotNull { controlsByProtectedOrder[it] }
                         .distinctBy { it.id }
                 }.getOrNull()
@@ -1274,10 +1294,11 @@ object DesktopCourseAnalyzer {
     private fun resolveProtectedIdealOrderControlIds(
         idealOrderText: String,
         controls: List<EventControl>,
-        courseInfo: ProtectedCourseInfo?
+        courseInfo: ProtectedCourseInfo?,
+        raceType: RaceType
     ): List<String> {
         if (courseInfo.usesAnalyzerSavedNumbering()) {
-            val analyzerLabelControls = protectedCourseInfoAliasControls(controls, courseInfo)
+            val analyzerLabelControls = protectedCourseInfoAliasControls(controls, courseInfo, raceType)
             if (analyzerLabelControls.isNotEmpty()) {
                 runCatching {
                     return ProtectedIdealOrderRules.resolveControlIds(idealOrderText, analyzerLabelControls)
@@ -1287,7 +1308,8 @@ object DesktopCourseAnalyzer {
         return runCatching {
             ProtectedIdealOrderRules.resolveControlIds(idealOrderText, controls)
         }.getOrElse { originalError ->
-            val controlsWithStoredImportLabels = controls + protectedCourseInfoAliasControls(controls, courseInfo)
+            val controlsWithStoredImportLabels =
+                controls + protectedCourseInfoAliasControls(controls, courseInfo, raceType)
             if (controlsWithStoredImportLabels.size == controls.size) {
                 throw originalError
             }
@@ -1301,7 +1323,8 @@ object DesktopCourseAnalyzer {
 
     private fun protectedCourseInfoAliasControls(
         controls: List<EventControl>,
-        courseInfo: ProtectedCourseInfo?
+        courseInfo: ProtectedCourseInfo?,
+        raceType: RaceType
     ): List<EventControl> {
         if (courseInfo == null) {
             return emptyList()
@@ -1312,6 +1335,7 @@ object DesktopCourseAnalyzer {
         // current public label.
         return courseInfo.controlPoints.map { protectedControl ->
             val currentControl = controlsById[protectedControl.controlId]
+                ?: controls.foxoringControlFor(protectedControl, raceType)
             if (currentControl != null) {
                 currentControl.copy(
                     label = protectedControl.label,
@@ -1321,6 +1345,17 @@ object DesktopCourseAnalyzer {
                 protectedControl.toEventControl("")
             }
         }
+    }
+
+    private fun List<EventControl>.foxoringControlFor(
+        protectedControl: ProtectedCourseControlPoint,
+        raceType: RaceType
+    ): EventControl? {
+        if (raceType != RaceType.FOXORING) {
+            return null
+        }
+        return filter { control -> control.matchesProtectedControl(protectedControl) }
+            .singleOrNull()
     }
 
     private fun EventControl.matchesProtectedControl(protectedControl: ProtectedCourseControlPoint): Boolean {
