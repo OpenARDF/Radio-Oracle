@@ -340,7 +340,7 @@ object DesktopCourseGraphic {
                 line.dashPattern(),
                 0f
             )
-            graphics.draw(line.imageSmoothPath())
+            graphics.draw(line.imagePath())
         }
     }
 
@@ -555,7 +555,7 @@ object DesktopCourseGraphic {
                 ?: DesktopCourseRouteMapStyle.linePdfRgb()
             appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} RG")
             appendLine("${pdfNumber((line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels).toDouble())} w")
-            appendPdfSmoothLine(line)
+            appendPdfLine(line)
         }
         appendLine("[] 0 d")
     }
@@ -877,8 +877,34 @@ object DesktopCourseGraphic {
     }
 
     private fun DesktopCourseRouteMap.withRouteLineThroughStops(): DesktopCourseRouteMap {
-        val stopPoints = routePointIndexes
-            .mapNotNull(points::getOrNull)
+        val rawRoutePoints = lineStrings
+            .firstOrNull { line -> line.points.size >= 2 }
+            ?.points
+            .orEmpty()
+        val intermediatePoints = points
+            .filterNot { point ->
+                point.type == DesktopCourseRouteMapPointType.Start ||
+                    point.type == DesktopCourseRouteMapPointType.Finish
+            }
+            .let { candidates ->
+                if (rawRoutePoints.isEmpty()) {
+                    candidates
+                } else {
+                    candidates.sortedBy { candidate ->
+                        rawRoutePoints.indices.minByOrNull { index ->
+                            val routePoint = rawRoutePoints[index]
+                            val dx = routePoint.xFraction - candidate.xFraction
+                            val dy = routePoint.yFraction - candidate.yFraction
+                            dx * dx + dy * dy
+                        } ?: Int.MAX_VALUE
+                    }
+                }
+            }
+        val orderedStops =
+            points.filter { it.type == DesktopCourseRouteMapPointType.Start } +
+                intermediatePoints +
+                points.filter { it.type == DesktopCourseRouteMapPointType.Finish }
+        val stopPoints = orderedStops
             .map { point ->
                 DesktopCourseRouteMapLinePoint(
                     xFraction = point.xFraction,
@@ -893,7 +919,8 @@ object DesktopCourseGraphic {
                 DesktopCourseRouteMapLine(
                     label = "",
                     points = stopPoints,
-                    dashed = false
+                    dashed = false,
+                    smooth = false
                 )
             )
         )
@@ -961,11 +988,29 @@ object DesktopCourseGraphic {
         return null
     }
 
-    private fun DesktopCourseRouteMapLine.imageSmoothPath(): Path2D.Double =
-        smoothPath(
-            x = { point -> imageX(point).toDouble() },
-            y = { point -> imageY(point).toDouble() }
-        )
+    private fun DesktopCourseRouteMapLine.imagePath(): Path2D.Double =
+        if (smooth) {
+            smoothPath(
+                x = { point -> imageX(point).toDouble() },
+                y = { point -> imageY(point).toDouble() }
+            )
+        } else {
+            straightPath(
+                x = { point -> imageX(point).toDouble() },
+                y = { point -> imageY(point).toDouble() }
+            )
+        }
+
+    private fun DesktopCourseRouteMapLine.straightPath(
+        x: (DesktopCourseRouteMapLinePoint) -> Double,
+        y: (DesktopCourseRouteMapLinePoint) -> Double
+    ): Path2D.Double {
+        val path = Path2D.Double()
+        val first = points.firstOrNull() ?: return path
+        path.moveTo(x(first), y(first))
+        points.drop(1).forEach { point -> path.lineTo(x(point), y(point)) }
+        return path
+    }
 
     private fun DesktopCourseRouteMapLine.smoothPath(
         x: (DesktopCourseRouteMapLinePoint) -> Double,
@@ -1023,6 +1068,17 @@ object DesktopCourseGraphic {
         val control = line.points[line.points.lastIndex - 1]
         val end = line.points.last()
         appendPdfQuadratic(currentX, currentY, pdfX(control), pdfY(control), pdfX(end), pdfY(end))
+        appendLine("S")
+    }
+
+    private fun StringBuilder.appendPdfLine(line: DesktopCourseRouteMapLine) {
+        if (line.smooth) {
+            appendPdfSmoothLine(line)
+            return
+        }
+        val first = line.points.firstOrNull() ?: return
+        appendLine("${pdfPoint(first)} m")
+        line.points.drop(1).forEach { point -> appendLine("${pdfPoint(point)} l") }
         appendLine("S")
     }
 

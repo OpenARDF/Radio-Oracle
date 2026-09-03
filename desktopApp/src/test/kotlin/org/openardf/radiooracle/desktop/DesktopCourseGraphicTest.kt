@@ -122,18 +122,19 @@ class DesktopCourseGraphicTest {
             title = "Foxoring course",
             points = listOf(
                 DesktopCourseRouteMapPoint("S", 0.0, 1.0, DesktopCourseRouteMapPointType.Start),
+                DesktopCourseRouteMapPoint("1F", 0.25, 0.75, DesktopCourseRouteMapPointType.Control),
                 DesktopCourseRouteMapPoint("3F", 0.5, 0.25, DesktopCourseRouteMapPointType.Control),
                 DesktopCourseRouteMapPoint("F", 1.0, 0.0, DesktopCourseRouteMapPointType.Finish)
             ),
             routeLabels = listOf("S", "3F", "F"),
-            routePointIndexes = listOf(0, 1, 2),
+            routePointIndexes = listOf(0, 2, 3),
             lineStrings = listOf(
                 DesktopCourseRouteMapLine(
                     label = "",
                     points = listOf(
                         DesktopCourseRouteMapLinePoint(0.0, 1.0),
                         DesktopCourseRouteMapLinePoint(0.1, 0.2),
-                        DesktopCourseRouteMapLinePoint(0.3, 0.9),
+                        DesktopCourseRouteMapLinePoint(0.25, 0.75),
                         DesktopCourseRouteMapLinePoint(0.5, 0.25),
                         DesktopCourseRouteMapLinePoint(1.0, 0.0)
                     ),
@@ -144,13 +145,14 @@ class DesktopCourseGraphicTest {
 
         val simplified = DesktopCourseGraphic.webRouteMap(routeMap, simplifyRouteToStops = true)
 
-        assertEquals(3, simplified.lineStrings.single().points.size)
+        assertEquals(4, simplified.lineStrings.single().points.size)
         assertEquals(
             simplified.points.map { point ->
                 DesktopCourseRouteMapLinePoint(point.xFraction, point.yFraction)
             },
             simplified.lineStrings.single().points
         )
+        assertFalse(simplified.lineStrings.single().smooth)
     }
 
     @Test

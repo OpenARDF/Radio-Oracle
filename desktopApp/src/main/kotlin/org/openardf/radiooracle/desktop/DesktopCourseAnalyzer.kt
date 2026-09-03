@@ -188,7 +188,8 @@ data class DesktopCourseRouteMapLine(
     val points: List<DesktopCourseRouteMapLinePoint>,
     val strokeColorArgb: Long? = null,
     val strokeWidthPixels: Float? = null,
-    val dashed: Boolean = true
+    val dashed: Boolean = true,
+    val smooth: Boolean = true
 )
 
 data class DesktopCourseRouteMapLinePoint(
