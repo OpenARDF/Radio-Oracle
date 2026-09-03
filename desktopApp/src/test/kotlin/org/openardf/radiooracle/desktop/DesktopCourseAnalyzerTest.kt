@@ -2085,6 +2085,59 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun foxoringRouteMapKeepsCatalogFastLabelsWhenSavedAnalyzerLabelsLostTheF() {
+        val baseProject = sprintProjectFile(includeSpectator = false)
+        val projectFile = baseProject.copy(
+            raceData = baseProject.raceData.copy(
+                race = baseProject.raceData.race.copy(raceType = RaceType.FOXORING),
+                controls = baseProject.raceData.controls.map { control ->
+                    when (control.id) {
+                        "control-fast-1" -> control.copy(label = "1F", publicLabel = "1F")
+                        "control-fast-2" -> control.copy(label = "2F", publicLabel = "2F")
+                        else -> control
+                    }
+                }
+            )
+        )
+        val baseInfo = sprintProtectedInfo(includeSpectator = false)
+        val includedIds = setOf("control-fast-1", "control-fast-2", "control-beacon")
+        val protectedInfo = baseInfo.copy(
+            idealOrder = "1 2 Beacon",
+            sourceName = "Course Analyzer calculated route",
+            controlPoints = baseInfo.controlPoints
+                .filter { it.controlId in includedIds }
+                .map { control ->
+                    when (control.controlId) {
+                        "control-fast-1" -> control.copy(label = "1")
+                        "control-fast-2" -> control.copy(label = "2")
+                        else -> control
+                    }
+                },
+            courseObjects = baseInfo.courseObjects.mapNotNull { courseObject ->
+                when (courseObject.id) {
+                    "control-fast-1" -> courseObject.copy(label = "1")
+                    "control-fast-2" -> courseObject.copy(label = "2")
+                    "control-slow-1", "control-slow-2" -> null
+                    else -> courseObject
+                }
+            }
+        )
+
+        val summary = DesktopCourseAnalyzer.analyze(
+            projectFile = projectFile,
+            categoryId = CATEGORY_ID,
+            protectedCourseInfo = protectedInfo,
+            protectedIdealOrderText = protectedInfo.idealOrder
+        )
+
+        val routeMapLabels = requireNotNull(summary.providedRouteSection?.routeMap).points
+            .filter { it.type == DesktopCourseRouteMapPointType.Control }
+            .map { it.label }
+        assertEquals(setOf("1F", "2F"), routeMapLabels.toSet())
+        assertEquals(2, routeMapLabels.size)
+    }
+
+    @Test
     fun calculatedRouteUsesControlsFromStoredRouteInsteadOfBroaderCategoryAssignments() {
         val baseProtectedInfo = protectedInfo(foxCount = 5)
         val routeControlIds = setOf("control-1", "control-3", "control-5", "control-beacon")

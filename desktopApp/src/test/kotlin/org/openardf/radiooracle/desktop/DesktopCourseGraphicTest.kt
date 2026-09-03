@@ -117,6 +117,43 @@ class DesktopCourseGraphicTest {
     }
 
     @Test
+    fun foxoringWebGraphicConnectsRouteStopsWithoutImportedRouteCorners() {
+        val routeMap = DesktopCourseRouteMap(
+            title = "Foxoring course",
+            points = listOf(
+                DesktopCourseRouteMapPoint("S", 0.0, 1.0, DesktopCourseRouteMapPointType.Start),
+                DesktopCourseRouteMapPoint("3F", 0.5, 0.25, DesktopCourseRouteMapPointType.Control),
+                DesktopCourseRouteMapPoint("F", 1.0, 0.0, DesktopCourseRouteMapPointType.Finish)
+            ),
+            routeLabels = listOf("S", "3F", "F"),
+            routePointIndexes = listOf(0, 1, 2),
+            lineStrings = listOf(
+                DesktopCourseRouteMapLine(
+                    label = "",
+                    points = listOf(
+                        DesktopCourseRouteMapLinePoint(0.0, 1.0),
+                        DesktopCourseRouteMapLinePoint(0.1, 0.2),
+                        DesktopCourseRouteMapLinePoint(0.3, 0.9),
+                        DesktopCourseRouteMapLinePoint(0.5, 0.25),
+                        DesktopCourseRouteMapLinePoint(1.0, 0.0)
+                    ),
+                    dashed = false
+                )
+            )
+        )
+
+        val simplified = DesktopCourseGraphic.webRouteMap(routeMap, simplifyRouteToStops = true)
+
+        assertEquals(3, simplified.lineStrings.single().points.size)
+        assertEquals(
+            simplified.points.map { point ->
+                DesktopCourseRouteMapLinePoint(point.xFraction, point.yFraction)
+            },
+            simplified.lineStrings.single().points
+        )
+    }
+
+    @Test
     fun webPngUsesLargerMarkersAndLabelsThanStandaloneGraphic() {
         val routeMap = DesktopCourseRouteMap(
             title = "Foxoring web course",

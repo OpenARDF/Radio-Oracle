@@ -418,10 +418,11 @@ object DesktopCourseAnalyzer {
         val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
             ?: courseInfo.idealOrder.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
-        val allProtectedControls = protectedAssignedControls(projectFile, courseInfo, null)
+        val raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race)
+        val allProtectedControls = protectedAssignedControls(projectFile, courseInfo, null, raceType)
         val terminalBeaconControl = allProtectedControls.firstOrNull { it.type == ControlPointType.BEACON }
             ?: categoryAssignedControls.firstOrNull { it.type == ControlPointType.BEACON }
-        val protectedRouteControls = protectedAssignedControls(projectFile, courseInfo, idealOrderText)
+        val protectedRouteControls = protectedAssignedControls(projectFile, courseInfo, idealOrderText, raceType)
             .withTerminalBeacon(terminalBeaconControl)
         val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls.withTerminalBeacon(terminalBeaconControl) }
         val providedControls = idealOrderText
@@ -458,7 +459,7 @@ object DesktopCourseAnalyzer {
         val foxes = controlsWithPoints.filter { it.control.type == ControlPointType.CONTROL && it.point != null }
         val spectator = controlsWithPoints.firstOrNull { it.control.type == ControlPointType.SEPARATOR && it.point != null }
         val canBuildCalculatedRouteSection = canAttemptCalculatedRoute(
-            raceType = categoryData.category.effectiveRaceType(projectFile.raceData.race),
+            raceType = raceType,
             start = start,
             finish = finish,
             foxes = foxes,
@@ -499,12 +500,12 @@ object DesktopCourseAnalyzer {
             ?: courseInfo?.idealOrder?.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
         val allProtectedControls = courseInfo
-            ?.let { protectedAssignedControls(projectFile, it, null) }
+            ?.let { protectedAssignedControls(projectFile, it, null, raceType) }
             .orEmpty()
         val terminalBeaconControl = allProtectedControls.firstOrNull { it.type == ControlPointType.BEACON }
             ?: categoryAssignedControls.firstOrNull { it.type == ControlPointType.BEACON }
         val protectedRouteControls = courseInfo
-            ?.let { protectedAssignedControls(projectFile, it, idealOrderText) }
+            ?.let { protectedAssignedControls(projectFile, it, idealOrderText, raceType) }
             .orEmpty()
             .withTerminalBeacon(terminalBeaconControl)
         val assignedControls = protectedRouteControls.ifEmpty { categoryAssignedControls.withTerminalBeacon(terminalBeaconControl) }
@@ -1218,7 +1219,8 @@ object DesktopCourseAnalyzer {
     private fun protectedAssignedControls(
         projectFile: EventProjectFile,
         courseInfo: ProtectedCourseInfo,
-        idealOrderText: String?
+        idealOrderText: String?,
+        raceType: RaceType
     ): List<EventControl> {
         val controlsById = projectFile.raceData.controls.associateBy { it.id }
         val projectControls = projectFile.raceData.controls
@@ -1235,10 +1237,12 @@ object DesktopCourseAnalyzer {
             }
             .zip(courseInfo.controlPoints)
             .map { (control, protectedControl) ->
-                if (courseInfo.usesAnalyzerSavedNumbering()) {
+                if (courseInfo.usesAnalyzerSavedNumbering() && raceType != RaceType.FOXORING) {
                     // Course Analyzer renumbering is intentionally stored in protected course data,
                     // not in Setup > Controls. Use the protected label for analyzer route labels and
                     // wait-slot calculations while preserving the control ID/SI-code source of truth.
+                    // Foxoring's paired labels (1/1F through 5/5F) identify different controls, so
+                    // their current catalog labels remain authoritative even for analyzer-saved data.
                     control.copy(
                         label = protectedControl.label,
                         publicLabel = protectedControl.label,

@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventAwardCategoryDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
@@ -371,7 +372,11 @@ object DesktopPublicResultSiteExports {
                 val routeMap = summary.routeMaps.firstOrNull() ?: return@runCatching null
                 val fileName = "course-${categoryId.safePathSegment()}.png"
                 val path = graphicsDirectory.resolve(fileName)
-                DesktopCourseGraphic.writeWebPng(path, routeMap.copy(title = "$categoryName course"))
+                DesktopCourseGraphic.writeWebPng(
+                    path = path,
+                    routeMap = routeMap.copy(title = "$categoryName course"),
+                    simplifyRouteToStops = race.projectFile.raceData.race.raceType == RaceType.FOXORING
+                )
                 DesktopDebugLog.info(
                     "PublicResults",
                     "Generated 2D course diagram race=${race.projectFile.raceData.race.name} " +

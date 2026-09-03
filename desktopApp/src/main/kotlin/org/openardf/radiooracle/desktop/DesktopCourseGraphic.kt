@@ -259,17 +259,26 @@ object DesktopCourseGraphic {
         ImageIO.write(renderImage(routeMap, "png", StandardImageStyle), "png", path.toFile())
     }
 
-    internal fun writeWebPng(path: Path, routeMap: DesktopCourseRouteMap) {
+    internal fun writeWebPng(
+        path: Path,
+        routeMap: DesktopCourseRouteMap,
+        simplifyRouteToStops: Boolean = false
+    ) {
         path.parent?.let(Files::createDirectories)
         ImageIO.write(
-            renderImage(routeMap.withFractionPadding(WebGraphicFractionPadding), "png", WebImageStyle),
+            renderImage(webRouteMap(routeMap, simplifyRouteToStops), "png", WebImageStyle),
             "png",
             path.toFile()
         )
     }
 
-    internal fun webRouteMap(routeMap: DesktopCourseRouteMap): DesktopCourseRouteMap =
-        routeMap.withFractionPadding(WebGraphicFractionPadding)
+    internal fun webRouteMap(
+        routeMap: DesktopCourseRouteMap,
+        simplifyRouteToStops: Boolean = false
+    ): DesktopCourseRouteMap =
+        routeMap
+            .let { if (simplifyRouteToStops) it.withRouteLineThroughStops() else it }
+            .withFractionPadding(WebGraphicFractionPadding)
 
     private fun writeJpg(path: Path, routeMap: DesktopCourseRouteMap) {
         ImageIO.write(renderImage(routeMap, "jpg", StandardImageStyle), "jpg", path.toFile())
@@ -864,6 +873,29 @@ object DesktopCourseGraphic {
                     }
                 )
             }
+        )
+    }
+
+    private fun DesktopCourseRouteMap.withRouteLineThroughStops(): DesktopCourseRouteMap {
+        val stopPoints = routePointIndexes
+            .mapNotNull(points::getOrNull)
+            .map { point ->
+                DesktopCourseRouteMapLinePoint(
+                    xFraction = point.xFraction,
+                    yFraction = point.yFraction
+                )
+            }
+        if (stopPoints.size < 2) {
+            return this
+        }
+        return copy(
+            lineStrings = listOf(
+                DesktopCourseRouteMapLine(
+                    label = "",
+                    points = stopPoints,
+                    dashed = false
+                )
+            )
         )
     }
 
