@@ -356,15 +356,20 @@ passes. First classify the patch's regression risk:
 The normal deployment sequence is:
 
 1. Bump Android, desktop, and npm/jDeploy versions together.
-2. Run `npm run jdeploy:release-preflight`.
-3. Merge the release state to `main`.
-4. Push the matching `v<version>` tag and let
+2. Generate terse Android release notes from the user-facing Android and shared
+   changes since the previous deployed version. Keep the notes suitable for an
+   app-store "What's new" field: one short paragraph, no internal implementation
+   details, and no desktop-only changes. Give the notes to the release operator
+   even though jDeploy does not publish the Android package.
+3. Run `npm run jdeploy:release-preflight`.
+4. Merge the release state to `main`.
+5. Push the matching `v<version>` tag and let
    `.github/workflows/jdeploy-github-release.yml` publish GitHub release
    installer assets.
-5. Run `.github/workflows/publish-jdeploy.yml` in `publish` mode for the same
+6. Run `.github/workflows/publish-jdeploy.yml` in `publish` mode for the same
    version.
-6. Run `npm run jdeploy:registry-smoke -- <version>`.
-7. Verify that the README's jDeploy install page remains the public desktop
+7. Run `npm run jdeploy:registry-smoke -- <version>`.
+8. Verify that the README's jDeploy install page remains the public desktop
    install link.
 
 ### Trusted Publishing
