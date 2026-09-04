@@ -1028,11 +1028,16 @@ object DesktopNavigation {
     fun shouldReturnToParentMenuAfterAction(action: DesktopNavAction): Boolean =
         action != DesktopNavAction.NewEventFile
 
-    fun returnToParentMenuAfterAction(state: DesktopNavState, action: DesktopNavAction): DesktopNavState =
-        if (shouldReturnToParentMenuAfterAction(action)) {
-            state.withParentMenuSelected()
-        } else {
-            state
+    fun returnToParentMenuAfterAction(
+        state: DesktopNavState,
+        action: DesktopNavAction,
+        changedResultCount: Int? = null
+    ): DesktopNavState =
+        when {
+            action == DesktopNavAction.RecalculateResults && changedResultCount == 0 ->
+                state.switchWorkflow(state.workflow)
+            shouldReturnToParentMenuAfterAction(action) -> state.withParentMenuSelected()
+            else -> state
         }
 
     fun returnToParentMenu(state: DesktopNavState): DesktopNavState =

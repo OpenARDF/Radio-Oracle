@@ -390,14 +390,32 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun resultsMenuStartsWithRecalculateAndKeepsResultsVisible() {
+    fun resultsMenuStartsWithRecalculateAndReturnsHomeOnlyWhenNothingChanged() {
         val resultsState = DesktopNavState().switchWorkflow(DesktopWorkflow.ResultsExport)
         val recalculate = DesktopNavigation.currentItems(resultsState).first()
         val selection = DesktopNavigation.selectItem(resultsState, recalculate)
+        val unchangedState = DesktopNavigation.returnToParentMenuAfterAction(
+            selection.state,
+            DesktopNavAction.RecalculateResults,
+            changedResultCount = 0
+        )
+        val changedState = DesktopNavigation.returnToParentMenuAfterAction(
+            selection.state,
+            DesktopNavAction.RecalculateResults,
+            changedResultCount = 1
+        )
 
         assertEquals("Recalculate Results", recalculate.label)
         assertEquals(DesktopNavAction.RecalculateResults, selection.action)
         assertEquals(DesktopSection.Results, selection.state.selectedSection)
+        assertEquals("results.home", unchangedState.selectedItemId)
+        assertEquals("Results/File Export", DesktopNavigation.breadcrumb(unchangedState))
+        assertEquals(
+            listOf("Recalculate Results", "Awards Results", "Live Results", "Exports"),
+            DesktopNavigation.currentItems(unchangedState).map { it.label }
+        )
+        assertEquals("results.recalculate", changedState.selectedItemId)
+        assertEquals(DesktopSection.Results, changedState.selectedSection)
     }
 
     @Test

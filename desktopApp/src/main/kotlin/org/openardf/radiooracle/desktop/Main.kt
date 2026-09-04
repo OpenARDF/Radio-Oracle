@@ -1425,7 +1425,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
         }
 
-        fun recalculateResults() {
+        fun recalculateResults(): Int? =
             runCatching {
                 var outcome: ResultRecalculationOutcome? = null
                 projectFile = projectSession.updateCurrentProject { currentProject ->
@@ -1443,11 +1443,11 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     "Recalculated ${result.recalculatedCount} results; ${result.changedCount} changed.$skippedText"
                 recordActivity(projectStatusText)
                 DesktopDebugLog.info("Results", projectStatusText)
+                result.changedCount
             }.onFailure { error ->
                 projectStatusText = "Result recalculation failed: ${error.message ?: error::class.simpleName}"
                 DesktopDebugLog.error("Results", projectStatusText)
-            }
-        }
+            }.getOrNull()
 
         fun isDefaultUnsavedNewEventFileDraft(): Boolean =
             newEventDraftProject != null &&
@@ -6365,10 +6365,6 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun handleEventFileNavAction(action: DesktopNavAction): Boolean =
             when (action) {
-                DesktopNavAction.RecalculateResults -> {
-                    recalculateResults()
-                    true
-                }
                 DesktopNavAction.NewEventFile -> {
                     requestNewEventFile()
                     true
@@ -7520,6 +7516,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             onInsertTestCompetitors = ::insertTestCompetitors,
             onInsertTestSportIdentDownloads = ::insertTestSportIdentDownloads,
             onRestoreRecentImportCheckpoint = ::restoreRecentImportCheckpoint,
+            onRecalculateResults = ::recalculateResults,
             onSetSportIdentPortDiscoveryMode = { mode ->
                 sportIdentPortDiscoveryMode = mode
                 DesktopAppSettingsPreferences.setSportIdentPortDiscoveryMode(mode)
@@ -12216,6 +12213,7 @@ private fun RadioOManagerDesktopApp(
     onInsertTestCompetitors: () -> Unit = {},
     onInsertTestSportIdentDownloads: () -> Unit = {},
     onRestoreRecentImportCheckpoint: () -> Unit = {},
+    onRecalculateResults: () -> Int? = { null },
     onNavAction: (DesktopNavAction) -> Unit = {},
     hasDefaultUnsavedNewEventFileDraft: Boolean = false,
     hasEditedUnsavedNewEventFileDraft: Boolean = false,
@@ -12315,8 +12313,17 @@ private fun RadioOManagerDesktopApp(
             }
             var appliedState = nextState
             action?.let {
-                onNavAction(it)
-                appliedState = DesktopNavigation.returnToParentMenuAfterAction(nextState, it)
+                val changedResultCount = if (it == DesktopNavAction.RecalculateResults) {
+                    onRecalculateResults()
+                } else {
+                    onNavAction(it)
+                    null
+                }
+                appliedState = DesktopNavigation.returnToParentMenuAfterAction(
+                    nextState,
+                    it,
+                    changedResultCount
+                )
             }
             navState = appliedState
             bypassedDisabledNavigation = intent.updatedBypassedDisabledNavigation(
