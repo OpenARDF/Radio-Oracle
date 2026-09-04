@@ -56,4 +56,16 @@ object DesktopProtectedCourseOrder {
             oldPassword = oldPassword,
             newPassword = newPassword
         )
+
+    fun removeProjectCourseProtection(
+        projectFile: EventProjectFile,
+        password: String
+    ): EventProjectFile =
+        ProtectedCourseCipher.removeProjectCourseProtection(projectFile, password)
+
+    fun protectProjectCourseData(
+        projectFile: EventProjectFile,
+        password: String
+    ): EventProjectFile =
+        ProtectedCourseCipher.protectProjectCourseData(projectFile, password)
 }

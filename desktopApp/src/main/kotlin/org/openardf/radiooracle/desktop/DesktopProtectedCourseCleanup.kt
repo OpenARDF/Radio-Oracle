@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 
@@ -32,37 +33,43 @@ object DesktopProtectedCourseCleanup {
         projectFile: EventProjectFile,
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
         controlId: String,
-        password: String
+        password: String?
     ): DesktopProtectedCourseCleanupResult {
-        val trimmedPassword = password.trim()
-        require(trimmedPassword.isNotEmpty()) {
-            "Race Password cannot be blank."
+        val trimmedPassword = password?.trim()?.takeIf(String::isNotEmpty)
+        require(
+            trimmedPassword != null ||
+                (projectFile.raceData.categories + projectFile.raceData.courseMappings)
+                    .any { it.category.courseInfo != null }
+        ) {
+            "Race Password is required for encrypted course data."
         }
 
         val nextCourseInfoByCategoryId = protectedCourseInfoByCategoryId.toMutableMap()
         var clearedCourseCount = 0
         var prunedCourseCount = 0
 
-        val nextCategories = projectFile.raceData.categories.map { categoryData ->
+        fun clean(categoryData: EventCategoryData): EventCategoryData {
             val courseInfo = protectedCourseInfoByCategoryId[categoryData.category.id]
             val isAssignedControl = categoryData.controlPoints.any { it.controlId == controlId } ||
                 controlId in categoryData.publicControlIds
             if (courseInfo == null) {
-                return@map categoryData
+                return categoryData
             }
             if (!courseInfo.references(controlId) && !isAssignedControl) {
-                return@map categoryData
+                return categoryData
             }
 
             val hasRemainingAssignedControls = categoryData.controlPoints.any { it.controlId != controlId } ||
                 categoryData.publicControlIds.any { it != controlId }
-            if (!hasRemainingAssignedControls) {
+            return if (!hasRemainingAssignedControls) {
                 clearedCourseCount += 1
                 nextCourseInfoByCategoryId.remove(categoryData.category.id)
                 categoryData.copy(
                     category = categoryData.category.copy(
                         encryptedIdealOrder = null,
-                        encryptedCourseInfo = null
+                        encryptedCourseInfo = null,
+                        idealOrder = null,
+                        courseInfo = null
                     )
                 )
             } else {
@@ -76,15 +83,25 @@ object DesktopProtectedCourseCleanup {
                 categoryData.copy(
                     category = categoryData.category.copy(
                         encryptedIdealOrder = null,
-                        encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(prunedCourseInfo, trimmedPassword)
+                        encryptedCourseInfo = trimmedPassword?.let {
+                            DesktopProtectedCourseOrder.encryptCourseInfo(prunedCourseInfo, it)
+                        },
+                        idealOrder = null,
+                        courseInfo = prunedCourseInfo.takeIf { trimmedPassword == null }
                     )
                 )
             }
         }
 
+        val nextCategories = projectFile.raceData.categories.map(::clean)
+        val nextCourseMappings = projectFile.raceData.courseMappings.map(::clean)
+
         return DesktopProtectedCourseCleanupResult(
             projectFile = projectFile.copy(
-                raceData = projectFile.raceData.copy(categories = nextCategories)
+                raceData = projectFile.raceData.copy(
+                    categories = nextCategories,
+                    courseMappings = nextCourseMappings
+                )
             ),
             protectedCourseInfoByCategoryId = nextCourseInfoByCategoryId,
             clearedCourseCount = clearedCourseCount,

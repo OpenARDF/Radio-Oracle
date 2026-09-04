@@ -490,6 +490,53 @@ object DesktopEventSeriesActions {
         }
     }
 
+    /** Removes Race Password encryption from every readable Race File in a series. */
+    fun removeCourseProtection(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        password: String,
+        currentEventPath: Path? = null,
+        currentProject: EventProjectFile? = null
+    ): DesktopEventSeriesCourseProtectionRemoval {
+        val trimmedPassword = password.trim()
+        require(trimmedPassword.isNotEmpty()) { "Current Race Password cannot be blank." }
+        val seriesFile = store.read(manifestPath)
+        val seriesFolder = requireNotNull(manifestPath.parent) {
+            "Race Series manifest must have a parent folder."
+        }
+        val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
+        val sourceProjects = seriesFile.sortedEvents().map { event ->
+            val path = seriesFolder.resolve(event.eventFilePath).normalize()
+            require(store.exists(path)) {
+                "Cannot remove encryption because Race File '${event.displayName}' is missing."
+            }
+            val project = if (
+                normalizedCurrentPath != null &&
+                path.toAbsolutePath().normalize() == normalizedCurrentPath &&
+                currentProject != null
+            ) {
+                currentProject
+            } else {
+                store.readEvent(path)
+            }
+            path to project
+        }
+
+        // Convert every member before writing any member. A missing file or wrong password thus
+        // leaves the complete series untouched.
+        val converted = sourceProjects.map { (path, project) ->
+            path to DesktopProtectedCourseOrder.removeProjectCourseProtection(project, trimmedPassword)
+        }
+        converted.forEach { (path, project) -> store.writeEvent(path, project) }
+        val updatedCurrentProject = normalizedCurrentPath?.let { currentPath ->
+            converted.firstOrNull { (path, _) -> path.toAbsolutePath().normalize() == currentPath }?.second
+        }
+        return DesktopEventSeriesCourseProtectionRemoval(
+            raceCount = converted.size,
+            updatedCurrentProject = updatedCurrentProject
+        )
+    }
+
     fun competitorMatchingSummaries(
         store: EventSeriesStore,
         manifestPath: Path,
@@ -1335,6 +1382,11 @@ data class DesktopEventSeriesEventSummary(
     val isCurrentEvent: Boolean,
     val startDateTimeIso: String? = null,
     val formatLabel: String? = null
+)
+
+data class DesktopEventSeriesCourseProtectionRemoval(
+    val raceCount: Int,
+    val updatedCurrentProject: EventProjectFile?
 )
 
 data class DesktopEventSeriesCompetitorMatchSummary(

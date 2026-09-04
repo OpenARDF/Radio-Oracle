@@ -108,6 +108,27 @@ class DesktopProtectedCourseCleanupTest {
         assertEquals(1, result.prunedCourseCount)
     }
 
+    @Test
+    fun prunesUnencryptedCourseDataAfterPasswordRemoval() {
+        val projectFile = DesktopProtectedCourseOrder.removeProjectCourseProtection(
+            projectFileWithTwoAssignedControls(),
+            PASSWORD
+        )
+        val courseInfo = projectFile.raceData.categories.single().category.courseInfo!!
+
+        val result = DesktopProtectedCourseCleanup.removeStaleControlReferencesForDeletedControl(
+            projectFile = projectFile,
+            protectedCourseInfoByCategoryId = mapOf("cat" to courseInfo),
+            controlId = "control-31",
+            password = null
+        )
+
+        val category = result.projectFile.raceData.categories.single().category
+        assertNull(category.encryptedCourseInfo)
+        assertEquals(listOf("control-32"), category.courseInfo?.controlPoints?.map { it.controlId })
+        assertEquals(1, result.prunedCourseCount)
+    }
+
     private fun projectFile(withAssignedControl: Boolean): EventProjectFile {
         val race = EventRace(
             id = "race",

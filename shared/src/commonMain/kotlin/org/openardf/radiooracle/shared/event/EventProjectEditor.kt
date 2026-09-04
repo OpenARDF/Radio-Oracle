@@ -402,7 +402,9 @@ object EventProjectEditor {
                     climbMeters = 0,
                     controlPointsString = "",
                     encryptedIdealOrder = null,
-                    encryptedCourseInfo = null
+                    encryptedCourseInfo = null,
+                    idealOrder = null,
+                    courseInfo = null
                 ),
                 controlPoints = emptyList(),
                 publicControlIds = emptyList()
@@ -645,7 +647,24 @@ object EventProjectEditor {
         return projectFile.updateCategoryOrCourseMapping(categoryId) { categoryData ->
             categoryData.copy(
                 category = categoryData.category.copy(
-                    encryptedIdealOrder = encryptedIdealOrder?.trim()?.takeIf { it.isNotEmpty() }
+                    encryptedIdealOrder = encryptedIdealOrder?.trim()?.takeIf { it.isNotEmpty() },
+                    idealOrder = null
+                )
+            )
+        }
+    }
+
+    /** Returns a copy of the Race File with one category's unencrypted course order changed. */
+    fun updateCategoryIdealOrder(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        idealOrder: String?
+    ): EventProjectFile {
+        return projectFile.updateCategoryOrCourseMapping(categoryId) { categoryData ->
+            categoryData.copy(
+                category = categoryData.category.copy(
+                    idealOrder = idealOrder?.trim(),
+                    encryptedIdealOrder = null
                 )
             )
         }
@@ -660,7 +679,24 @@ object EventProjectEditor {
         return projectFile.updateCategoryOrCourseMapping(categoryId) { categoryData ->
             categoryData.copy(
                 category = categoryData.category.copy(
-                    encryptedCourseInfo = encryptedCourseInfo?.trim()?.takeIf { it.isNotEmpty() }
+                    encryptedCourseInfo = encryptedCourseInfo?.trim()?.takeIf { it.isNotEmpty() },
+                    courseInfo = null
+                )
+            )
+        }
+    }
+
+    /** Returns a copy of the Race File with one category's unencrypted course data changed. */
+    fun updateCategoryCourseInfo(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        courseInfo: ProtectedCourseInfo?
+    ): EventProjectFile {
+        return projectFile.updateCategoryOrCourseMapping(categoryId) { categoryData ->
+            categoryData.copy(
+                category = categoryData.category.copy(
+                    courseInfo = courseInfo,
+                    encryptedCourseInfo = null
                 )
             )
         }
@@ -841,11 +877,13 @@ object EventProjectEditor {
                         climbMeters = 0,
                         controlPointsString = remainingControlPointsString,
                         encryptedIdealOrder = null,
+                        idealOrder = null,
                         encryptedCourseInfo = if (clearProtectedCourseData) {
                             null
                         } else {
                             categoryData.category.encryptedCourseInfo
-                        }
+                        },
+                        courseInfo = if (clearProtectedCourseData) null else categoryData.category.courseInfo
                     ),
                     controlPoints = remainingControlPoints,
                     publicControlIds = remainingPublicControlIds
@@ -1564,7 +1602,9 @@ object EventProjectEditor {
                 timeLimitSeconds = null,
                 controlPointsString = "",
                 encryptedIdealOrder = row.encryptedIdealOrder ?: existingCategoryData?.category?.encryptedIdealOrder,
-                encryptedCourseInfo = existingCategoryData?.category?.encryptedCourseInfo
+                encryptedCourseInfo = existingCategoryData?.category?.encryptedCourseInfo,
+                idealOrder = existingCategoryData?.category?.idealOrder,
+                courseInfo = existingCategoryData?.category?.courseInfo
             )
             val definitions = ControlPointRules.parseAssignedControlPoints(
                 input = row.controlPointsText,
@@ -1670,6 +1710,8 @@ object EventProjectEditor {
                     ),
                     encryptedIdealOrder = existingCategoryData?.category?.encryptedIdealOrder,
                     encryptedCourseInfo = existingCategoryData?.category?.encryptedCourseInfo,
+                    idealOrder = existingCategoryData?.category?.idealOrder,
+                    courseInfo = existingCategoryData?.category?.courseInfo,
                     controlPointsString = ControlPointRules.formatControlPoints(definitions)
                 ),
                 controlPoints = controlPoints,

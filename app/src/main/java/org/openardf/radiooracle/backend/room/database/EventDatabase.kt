@@ -59,7 +59,7 @@ import org.openardf.radiooracle.backend.room.entity.ResultService
         ResultService::class,
         EventSeries::class,
         EventSeriesMember::class],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(DateTimeTypeConverter::class)

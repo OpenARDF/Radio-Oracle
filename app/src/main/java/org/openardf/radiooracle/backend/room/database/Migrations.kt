@@ -230,3 +230,12 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
         db.execSQL("ALTER TABLE `competitor` ADD COLUMN `corridor` TEXT NOT NULL DEFAULT ''")
     }
 }
+
+// Migration from version 11 -> 12: retain course data after an organizer removes
+// Race Password encryption from a Race File or Race Series.
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `category` ADD COLUMN `ideal_order` TEXT")
+        db.execSQL("ALTER TABLE `category` ADD COLUMN `course_info` TEXT")
+    }
+}

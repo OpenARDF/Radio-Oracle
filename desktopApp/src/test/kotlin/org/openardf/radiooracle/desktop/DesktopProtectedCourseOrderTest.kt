@@ -32,6 +32,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 
 class DesktopProtectedCourseOrderTest {
@@ -115,6 +116,71 @@ class DesktopProtectedCourseOrderTest {
                 newPassword = "new-password"
             )
         }
+    }
+
+    @Test
+    fun removesProtectionWithoutDiscardingCourseDataAndCanProtectItAgain() {
+        val courseInfo = ProtectedCourseInfo(idealOrder = "31 32", sourceName = "course.kml")
+        val encrypted = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        ).let { project ->
+            EventProjectEditor.updateCategoryEncryptedIdealOrder(
+                project,
+                "cat-m21",
+                DesktopProtectedCourseOrder.encrypt("31 32", "race-password")
+            )
+        }.let { project ->
+            EventProjectEditor.updateCategoryEncryptedCourseInfo(
+                project,
+                "cat-m21",
+                DesktopProtectedCourseOrder.encryptCourseInfo(courseInfo, "race-password")
+            )
+        }
+
+        val unprotected = DesktopProtectedCourseOrder.removeProjectCourseProtection(encrypted, " race-password ")
+        val stored = EventProjectFileJson.decode(EventProjectFileJson.encode(unprotected))
+        val category = stored.raceData.categories.single().category
+
+        assertEquals(6, stored.schemaVersion)
+        assertEquals("31 32", category.idealOrder)
+        assertEquals(courseInfo, category.courseInfo)
+        assertEquals(null, category.encryptedIdealOrder)
+        assertEquals(null, category.encryptedCourseInfo)
+
+        val protectedAgain = DesktopProtectedCourseOrder.protectProjectCourseData(stored, "new-password")
+        val protectedCategory = protectedAgain.raceData.categories.single().category
+        assertEquals(null, protectedCategory.idealOrder)
+        assertEquals(null, protectedCategory.courseInfo)
+        assertEquals(
+            "31 32",
+            DesktopProtectedCourseOrder.decrypt(protectedCategory.encryptedIdealOrder!!, "new-password")
+        )
+        assertEquals(
+            courseInfo,
+            DesktopProtectedCourseOrder.decryptCourseInfo(protectedCategory.encryptedCourseInfo!!, "new-password")
+        )
+    }
+
+    @Test
+    fun removalRejectsWrongPasswordWithoutReturningPartialProject() {
+        val project = EventProjectEditor.addCategory(
+            EventProjectFactory.createEmptyProject("race", "Course Test", "2026-06-05T09:00"),
+            categoryId = "cat-m21",
+            name = "M21"
+        ).let { projectFile ->
+            EventProjectEditor.updateCategoryEncryptedIdealOrder(
+                projectFile,
+                "cat-m21",
+                DesktopProtectedCourseOrder.encrypt("31", "race-password")
+            )
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DesktopProtectedCourseOrder.removeProjectCourseProtection(project, "wrong-password")
+        }
+        assertTrue(project.raceData.categories.single().category.encryptedIdealOrder?.isNotBlank() == true)
     }
 
     @Test

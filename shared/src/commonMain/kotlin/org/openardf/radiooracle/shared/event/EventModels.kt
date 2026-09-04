@@ -72,7 +72,11 @@ data class EventCategory(
     @Deprecated("Use EventCategoryData.controlPoints plus EventRaceData.controls.")
     val controlPointsString: String,
     val encryptedIdealOrder: String? = null,
-    val encryptedCourseInfo: String? = null
+    val encryptedCourseInfo: String? = null,
+    /** Plaintext course order used only after an organizer explicitly removes Race Password protection. */
+    val idealOrder: String? = null,
+    /** Plaintext route details used only after an organizer explicitly removes Race Password protection. */
+    val courseInfo: ProtectedCourseInfo? = null
 ) {
     /** Returns the event race type; legacy category-specific race type is ignored. */
     fun effectiveRaceType(race: EventRace): RaceType =

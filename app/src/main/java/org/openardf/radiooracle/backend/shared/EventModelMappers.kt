@@ -59,6 +59,7 @@ import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
+import org.openardf.radiooracle.shared.publicresults.ProtectedCourseCipher
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.UUID
@@ -93,7 +94,9 @@ fun Category.toEventCategory(): EventCategory =
         timeLimitSeconds = null,
         controlPointsString = controlPointsString,
         encryptedIdealOrder = encryptedIdealOrder,
-        encryptedCourseInfo = encryptedCourseInfo
+        encryptedCourseInfo = encryptedCourseInfo,
+        idealOrder = idealOrder,
+        courseInfo = courseInfo?.let(ProtectedCourseCipher::decodeCourseInfo)
     )
 
 /** Converts the Android Room control-point entity into the portable shared race model. */
@@ -270,7 +273,9 @@ private fun EventCategory.toRoomCategory(idMapper: RoomIdMapper): Category =
         timeLimit = null,
         controlPointsString = controlPointsString,
         encryptedIdealOrder = encryptedIdealOrder,
-        encryptedCourseInfo = encryptedCourseInfo
+        encryptedCourseInfo = encryptedCourseInfo,
+        idealOrder = idealOrder,
+        courseInfo = courseInfo?.let(ProtectedCourseCipher::encodeCourseInfo)
     )
 
 /** Converts the portable shared control-point model back into an Android Room entity. */

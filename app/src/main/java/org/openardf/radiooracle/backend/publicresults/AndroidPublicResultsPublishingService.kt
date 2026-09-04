@@ -35,6 +35,7 @@ import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.publicresults.CloudflarePagesPublisher
+import org.openardf.radiooracle.shared.publicresults.ProtectedCourseCipher
 import org.openardf.radiooracle.shared.publicresults.PublicResultsRaceRenderRequest
 import java.time.Instant
 import java.util.UUID
@@ -249,20 +250,19 @@ class AndroidPublicResultsPublishingService(
         )
 
     private fun RaceData.unlockedCourseInfo(password: String?): Map<String, ProtectedCourseInfo> {
-        if (!needsPasswordForCourseDiagrams()) {
-            return emptyMap()
-        }
         val value = password?.trim().orEmpty()
-        require(value.isNotEmpty()) {
+        require(!needsPasswordForCourseDiagrams() || value.isNotEmpty()) {
             "Race Password is required to include 2D course diagrams."
         }
         return categories.mapNotNull { categoryData ->
-            categoryData.category.encryptedCourseInfo
+            val category = categoryData.category
+            val courseInfo = category.encryptedCourseInfo
                 ?.takeIf(String::isNotBlank)
-                ?.let { encrypted ->
-                    categoryData.category.id.toString() to
-                        AndroidProtectedCourseInfo.decryptCourseInfo(encrypted, value)
-                }
+                ?.let { AndroidProtectedCourseInfo.decryptCourseInfo(it, value) }
+                ?: category.courseInfo
+                    ?.takeIf(String::isNotBlank)
+                    ?.let(ProtectedCourseCipher::decodeCourseInfo)
+            courseInfo?.let { category.id.toString() to it }
         }.toMap()
     }
 

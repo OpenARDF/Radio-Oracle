@@ -41,6 +41,7 @@ import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventProjectFileFormat
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 
@@ -65,7 +66,7 @@ class DesktopProjectDiagnosticsTest {
         val diagnostics = DesktopProjectDiagnostics.from(projectFile())
 
         assertEquals("Race File open", diagnostics.projectState)
-        assertEquals("Radio-Oracle schema 5", diagnostics.schemaText)
+        assertEquals("Radio-Oracle schema ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION}", diagnostics.schemaText)
         assertEquals("race", diagnostics.raceId)
         assertEquals("Diagnostics Race", diagnostics.raceName)
         assertEquals("2026-06-01T10:00", diagnostics.startDateTimeIso)

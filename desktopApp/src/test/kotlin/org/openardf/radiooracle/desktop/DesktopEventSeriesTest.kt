@@ -53,6 +53,7 @@ import org.openardf.radiooracle.shared.event.EventSeriesPackageFingerprints
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import org.openardf.radiooracle.shared.event.StartDrawSettings
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
@@ -60,6 +61,82 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 class DesktopEventSeriesTest {
+    @Test
+    fun removesCourseProtectionFromEverySeriesRaceAfterAllPasswordsValidate() {
+        val manifestPath = Path.of("/work/championship/series.radio-oracle.json")
+        val dayOnePath = Path.of("/work/championship/day-1.rom.json")
+        val dayTwoPath = Path.of("/work/championship/day-2.rom.json")
+        val events = listOf(
+            EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+            EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2")
+        )
+        fun encryptedProject(name: String): EventProjectFile {
+            val category = eventCategory("cat-$name", name).copy(
+                encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt("31 32", "series-password"),
+                encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(
+                    ProtectedCourseInfo(idealOrder = "31 32", sourceName = "$name.kml"),
+                    "series-password"
+                )
+            )
+            return projectFile(
+                name,
+                categories = listOf(EventCategoryData(category, emptyList(), emptyList()))
+            )
+        }
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile(events)),
+            eventFiles = mapOf(dayOnePath to encryptedProject("Day 1"), dayTwoPath to encryptedProject("Day 2"))
+        )
+
+        val result = DesktopEventSeriesActions.removeCourseProtection(
+            store,
+            manifestPath,
+            "series-password",
+            currentEventPath = dayOnePath,
+            currentProject = store.readEvent(dayOnePath)
+        )
+
+        assertEquals(2, result.raceCount)
+        listOf(dayOnePath, dayTwoPath).forEach { path ->
+            val category = store.readEvent(path).raceData.categories.single().category
+            assertEquals("31 32", category.idealOrder)
+            assertTrue(category.courseInfo?.sourceName?.endsWith(".kml") == true)
+            assertNull(category.encryptedIdealOrder)
+            assertNull(category.encryptedCourseInfo)
+        }
+    }
+
+    @Test
+    fun seriesRemovalWritesNothingWhenOneRaceUsesAnotherPassword() {
+        val manifestPath = Path.of("/work/championship/series.radio-oracle.json")
+        val dayOnePath = Path.of("/work/championship/day-1.rom.json")
+        val dayTwoPath = Path.of("/work/championship/day-2.rom.json")
+        val events = listOf(
+            EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+            EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2")
+        )
+        fun encryptedProject(name: String, password: String): EventProjectFile {
+            val category = eventCategory("cat-$name", name).copy(
+                encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt("31", password)
+            )
+            return projectFile(name, categories = listOf(EventCategoryData(category, emptyList(), emptyList())))
+        }
+        val originals = mapOf(
+            dayOnePath to encryptedProject("Day 1", "shared-password"),
+            dayTwoPath to encryptedProject("Day 2", "different-password")
+        )
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile(events)),
+            eventFiles = originals
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            DesktopEventSeriesActions.removeCourseProtection(store, manifestPath, "shared-password")
+        }
+        assertEquals(originals.getValue(dayOnePath), store.readEvent(dayOnePath))
+        assertEquals(originals.getValue(dayTwoPath), store.readEvent(dayTwoPath))
+    }
+
     @Test
     fun seriesSessionDirtyStateIsIndependentFromProjectSession() {
         val projectStore = InMemorySeriesProjectFileStore(mapOf(Path.of("event.rom.json") to projectFile("Event")))

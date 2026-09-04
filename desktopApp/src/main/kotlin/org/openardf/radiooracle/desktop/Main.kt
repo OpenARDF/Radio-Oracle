@@ -124,6 +124,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -336,6 +337,82 @@ internal data class DesktopProtectedCourseState(
     val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
 )
 
+internal data class DesktopCoursePasswordUpdate(
+    val projectFile: EventProjectFile,
+    val password: String?,
+    val courseState: DesktopProtectedCourseState,
+    val replacedExistingPassword: Boolean,
+    val removedPassword: Boolean = false
+)
+
+internal fun updatedCoursePassword(
+    projectFile: EventProjectFile,
+    oldPassword: String,
+    newPassword: String,
+    confirmPassword: String
+): DesktopCoursePasswordUpdate {
+    val trimmedOldPassword = oldPassword.trim()
+    val trimmedNewPassword = newPassword.trim()
+    if (trimmedNewPassword.isEmpty() && confirmPassword.isBlank()) {
+        val removal = removedCourseEncryption(projectFile, trimmedOldPassword)
+        return DesktopCoursePasswordUpdate(
+            projectFile = removal.projectFile,
+            password = null,
+            courseState = removal.courseState,
+            replacedExistingPassword = false,
+            removedPassword = true
+        )
+    }
+    require(trimmedNewPassword.isNotEmpty()) { "New Race Password cannot be blank." }
+    require(trimmedNewPassword == confirmPassword.trim()) { "New Race Passwords do not match." }
+    val hasEncryptedCourseProtection = projectFile.hasEncryptedCategoryData()
+    require(!hasEncryptedCourseProtection || trimmedOldPassword.isNotEmpty()) {
+        "Current Race Password cannot be blank."
+    }
+    val updatedProject = when {
+        hasEncryptedCourseProtection -> DesktopProtectedCourseOrder.reencryptProjectCourseProtection(
+            projectFile,
+            oldPassword = trimmedOldPassword,
+            newPassword = trimmedNewPassword
+        )
+        projectFile.hasUnencryptedCategoryData() ->
+            DesktopProtectedCourseOrder.protectProjectCourseData(projectFile, trimmedNewPassword)
+        else -> projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = projectFile.raceData.categories.map { categoryData ->
+                    categoryData.copy(
+                        category = categoryData.category.copy(
+                            encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt("", trimmedNewPassword)
+                        )
+                    )
+                }
+            )
+        )
+    }
+    return DesktopCoursePasswordUpdate(
+        projectFile = updatedProject,
+        password = trimmedNewPassword,
+        courseState = decryptedProtectedCourseState(updatedProject, trimmedNewPassword),
+        replacedExistingPassword = hasEncryptedCourseProtection
+    )
+}
+
+internal data class DesktopCourseProtectionRemoval(
+    val projectFile: EventProjectFile,
+    val courseState: DesktopProtectedCourseState
+)
+
+internal fun removedCourseEncryption(
+    projectFile: EventProjectFile,
+    password: String
+): DesktopCourseProtectionRemoval {
+    val updatedProject = DesktopProtectedCourseOrder.removeProjectCourseProtection(projectFile, password)
+    return DesktopCourseProtectionRemoval(
+        projectFile = updatedProject,
+        courseState = decryptedProtectedCourseState(updatedProject, "")
+    )
+}
+
 /**
  * Testable decryption hook for the protected route state that the desktop UI keeps in memory.
  *
@@ -351,16 +428,19 @@ internal fun decryptedProtectedCourseState(
     return DesktopProtectedCourseState(
         protectedIdealOrderByCategoryId = courseCategories.associate { categoryData ->
             val encryptedValue = categoryData.category.encryptedIdealOrder
-            categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
-                ""
-            } else {
-                DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
+            categoryData.category.id to when {
+                !encryptedValue.isNullOrBlank() ->
+                    DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
+                else -> categoryData.category.idealOrder.orEmpty()
             }
         },
         protectedCourseInfoByCategoryId = courseCategories.mapNotNull { categoryData ->
-            categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
-                categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
-            }
+            val category = categoryData.category
+            val courseInfo = category.encryptedCourseInfo
+                ?.takeIf(String::isNotBlank)
+                ?.let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
+                ?: category.courseInfo
+            courseInfo?.let { category.id to it }
         }.toMap()
     )
 }
@@ -429,11 +509,16 @@ internal fun loadPublicResultSeriesRaces(
         } else {
             DesktopEventSeriesFiles.readEvent(eventPath)
         }
-        val courseInfo = protectedCoursePassword?.let { password ->
-            runCatching {
-                decryptedProtectedCourseState(project, password).protectedCourseInfoByCategoryId
-            }.getOrElse { if (isCurrentEvent) currentProtectedCourseInfoByCategoryId else emptyMap() }
-        }.orEmpty()
+        val courseInfo = when {
+            isCurrentEvent && currentProtectedCourseInfoByCategoryId.isNotEmpty() ->
+                currentProtectedCourseInfoByCategoryId
+            project.hasUnencryptedCategoryData() ->
+                decryptedProtectedCourseState(project, "").protectedCourseInfoByCategoryId
+            protectedCoursePassword != null -> runCatching {
+                decryptedProtectedCourseState(project, protectedCoursePassword).protectedCourseInfoByCategoryId
+            }.getOrElse { emptyMap() }
+            else -> emptyMap()
+        }
         DesktopPublicResultSeriesRace(project, courseInfo, awardDisplayMode)
     }
     return seriesFile.name to races
@@ -805,6 +890,86 @@ private val ControlTableColumnHints = mapOf(
 private fun currentDesktopAwardDisplayMode(): EventAwardDisplayMode =
     DesktopAppSettingsPreferences.awardDisplayMode()
 
+private fun refreshSavedEventSeriesMetadata(savedProject: EventProjectFile, savedPath: Path): String? {
+    if (savedProject.seriesLink == null) return null
+    val manifestPath = DesktopEventSeriesActions.findManifestNearEvent(
+        eventPath = savedPath,
+        seriesLink = savedProject.seriesLink,
+        store = DesktopEventSeriesFiles
+    ) ?: return "Race Series metadata was not refreshed because no series manifest was found near this Race File."
+    return runCatching {
+        val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+        val refreshedSeriesFile = DesktopEventSeriesActions.refreshLinkedEventMetadata(
+            seriesFile = seriesFile,
+            eventPath = savedPath,
+            seriesFolder = requireNotNull(manifestPath.parent) { "Race Series manifest has no parent folder." },
+            eventProjectFile = savedProject
+        )
+        if (refreshedSeriesFile != seriesFile) {
+            DesktopEventSeriesFiles.write(manifestPath, refreshedSeriesFile)
+            DesktopDebugLog.info(
+                "EventSeries",
+                "Refreshed saved Race File metadata in ${manifestPath.fileName} for ${savedPath.fileName}."
+            )
+        }
+        null
+    }.getOrElse { error ->
+        val message = error.message ?: error::class.simpleName ?: "Unknown error"
+        DesktopDebugLog.error("EventSeries", "Failed to refresh saved Race File metadata: $message")
+        "Race Series metadata refresh failed: $message"
+    }
+}
+
+private fun EventProjectFile.startDrawSettingsLogText(): String {
+    val settings = raceData.effectiveStartDrawSettings()
+    return "startDraw interval=${settings.intervalText} club=${settings.options.clubHandling.name} " +
+        "starters=${settings.options.startersPerStartTime} groups=${settings.options.startGroupMode.name} " +
+        "seed=${settings.options.seed} seriesLock=${settings.lockedForSeriesOptimization}"
+}
+
+private fun iofWarningLines(
+    unsupportedItems: List<IofXmlUnsupportedItem>,
+    outcomeWarnings: List<String> = emptyList()
+): List<String> =
+    unsupportedItems.map { item ->
+        "Unsupported valid IOF content at ${item.location}: ${item.reason}"
+    } + outcomeWarnings.map { warning ->
+        "Import warning: $warning"
+    }
+
+@Composable
+private fun FrameWindowScope.ConfigureDesktopWindowMinimumSize() {
+    DisposableEffect(Unit) {
+        window.minimumSize = Dimension(DesktopWindowBounds.MIN_WIDTH, DesktopWindowBounds.MIN_HEIGHT)
+        onDispose {}
+    }
+}
+
+@Composable
+private fun ManageDesktopServerCleanup(
+    eventFileTransferServer: DesktopEventFileTransferServer?,
+    androidFileReceiveServer: DesktopAndroidFileReceiveServer?,
+    localResultsWebServerRefreshJob: Job?,
+    localResultsWebServer: DesktopPublicResultSitePreviewServer?,
+    publicResultSitePreviewServer: DesktopPublicResultSitePreviewServer?
+) {
+    val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
+    val activeAndroidFileReceiveServer by rememberUpdatedState(androidFileReceiveServer)
+    val activeLocalResultsWebServer by rememberUpdatedState(localResultsWebServer)
+    val activeLocalResultsWebServerRefreshJob by rememberUpdatedState(localResultsWebServerRefreshJob)
+    val activePublicResultSitePreviewServer by rememberUpdatedState(publicResultSitePreviewServer)
+    DisposableEffect(Unit) {
+        onDispose {
+            activeEventFileTransferServer?.stop()
+            activeAndroidFileReceiveServer?.stop()
+            activeLocalResultsWebServerRefreshJob?.cancel()
+            activeLocalResultsWebServer?.stop()
+            activePublicResultSitePreviewServer?.stop()
+            DesktopEventSeriesArchiveWorkspaces.closeAll()
+        }
+    }
+}
+
 /** Starts the first Compose Desktop shell for Radio-Oracle. */
 fun main(args: Array<String>) = application {
     val restoredWindowBounds = remember { DesktopAppSettingsPreferences.windowBounds() }
@@ -819,10 +984,21 @@ fun main(args: Array<String>) = application {
     )
     lateinit var requestWindowClose: () -> Unit
     Window(onCloseRequest = { requestWindowClose() }, title = DesktopBuildInfo.windowTitle, state = windowState) {
-        DisposableEffect(Unit) {
-            window.minimumSize = Dimension(DesktopWindowBounds.MIN_WIDTH, DesktopWindowBounds.MIN_HEIGHT)
-            onDispose {}
-        }
+        RadioOracleDesktopContent(
+            args = args,
+            onExitApplication = ::exitApplication,
+            onRequestWindowCloseReady = { requestWindowClose = it }
+        )
+    }
+}
+
+@Composable
+private fun FrameWindowScope.RadioOracleDesktopContent(
+    args: Array<String>,
+    onExitApplication: () -> Unit,
+    onRequestWindowCloseReady: (() -> Unit) -> Unit
+) {
+        ConfigureDesktopWindowMinimumSize()
         val startupPath = remember(args.toList()) {
             startupProjectPath(args.firstOrNull()?.let(Path::of))
         }
@@ -952,22 +1128,13 @@ fun main(args: Array<String>) = application {
             mutableStateOf<DesktopCompetitorSpreadsheetImportDraft?>(null)
         }
         val siPortMutex = remember { Mutex() }
-        val activeEventFileTransferServer by rememberUpdatedState(eventFileTransferServer)
-        val activeAndroidFileReceiveServer by rememberUpdatedState(androidFileReceiveServer)
-        val activeLocalResultsWebServer by rememberUpdatedState(localResultsWebServer)
-        val activeLocalResultsWebServerRefreshJob by rememberUpdatedState(localResultsWebServerRefreshJob)
-        val activePublicResultSitePreviewServer by rememberUpdatedState(publicResultSiteState.previewServer)
-
-        DisposableEffect(Unit) {
-            onDispose {
-                activeEventFileTransferServer?.stop()
-                activeAndroidFileReceiveServer?.stop()
-                activeLocalResultsWebServerRefreshJob?.cancel()
-                activeLocalResultsWebServer?.stop()
-                activePublicResultSitePreviewServer?.stop()
-                DesktopEventSeriesArchiveWorkspaces.closeAll()
-            }
-        }
+        ManageDesktopServerCleanup(
+            eventFileTransferServer,
+            androidFileReceiveServer,
+            localResultsWebServerRefreshJob,
+            localResultsWebServer,
+            publicResultSiteState.previewServer
+        )
 
         LaunchedEffect(Unit) {
             DesktopDebugLog.initialize()
@@ -1039,42 +1206,6 @@ fun main(args: Array<String>) = application {
             seriesRevision = seriesEventSummaries
         )
 
-        fun refreshSavedEventSeriesMetadata(savedProject: EventProjectFile, savedPath: Path): String? {
-            if (savedProject.seriesLink == null) {
-                return null
-            }
-            val manifestPath = DesktopEventSeriesActions.findManifestNearEvent(
-                eventPath = savedPath,
-                seriesLink = savedProject.seriesLink,
-                store = DesktopEventSeriesFiles
-            )
-                ?: return "Race Series metadata was not refreshed because no series manifest was found near this Race File."
-            return runCatching {
-                val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
-                val seriesFolder = requireNotNull(manifestPath.parent) {
-                    "Race Series manifest has no parent folder."
-                }
-                val refreshedSeriesFile = DesktopEventSeriesActions.refreshLinkedEventMetadata(
-                    seriesFile = seriesFile,
-                    eventPath = savedPath,
-                    seriesFolder = seriesFolder,
-                    eventProjectFile = savedProject
-                )
-                if (refreshedSeriesFile != seriesFile) {
-                    DesktopEventSeriesFiles.write(manifestPath, refreshedSeriesFile)
-                    DesktopDebugLog.info(
-                        "EventSeries",
-                        "Refreshed saved Race File metadata in ${manifestPath.fileName} for ${savedPath.fileName}."
-                    )
-                }
-                null
-            }.getOrElse { error ->
-                val message = error.message ?: error::class.simpleName ?: "Unknown error"
-                DesktopDebugLog.error("EventSeries", "Failed to refresh saved Race File metadata: $message")
-                "Race Series metadata refresh failed: $message"
-            }
-        }
-
         fun refreshSeriesEventSummaries() {
             val currentPath = projectSession.currentPath
             val manifestPath = currentPath?.let {
@@ -1137,6 +1268,12 @@ fun main(args: Array<String>) = application {
         fun syncProjectState() {
             projectFile = projectSession.currentProject
             hasUnsavedChanges = projectSession.hasUnsavedChanges
+            projectFile?.takeIf { it.hasUnencryptedCategoryData() && !it.hasEncryptedCategoryData() }?.let { project ->
+                val courseState = decryptedProtectedCourseState(project, "")
+                protectedIdealOrderByCategoryId = courseState.protectedIdealOrderByCategoryId
+                protectedCourseInfoByCategoryId = courseState.protectedCourseInfoByCategoryId
+                protectedCoursePassword = null
+            }
             refreshSeriesEventSummaries()
             val currentEventPath = projectSession.currentPath?.toAbsolutePath()?.normalize()
             if (eventSeriesValidationEventPath != currentEventPath) {
@@ -1181,12 +1318,8 @@ fun main(args: Array<String>) = application {
             recentActivityLog = (listOf("$timestamp - $message") + recentActivityLog).take(12)
         }
 
-        fun EventProjectFile.startDrawSettingsLogText(): String {
-            val settings = raceData.effectiveStartDrawSettings()
-            return "startDraw interval=${settings.intervalText} club=${settings.options.clubHandling.name} " +
-                "starters=${settings.options.startersPerStartTime} groups=${settings.options.startGroupMode.name} " +
-                "seed=${settings.options.seed} seriesLock=${settings.lockedForSeriesOptimization}"
-        }
+        fun isProtectedCourseStateAvailable(project: EventProjectFile? = projectFile): Boolean =
+            protectedCoursePassword != null || project?.hasUnencryptedCategoryData() == true
 
         fun deleteControlAfterProtectedRouteCheck(controlId: String, promptIfLocked: Boolean = true): Boolean {
             val currentProject = projectSession.currentProject
@@ -1194,7 +1327,7 @@ fun main(args: Array<String>) = application {
                 projectStatusText = "Edit failed: Load a Race File before deleting controls."
                 return false
             }
-            if (currentProject.hasProtectedCategoryData() && protectedCoursePassword == null) {
+            if (currentProject.hasLockedProtectedCourseData(isProtectedCourseStateAvailable(currentProject))) {
                 val controlLabel = currentProject.raceData.controls
                     .firstOrNull { it.id == controlId }
                     ?.publicDisplayLabel()
@@ -1211,13 +1344,11 @@ fun main(args: Array<String>) = application {
                 val currentProjectForDelete = projectSession.currentProject
                     ?: throw IllegalStateException("Load a Race File before deleting controls.")
                 val cleanupResult = if (protectedCourseInfoByCategoryId.isNotEmpty()) {
-                    val password = protectedCoursePassword
-                        ?: throw IllegalStateException("Unlock course data before deleting controls so protected route references can be cleaned.")
                     DesktopProtectedCourseCleanup.removeStaleControlReferencesForDeletedControl(
                         projectFile = currentProjectForDelete,
                         protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                         controlId = controlId,
-                        password = password
+                        password = protectedCoursePassword
                     )
                 } else {
                     DesktopProtectedCourseCleanupResult(
@@ -1273,16 +1404,6 @@ fun main(args: Array<String>) = application {
             val backupPath = recentImportCheckpoint?.backupPath ?: return lines
             return lines + "Rollback backup file: $backupPath"
         }
-
-        fun iofWarningLines(
-            unsupportedItems: List<IofXmlUnsupportedItem>,
-            outcomeWarnings: List<String> = emptyList()
-        ): List<String> =
-            unsupportedItems.map { item ->
-                "Unsupported valid IOF content at ${item.location}: ${item.reason}"
-            } + outcomeWarnings.map { warning ->
-                "Import warning: $warning"
-            }
 
         fun restoreRecentImportCheckpoint() {
             val checkpoint = recentImportCheckpoint ?: return
@@ -1352,6 +1473,17 @@ fun main(args: Array<String>) = application {
             pendingAssignedControlsWarning = null
         }
 
+        fun lockProtectedCourseOrder() {
+            if (protectedCoursePassword == null && projectFile?.hasUnencryptedCategoryData() == true) {
+                return
+            }
+            val wasUnlocked = protectedCoursePassword != null
+            protectedCoursePassword = null
+            protectedIdealOrderByCategoryId = emptyMap()
+            protectedCourseInfoByCategoryId = emptyMap()
+            if (wasUnlocked) projectStatusText = "Race Password lock applied."
+        }
+
         fun scheduleAssignedControlsWarning(
             warning: EventAssignedControlWarning?,
             previousControlPointsText: String? = null
@@ -1369,16 +1501,6 @@ fun main(args: Array<String>) = application {
                     previousControlPointsText = previousControlPointsText
                 )
                 assignedControlsWarningJob = null
-            }
-        }
-
-        fun lockProtectedCourseOrder() {
-            val wasUnlocked = protectedCoursePassword != null
-            protectedCoursePassword = null
-            protectedIdealOrderByCategoryId = emptyMap()
-            protectedCourseInfoByCategoryId = emptyMap()
-            if (wasUnlocked) {
-                projectStatusText = "Race Password lock applied."
             }
         }
 
@@ -1511,7 +1633,7 @@ fun main(args: Array<String>) = application {
                 DesktopProjectFiles.exportPublicResultsSite(
                     directory,
                     currentProject,
-                    protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                    protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable() } ?: emptyMap(),
                     currentDesktopAwardDisplayMode()
                 )
             } else {
@@ -1778,8 +1900,8 @@ fun main(args: Array<String>) = application {
             }
             val preflightWarning = raceOpsPreflightWarning(
                 currentProject,
-                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
-                protectedCoursePassword != null
+                protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable(currentProject) } ?: emptyMap(),
+                isProtectedCourseStateAvailable(currentProject)
             )
             isDownloadingSiReadout = true
             siDownloadStatusText = "Waiting for SI card; keep it seated until the read finishes."
@@ -1958,8 +2080,8 @@ fun main(args: Array<String>) = application {
             }
             val preflightWarning = raceOpsPreflightWarning(
                 currentProject,
-                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
-                protectedCoursePassword != null
+                protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable(currentProject) } ?: emptyMap(),
+                isProtectedCourseStateAvailable(currentProject)
             )
             val stopRequested = AtomicBoolean(false)
             val timeoutNoticeLogged = AtomicBoolean(false)
@@ -2146,8 +2268,8 @@ fun main(args: Array<String>) = application {
             }
             val preflightWarning = raceOpsPreflightWarning(
                 currentProjectForPlan,
-                protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
-                protectedCoursePassword != null
+                protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable(currentProjectForPlan) } ?: emptyMap(),
+                isProtectedCourseStateAvailable(currentProjectForPlan)
             )
             isSendingLiveResults = true
             if (!automatic) {
@@ -2650,6 +2772,28 @@ fun main(args: Array<String>) = application {
             }
         }
 
+        fun removeCurrentEventSeriesCourseEncryption(password: String): Boolean = runCatching {
+            val result = DesktopEventSeriesActions.removeCourseProtection(
+                store = DesktopEventSeriesFiles,
+                manifestPath = requireNotNull(currentSeriesManifestPath()) {
+                    "Series manifest not found near this Race File."
+                },
+                password = password,
+                currentEventPath = projectSession.currentPath,
+                currentProject = projectSession.currentProject
+            )
+            projectSession.currentPath?.let { projectFile = projectSession.open(it) }
+            syncProjectState()
+            protectedCoursePassword = null
+            projectStatusText =
+                "Removed Race Password protection from ${result.raceCount} Race Files. " +
+                    "Course and route data is now stored as readable text."
+            true
+        }.getOrElse { error ->
+            projectStatusText = "Race Series encryption removal failed: ${error.message ?: error::class.simpleName}"
+            false
+        }
+
         fun updateCurrentEventSeriesFileName(fileNameStem: String): Boolean {
             val trimmedFileNameStem = fileNameStem.trim()
             if (trimmedFileNameStem.isBlank()) {
@@ -2847,7 +2991,7 @@ fun main(args: Array<String>) = application {
 
         fun exportIofCourseDataXml() {
             val currentProject = projectSession.currentProject ?: return
-            if (currentProject.hasLockedProtectedCourseData(protectedCoursePassword != null)) {
+            if (currentProject.hasLockedProtectedCourseData(isProtectedCourseStateAvailable(currentProject))) {
                 projectStatusText = "Course data is locked. Unlock the Race Password before exporting IOF CourseData XML."
                 return
             }
@@ -2857,7 +3001,7 @@ fun main(args: Array<String>) = application {
                         path = path,
                         projectFile = currentProject,
                         protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
-                            .takeIf { protectedCoursePassword != null }
+                            .takeIf { isProtectedCourseStateAvailable(currentProject) }
                     )
                     syncProjectState()
                     projectStatusText = "Exported ${path.fileName}"
@@ -2992,13 +3136,13 @@ fun main(args: Array<String>) = application {
         }
 
         fun updateProtectedIdealOrder(categoryId: String, idealOrderText: String) {
-            val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock course order before editing."
-                return
-            }
             runCatching {
                 val currentProject = projectFile
                     ?: throw IllegalStateException("Load a Race File before editing course order.")
+                val storesPlaintext = currentProject.hasUnencryptedCategoryData() &&
+                    !currentProject.hasEncryptedCategoryData()
+                val password = protectedCoursePassword
+                require(storesPlaintext || password != null) { "Unlock course order before editing." }
                 val trimmedIdealOrder = idealOrderText.trim()
                 if (trimmedIdealOrder.isNotEmpty()) {
                     val assignedControls = assignedProtectedIdealOrderControls(currentProject, categoryId)
@@ -3007,11 +3151,18 @@ fun main(args: Array<String>) = application {
                     }
                     ProtectedIdealOrderRules.validateAssignedToCategory(trimmedIdealOrder, assignedControls)
                 }
-                val encryptedIdealOrder = trimmedIdealOrder.takeIf { it.isNotEmpty() }?.let {
-                    DesktopProtectedCourseOrder.encrypt(it, password)
-                }
                 projectFile = projectSession.updateCurrentProject { currentProject ->
-                    EventProjectEditor.updateCategoryEncryptedIdealOrder(currentProject, categoryId, encryptedIdealOrder)
+                    if (storesPlaintext) {
+                        EventProjectEditor.updateCategoryIdealOrder(currentProject, categoryId, trimmedIdealOrder)
+                    } else {
+                        EventProjectEditor.updateCategoryEncryptedIdealOrder(
+                            currentProject,
+                            categoryId,
+                            trimmedIdealOrder.takeIf(String::isNotEmpty)?.let {
+                                DesktopProtectedCourseOrder.encrypt(it, requireNotNull(password))
+                            }
+                        )
+                    }
                 }
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (categoryId to trimmedIdealOrder)
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -3044,8 +3195,10 @@ fun main(args: Array<String>) = application {
                         syncProtectedCourseState(reloadedProject, password)
                     }
                 } ?: run {
-                    protectedIdealOrderByCategoryId = emptyMap()
-                    protectedCourseInfoByCategoryId = emptyMap()
+                    if (projectSession.currentProject?.hasUnencryptedCategoryData() != true) {
+                        protectedIdealOrderByCategoryId = emptyMap()
+                        protectedCourseInfoByCategoryId = emptyMap()
+                    }
                 }
                 projectStatusText = "Unsaved Race File changes dumped. Reloaded ${path.fileName} from disk."
                 DesktopDebugLog.info("EventFile", "Dumped unsaved changes and reloaded ${path.fileName}")
@@ -3109,19 +3262,18 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        fun updateCourseAnalyzerSpeedFactor(factor: Double): String =
-            runCatching {
-                projectFile ?: throw IllegalStateException("Load a Race File before updating Course Analyzer speed.")
-                projectFile = projectSession.updateCurrentProject { project ->
-                    EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(project, factor)
-                }
-                hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = "Course Analyzer speed factor updated. Unsaved changes."
-                projectStatusText
-            }.getOrElse { error ->
-                projectStatusText = "Speed factor update failed: ${error.message ?: error::class.simpleName}"
-                projectStatusText
+        fun updateCourseAnalyzerSpeedFactor(factor: Double): String = runCatching {
+            projectFile ?: throw IllegalStateException("Load a Race File before updating Course Analyzer speed.")
+            projectFile = projectSession.updateCurrentProject { project ->
+                EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(project, factor)
             }
+            hasUnsavedChanges = projectSession.hasUnsavedChanges
+            projectStatusText = "Course Analyzer speed factor updated. Unsaved changes."
+            projectStatusText
+        }.getOrElse { error ->
+            projectStatusText = "Speed factor update failed: ${error.message ?: error::class.simpleName}"
+            projectStatusText
+        }
 
         fun updateProtectedControlLocation(controlId: String, latitudeText: String, longitudeText: String): String {
             val password = protectedCoursePassword ?: run {
@@ -3157,67 +3309,18 @@ fun main(args: Array<String>) = application {
 
         fun updateProtectedCoursePassword(oldPassword: String, newPassword: String, confirmPassword: String): Boolean {
             val currentProject = projectSession.currentProject ?: return false
-            val trimmedOldPassword = oldPassword.trim()
-            val trimmedNewPassword = newPassword.trim()
-            val trimmedConfirmPassword = confirmPassword.trim()
-            if (trimmedNewPassword.isEmpty()) {
-                projectStatusText = "New Race Password cannot be blank."
-                return false
-            }
-            if (trimmedNewPassword != trimmedConfirmPassword) {
-                projectStatusText = "New Race Passwords do not match."
-                return false
-            }
-
-            val hasEncryptedCourseProtection = currentProject.raceData.categories.any { categoryData ->
-                !categoryData.category.encryptedIdealOrder.isNullOrBlank() ||
-                    !categoryData.category.encryptedCourseInfo.isNullOrBlank()
-            }
-            if (hasEncryptedCourseProtection && trimmedOldPassword.isEmpty()) {
-                projectStatusText = "Current Race Password cannot be blank."
-                return false
-            }
-
             return runCatching {
-                val updatedProject = if (hasEncryptedCourseProtection) {
-                    DesktopProtectedCourseOrder.reencryptProjectCourseProtection(
-                        currentProject,
-                        oldPassword = trimmedOldPassword,
-                        newPassword = trimmedNewPassword
-                    )
-                } else {
-                    currentProject.copy(
-                        raceData = currentProject.raceData.copy(
-                            categories = currentProject.raceData.categories.map { categoryData ->
-                                categoryData.copy(
-                                    category = categoryData.category.copy(
-                                        encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt("", trimmedNewPassword)
-                                    )
-                                )
-                            }
-                        )
-                    )
-                }
-                projectFile = projectSession.updateCurrentProject { updatedProject }
-                protectedCoursePassword = trimmedNewPassword
-                protectedIdealOrderByCategoryId = updatedProject.raceData.categories.associate { categoryData ->
-                    val encryptedValue = categoryData.category.encryptedIdealOrder
-                    categoryData.category.id to if (encryptedValue.isNullOrBlank()) {
-                        ""
-                    } else {
-                        DesktopProtectedCourseOrder.decrypt(encryptedValue, trimmedNewPassword)
-                    }
-                }
-                protectedCourseInfoByCategoryId = updatedProject.raceData.categories.mapNotNull { categoryData ->
-                    categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
-                        categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, trimmedNewPassword)
-                    }
-                }.toMap()
+                val update = updatedCoursePassword(currentProject, oldPassword, newPassword, confirmPassword)
+                projectFile = projectSession.updateCurrentProject { update.projectFile }
+                protectedCoursePassword = update.password
+                protectedIdealOrderByCategoryId = update.courseState.protectedIdealOrderByCategoryId
+                protectedCourseInfoByCategoryId = update.courseState.protectedCourseInfoByCategoryId
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = if (hasEncryptedCourseProtection) {
-                    "Race Password updated. Unsaved changes."
-                } else {
-                    "Race Password set. Unsaved changes."
+                projectStatusText = when {
+                    update.removedPassword ->
+                        "Race Password protection removed. Course and route data is now stored as readable text. Unsaved changes."
+                    update.replacedExistingPassword -> "Race Password updated. Unsaved changes."
+                    else -> "Race Password set. Unsaved changes."
                 }
                 true
             }.getOrElse { error ->
@@ -4267,7 +4370,7 @@ fun main(args: Array<String>) = application {
                     DesktopProjectFiles.exportFinalResultsJson(
                         path,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable() } ?: emptyMap(),
                         currentDesktopAwardDisplayMode()
                     )
                     syncProjectState()
@@ -4339,7 +4442,7 @@ fun main(args: Array<String>) = application {
                     DesktopProjectFiles.exportResultsHtml(
                         path,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable() } ?: emptyMap(),
                         currentDesktopAwardDisplayMode()
                     )
                     syncProjectState()
@@ -4357,7 +4460,7 @@ fun main(args: Array<String>) = application {
                     DesktopProjectFiles.exportResultReportHtml(
                         path,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable() } ?: emptyMap(),
                         currentDesktopAwardDisplayMode()
                     )
                     syncProjectState()
@@ -4375,7 +4478,7 @@ fun main(args: Array<String>) = application {
                     DesktopProjectFiles.exportResultReportXml(
                         path,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable() } ?: emptyMap(),
                         currentDesktopAwardDisplayMode()
                     )
                     syncProjectState()
@@ -4395,7 +4498,7 @@ fun main(args: Array<String>) = application {
                     DesktopProjectFiles.exportResultReportPdf(
                         path,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable() } ?: emptyMap(),
                         currentDesktopAwardDisplayMode()
                     )
                     syncProjectState()
@@ -4597,7 +4700,7 @@ fun main(args: Array<String>) = application {
         fun requestPublicResultsSite(publish: Boolean) {
             val projects = publicResultSeriesRaces()?.second?.map(DesktopPublicResultSeriesRace::projectFile)
                 ?: listOfNotNull(projectSession.currentProject)
-            if (publicResultsNeedCourseUnlock(projects, protectedCoursePassword != null)) {
+            if (publicResultsNeedCourseUnlock(projects, isProtectedCourseStateAvailable())) {
                 DesktopPublicResultsRequestedAction.rememberPublish(publish)
                 pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.GeneratePublicResultsSite
                 projectStatusText =
@@ -4614,7 +4717,7 @@ fun main(args: Array<String>) = application {
                     DesktopProjectFiles.exportResultsText(
                         path,
                         currentProject,
-                        protectedCourseInfoByCategoryId.takeIf { protectedCoursePassword != null } ?: emptyMap(),
+                        protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable() } ?: emptyMap(),
                         currentDesktopAwardDisplayMode()
                     )
                     syncProjectState()
@@ -4838,7 +4941,9 @@ fun main(args: Array<String>) = application {
             val currentProjectBeforeImport = projectSession.currentProject
             if (
                 syncMissingControls &&
-                currentProjectBeforeImport?.hasLockedProtectedCourseData(protectedCoursePassword != null) == true
+                currentProjectBeforeImport?.hasLockedProtectedCourseData(
+                    isProtectedCourseStateAvailable(currentProjectBeforeImport)
+                ) == true
             ) {
                 pendingControlsCsvSyncUnlockReview = review
                 projectStatusText = "Unlock course data to synchronize control deletions."
@@ -5188,7 +5293,7 @@ fun main(args: Array<String>) = application {
                     height = window.height
                 )
             )
-            exitApplication()
+            onExitApplication()
         }
 
         fun continuePendingDirtyAction(saveFirst: Boolean) {
@@ -5210,7 +5315,7 @@ fun main(args: Array<String>) = application {
             }
         }
 
-        requestWindowClose = {
+        onRequestWindowCloseReady {
             pendingDirtyProjectAction = DesktopDirtyProjectActions.pendingActionOrNull(
                 hasProtectedUnsavedChanges(),
                 PendingDirtyProjectAction.ExitApplication
@@ -7429,6 +7534,7 @@ fun main(args: Array<String>) = application {
             onOpenSeriesEvent = ::openSeriesEvent,
             onUpdateEventSeriesName = ::updateCurrentEventSeriesName,
             onUpdateEventSeriesFileName = ::updateCurrentEventSeriesFileName,
+            onRemoveEventSeriesCourseEncryption = ::removeCurrentEventSeriesCourseEncryption,
             onInsertTestControls = ::insertTestControls,
             onInsertTestCategories = ::insertTestCategories,
             onInsertTestCompetitors = ::insertTestCompetitors,
@@ -7442,7 +7548,8 @@ fun main(args: Array<String>) = application {
                 lastLoggedSiReaderStatus = null
             },
             onNavAction = ::handleNavAction,
-            isProtectedCourseOrderUnlocked = protectedCoursePassword != null,
+            isProtectedCourseOrderUnlocked =
+                isProtectedCourseStateAvailable(),
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             recentImportReport = recentImportReport,
@@ -7587,7 +7694,10 @@ fun main(args: Array<String>) = application {
                         ?.restorableControlPointsText()
                         ?.takeIf { it.isNotBlank() }
                     val updatedProject = projectSession.updateCurrentProject { currentProject ->
-                        lockedCourseWarning = currentProject.lockedCategoryCourseWarning(categoryId, protectedCoursePassword != null)
+                        lockedCourseWarning = currentProject.lockedCategoryCourseWarning(
+                            categoryId,
+                            isProtectedCourseStateAvailable(currentProject)
+                        )
                         EventProjectEditor.updateCategoryControlPoints(
                             currentProject,
                             categoryId,
@@ -7617,7 +7727,10 @@ fun main(args: Array<String>) = application {
                 runCatching {
                     var lockedCourseWarning = ""
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        lockedCourseWarning = currentProject.lockedCategoryCourseWarning(categoryId, protectedCoursePassword != null)
+                        lockedCourseWarning = currentProject.lockedCategoryCourseWarning(
+                            categoryId,
+                            isProtectedCourseStateAvailable(currentProject)
+                        )
                         EventProjectEditor.updateCategoryPhysicalStats(
                             currentProject,
                             categoryId,
@@ -7895,7 +8008,7 @@ fun main(args: Array<String>) = application {
                         resultId,
                         useAliases = areAliasesEnabled,
                         protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
-                            .takeIf { protectedCoursePassword != null }
+                            .takeIf { isProtectedCourseStateAvailable(currentProject) }
                     )
                 }.getOrElse { error ->
                     "Ticket preview failed: ${error.message ?: error::class.simpleName}"
@@ -7915,7 +8028,7 @@ fun main(args: Array<String>) = application {
                                     resultId,
                                     useAliases = areAliasesEnabled,
                                     protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
-                                        .takeIf { protectedCoursePassword != null }
+                                        .takeIf { isProtectedCourseStateAvailable(currentProject) }
                                 )
                                 val printerName = DesktopTicketPrinterSelector.selectPrinterName(ticketPrinter.listPrinters())
                                 ticketPrinter.printFinishTicket(markedUpTicketText, printerName)
@@ -7977,7 +8090,9 @@ fun main(args: Array<String>) = application {
                                 protectedCourseInfoByCategoryId,
                                 controlIds
                             )
-                            lockedCourseWarning = currentProject.lockedProtectedCourseWarning(protectedCoursePassword != null)
+                            lockedCourseWarning = currentProject.lockedProtectedCourseWarning(
+                                isProtectedCourseStateAvailable(currentProject)
+                            )
                         }
                         val updatedProject = EventProjectEditor.updateControl(
                             currentProject,
@@ -8084,7 +8199,6 @@ fun main(args: Array<String>) = application {
                 projectStatusText = "New Race File discarded."
             }
         )
-    }
 }
 
 @Composable
@@ -11962,6 +12076,7 @@ private fun RadioOManagerDesktopApp(
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit = {},
     onUpdateEventSeriesName: (String) -> Boolean = { false },
     onUpdateEventSeriesFileName: (String) -> Boolean = { false },
+    onRemoveEventSeriesCourseEncryption: (String) -> Boolean = { false },
     onInsertTestControls: () -> Unit = {},
     onInsertTestCategories: () -> Unit = {},
     onInsertTestCompetitors: () -> Unit = {},
@@ -12322,6 +12437,7 @@ private fun RadioOManagerDesktopApp(
                                     onOpenSeriesEvent = onOpenSeriesEvent,
                                     onUpdateEventSeriesName = onUpdateEventSeriesName,
                                     onUpdateEventSeriesFileName = onUpdateEventSeriesFileName,
+                                    onRemoveEventSeriesCourseEncryption = onRemoveEventSeriesCourseEncryption,
                                     onInsertTestControls = onInsertTestControls,
                                     onInsertTestCategories = onInsertTestCategories,
                                     onInsertTestCompetitors = onInsertTestCompetitors,
@@ -13647,6 +13763,7 @@ private fun SectionWorkspace(
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit,
     onUpdateEventSeriesName: (String) -> Boolean,
     onUpdateEventSeriesFileName: (String) -> Boolean,
+    onRemoveEventSeriesCourseEncryption: (String) -> Boolean,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
@@ -13832,7 +13949,8 @@ private fun SectionWorkspace(
             EventSeriesSettingsPanel(
                 seriesContext = eventSeriesUiContext,
                 onUpdateSeriesName = onUpdateEventSeriesName,
-                onUpdateSeriesFileName = onUpdateEventSeriesFileName
+                onUpdateSeriesFileName = onUpdateEventSeriesFileName,
+                onRemoveCourseEncryption = onRemoveEventSeriesCourseEncryption
             )
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
@@ -15383,6 +15501,7 @@ private fun CoursePasswordSettingsPanel(
     var oldPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
     var newPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
     var confirmPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
+    var isRemoveConfirmationVisible by remember(projectFile?.raceData?.race?.id) { mutableStateOf(false) }
     val canSubmit = newPasswordDraft.isNotBlank() &&
         confirmPasswordDraft.isNotBlank() &&
         (!hasCoursePassword || oldPasswordDraft.isNotBlank())
@@ -15453,7 +15572,54 @@ private fun CoursePasswordSettingsPanel(
                     ButtonLabel(if (hasCoursePassword) "Reset Race Password" else "Set Race Password")
                 }
             }
+            if (hasCoursePassword) {
+                Button(
+                    onClick = { isRemoveConfirmationVisible = true },
+                    enabled = oldPasswordDraft.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = DesktopPalette.Warning,
+                        contentColor = DesktopPalette.Black
+                    )
+                ) {
+                    ButtonLabel("Remove Encryption")
+                }
+            }
         }
+    }
+    if (isRemoveConfirmationVisible) {
+        AlertDialog(
+            onDismissRequest = { isRemoveConfirmationVisible = false },
+            title = { Text("Remove Race Password Protection?") },
+            text = {
+                Text(
+                    "This keeps all course and route data, but stores it as readable text in the Race File. " +
+                        "Anyone with the file will be able to see control locations and route details."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (onUpdateCoursePassword(oldPasswordDraft, "", "")) {
+                            oldPasswordDraft = ""
+                            newPasswordDraft = ""
+                            confirmPasswordDraft = ""
+                            isRemoveConfirmationVisible = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = DesktopPalette.Warning,
+                        contentColor = DesktopPalette.Black
+                    )
+                ) {
+                    Text("Remove Encryption")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { isRemoveConfirmationVisible = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -16698,7 +16864,8 @@ private fun EventSeriesCompetitorMatchingRow(summary: DesktopEventSeriesCompetit
 private fun EventSeriesSettingsPanel(
     seriesContext: EventSeriesUiContext?,
     onUpdateSeriesName: (String) -> Boolean,
-    onUpdateSeriesFileName: (String) -> Boolean
+    onUpdateSeriesFileName: (String) -> Boolean,
+    onRemoveCourseEncryption: (String) -> Boolean
 ) {
     if (seriesContext == null) {
         Text(
@@ -16716,6 +16883,8 @@ private fun EventSeriesSettingsPanel(
     var fileNameDraft by remember(seriesContext.manifestPath) { mutableStateOf(currentFileNameStem) }
     val trimmedFileName = fileNameDraft.trim()
     val canApplyFileName = trimmedFileName.isNotBlank() && trimmedFileName != currentFileNameStem
+    var passwordDraft by remember(seriesContext.manifestPath) { mutableStateOf("") }
+    var isRemoveConfirmationVisible by remember(seriesContext.manifestPath) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = "Series File: ${seriesContext.manifestPath}",
@@ -16793,6 +16962,74 @@ private fun EventSeriesSettingsPanel(
                 Text("Rename File")
             }
         }
+        Divider()
+        Text(
+            text = "Remove Race Password protection from every Race File in this series.",
+            color = DesktopPalette.Black,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = "All races must use the same current Race Password. The change is saved directly to every Race File.",
+            color = Color.DarkGray,
+            fontSize = 13.sp
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = passwordDraft,
+                onValueChange = { passwordDraft = it },
+                label = { Text("Current Race Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.width(220.dp)
+            )
+            Button(
+                onClick = { isRemoveConfirmationVisible = true },
+                enabled = passwordDraft.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = DesktopPalette.Warning,
+                    contentColor = DesktopPalette.Black
+                )
+            ) {
+                Text("Remove Series Encryption")
+            }
+        }
+    }
+    if (isRemoveConfirmationVisible) {
+        AlertDialog(
+            onDismissRequest = { isRemoveConfirmationVisible = false },
+            title = { Text("Remove Series Encryption?") },
+            text = {
+                Text(
+                    "This keeps all course and route data, but stores it as readable text in every Race File. " +
+                        "Anyone with the series will be able to see control locations and route details."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (onRemoveCourseEncryption(passwordDraft)) {
+                            passwordDraft = ""
+                            isRemoveConfirmationVisible = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        backgroundColor = DesktopPalette.Warning,
+                        contentColor = DesktopPalette.Black
+                    )
+                ) {
+                    Text("Remove Encryption")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { isRemoveConfirmationVisible = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -24575,7 +24812,20 @@ private fun EventProjectFile.hasLockedProtectedCourseData(isProtectedCourseOrder
 private fun EventProjectFile.hasProtectedCategoryData(): Boolean =
     protectedCourseDataContainers(raceData).any {
         it.category.encryptedIdealOrder?.isNotBlank() == true ||
+            it.category.encryptedCourseInfo?.isNotBlank() == true ||
+            it.category.idealOrder?.isNotBlank() == true ||
+            it.category.courseInfo != null
+    }
+
+private fun EventProjectFile.hasEncryptedCategoryData(): Boolean =
+    protectedCourseDataContainers(raceData).any {
+        it.category.encryptedIdealOrder?.isNotBlank() == true ||
             it.category.encryptedCourseInfo?.isNotBlank() == true
+    }
+
+private fun EventProjectFile.hasUnencryptedCategoryData(): Boolean =
+    protectedCourseDataContainers(raceData).any {
+        it.category.idealOrder != null || it.category.courseInfo != null
     }
 
 private fun EventProjectFile.categoryHasLockedProtectedCourseData(

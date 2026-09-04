@@ -26,6 +26,7 @@ package org.openardf.radiooracle.shared.publicresults
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import java.security.SecureRandom
@@ -116,6 +117,12 @@ object ProtectedCourseCipher {
     fun decryptCourseInfo(encryptedValue: String, password: String): ProtectedCourseInfo =
         json.decodeFromString(ProtectedCourseInfo.serializer(), decrypt(encryptedValue, password))
 
+    fun encodeCourseInfo(courseInfo: ProtectedCourseInfo): String =
+        json.encodeToString(courseInfo)
+
+    fun decodeCourseInfo(value: String): ProtectedCourseInfo =
+        json.decodeFromString(ProtectedCourseInfo.serializer(), value)
+
     fun reencryptProjectCourseProtection(
         projectFile: EventProjectFile,
         oldPassword: String,
@@ -129,25 +136,114 @@ object ProtectedCourseCipher {
         require(trimmedNewPassword.isNotEmpty()) {
             "New Race Password cannot be blank."
         }
-        val categories = projectFile.raceData.categories.map { categoryData ->
-            val category = categoryData.category
-            categoryData.copy(
-                category = category.copy(
-                    encryptedIdealOrder = category.encryptedIdealOrder
-                        ?.takeIf(String::isNotBlank)
-                        ?.let { encrypt(decrypt(it, trimmedOldPassword), trimmedNewPassword) },
-                    encryptedCourseInfo = category.encryptedCourseInfo
-                        ?.takeIf(String::isNotBlank)
-                        ?.let {
-                            encryptCourseInfo(
-                                decryptCourseInfo(it, trimmedOldPassword),
-                                trimmedNewPassword
-                            )
-                        }
+        fun reencrypt(categoryData: EventCategoryData) =
+            categoryData.let { data ->
+                val category = data.category
+                data.copy(
+                    category = category.copy(
+                        encryptedIdealOrder = category.encryptedIdealOrder
+                            ?.takeIf(String::isNotBlank)
+                            ?.let { encrypt(decrypt(it, trimmedOldPassword), trimmedNewPassword) }
+                            ?: category.idealOrder?.let { encrypt(it, trimmedNewPassword) },
+                        encryptedCourseInfo = category.encryptedCourseInfo
+                            ?.takeIf(String::isNotBlank)
+                            ?.let {
+                                encryptCourseInfo(
+                                    decryptCourseInfo(it, trimmedOldPassword),
+                                    trimmedNewPassword
+                                )
+                            }
+                            ?: category.courseInfo?.let {
+                                encryptCourseInfo(it, trimmedNewPassword)
+                            },
+                        idealOrder = null,
+                        courseInfo = null
+                    )
                 )
+            }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = projectFile.raceData.categories.map(::reencrypt),
+                courseMappings = projectFile.raceData.courseMappings.map(::reencrypt)
             )
+        )
+    }
+
+    /**
+     * Permanently replaces encrypted course payloads with their plaintext equivalents.
+     *
+     * Every payload is decrypted before the returned project is built, so a wrong password never
+     * produces a partly converted Race File. Callers are expected to present an explicit warning
+     * before persisting the result because course locations and route details become readable JSON.
+     */
+    fun removeProjectCourseProtection(
+        projectFile: EventProjectFile,
+        password: String
+    ): EventProjectFile {
+        val trimmedPassword = password.trim()
+        require(trimmedPassword.isNotEmpty()) {
+            "Current Race Password cannot be blank."
         }
-        return projectFile.copy(raceData = projectFile.raceData.copy(categories = categories))
+        fun remove(categoryData: EventCategoryData) =
+            categoryData.let { data ->
+                val category = data.category
+                data.copy(
+                    category = category.copy(
+                        idealOrder = category.encryptedIdealOrder
+                            ?.takeIf(String::isNotBlank)
+                            ?.let { decrypt(it, trimmedPassword) }
+                            ?: category.idealOrder,
+                        courseInfo = category.encryptedCourseInfo
+                            ?.takeIf(String::isNotBlank)
+                            ?.let { decryptCourseInfo(it, trimmedPassword) }
+                            ?: category.courseInfo,
+                        encryptedIdealOrder = null,
+                        encryptedCourseInfo = null
+                    )
+                )
+            }
+
+        // Map both active categories and inactive imported course mappings. Decryption happens
+        // while constructing these lists; if any member rejects the password, no result is returned.
+        val categories = projectFile.raceData.categories.map(::remove)
+        val courseMappings = projectFile.raceData.courseMappings.map(::remove)
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = categories,
+                courseMappings = courseMappings
+            )
+        )
+    }
+
+    /** Applies Race Password protection to plaintext course data. */
+    fun protectProjectCourseData(
+        projectFile: EventProjectFile,
+        password: String
+    ): EventProjectFile {
+        val trimmedPassword = password.trim()
+        require(trimmedPassword.isNotEmpty()) { "Race Password cannot be blank." }
+        fun protect(categoryData: EventCategoryData) =
+            categoryData.let { data ->
+                val category = data.category
+                data.copy(
+                    category = category.copy(
+                        encryptedIdealOrder = category.idealOrder
+                            ?.let { encrypt(it, trimmedPassword) }
+                            ?: category.encryptedIdealOrder,
+                        encryptedCourseInfo = category.courseInfo
+                            ?.let { encryptCourseInfo(it, trimmedPassword) }
+                            ?: category.encryptedCourseInfo,
+                        idealOrder = null,
+                        courseInfo = null
+                    )
+                )
+            }
+        return projectFile.copy(
+            raceData = projectFile.raceData.copy(
+                categories = projectFile.raceData.categories.map(::protect),
+                courseMappings = projectFile.raceData.courseMappings.map(::protect)
+            )
+        )
     }
 
     private fun secretKey(password: String, salt: ByteArray, iterations: Int): SecretKeySpec {

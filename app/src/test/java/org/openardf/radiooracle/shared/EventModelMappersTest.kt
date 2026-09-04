@@ -56,6 +56,7 @@ import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.junit.Test
 import java.time.Duration
 import java.time.LocalDateTime
@@ -244,7 +245,9 @@ class EventModelMappersTest {
                         timeLimitSeconds = null,
                         controlPointsString = "",
                         encryptedIdealOrder = "encrypted-order",
-                        encryptedCourseInfo = "encrypted-course"
+                        encryptedCourseInfo = "encrypted-course",
+                        idealOrder = "S 1 2 F",
+                        courseInfo = ProtectedCourseInfo()
                     ),
                     controlPoints = listOf(
                         EventControlPoint(
@@ -282,6 +285,8 @@ class EventModelMappersTest {
         assertEquals("31", room.categories.single().category.controlPointsString)
         assertEquals("encrypted-order", room.categories.single().category.encryptedIdealOrder)
         assertEquals("encrypted-course", room.categories.single().category.encryptedCourseInfo)
+        assertEquals("S 1 2 F", room.categories.single().category.idealOrder)
+        assertEquals(false, room.categories.single().category.courseInfo.isNullOrBlank())
         assertEquals(31, room.categories.single().controlPoints.single().siCode)
         assertEquals(ControlPointType.CONTROL, room.categories.single().controlPoints.single().type)
         assertEquals(listOf("FOX 1"), room.aliases.map { it.name })
@@ -289,6 +294,9 @@ class EventModelMappersTest {
         val roundTripCategory = room.toEventRaceData().categories.single().category
         assertEquals("encrypted-order", roundTripCategory.encryptedIdealOrder)
         assertEquals("encrypted-course", roundTripCategory.encryptedCourseInfo)
+        assertEquals("S 1 2 F", roundTripCategory.idealOrder)
+        assertEquals(0, roundTripCategory.courseInfo?.controlPoints?.size)
+        assertEquals(0, roundTripCategory.courseInfo?.route?.size)
     }
 
     @Test
