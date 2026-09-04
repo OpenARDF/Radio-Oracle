@@ -1223,12 +1223,10 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 eventSeriesUiContext = null
             } else {
                 runCatching {
-                    val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
-                    eventSeriesUiContext = EventSeriesUiContext(
-                        manifestPath =
-                            DesktopEventSeriesArchiveWorkspaces.containerPathFor(manifestPath)
-                                ?: manifestPath,
-                        seriesName = seriesFile.name
+                    eventSeriesUiContext = desktopEventSeriesUiContext(
+                        manifestPath,
+                        currentPath,
+                        projectSession.currentProject
                     )
                     seriesEventSummaries = DesktopEventSeriesActions.eventSummaries(
                         store = DesktopEventSeriesFiles,
@@ -2772,27 +2770,25 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
         }
 
-        fun removeCurrentEventSeriesCourseEncryption(password: String): Boolean = runCatching {
-            val result = DesktopEventSeriesActions.removeCourseProtection(
-                store = DesktopEventSeriesFiles,
-                manifestPath = requireNotNull(currentSeriesManifestPath()) {
-                    "Series manifest not found near this Race File."
-                },
-                password = password,
-                currentEventPath = projectSession.currentPath,
-                currentProject = projectSession.currentProject
-            )
-            projectSession.currentPath?.let { projectFile = projectSession.open(it) }
-            syncProjectState()
-            protectedCoursePassword = null
-            projectStatusText =
-                "Removed Race Password protection from ${result.raceCount} Race Files. " +
-                    "Course and route data is now stored as readable text."
-            true
-        }.getOrElse { error ->
-            projectStatusText = "Race Series encryption removal failed: ${error.message ?: error::class.simpleName}"
-            false
-        }
+        val courseProtectionOperations = DesktopCourseProtectionOperations(
+            projectSession = projectSession,
+            currentSeriesManifestPath = ::currentSeriesManifestPath,
+            applyRaceUpdate = { update ->
+                projectFile = projectSession.updateCurrentProject { update.projectFile }
+                protectedCoursePassword = update.password
+                protectedIdealOrderByCategoryId = update.courseState.protectedIdealOrderByCategoryId
+                protectedCourseInfoByCategoryId = update.courseState.protectedCourseInfoByCategoryId
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+            },
+            syncSeriesState = { password ->
+                syncProjectState()
+                protectedCoursePassword = password
+            },
+            reportStatus = { message ->
+                projectStatusText = message
+                recordActivity(message)
+            }
+        )
 
         fun updateCurrentEventSeriesFileName(fileNameStem: String): Boolean {
             val trimmedFileNameStem = fileNameStem.trim()
@@ -3304,28 +3300,6 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }.getOrElse { error ->
                 projectStatusText = "Control location update failed: ${error.message ?: error::class.simpleName}"
                 projectStatusText
-            }
-        }
-
-        fun updateProtectedCoursePassword(oldPassword: String, newPassword: String, confirmPassword: String): Boolean {
-            val currentProject = projectSession.currentProject ?: return false
-            return runCatching {
-                val update = updatedCoursePassword(currentProject, oldPassword, newPassword, confirmPassword)
-                projectFile = projectSession.updateCurrentProject { update.projectFile }
-                protectedCoursePassword = update.password
-                protectedIdealOrderByCategoryId = update.courseState.protectedIdealOrderByCategoryId
-                protectedCourseInfoByCategoryId = update.courseState.protectedCourseInfoByCategoryId
-                hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = when {
-                    update.removedPassword ->
-                        "Race Password protection removed. Course and route data is now stored as readable text. Unsaved changes."
-                    update.replacedExistingPassword -> "Race Password updated. Unsaved changes."
-                    else -> "Race Password set. Unsaved changes."
-                }
-                true
-            }.getOrElse { error ->
-                projectStatusText = "Race Password update failed: ${error.message ?: error::class.simpleName}"
-                false
             }
         }
 
@@ -7534,7 +7508,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             onOpenSeriesEvent = ::openSeriesEvent,
             onUpdateEventSeriesName = ::updateCurrentEventSeriesName,
             onUpdateEventSeriesFileName = ::updateCurrentEventSeriesFileName,
-            onRemoveEventSeriesCourseEncryption = ::removeCurrentEventSeriesCourseEncryption,
+            onRemoveEventSeriesCourseEncryption = courseProtectionOperations::removeSeriesEncryption,
+            onEncryptEventSeriesCourseData = courseProtectionOperations::encryptSeries,
             onInsertTestControls = ::insertTestControls,
             onInsertTestCategories = ::insertTestCategories,
             onInsertTestCompetitors = ::insertTestCompetitors,
@@ -7597,7 +7572,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             onUpdateCourseAnalyzerSpeedFactor = ::updateCourseAnalyzerSpeedFactor,
             onReadCompetitorSiCardForAddRow = ::readCompetitorSiCardForAddRow,
             onUpdateProtectedControlLocation = ::updateProtectedControlLocation,
-            onUpdateProtectedCoursePassword = ::updateProtectedCoursePassword,
+            onUpdateProtectedCoursePassword = courseProtectionOperations::updateRacePassword,
             onSetUpdateCheckingEnabled = ::setUpdateCheckingEnabled,
             onSetCloudflarePagesPublishSettings = ::setCloudflarePagesPublishSettings,
             onOpenPublishedPublicResultsSite = ::openExternalUrl,
@@ -11920,8 +11895,159 @@ private data class EventSeriesValidationUiState(
 
 internal data class EventSeriesUiContext(
     val manifestPath: Path,
-    val seriesName: String
+    val seriesName: String,
+    val raceCount: Int = 0,
+    val encryptedRaceCount: Int = 0
 )
+
+private data class DesktopPasswordOperationResult(
+    val succeeded: Boolean,
+    val message: String
+)
+
+private data class DesktopSeriesCourseEncryptionUpdate(
+    val password: String?,
+    val message: String
+)
+
+private fun desktopEventSeriesUiContext(
+    manifestPath: Path,
+    currentEventPath: Path?,
+    currentProject: EventProjectFile?
+): EventSeriesUiContext {
+    val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
+    val status = DesktopEventSeriesActions.courseProtectionStatus(
+        DesktopEventSeriesFiles,
+        manifestPath,
+        currentEventPath,
+        currentProject
+    )
+    return EventSeriesUiContext(
+        manifestPath = DesktopEventSeriesArchiveWorkspaces.containerPathFor(manifestPath) ?: manifestPath,
+        seriesName = seriesFile.name,
+        raceCount = status.raceCount,
+        encryptedRaceCount = status.encryptedRaceCount
+    )
+}
+
+private suspend fun updateDesktopSeriesCourseEncryption(
+    manifestPath: Path,
+    currentEventPath: Path?,
+    currentProject: EventProjectFile?,
+    password: String,
+    encrypt: Boolean
+): DesktopSeriesCourseEncryptionUpdate = withContext(Dispatchers.Default) {
+    val result = if (encrypt) {
+        DesktopEventSeriesActions.protectCourseData(
+            DesktopEventSeriesFiles,
+            manifestPath,
+            password,
+            currentEventPath,
+            currentProject
+        )
+    } else {
+        DesktopEventSeriesActions.removeCourseProtection(
+            DesktopEventSeriesFiles,
+            manifestPath,
+            password,
+            currentEventPath,
+            currentProject
+        )
+    }
+    DesktopSeriesCourseEncryptionUpdate(
+        password = password.trim().takeIf { encrypt },
+        message = if (encrypt) {
+            "Encrypted ${result.raceCount} Race Files with the Race Series password."
+        } else {
+            "Removed Race Password protection from ${result.raceCount} Race Files. " +
+                "Course and route data is now stored as readable text."
+        }
+    )
+}
+
+private class DesktopCourseProtectionOperations(
+    private val projectSession: DesktopProjectSession,
+    private val currentSeriesManifestPath: () -> Path?,
+    private val applyRaceUpdate: (DesktopCoursePasswordUpdate) -> Unit,
+    private val syncSeriesState: (String?) -> Unit,
+    private val reportStatus: (String) -> Unit
+) {
+    suspend fun updateRacePassword(
+        oldPassword: String,
+        newPassword: String,
+        confirmPassword: String
+    ): DesktopPasswordOperationResult {
+        val currentProject = projectSession.currentProject
+            ?: return failure("Open or create a Race File before changing encryption.")
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                updatedCoursePassword(currentProject, oldPassword, newPassword, confirmPassword)
+            }
+        }.fold(
+            onSuccess = { update ->
+                applyRaceUpdate(update)
+                success(
+                    when {
+                        update.removedPassword ->
+                            "Race Password protection removed. Course and route data is now stored as readable text. Unsaved changes."
+                        update.replacedExistingPassword -> "Race Password updated. Unsaved changes."
+                        else -> "Race encrypted with a password. Unsaved changes."
+                    }
+                )
+            },
+            onFailure = { error -> failure("Race Password update failed: ${error.message ?: error::class.simpleName}") }
+        )
+    }
+
+    suspend fun removeSeriesEncryption(password: String): DesktopPasswordOperationResult =
+        updateSeriesEncryption(password, encrypt = false)
+
+    suspend fun encryptSeries(password: String): DesktopPasswordOperationResult =
+        updateSeriesEncryption(password, encrypt = true)
+
+    private suspend fun updateSeriesEncryption(
+        password: String,
+        encrypt: Boolean
+    ): DesktopPasswordOperationResult {
+        val currentEventPath = projectSession.currentPath
+        val currentProject = projectSession.currentProject
+        return runCatching {
+            val manifestPath = requireNotNull(currentSeriesManifestPath()) {
+                "Series manifest not found near this Race File."
+            }
+            val update = updateDesktopSeriesCourseEncryption(
+                manifestPath,
+                currentEventPath,
+                currentProject,
+                password,
+                encrypt
+            )
+            currentEventPath?.let(projectSession::open)
+            syncSeriesState(update.password)
+            update
+        }.fold(
+            onSuccess = { success(it.message) },
+            onFailure = { error ->
+                failure(
+                    "Race Series encryption ${if (encrypt) "failed" else "removal failed"}: " +
+                        (error.message ?: error::class.simpleName)
+                )
+            }
+        )
+    }
+
+    private fun success(message: String): DesktopPasswordOperationResult {
+        reportStatus(message)
+        DesktopDebugLog.info("CourseProtection", message)
+        return DesktopPasswordOperationResult(true, message)
+    }
+
+    private fun failure(message: String): DesktopPasswordOperationResult {
+        reportStatus(message)
+        DesktopDebugLog.error("CourseProtection", message)
+        return DesktopPasswordOperationResult(false, message)
+    }
+}
 
 private fun updateCompetitorIdentityOrRental(
     projectFile: EventProjectFile,
@@ -12065,7 +12191,8 @@ private fun RadioOManagerDesktopApp(
         error("SI card reader is not configured.")
     },
     onUpdateProtectedControlLocation: (String, String, String) -> String = { _, _, _ -> "" },
-    onUpdateProtectedCoursePassword: (String, String, String) -> Boolean = { _, _, _ -> false },
+    onUpdateProtectedCoursePassword: suspend (String, String, String) -> DesktopPasswordOperationResult =
+        { _, _, _ -> DesktopPasswordOperationResult(false, "Race Password operation is unavailable.") },
     onSetUpdateCheckingEnabled: (Boolean) -> Unit = {},
     onSetSportIdentPortDiscoveryMode: (DesktopSportIdentPortDiscoveryMode) -> Unit = {},
     onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean = { false },
@@ -12076,7 +12203,10 @@ private fun RadioOManagerDesktopApp(
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit = {},
     onUpdateEventSeriesName: (String) -> Boolean = { false },
     onUpdateEventSeriesFileName: (String) -> Boolean = { false },
-    onRemoveEventSeriesCourseEncryption: (String) -> Boolean = { false },
+    onRemoveEventSeriesCourseEncryption: suspend (String) -> DesktopPasswordOperationResult =
+        { DesktopPasswordOperationResult(false, "Race Series encryption removal is unavailable.") },
+    onEncryptEventSeriesCourseData: suspend (String) -> DesktopPasswordOperationResult =
+        { DesktopPasswordOperationResult(false, "Race Series encryption is unavailable.") },
     onInsertTestControls: () -> Unit = {},
     onInsertTestCategories: () -> Unit = {},
     onInsertTestCompetitors: () -> Unit = {},
@@ -12438,6 +12568,7 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateEventSeriesName = onUpdateEventSeriesName,
                                     onUpdateEventSeriesFileName = onUpdateEventSeriesFileName,
                                     onRemoveEventSeriesCourseEncryption = onRemoveEventSeriesCourseEncryption,
+                                    onEncryptEventSeriesCourseData = onEncryptEventSeriesCourseData,
                                     onInsertTestControls = onInsertTestControls,
                                     onInsertTestCategories = onInsertTestCategories,
                                     onInsertTestCompetitors = onInsertTestCompetitors,
@@ -13753,7 +13884,7 @@ private fun SectionWorkspace(
     onUpdateCourseAnalyzerSpeedFactor: (Double) -> String,
     onReadCompetitorSiCardForAddRow: suspend () -> DesktopCompetitorSiCardDraft,
     onUpdateProtectedControlLocation: (String, String, String) -> String,
-    onUpdateProtectedCoursePassword: (String, String, String) -> Boolean,
+    onUpdateProtectedCoursePassword: suspend (String, String, String) -> DesktopPasswordOperationResult,
     onSetUpdateCheckingEnabled: (Boolean) -> Unit,
     onSetSportIdentPortDiscoveryMode: (DesktopSportIdentPortDiscoveryMode) -> Unit,
     onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
@@ -13763,7 +13894,8 @@ private fun SectionWorkspace(
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit,
     onUpdateEventSeriesName: (String) -> Boolean,
     onUpdateEventSeriesFileName: (String) -> Boolean,
-    onRemoveEventSeriesCourseEncryption: (String) -> Boolean,
+    onRemoveEventSeriesCourseEncryption: suspend (String) -> DesktopPasswordOperationResult,
+    onEncryptEventSeriesCourseData: suspend (String) -> DesktopPasswordOperationResult,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
@@ -13950,7 +14082,8 @@ private fun SectionWorkspace(
                 seriesContext = eventSeriesUiContext,
                 onUpdateSeriesName = onUpdateEventSeriesName,
                 onUpdateSeriesFileName = onUpdateEventSeriesFileName,
-                onRemoveCourseEncryption = onRemoveEventSeriesCourseEncryption
+                onRemoveCourseEncryption = onRemoveEventSeriesCourseEncryption,
+                onEncryptCourseData = onEncryptEventSeriesCourseData
             )
         }
         if (section == DesktopSection.Readouts && projectFile != null) {
@@ -15015,7 +15148,7 @@ private fun AppSettingsPanel(
     onSetAwardDisplayMode: (EventAwardDisplayMode) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit,
     onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
-    onUpdateCoursePassword: (String, String, String) -> Boolean
+    onUpdateCoursePassword: suspend (String, String, String) -> DesktopPasswordOperationResult
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         AppSettingsSection("Updates") {
@@ -15058,7 +15191,9 @@ private fun AppSettingsPanel(
                 printerDiagnostics.detectedPrinterNames.joinToString().ifBlank { "None" }
             )
         }
-        AppSettingsSection(if (projectFile?.hasCoursePasswordSet() == true) "Reset Race Password" else "Set Race Password") {
+        AppSettingsSection(
+            if (projectFile?.hasCoursePasswordSet() == true) "Race Password Protection" else "Encrypt Race with Password"
+        ) {
             CoursePasswordSettingsPanel(
                 projectFile = projectFile,
                 isCourseDataUnlocked = isCourseDataUnlocked,
@@ -15495,21 +15630,38 @@ private fun AppSettingsSection(
 private fun CoursePasswordSettingsPanel(
     projectFile: EventProjectFile?,
     isCourseDataUnlocked: Boolean,
-    onUpdateCoursePassword: (String, String, String) -> Boolean
+    onUpdateCoursePassword: suspend (String, String, String) -> DesktopPasswordOperationResult
 ) {
     val hasCoursePassword = remember(projectFile) { projectFile?.hasCoursePasswordSet() == true }
+    val operationScope = rememberCoroutineScope()
     var oldPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
     var newPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
     var confirmPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
     var isRemoveConfirmationVisible by remember(projectFile?.raceData?.race?.id) { mutableStateOf(false) }
+    var isPasswordOperationInProgress by remember(projectFile?.raceData?.race?.id) { mutableStateOf(false) }
+    var operationMessage by remember(projectFile?.raceData?.race?.id) { mutableStateOf<String?>(null) }
     val canSubmit = newPasswordDraft.isNotBlank() &&
         confirmPasswordDraft.isNotBlank() &&
         (!hasCoursePassword || oldPasswordDraft.isNotBlank())
+    fun startPasswordOperation(oldPassword: String, newPassword: String, confirmPassword: String, removing: Boolean) {
+        if (isPasswordOperationInProgress) return
+        operationMessage = null
+        isPasswordOperationInProgress = true
+        operationScope.launch {
+            val result = onUpdateCoursePassword(oldPassword, newPassword, confirmPassword)
+            operationMessage = result.message
+            isPasswordOperationInProgress = false
+            if (result.succeeded) {
+                oldPasswordDraft = ""
+                newPasswordDraft = ""
+                confirmPasswordDraft = ""
+                if (removing) isRemoveConfirmationVisible = false
+            }
+        }
+    }
     fun submitPasswordChange() {
-        if (projectFile != null && canSubmit && onUpdateCoursePassword(oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
-            oldPasswordDraft = ""
-            newPasswordDraft = ""
-            confirmPasswordDraft = ""
+        if (projectFile != null && canSubmit) {
+            startPasswordOperation(oldPasswordDraft, newPasswordDraft, confirmPasswordDraft, removing = false)
         }
     }
 
@@ -15521,7 +15673,7 @@ private fun CoursePasswordSettingsPanel(
                 hasCoursePassword ->
                     "Resetting the Race Password requires the current Race Password. Sensitive Race File data is ${if (isCourseDataUnlocked) "currently unlocked" else "currently locked"}."
                 else ->
-                    "Set a Race Password before importing route data or editing stored course order. Accessing sensitive data can still create a Race Password when none exists."
+                    "Encrypt this Race File with a Race Password. Course and route data will no longer be stored as readable text."
             },
             color = DesktopPalette.Black,
             fontSize = 13.sp
@@ -15548,7 +15700,7 @@ private fun CoursePasswordSettingsPanel(
                 label = { Text(if (hasCoursePassword) "New Race Password" else "Race Password") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                enabled = projectFile != null,
+                enabled = projectFile != null && !isPasswordOperationInProgress,
                 modifier = Modifier
                     .width(190.dp)
                     .commitOnEnter(::submitPasswordChange)
@@ -15559,7 +15711,7 @@ private fun CoursePasswordSettingsPanel(
                 label = { Text("Confirm") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                enabled = projectFile != null,
+                enabled = projectFile != null && !isPasswordOperationInProgress,
                 modifier = Modifier
                     .width(190.dp)
                     .commitOnEnter(::submitPasswordChange)
@@ -15567,15 +15719,15 @@ private fun CoursePasswordSettingsPanel(
             DisabledReasonTooltip(coursePasswordSubmitDisabledReason(projectFile, hasCoursePassword, oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
                 Button(
                     onClick = ::submitPasswordChange,
-                    enabled = projectFile != null && canSubmit
+                    enabled = projectFile != null && canSubmit && !isPasswordOperationInProgress
                 ) {
-                    ButtonLabel(if (hasCoursePassword) "Reset Race Password" else "Set Race Password")
+                    ButtonLabel(if (hasCoursePassword) "Reset Race Password" else "Encrypt Race")
                 }
             }
             if (hasCoursePassword) {
                 Button(
                     onClick = { isRemoveConfirmationVisible = true },
-                    enabled = oldPasswordDraft.isNotBlank(),
+                    enabled = oldPasswordDraft.isNotBlank() && !isPasswordOperationInProgress,
                     colors = ButtonDefaults.buttonColors(
                         backgroundColor = DesktopPalette.Warning,
                         contentColor = DesktopPalette.Black
@@ -15585,26 +15737,48 @@ private fun CoursePasswordSettingsPanel(
                 }
             }
         }
+        operationMessage?.let { message ->
+            Text(
+                text = message,
+                color = if (message.contains("failed", ignoreCase = true)) DesktopPalette.Disconnected else DesktopPalette.Connected,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
     }
-    if (isRemoveConfirmationVisible) {
+    if (isPasswordOperationInProgress) {
+        IndeterminateProgressDialog(
+            title = if (isRemoveConfirmationVisible) "Removing Race Password Protection" else if (hasCoursePassword) {
+                "Updating Race Password"
+            } else {
+                "Encrypting Race"
+            },
+            message = "Updating protected course and route data. This can take a while."
+        )
+    } else if (isRemoveConfirmationVisible) {
         AlertDialog(
             onDismissRequest = { isRemoveConfirmationVisible = false },
             title = { Text("Remove Race Password Protection?") },
             text = {
-                Text(
-                    "This keeps all course and route data, but stores it as readable text in the Race File. " +
-                        "Anyone with the file will be able to see control locations and route details."
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "This keeps all course and route data, but stores it as readable text in the Race File. " +
+                            "Anyone with the file will be able to see control locations and route details."
+                    )
+                    operationMessage?.let { message ->
+                        Text(
+                            text = message,
+                            color = DesktopPalette.Disconnected,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        if (onUpdateCoursePassword(oldPasswordDraft, "", "")) {
-                            oldPasswordDraft = ""
-                            newPasswordDraft = ""
-                            confirmPasswordDraft = ""
-                            isRemoveConfirmationVisible = false
-                        }
+                        startPasswordOperation(oldPasswordDraft, "", "", removing = true)
                     },
                     colors = ButtonDefaults.buttonColors(
                         backgroundColor = DesktopPalette.Warning,
@@ -15623,11 +15797,7 @@ private fun CoursePasswordSettingsPanel(
     }
 }
 
-private fun EventProjectFile.hasCoursePasswordSet(): Boolean =
-    raceData.categories.any { categoryData ->
-        !categoryData.category.encryptedIdealOrder.isNullOrBlank() ||
-            !categoryData.category.encryptedCourseInfo.isNullOrBlank()
-    }
+private fun EventProjectFile.hasCoursePasswordSet(): Boolean = hasEncryptedCategoryData()
 
 internal fun EventProjectFile.racePasswordAuthorizesCloudflareTokenReveal(password: String): Boolean {
     val trimmedPassword = password.trim()
@@ -15647,9 +15817,9 @@ private fun coursePasswordSubmitDisabledReason(
     confirmPassword: String
 ): String? =
     when {
-        projectFile == null -> "Open or create a Race File before setting a Race Password."
+        projectFile == null -> "Open or create a Race File before encrypting it with a Race Password."
         hasCoursePassword && oldPassword.isBlank() -> "Enter the current Race Password before resetting it."
-        newPassword.isBlank() -> "Enter a new Race Password."
+        newPassword.isBlank() -> if (hasCoursePassword) "Enter a new Race Password." else "Enter a Race Password."
         confirmPassword.isBlank() -> "Confirm the new Race Password."
         else -> null
     }
@@ -16865,7 +17035,8 @@ private fun EventSeriesSettingsPanel(
     seriesContext: EventSeriesUiContext?,
     onUpdateSeriesName: (String) -> Boolean,
     onUpdateSeriesFileName: (String) -> Boolean,
-    onRemoveCourseEncryption: (String) -> Boolean
+    onRemoveCourseEncryption: suspend (String) -> DesktopPasswordOperationResult,
+    onEncryptCourseData: suspend (String) -> DesktopPasswordOperationResult
 ) {
     if (seriesContext == null) {
         Text(
@@ -16883,8 +17054,35 @@ private fun EventSeriesSettingsPanel(
     var fileNameDraft by remember(seriesContext.manifestPath) { mutableStateOf(currentFileNameStem) }
     val trimmedFileName = fileNameDraft.trim()
     val canApplyFileName = trimmedFileName.isNotBlank() && trimmedFileName != currentFileNameStem
+    val operationScope = rememberCoroutineScope()
+    val hasSeriesEncryption = seriesContext.encryptedRaceCount > 0
     var passwordDraft by remember(seriesContext.manifestPath) { mutableStateOf("") }
-    var isRemoveConfirmationVisible by remember(seriesContext.manifestPath) { mutableStateOf(false) }
+    var confirmPasswordDraft by remember(seriesContext.manifestPath) { mutableStateOf("") }
+    var isEncryptionConfirmationVisible by remember(seriesContext.manifestPath) { mutableStateOf(false) }
+    var isEncryptionOperationInProgress by remember(seriesContext.manifestPath) { mutableStateOf(false) }
+    var operationMessage by remember(seriesContext.manifestPath) { mutableStateOf<String?>(null) }
+    val canStartEncryptionOperation = seriesContext.raceCount > 0 &&
+        passwordDraft.isNotBlank() &&
+        (hasSeriesEncryption || confirmPasswordDraft.isNotBlank() && passwordDraft.trim() == confirmPasswordDraft.trim())
+    fun startEncryptionOperation() {
+        if (isEncryptionOperationInProgress) return
+        operationMessage = null
+        isEncryptionOperationInProgress = true
+        operationScope.launch {
+            val result = if (hasSeriesEncryption) {
+                onRemoveCourseEncryption(passwordDraft)
+            } else {
+                onEncryptCourseData(passwordDraft)
+            }
+            operationMessage = result.message
+            isEncryptionOperationInProgress = false
+            if (result.succeeded) {
+                passwordDraft = ""
+                confirmPasswordDraft = ""
+                isEncryptionConfirmationVisible = false
+            }
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = "Series File: ${seriesContext.manifestPath}",
@@ -16964,13 +17162,22 @@ private fun EventSeriesSettingsPanel(
         }
         Divider()
         Text(
-            text = "Remove Race Password protection from every Race File in this series.",
+            text = if (hasSeriesEncryption) {
+                "Remove Race Password protection from every encrypted Race File in this series."
+            } else {
+                "Encrypt every Race File in this series with one Race Password."
+            },
             color = DesktopPalette.Black,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold
         )
         Text(
-            text = "All races must use the same current Race Password. The change is saved directly to every Race File.",
+            text = if (hasSeriesEncryption) {
+                "${seriesContext.encryptedRaceCount} of ${seriesContext.raceCount} races are encrypted. " +
+                    "All encrypted races must use the same current Race Password."
+            } else {
+                "No races are currently encrypted. The new password will be applied directly to all ${seriesContext.raceCount} Race Files."
+            },
             color = Color.DarkGray,
             fontSize = 13.sp
         )
@@ -16980,52 +17187,96 @@ private fun EventSeriesSettingsPanel(
         ) {
             TextField(
                 value = passwordDraft,
-                onValueChange = { passwordDraft = it },
-                label = { Text("Current Race Password") },
+                onValueChange = {
+                    passwordDraft = it
+                    operationMessage = null
+                },
+                label = { Text(if (hasSeriesEncryption) "Current Race Password" else "Race Series Password") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
+                enabled = !isEncryptionOperationInProgress,
                 modifier = Modifier.width(220.dp)
             )
+            if (!hasSeriesEncryption) {
+                TextField(
+                    value = confirmPasswordDraft,
+                    onValueChange = {
+                        confirmPasswordDraft = it
+                        operationMessage = null
+                    },
+                    label = { Text("Confirm") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    enabled = !isEncryptionOperationInProgress,
+                    modifier = Modifier.width(220.dp)
+                )
+            }
             Button(
-                onClick = { isRemoveConfirmationVisible = true },
-                enabled = passwordDraft.isNotBlank(),
+                onClick = { isEncryptionConfirmationVisible = true },
+                enabled = canStartEncryptionOperation && !isEncryptionOperationInProgress,
                 colors = ButtonDefaults.buttonColors(
-                    backgroundColor = DesktopPalette.Warning,
+                    backgroundColor = if (hasSeriesEncryption) DesktopPalette.Warning else DesktopPalette.Primary,
                     contentColor = DesktopPalette.Black
                 )
             ) {
-                Text("Remove Series Encryption")
+                Text(if (hasSeriesEncryption) "Remove Series Encryption" else "Encrypt Race Series")
             }
         }
+        operationMessage?.let { message ->
+            Text(
+                text = message,
+                color = if (message.contains("failed", ignoreCase = true)) DesktopPalette.Disconnected else DesktopPalette.Connected,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
     }
-    if (isRemoveConfirmationVisible) {
+    if (isEncryptionOperationInProgress) {
+        IndeterminateProgressDialog(
+            title = if (hasSeriesEncryption) "Removing Race Series Encryption" else "Encrypting Race Series",
+            message = if (hasSeriesEncryption) {
+                "Decrypting protected course and route data in every Race File. This can take a while."
+            } else {
+                "Encrypting course and route data in every Race File. This can take a while."
+            }
+        )
+    } else if (isEncryptionConfirmationVisible) {
         AlertDialog(
-            onDismissRequest = { isRemoveConfirmationVisible = false },
-            title = { Text("Remove Series Encryption?") },
+            onDismissRequest = { isEncryptionConfirmationVisible = false },
+            title = { Text(if (hasSeriesEncryption) "Remove Series Encryption?" else "Encrypt Race Series?") },
             text = {
-                Text(
-                    "This keeps all course and route data, but stores it as readable text in every Race File. " +
-                        "Anyone with the series will be able to see control locations and route details."
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (hasSeriesEncryption) {
+                            "This keeps all course and route data, but stores it as readable text in every Race File. " +
+                                "Anyone with the series will be able to see control locations and route details."
+                        } else {
+                            "This encrypts course and route data in every Race File with the supplied Race Series Password."
+                        }
+                    )
+                    operationMessage?.let { message ->
+                        Text(
+                            text = message,
+                            color = DesktopPalette.Disconnected,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        if (onRemoveCourseEncryption(passwordDraft)) {
-                            passwordDraft = ""
-                            isRemoveConfirmationVisible = false
-                        }
-                    },
+                    onClick = ::startEncryptionOperation,
                     colors = ButtonDefaults.buttonColors(
-                        backgroundColor = DesktopPalette.Warning,
+                        backgroundColor = if (hasSeriesEncryption) DesktopPalette.Warning else DesktopPalette.Primary,
                         contentColor = DesktopPalette.Black
                     )
                 ) {
-                    Text("Remove Encryption")
+                    Text(if (hasSeriesEncryption) "Remove Encryption" else "Encrypt Series")
                 }
             },
             dismissButton = {
-                Button(onClick = { isRemoveConfirmationVisible = false }) {
+                Button(onClick = { isEncryptionConfirmationVisible = false }) {
                     Text("Cancel")
                 }
             }

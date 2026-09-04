@@ -519,13 +519,22 @@ object DesktopEventSeriesActions {
             } else {
                 store.readEvent(path)
             }
-            path to project
+            Triple(event, path, project)
         }
 
         // Convert every member before writing any member. A missing file or wrong password thus
         // leaves the complete series untouched.
-        val converted = sourceProjects.map { (path, project) ->
-            path to DesktopProtectedCourseOrder.removeProjectCourseProtection(project, trimmedPassword)
+        val converted = sourceProjects.map { (event, path, project) ->
+            val convertedProject = runCatching {
+                DesktopProtectedCourseOrder.removeProjectCourseProtection(project, trimmedPassword)
+            }.getOrElse { error ->
+                throw IllegalArgumentException(
+                    "Race '${event.displayName}' did not accept the Race Password: " +
+                        (error.message ?: error::class.simpleName),
+                    error
+                )
+            }
+            path to convertedProject
         }
         converted.forEach { (path, project) -> store.writeEvent(path, project) }
         val updatedCurrentProject = normalizedCurrentPath?.let { currentPath ->
@@ -534,6 +543,82 @@ object DesktopEventSeriesActions {
         return DesktopEventSeriesCourseProtectionRemoval(
             raceCount = converted.size,
             updatedCurrentProject = updatedCurrentProject
+        )
+    }
+
+    /** Applies one Race Password to every Race File in a series. */
+    fun protectCourseData(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        password: String,
+        currentEventPath: Path? = null,
+        currentProject: EventProjectFile? = null
+    ): DesktopEventSeriesCourseProtectionRemoval {
+        val trimmedPassword = password.trim()
+        require(trimmedPassword.isNotEmpty()) { "Race Password cannot be blank." }
+        val seriesFile = store.read(manifestPath)
+        val seriesFolder = requireNotNull(manifestPath.parent) {
+            "Race Series manifest must have a parent folder."
+        }
+        val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
+        val converted = seriesFile.sortedEvents().map { event ->
+            val path = seriesFolder.resolve(event.eventFilePath).normalize()
+            require(store.exists(path)) {
+                "Cannot encrypt the series because Race File '${event.displayName}' is missing."
+            }
+            val project = if (
+                normalizedCurrentPath != null &&
+                path.toAbsolutePath().normalize() == normalizedCurrentPath &&
+                currentProject != null
+            ) {
+                currentProject
+            } else {
+                store.readEvent(path)
+            }
+            require(!project.hasEncryptedCourseData()) {
+                "Race '${event.displayName}' is already encrypted. Remove existing series encryption before applying a new password."
+            }
+            val protectedProject = DesktopProtectedCourseOrder.protectProjectCourseData(project, trimmedPassword)
+            path to protectedProject.withCoursePasswordMarker(trimmedPassword)
+        }
+        converted.forEach { (path, project) -> store.writeEvent(path, project) }
+        val updatedCurrentProject = normalizedCurrentPath?.let { currentPath ->
+            converted.firstOrNull { (path, _) -> path.toAbsolutePath().normalize() == currentPath }?.second
+        }
+        return DesktopEventSeriesCourseProtectionRemoval(
+            raceCount = converted.size,
+            updatedCurrentProject = updatedCurrentProject
+        )
+    }
+
+    fun courseProtectionStatus(
+        store: EventSeriesStore,
+        manifestPath: Path,
+        currentEventPath: Path? = null,
+        currentProject: EventProjectFile? = null
+    ): DesktopEventSeriesCourseProtectionStatus {
+        val seriesFile = store.read(manifestPath)
+        val seriesFolder = requireNotNull(manifestPath.parent) {
+            "Race Series manifest must have a parent folder."
+        }
+        val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
+        val encryptedRaceCount = seriesFile.sortedEvents().count { event ->
+            val path = seriesFolder.resolve(event.eventFilePath).normalize()
+            if (!store.exists(path)) return@count false
+            val project = if (
+                normalizedCurrentPath != null &&
+                path.toAbsolutePath().normalize() == normalizedCurrentPath &&
+                currentProject != null
+            ) {
+                currentProject
+            } else {
+                store.readEvent(path)
+            }
+            project.hasEncryptedCourseData()
+        }
+        return DesktopEventSeriesCourseProtectionStatus(
+            raceCount = seriesFile.events.size,
+            encryptedRaceCount = encryptedRaceCount
         )
     }
 
@@ -1389,6 +1474,11 @@ data class DesktopEventSeriesCourseProtectionRemoval(
     val updatedCurrentProject: EventProjectFile?
 )
 
+data class DesktopEventSeriesCourseProtectionStatus(
+    val raceCount: Int,
+    val encryptedRaceCount: Int
+)
+
 data class DesktopEventSeriesCompetitorMatchSummary(
     val firstEventName: String,
     val firstSeriesEventId: String,
@@ -1540,4 +1630,25 @@ internal fun hasDesktopEventSeriesContext(
     // The manifest is authoritative. Missing backlinks should not hide the Series workflow,
     // because validation and settings tools are needed to diagnose and repair that state.
     return openProjectFile.seriesLink?.seriesEventId?.let { it == currentSummary.seriesEventId } != false
+}
+
+private fun EventProjectFile.hasEncryptedCourseData(): Boolean =
+    (raceData.categories + raceData.courseMappings).any { categoryData ->
+        !categoryData.category.encryptedIdealOrder.isNullOrBlank() ||
+            !categoryData.category.encryptedCourseInfo.isNullOrBlank()
+    }
+
+private fun EventProjectFile.withCoursePasswordMarker(password: String): EventProjectFile {
+    if (hasEncryptedCourseData() || raceData.categories.isEmpty()) return this
+    return copy(
+        raceData = raceData.copy(
+            categories = raceData.categories.map { categoryData ->
+                categoryData.copy(
+                    category = categoryData.category.copy(
+                        encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt("", password)
+                    )
+                )
+            }
+        )
+    )
 }

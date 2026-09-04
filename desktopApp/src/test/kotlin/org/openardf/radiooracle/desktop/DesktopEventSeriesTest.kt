@@ -130,11 +130,72 @@ class DesktopEventSeriesTest {
             eventFiles = originals
         )
 
-        assertThrows(IllegalArgumentException::class.java) {
+        val error = assertThrows(IllegalArgumentException::class.java) {
             DesktopEventSeriesActions.removeCourseProtection(store, manifestPath, "shared-password")
         }
+        assertTrue(error.message?.contains("Race 'Day 2' did not accept the Race Password") == true)
         assertEquals(originals.getValue(dayOnePath), store.readEvent(dayOnePath))
         assertEquals(originals.getValue(dayTwoPath), store.readEvent(dayTwoPath))
+    }
+
+    @Test
+    fun reportsAndEncryptsEveryUnprotectedSeriesRace() {
+        val manifestPath = Path.of("/work/championship/series.radio-oracle.json")
+        val dayOnePath = Path.of("/work/championship/day-1.rom.json")
+        val dayTwoPath = Path.of("/work/championship/day-2.rom.json")
+        val dayThreePath = Path.of("/work/championship/day-3.rom.json")
+        val events = listOf(
+            EventSeriesEvent("day-1", "day-1.rom.json", 0, "Day 1"),
+            EventSeriesEvent("day-2", "day-2.rom.json", 1, "Day 2"),
+            EventSeriesEvent("day-3", "day-3.rom.json", 2, "Day 3")
+        )
+        fun plaintextProject(name: String): EventProjectFile {
+            val category = eventCategory("cat-$name", name).copy(idealOrder = "31 32")
+            return projectFile(name, categories = listOf(EventCategoryData(category, emptyList(), emptyList())))
+        }
+        val store = InMemoryEventSeriesStore(
+            seriesFiles = mapOf(manifestPath to seriesFile(events)),
+            eventFiles = mapOf(
+                dayOnePath to plaintextProject("Day 1"),
+                dayTwoPath to plaintextProject("Day 2"),
+                dayThreePath to projectFile(
+                    "Day 3",
+                    categories = listOf(
+                        EventCategoryData(eventCategory("cat-Day 3", "Day 3"), emptyList(), emptyList())
+                    )
+                )
+            )
+        )
+
+        assertEquals(
+            DesktopEventSeriesCourseProtectionStatus(raceCount = 3, encryptedRaceCount = 0),
+            DesktopEventSeriesActions.courseProtectionStatus(store, manifestPath)
+        )
+
+        val result = DesktopEventSeriesActions.protectCourseData(
+            store = store,
+            manifestPath = manifestPath,
+            password = "series-password",
+            currentEventPath = dayOnePath,
+            currentProject = store.readEvent(dayOnePath)
+        )
+
+        assertEquals(3, result.raceCount)
+        assertEquals(
+            DesktopEventSeriesCourseProtectionStatus(raceCount = 3, encryptedRaceCount = 3),
+            DesktopEventSeriesActions.courseProtectionStatus(store, manifestPath)
+        )
+        listOf(dayOnePath, dayTwoPath).forEach { path ->
+            val category = store.readEvent(path).raceData.categories.single().category
+            assertNull(category.idealOrder)
+            assertTrue(category.encryptedIdealOrder?.isNotBlank() == true)
+            assertEquals(
+                "31 32",
+                DesktopProtectedCourseOrder.decrypt(requireNotNull(category.encryptedIdealOrder), "series-password")
+            )
+        }
+        val marker = store.readEvent(dayThreePath).raceData.categories.single().category.encryptedIdealOrder
+        assertEquals("", DesktopProtectedCourseOrder.decrypt(requireNotNull(marker), "series-password"))
     }
 
     @Test
