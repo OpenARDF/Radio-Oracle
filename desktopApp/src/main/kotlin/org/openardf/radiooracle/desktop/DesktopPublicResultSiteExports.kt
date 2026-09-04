@@ -367,7 +367,10 @@ object DesktopPublicResultSiteExports {
                     categoryId = categoryId,
                     protectedCourseInfo = courseInfo,
                     protectedIdealOrderText = courseInfo.idealOrder,
-                    magneticDeclinationProvider = DesktopMagneticDeclination::result
+                    magneticDeclinationProvider = DesktopMagneticDeclination::result,
+                    // Published labels must match the controls/SI identities used by the results,
+                    // even when Course Analyzer saved alternate planning-time fox numbering.
+                    controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS
                 )
                 val routeMap = summary.routeMaps.firstOrNull() ?: return@runCatching null
                 val fileName = "course-${categoryId.safePathSegment()}.png"

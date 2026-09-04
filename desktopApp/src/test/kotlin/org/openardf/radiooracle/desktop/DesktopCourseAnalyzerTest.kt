@@ -1482,6 +1482,71 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun resultDiagramKeepsEventControlIdentityAtStoredControlLocations() {
+        val projectFile = projectFile(
+            foxCount = 5,
+            publicLabels = listOf("Fox1", "Fox2", "Fox3", "Fox4", "Fox5")
+        )
+        val baseInfo = protectedInfo(foxCount = 5)
+        val savedLabelByControlId = mapOf(
+            "control-1" to "Fox5",
+            "control-2" to "Fox2",
+            "control-3" to "Fox4",
+            "control-4" to "Fox3",
+            "control-5" to "Fox1"
+        )
+        val analyzerSavedInfo = baseInfo.copy(
+            idealOrder = "Fox5 Fox2 Fox4 Fox3 Fox1 Beacon",
+            sourceName = "Course Analyzer calculated route",
+            controlPoints = baseInfo.controlPoints.map { controlPoint ->
+                controlPoint.copy(label = savedLabelByControlId[controlPoint.controlId] ?: controlPoint.label)
+            },
+            courseObjects = baseInfo.courseObjects.map { courseObject ->
+                courseObject.copy(label = savedLabelByControlId[courseObject.id] ?: courseObject.label)
+            }
+        )
+
+        val affectedRaceTypes = RaceType.entries.filterNot { it == RaceType.FOXORING }
+        affectedRaceTypes.flatMap { raceType ->
+            listOf(RaceBand.M2, RaceBand.M80).map { raceBand -> raceType to raceBand }
+        }.forEach { (raceType, raceBand) ->
+            val bandProject = projectFile.copy(
+                raceData = projectFile.raceData.copy(
+                    race = projectFile.raceData.race.copy(raceType = raceType, raceBand = raceBand)
+                )
+            )
+            val analyzerSummary = DesktopCourseAnalyzer.analyze(
+                projectFile = bandProject,
+                categoryId = CATEGORY_ID,
+                protectedCourseInfo = analyzerSavedInfo,
+                protectedIdealOrderText = analyzerSavedInfo.idealOrder
+            )
+            val resultSummary = DesktopCourseAnalyzer.analyze(
+                projectFile = bandProject,
+                categoryId = CATEGORY_ID,
+                protectedCourseInfo = analyzerSavedInfo,
+                protectedIdealOrderText = analyzerSavedInfo.idealOrder,
+                controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS
+            )
+
+            val analyzerRouteMap = requireNotNull(analyzerSummary.providedRouteSection?.routeMap)
+            assertEquals(
+                listOf("S", "Fox5", "Fox2", "Fox4", "Fox3", "Fox1", "B", "F"),
+                analyzerRouteMap.routePointIndexes.map { analyzerRouteMap.points[it].label }
+            )
+            val resultRouteMap = requireNotNull(resultSummary.providedRouteSection?.routeMap)
+            assertEquals(
+                listOf("S", "Fox1", "Fox2", "Fox3", "Fox4", "Fox5", "B", "F"),
+                resultRouteMap.routePointIndexes.map { resultRouteMap.points[it].label }
+            )
+            val resultControlPoints = resultRouteMap.points
+                .filter { it.type == DesktopCourseRouteMapPointType.Control }
+                .sortedBy { it.xFraction }
+            assertEquals(listOf("Fox1", "Fox2", "Fox3", "Fox4", "Fox5"), resultControlPoints.map { it.label })
+        }
+    }
+
+    @Test
     fun appliesCalculatedIdealOrderToEveryCategoryWithTheSameAssignedCourse() {
         val password = "test-password"
         val baseProject = projectFile(

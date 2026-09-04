@@ -253,6 +253,12 @@ data class DesktopCourseCalculatedFoxAssignment(
     val calculatedLabel: String
 )
 
+/** Selects whether a route map describes planning-time numbering or result-record identities. */
+enum class DesktopCourseControlIdentityMode {
+    ANALYZER_SAVED_NUMBERING,
+    RESULT_CONTROLS
+}
+
 data class DesktopCourseSpeedModel(
     val formatSpeedMetersPerSecond: Double,
     val categorySpeedMultiplier: Double,
@@ -495,7 +501,9 @@ object DesktopCourseAnalyzer {
         analysisPerformedAtText: String = DesktopDateTimeText.displayText(LocalDateTime.now().withNano(0)),
         elevationLookup: (CourseGeoPoint) -> Double? = { null },
         elevationCacheNotes: (List<CourseGeoPoint>) -> List<String> = { emptyList() },
-        magneticDeclinationProvider: (CourseGeoPoint) -> DesktopMagneticDeclinationResult? = { null }
+        magneticDeclinationProvider: (CourseGeoPoint) -> DesktopMagneticDeclinationResult? = { null },
+        controlIdentityMode: DesktopCourseControlIdentityMode =
+            DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING
     ): DesktopCourseAnalysisSummary {
         val rawProtectedCourseInfo = protectedCourseInfo
         val courseInfo = rawProtectedCourseInfo?.withFiniteCourseGeometry()
@@ -514,14 +522,28 @@ object DesktopCourseAnalyzer {
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
         val allProtectedControls = courseInfo
             ?.let {
-                protectedAssignedControls(projectFile, it, null, raceType, categoryAssignedControls)
+                protectedAssignedControls(
+                    projectFile,
+                    it,
+                    null,
+                    raceType,
+                    categoryAssignedControls,
+                    controlIdentityMode
+                )
             }
             .orEmpty()
         val terminalBeaconControl = allProtectedControls.firstOrNull { it.type == ControlPointType.BEACON }
             ?: categoryAssignedControls.firstOrNull { it.type == ControlPointType.BEACON }
         val protectedRouteControls = courseInfo
             ?.let {
-                protectedAssignedControls(projectFile, it, idealOrderText, raceType, categoryAssignedControls)
+                protectedAssignedControls(
+                    projectFile,
+                    it,
+                    idealOrderText,
+                    raceType,
+                    categoryAssignedControls,
+                    controlIdentityMode
+                )
             }
             .orEmpty()
             .withTerminalBeacon(terminalBeaconControl)
@@ -1238,7 +1260,9 @@ object DesktopCourseAnalyzer {
         courseInfo: ProtectedCourseInfo,
         idealOrderText: String?,
         raceType: RaceType,
-        categoryAssignedControls: List<EventControl>
+        categoryAssignedControls: List<EventControl>,
+        controlIdentityMode: DesktopCourseControlIdentityMode =
+            DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING
     ): List<EventControl> {
         val controlsById = projectFile.raceData.controls.associateBy { it.id }
         val assignedControlsById = categoryAssignedControls.associateBy { it.id }
@@ -1258,7 +1282,11 @@ object DesktopCourseAnalyzer {
             }
             .zip(courseInfo.controlPoints)
             .map { (control, protectedControl) ->
-                if (courseInfo.usesAnalyzerSavedNumbering() && raceType != RaceType.FOXORING) {
+                if (
+                    controlIdentityMode == DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING &&
+                    courseInfo.usesAnalyzerSavedNumbering() &&
+                    raceType != RaceType.FOXORING
+                ) {
                     // Course Analyzer renumbering is intentionally stored in protected course data,
                     // not in Setup > Controls. Use the protected label for analyzer route labels and
                     // wait-slot calculations while preserving the control ID/SI-code source of truth.
