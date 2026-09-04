@@ -220,7 +220,7 @@ class DesktopNavigationTest {
             DesktopNavigation.rootItems(DesktopWorkflow.Series).map { it.label }
         )
         assertEquals(
-            listOf("Awards Results", "Live Results", "Exports"),
+            listOf("Recalculate Results", "Awards Results", "Live Results", "Exports"),
             DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport).map { it.label }
         )
         assertEquals(
@@ -240,15 +240,15 @@ class DesktopNavigationTest {
         val regionalEvent = practiceEvent.copy(raceLevel = RaceLevel.REGIONAL)
 
         assertEquals(
-            listOf("Awards Results", "Live Results", "Exports"),
+            listOf("Recalculate Results", "Awards Results", "Live Results", "Exports"),
             DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport, regionalEvent).map { it.label }
         )
         assertEquals(
-            listOf("Live Results", "Exports"),
+            listOf("Recalculate Results", "Live Results", "Exports"),
             DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport, practiceEvent).map { it.label }
         )
         assertEquals(
-            listOf("Live Results", "Exports"),
+            listOf("Recalculate Results", "Live Results", "Exports"),
             DesktopNavigation.rootItems(DesktopWorkflow.ResultsExport, practiceSeriesEvent).map { it.label }
         )
     }
@@ -381,12 +381,23 @@ class DesktopNavigationTest {
         assertEquals("Results/File Export", DesktopNavigation.breadcrumb(state))
         assertFalse(DesktopNavigation.canGoBack(state))
         assertEquals(
-            listOf("Awards Results", "Live Results", "Exports"),
+            listOf("Recalculate Results", "Awards Results", "Live Results", "Exports"),
             DesktopNavigation.currentItems(state).map { it.label }
         )
         assertTrue(DesktopNavigation.selectedDescription(state).contains("review scored finishers by category"))
         assertTrue(DesktopNavigation.selectedDescription(state).contains("Use Live Results"))
         assertTrue(DesktopNavigation.selectedDescription(state).contains("use Exports"))
+    }
+
+    @Test
+    fun resultsMenuStartsWithRecalculateAndKeepsResultsVisible() {
+        val resultsState = DesktopNavState().switchWorkflow(DesktopWorkflow.ResultsExport)
+        val recalculate = DesktopNavigation.currentItems(resultsState).first()
+        val selection = DesktopNavigation.selectItem(resultsState, recalculate)
+
+        assertEquals("Recalculate Results", recalculate.label)
+        assertEquals(DesktopNavAction.RecalculateResults, selection.action)
+        assertEquals(DesktopSection.Results, selection.state.selectedSection)
     }
 
     @Test

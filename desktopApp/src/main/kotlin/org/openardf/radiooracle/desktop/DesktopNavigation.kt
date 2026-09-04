@@ -65,6 +65,7 @@ enum class DesktopWorkflow(
 }
 
 enum class DesktopNavAction {
+    RecalculateResults,
     NewEventFile,
     OpenEventFile,
     ImportEventRegWebsite,
@@ -794,6 +795,13 @@ object DesktopNavigation {
                 )
             )
             DesktopWorkflow.ResultsExport -> listOf(
+                action(
+                    "results.recalculate",
+                    "Recalculate Results",
+                    workflow,
+                    DesktopNavAction.RecalculateResults,
+                    section = DesktopSection.Results
+                ),
                 item(
                     "results.awards",
                     "Awards Results",
@@ -1476,6 +1484,8 @@ object DesktopNavigation {
             "Use ROBIS to send eligible matched live results to the configured ROBIS endpoint, either manually or with background sending enabled.",
         "results.send-robis" to
             "Use Send ROBIS to send unsent matched live results to the configured ROBIS endpoint.",
+        "results.recalculate" to
+            "Use Recalculate Results to re-evaluate stored readouts against the current controls, categories, and course assignments. Review the updated results immediately, then use Save Race to persist them.",
         "results.awards" to
             "Use Awards Results to review derived National and Regional championship award levels by category. Awards are calculated from current preliminary results and competitor eligibility fields.",
         "results.exports" to

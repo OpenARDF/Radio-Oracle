@@ -6238,6 +6238,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                         "There are no Race File changes to save."
                     }
                 DesktopNavAction.CloseEventFile,
+                DesktopNavAction.RecalculateResults,
                 DesktopNavAction.ImportEventRegCompetitors,
                 DesktopNavAction.ImportCompetitorsSpreadsheet,
                 DesktopNavAction.ImportIofEntryListXml,
@@ -6364,6 +6365,10 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun handleEventFileNavAction(action: DesktopNavAction): Boolean =
             when (action) {
+                DesktopNavAction.RecalculateResults -> {
+                    recalculateResults()
+                    true
+                }
                 DesktopNavAction.NewEventFile -> {
                     requestNewEventFile()
                     true
@@ -7515,7 +7520,6 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             onInsertTestCompetitors = ::insertTestCompetitors,
             onInsertTestSportIdentDownloads = ::insertTestSportIdentDownloads,
             onRestoreRecentImportCheckpoint = ::restoreRecentImportCheckpoint,
-            onRecalculateResults = ::recalculateResults,
             onSetSportIdentPortDiscoveryMode = { mode ->
                 sportIdentPortDiscoveryMode = mode
                 DesktopAppSettingsPreferences.setSportIdentPortDiscoveryMode(mode)
@@ -12212,7 +12216,6 @@ private fun RadioOManagerDesktopApp(
     onInsertTestCompetitors: () -> Unit = {},
     onInsertTestSportIdentDownloads: () -> Unit = {},
     onRestoreRecentImportCheckpoint: () -> Unit = {},
-    onRecalculateResults: () -> Unit = {},
     onNavAction: (DesktopNavAction) -> Unit = {},
     hasDefaultUnsavedNewEventFileDraft: Boolean = false,
     hasEditedUnsavedNewEventFileDraft: Boolean = false,
@@ -12541,7 +12544,6 @@ private fun RadioOManagerDesktopApp(
                                     onCompetitorImportReviewEmptyCourseCategorySelectionChange = onCompetitorImportReviewEmptyCourseCategorySelectionChange,
                                     onApplyCompetitorImportReview = onApplyCompetitorImportReview,
                                     onCancelCompetitorImportReview = onCancelCompetitorImportReview,
-                                    onRecalculateResults = onRecalculateResults,
                                     onResolveCachedCourseAnalysisElevations = onResolveCachedCourseAnalysisElevations,
                                     onDownloadMissingCourseAnalysisElevations = onDownloadMissingCourseAnalysisElevations,
                                     onDownloadVenueElevationCache = onDownloadVenueElevationCache,
@@ -13901,7 +13903,6 @@ private fun SectionWorkspace(
     onInsertTestCompetitors: () -> Unit,
     onInsertTestSportIdentDownloads: () -> Unit,
     onRestoreRecentImportCheckpoint: () -> Unit,
-    onRecalculateResults: () -> Unit,
     onNavAction: (DesktopNavAction) -> Unit
 ) {
     Column(
@@ -14138,7 +14139,6 @@ private fun SectionWorkspace(
                 recentImportCheckpoint = recentImportCheckpoint,
                 recentActivityLog = recentActivityLog,
                 onRestoreRecentImportCheckpoint = onRestoreRecentImportCheckpoint,
-                onRecalculateResults = onRecalculateResults,
                 onInsertTestControls = onInsertTestControls,
                 onInsertTestCategories = onInsertTestCategories,
                 onInsertTestCompetitors = onInsertTestCompetitors,
@@ -14804,7 +14804,6 @@ private fun EventDiagnosticsPanel(
     recentImportCheckpoint: DesktopImportCheckpoint?,
     recentActivityLog: List<String>,
     onRestoreRecentImportCheckpoint: () -> Unit,
-    onRecalculateResults: () -> Unit,
     onInsertTestControls: () -> Unit,
     onInsertTestCategories: () -> Unit,
     onInsertTestCompetitors: () -> Unit,
@@ -14832,16 +14831,6 @@ private fun EventDiagnosticsPanel(
             )
         )
         DetailRow("Validation", diagnostics.validationState)
-        if (diagnostics.resultCount > 0 || diagnostics.readoutCount > 0) {
-            Button(onClick = onRecalculateResults) {
-                ButtonLabel("Recalculate Results")
-            }
-            Text(
-                text = "Re-evaluates stored readouts against the current controls, categories, and course assignments. Changed results are marked unsent for reposting.",
-                color = Color.DarkGray,
-                fontSize = 12.sp
-            )
-        }
         RaceReadinessDiagnostics(diagnostics.readinessIssues)
         RecentImportDiagnostics(
             recentImportReport = recentImportReport,
