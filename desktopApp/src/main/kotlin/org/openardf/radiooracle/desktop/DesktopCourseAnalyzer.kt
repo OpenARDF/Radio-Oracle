@@ -370,6 +370,7 @@ enum class DesktopCourseMetricStatus {
  * time, but the current estimate does not apply a separate accumulated-fatigue adjustment.
  */
 object DesktopCourseAnalyzer {
+    private val STABLE_CONTROL_ID_PATTERN = Regex("""^control-(.+)-(\d+)-(control|beacon|separator)$""")
     private const val USA_RULES_DOCUMENT_LABEL = "USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"
     private const val CLASSIC_TRANSMIT_CYCLE_SECONDS = 300
     private const val CLASSIC_TRANSMIT_SLOT_SECONDS = 60
@@ -598,10 +599,15 @@ object DesktopCourseAnalyzer {
             ControlAnalysisPoint(
                 control = control,
                 point = protectedControlPointsById[control.id]?.toGeoPoint()
-                    ?: protectedPointForControl(control, protectedCoordinateLookup)
+                    ?: protectedPointForControl(control, protectedCoordinateLookup, controlIdentityMode)
             )
         }
-        val displayControlsWithPoints = displayControlsWithPoints(projectFile, protectedControlPointsById, protectedCoordinateLookup)
+        val displayControlsWithPoints = displayControlsWithPoints(
+            projectFile,
+            protectedControlPointsById,
+            protectedCoordinateLookup,
+            controlIdentityMode
+        )
             .ifEmpty { controlsWithPoints }
         val missingCoordinateControls = controlsWithPoints.filter { it.point == null }
         if (missingCoordinateControls.isNotEmpty()) {
@@ -670,7 +676,13 @@ object DesktopCourseAnalyzer {
         val providedControlsFromOrder = idealOrderText
             ?.let { idealOrder ->
                 runCatching {
-                    val ids = resolveProtectedIdealOrderControlIds(idealOrder, assignedControls, courseInfo, raceType)
+                    val ids = resolveProtectedIdealOrderControlIds(
+                        idealOrder,
+                        assignedControls,
+                        courseInfo,
+                        raceType,
+                        controlIdentityMode
+                    )
                     ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
                 }.getOrElse { error ->
                     missing += "Saved route order could not be resolved: ${error.message ?: error::class.simpleName}."
@@ -1237,7 +1249,8 @@ object DesktopCourseAnalyzer {
     private fun displayControlsWithPoints(
         projectFile: EventProjectFile,
         protectedControlPointsById: Map<String, ProtectedCourseControlPoint>,
-        protectedCoordinateLookup: ProtectedCoordinateLookup
+        protectedCoordinateLookup: ProtectedCoordinateLookup,
+        controlIdentityMode: DesktopCourseControlIdentityMode
     ): List<ControlAnalysisPoint> =
         projectFile.raceData.controls
             .filter {
@@ -1249,7 +1262,7 @@ object DesktopCourseAnalyzer {
                 ControlAnalysisPoint(
                     control = control,
                     point = protectedControlPointsById[control.id]?.toGeoPoint()
-                        ?: protectedPointForControl(control, protectedCoordinateLookup)
+                        ?: protectedPointForControl(control, protectedCoordinateLookup, controlIdentityMode)
                 )
             }
             .filter { it.point != null }
@@ -1275,8 +1288,10 @@ object DesktopCourseAnalyzer {
         val protectedControls = courseInfo.controlPoints
             .map { protectedControl ->
                 assignedControlsById[protectedControl.controlId]
+                    ?: categoryAssignedControls.resultControlFor(protectedControl, controlIdentityMode)
                     ?: categoryAssignedControls.foxoringControlFor(protectedControl, raceType)
                     ?: controlsById[protectedControl.controlId]
+                    ?: projectControls.resultControlFor(protectedControl, controlIdentityMode)
                     ?: projectControls.firstOrNull { it.matchesProtectedControl(protectedControl) }
                     ?: protectedControl.toEventControl(projectFile.raceData.race.id)
             }
@@ -1311,7 +1326,13 @@ object DesktopCourseAnalyzer {
             ?.let { idealOrder ->
                 runCatching {
                     val controlsByProtectedOrder = protectedControls.associateBy { it.id }
-                    resolveProtectedIdealOrderControlIds(idealOrder, protectedControls, courseInfo, raceType)
+                    resolveProtectedIdealOrderControlIds(
+                        idealOrder,
+                        protectedControls,
+                        courseInfo,
+                        raceType,
+                        controlIdentityMode
+                    )
                         .mapNotNull { controlsByProtectedOrder[it] }
                         .distinctBy { it.id }
                 }.getOrNull()
@@ -1324,10 +1345,17 @@ object DesktopCourseAnalyzer {
         idealOrderText: String,
         controls: List<EventControl>,
         courseInfo: ProtectedCourseInfo?,
-        raceType: RaceType
+        raceType: RaceType,
+        controlIdentityMode: DesktopCourseControlIdentityMode =
+            DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING
     ): List<String> {
         if (courseInfo.usesAnalyzerSavedNumbering()) {
-            val analyzerLabelControls = protectedCourseInfoAliasControls(controls, courseInfo, raceType)
+            val analyzerLabelControls = protectedCourseInfoAliasControls(
+                controls,
+                courseInfo,
+                raceType,
+                controlIdentityMode
+            )
             if (analyzerLabelControls.isNotEmpty()) {
                 runCatching {
                     return ProtectedIdealOrderRules.resolveControlIds(idealOrderText, analyzerLabelControls)
@@ -1338,7 +1366,7 @@ object DesktopCourseAnalyzer {
             ProtectedIdealOrderRules.resolveControlIds(idealOrderText, controls)
         }.getOrElse { originalError ->
             val controlsWithStoredImportLabels =
-                controls + protectedCourseInfoAliasControls(controls, courseInfo, raceType)
+                controls + protectedCourseInfoAliasControls(controls, courseInfo, raceType, controlIdentityMode)
             if (controlsWithStoredImportLabels.size == controls.size) {
                 throw originalError
             }
@@ -1353,7 +1381,9 @@ object DesktopCourseAnalyzer {
     private fun protectedCourseInfoAliasControls(
         controls: List<EventControl>,
         courseInfo: ProtectedCourseInfo?,
-        raceType: RaceType
+        raceType: RaceType,
+        controlIdentityMode: DesktopCourseControlIdentityMode =
+            DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING
     ): List<EventControl> {
         if (courseInfo == null) {
             return emptyList()
@@ -1364,6 +1394,7 @@ object DesktopCourseAnalyzer {
         // current public label.
         return courseInfo.controlPoints.map { protectedControl ->
             val currentControl = controlsById[protectedControl.controlId]
+                ?: controls.resultControlFor(protectedControl, controlIdentityMode)
                 ?: controls.foxoringControlFor(protectedControl, raceType)
             if (currentControl != null) {
                 currentControl.copy(
@@ -1374,6 +1405,21 @@ object DesktopCourseAnalyzer {
                 protectedControl.toEventControl("")
             }
         }
+    }
+
+    private fun List<EventControl>.resultControlFor(
+        protectedControl: ProtectedCourseControlPoint,
+        controlIdentityMode: DesktopCourseControlIdentityMode
+    ): EventControl? {
+        if (controlIdentityMode != DesktopCourseControlIdentityMode.RESULT_CONTROLS) {
+            return null
+        }
+        val protectedIdentity = protectedControl.controlId.stableResultControlIdentity(protectedControl.type)
+            ?: return null
+        return filter { control ->
+            control.type == protectedControl.type &&
+                control.id.stableResultControlIdentity(control.type) == protectedIdentity
+        }.singleOrNull()
     }
 
     private fun List<EventControl>.foxoringControlFor(
@@ -1416,6 +1462,25 @@ object DesktopCourseAnalyzer {
     private fun String.singleAnalysisControlNumber(): Int? {
         val matches = Regex("""\d+""").findAll(this).map { it.value.toInt() }.toList()
         return matches.singleOrNull()
+    }
+
+    private fun String.stableResultControlIdentity(type: ControlPointType): String? {
+        val match = STABLE_CONTROL_ID_PATTERN.matchEntire(this) ?: return null
+        if (match.groupValues[3] != type.name.lowercase()) {
+            return null
+        }
+        return when (type) {
+            ControlPointType.CONTROL -> {
+                val labelToken = match.groupValues[1]
+                val foxNumber = ControlRoleLabelRules.foxNumber(labelToken) ?: return null
+                val compactLabel = labelToken.lowercase().filter(Char::isLetterOrDigit)
+                val isFast = compactLabel.endsWith("f") ||
+                    (compactLabel.startsWith("f") && compactLabel.drop(1).all(Char::isDigit))
+                "control:${if (isFast) "fast" else "standard"}:$foxNumber"
+            }
+            ControlPointType.BEACON -> "beacon"
+            ControlPointType.SEPARATOR -> "spectator"
+        }
     }
 
     private fun ProtectedCourseControlPoint.toEventControl(raceId: String): EventControl =
@@ -4098,6 +4163,7 @@ object DesktopCourseAnalyzer {
         if (courseInfo == null) {
             return ProtectedCoordinateLookup(
                 pointsByToken = emptyMap(),
+                pointsByStableIdentity = emptyMap(),
                 singleBeaconPoint = null,
                 singleSpectatorPoint = null
             )
@@ -4108,6 +4174,7 @@ object DesktopCourseAnalyzer {
                     ProtectedCoordinateCandidate(
                         label = controlPoint.label,
                         type = controlPoint.type.toProtectedCourseObjectType(),
+                        stableIdentity = controlPoint.controlId.stableResultControlIdentity(controlPoint.type),
                         point = controlPoint.toGeoPoint()
                     )
                 )
@@ -4123,6 +4190,9 @@ object DesktopCourseAnalyzer {
                         ProtectedCoordinateCandidate(
                             label = courseObject.label,
                             type = courseObject.type,
+                            stableIdentity = courseObject.type.controlPointTypeOrNull()?.let { controlType ->
+                                courseObject.id.stableResultControlIdentity(controlType)
+                            },
                             point = courseObject.toGeoPoint()
                         )
                     )
@@ -4152,8 +4222,14 @@ object DesktopCourseAnalyzer {
         // aliases overlap, but their exact public labels still identify two different locations.
         // Keep broad alias matching for legacy imports while giving exact labels precedence.
         val pointsByToken = aliasPointsByToken + exactPointsByToken
+        val pointsByStableIdentity = uniquePointsByToken(
+            typedPoints.mapNotNull { candidate ->
+                candidate.stableIdentity?.let { identity -> identity to candidate.point }
+            }
+        )
         return ProtectedCoordinateLookup(
             pointsByToken = pointsByToken,
+            pointsByStableIdentity = pointsByStableIdentity,
             singleBeaconPoint = typedPoints.singleUniquePoint(ProtectedCourseObjectType.BEACON),
             singleSpectatorPoint = typedPoints.singleUniquePoint(ProtectedCourseObjectType.SPECTATOR)
         )
@@ -4161,9 +4237,16 @@ object DesktopCourseAnalyzer {
 
     private fun protectedPointForControl(
         control: EventControl,
-        protectedCoordinateLookup: ProtectedCoordinateLookup
+        protectedCoordinateLookup: ProtectedCoordinateLookup,
+        controlIdentityMode: DesktopCourseControlIdentityMode =
+            DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING
     ): CourseGeoPoint? =
-        control.protectedCoordinateTokens()
+        if (controlIdentityMode == DesktopCourseControlIdentityMode.RESULT_CONTROLS) {
+            control.id.stableResultControlIdentity(control.type)
+                ?.let { identity -> protectedCoordinateLookup.pointsByStableIdentity[identity] }
+        } else {
+            null
+        } ?: control.protectedCoordinateTokens()
             .firstNotNullOfOrNull { token -> protectedCoordinateLookup.pointsByToken[token] }
             ?: when (control.type) {
                 ControlPointType.BEACON -> protectedCoordinateLookup.singleBeaconPoint
@@ -4240,6 +4323,16 @@ object DesktopCourseAnalyzer {
             ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
         }
 
+    private fun ProtectedCourseObjectType.controlPointTypeOrNull(): ControlPointType? =
+        when (this) {
+            ProtectedCourseObjectType.CONTROL -> ControlPointType.CONTROL
+            ProtectedCourseObjectType.BEACON -> ControlPointType.BEACON
+            ProtectedCourseObjectType.SPECTATOR -> ControlPointType.SEPARATOR
+            ProtectedCourseObjectType.START,
+            ProtectedCourseObjectType.FINISH,
+            ProtectedCourseObjectType.WAYPOINT -> null
+        }
+
     private fun oneDecimal(value: Double): String =
         (value * 10.0).roundToInt().let { "${it / 10}.${abs(it % 10)}" }
 
@@ -4262,6 +4355,7 @@ object DesktopCourseAnalyzer {
 
 private data class ProtectedCoordinateLookup(
     val pointsByToken: Map<String, CourseGeoPoint>,
+    val pointsByStableIdentity: Map<String, CourseGeoPoint>,
     val singleBeaconPoint: CourseGeoPoint?,
     val singleSpectatorPoint: CourseGeoPoint?
 )
@@ -4269,6 +4363,7 @@ private data class ProtectedCoordinateLookup(
 private data class ProtectedCoordinateCandidate(
     val label: String,
     val type: ProtectedCourseObjectType,
+    val stableIdentity: String?,
     val point: CourseGeoPoint
 )
 
