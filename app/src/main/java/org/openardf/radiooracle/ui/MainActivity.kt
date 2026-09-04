@@ -82,7 +82,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val KEY_RESULTS_SCORING_REVISION = "results_scoring_revision"
-        private const val RESULTS_SCORING_REVISION = 4
+        private const val RESULTS_SCORING_REVISION = 5
     }
 
     private var usbDetachReceiver: BroadcastReceiver = object : BroadcastReceiver() {

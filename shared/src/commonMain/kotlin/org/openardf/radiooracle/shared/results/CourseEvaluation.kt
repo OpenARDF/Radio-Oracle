@@ -81,7 +81,13 @@ object CourseEvaluator {
         controlPoints: List<EvaluationControlPoint>
     ): CourseEvaluation {
         val loop = evaluateLoop(punches, controlPoints)
-        return CourseEvaluation(loop.points, statusForRadioO(controlPoints, loop.missingRequiredControl), loop.statuses)
+        // A finish-beacon punch alone does not qualify a competitor for a result.
+        val didNotFinish = loop.missingRequiredControl || loop.points == 0
+        return CourseEvaluation(
+            loop.points,
+            statusForRadioO(controlPoints, didNotFinish),
+            loop.statuses
+        )
     }
 
     private fun evaluateSprint(
@@ -261,11 +267,11 @@ object CourseEvaluator {
 
     private fun statusForRadioO(
         controlPoints: List<EvaluationControlPoint>,
-        missingRequiredControl: Boolean
+        didNotFinish: Boolean
     ): ResultStatus =
         when {
             controlPoints.isEmpty() -> ResultStatus.NO_RANKING
-            missingRequiredControl -> ResultStatus.DID_NOT_FINISH
+            didNotFinish -> ResultStatus.DID_NOT_FINISH
             else -> ResultStatus.OK
         }
 

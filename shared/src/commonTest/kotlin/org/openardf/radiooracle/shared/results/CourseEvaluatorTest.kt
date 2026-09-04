@@ -110,6 +110,24 @@ class CourseEvaluatorTest {
     }
 
     @Test
+    fun classicBeaconOnlyIsDnf() {
+        val evaluation = CourseEvaluator.evaluate(
+            RaceType.CLASSIC,
+            punches = punches(136),
+            controlPoints = controls(
+                223 to ControlPointType.CONTROL,
+                224 to ControlPointType.CONTROL,
+                225 to ControlPointType.CONTROL,
+                136 to ControlPointType.BEACON
+            )
+        )
+
+        assertEquals(0, evaluation.points)
+        assertEquals(ResultStatus.DID_NOT_FINISH, evaluation.resultStatus)
+        assertEquals(listOf(PunchStatus.VALID), evaluation.punchStatuses)
+    }
+
+    @Test
     fun radioOControlRoleScoresEvenIfLegacyDataMarksItUnscored() {
         val evaluation = CourseEvaluator.evaluate(
             RaceType.CLASSIC,
