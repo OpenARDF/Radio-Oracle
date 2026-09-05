@@ -69,7 +69,7 @@
     <string name="category_edit">Upravit kategorii</string>
     <string name="category_delete_confirmation">Opravdu chcete smazat tuto kategorii?\n%1$s</string>
     <string name="category_delete_competitors">Smazat i závodníky v této kategorii</string>
-    <string name="control_point_edit_hint">Zadejte SI kódy, oddělené mezerou. ! značí diváckou (pouze sprint), B maják. Cílové stanice se načítají automaticky z SI čipu a zde se nezadávají. Aliasy se spravují v samostatném dialogu.</string>
+    <string name="control_point_edit_hint">Zadejte SI kódy nebo existující aliasy kontrol, pokud jsou aliasy zapnuté, oddělené mezerami. Názvy s mezerami lze uzavřít do uvozovek (\"Fox 2\") nebo oddělit čárkami. ! značí diváckou kontrolu (pouze sprint), B maják. Cílové stanice se načítají automaticky z SI čipu a zde se nezadávají.</string>
     <string name="control_point_unknown_specifier">Neznámý specifikátor: %1$s</string>
     <string name="control_point_invalid_range">SI kód mimo rozsah: %1$s. Kód musí být větší než 30 a menší než 256.</string>
     <string name="control_point_two_in_row">Stejná kontrola nemůže být dvakrát za sebou.</string>

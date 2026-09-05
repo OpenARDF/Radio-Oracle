@@ -40,6 +40,7 @@ import org.openardf.radiooracle.shared.course.ControlPointDisplayToken
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointValidationError
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
+import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import java.util.UUID
 
 /**
@@ -172,7 +173,10 @@ object ControlPointsHelper {
             controlPoint.siCode.toString()
         }
         val marker = controlPoint.editMarkerFor(base, useAlias)
-        "$base$marker"
+        ControlPointRules.formatEditableDisplayTokens(
+            listOf(ControlPointDisplayToken(controlPoint.siCode, "$base$marker")),
+            useAlias = true
+        )
     }
 
     /** Formats raw readout punches without alias substitution. */
@@ -212,16 +216,46 @@ object ControlPointsHelper {
             return input
         }
         val aliasesByName = aliases.associateBy { it.name }
-        return input.trim().split("\\s+".toRegex()).joinToString(" ") { token ->
-            aliasesByName[token]?.let { alias ->
-                if (token.equals(ControlPointRules.BEACON_CONTROL_MARKER.toString(), ignoreCase = true)) {
-                    "${alias.siCode}${ControlPointRules.BEACON_CONTROL_MARKER}"
-                } else {
-                    alias.siCode.toString()
-                }
+        val aliasesByEquivalentName = aliases.groupBy { it.name.aliasMatchKey() }
+            .mapNotNull { (name, matches) ->
+                matches.first().takeIf { matches.map(Alias::siCode).distinct().size == 1 }
+                    ?.let { name to it }
+            }.toMap()
+        fun findAlias(name: String): Alias? = aliasesByName[name]
+            ?: aliasesByEquivalentName[name.aliasMatchKey()].takeIf { name.any(Char::isLetter) }
+        val tokens = ControlPointRules.tokenizeControlPoints(input)
+        val resolved = mutableListOf<String>()
+        var index = 0
+        while (index < tokens.size) {
+            // Prefer a complete known name (for example Fox 2) over its individual words.
+            // Shared tokenization also supports quoted names and comma-separated controls.
+            val match = (tokens.size downTo index + 1).firstNotNullOfOrNull { end ->
+                val candidate = tokens.subList(index, end).joinToString(" ")
+                resolveAliasToken(candidate, ::findAlias)?.let { it to end }
             }
-                ?: replaceMarkedAliasToken(token, aliasesByName)
+            if (match == null) {
+                resolved += tokens[index++]
+            } else {
+                resolved += match.first
+                index = match.second
+            }
         }
+        return resolved.joinToString(" ")
+    }
+
+    private fun String.aliasMatchKey(): String =
+        ControlRoleLabelRules.foxNumber(this)?.let { "fox:$it" }
+            ?: "label:${filterNot(Char::isWhitespace).lowercase()}"
+
+    private fun resolveAliasToken(token: String, findAlias: (String) -> Alias?): String? {
+        findAlias(token)?.let { alias ->
+            return if (token.equals(ControlPointRules.BEACON_CONTROL_MARKER.toString(), ignoreCase = true)) {
+                "${alias.siCode}${ControlPointRules.BEACON_CONTROL_MARKER}"
+            } else {
+                alias.siCode.toString()
+            }
+        }
+        return replaceMarkedAliasToken(token, findAlias)
     }
 
     private fun ControlPoint.editMarkerFor(base: String, useAlias: Boolean): String =
@@ -238,16 +272,21 @@ object ControlPointsHelper {
 
     private fun replaceMarkedAliasToken(
         token: String,
-        aliasesByName: Map<String, Alias>
-    ): String {
+        findAlias: (String) -> Alias?
+    ): String? {
         val marker = token.lastOrNull()
         if (marker != ControlPointRules.SPECTATOR_CONTROL_MARKER &&
             marker != ControlPointRules.BEACON_CONTROL_MARKER
         ) {
-            return token
+            return null
         }
         val base = token.dropLast(1)
-        return aliasesByName[base]?.let { alias -> "${alias.siCode}$marker" } ?: token
+        // A marker must be attached to its control. In "Fox 2 B", B is a separate
+        // control and must not be absorbed while matching a multiword fox name.
+        if (base.lastOrNull()?.isWhitespace() == true) {
+            return null
+        }
+        return findAlias(base)?.let { alias -> "${alias.siCode}$marker" }
     }
 
     const val SPECTATOR_CONTROL_MARKER = ControlPointRules.SPECTATOR_CONTROL_MARKER

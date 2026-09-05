@@ -2276,12 +2276,29 @@ object DesktopCourseAnalyzer {
         }
     }
 
+    /** Uses the analyzer's existing exhaustive Classic objective without timing or renumbering. */
+    internal fun classicIdealOrder(
+        start: CourseGeoPoint,
+        finish: CourseGeoPoint,
+        controls: List<Pair<EventControl, CourseGeoPoint>>,
+        beacon: Pair<EventControl, CourseGeoPoint>?,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        checkCancelled: () -> Unit = {}
+    ): List<String> {
+        require(controls.size <= MAX_PERMUTATION_CONTROLS) { "Too many controls for exhaustive Classic analysis." }
+        return shortestPermutation(
+            start, finish, controls.map { ControlAnalysisPoint(it.first, it.second) },
+            beacon?.let { ControlAnalysisPoint(it.first, it.second) }, elevationLookup, checkCancelled
+        ).controls.map { it.control.id }
+    }
+
     private fun shortestPermutation(
         start: CourseGeoPoint,
         finish: CourseGeoPoint,
         controlsToPermute: List<ControlAnalysisPoint>,
         beacon: ControlAnalysisPoint?,
-        elevationLookup: (CourseGeoPoint) -> Double?
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        checkCancelled: () -> Unit = {}
     ): CalculatedRoute {
         var bestControls = emptyList<ControlAnalysisPoint>()
         var bestComparisonLength = Double.POSITIVE_INFINITY
@@ -2289,6 +2306,7 @@ object DesktopCourseAnalyzer {
         var routeCount = 0
         val legSampleCache = mutableMapOf<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>()
         controlsToPermute.permutations().forEach { permutation ->
+            checkCancelled()
             routeCount++
             val controls = if (beacon != null) permutation + beacon else permutation
             val points = listOf(start) + controls.mapNotNull { it.point } + finish

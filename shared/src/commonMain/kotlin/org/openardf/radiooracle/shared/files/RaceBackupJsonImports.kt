@@ -52,6 +52,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -61,12 +62,18 @@ import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.EventStartNumbers
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
-/** Imports Android `.ardfjs` full race backup JSON into the shared desktop project model. */
+/** Imports legacy Android backups and modern Race Files, including modern JSON saved as `.ardfjs`. */
 object RaceBackupJsonImports {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun projectFile(text: String, idFactory: () -> String): EventProjectFile {
         val root = json.parseToJsonElement(text).jsonObject
+        // Android previously kept the legacy extension after switching its export payload.
+        // Select by the envelope, and let the native decoder validate modern files without
+        // falling back to a lossy legacy import on malformed or unsupported schemas.
+        if (root.containsKey("raceData") || root.containsKey("schemaVersion") || root.containsKey("appName")) {
+            return EventProjectFileJson.decode(text)
+        }
         val raceId = idFactory()
         val raceStart = root.string("race_start") ?: "1970-01-01T00:00:00"
         val race = EventRace(

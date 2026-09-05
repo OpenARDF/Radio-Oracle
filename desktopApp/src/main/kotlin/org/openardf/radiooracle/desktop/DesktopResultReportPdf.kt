@@ -74,7 +74,8 @@ object DesktopResultReportPdf {
         val report = ResultReportExports.model(
             projectFile.raceData,
             protectedCourseInfoByCategoryId,
-            awardDisplayMode
+            awardDisplayMode,
+            routeLengths = DesktopClassicRouteAnalysis.projection(projectFile)
         )
         return DesktopPdfDocument.bytes(pageContents(report))
     }
@@ -106,11 +107,12 @@ object DesktopResultReportPdf {
         line(report.raceName.ifBlank { "Results Report" }, fontSize = 16, bold = true)
         line("Start: ${report.startDateTimeIso}   Level: ${report.raceLevel}", fontSize = 10)
         report.publicationNotice?.let { line(it, fontSize = 10, bold = true) }
+        report.routeLengthCoverage?.let { line(it, fontSize = 7) }
         y -= 6.0
 
         report.categories.forEach { category ->
             ensure(HeaderHeight + RowHeight * 2)
-            line(category.name, fontSize = 13, bold = true)
+            line(category.displayName, fontSize = 13, bold = true)
             val metaText = categoryMetaText(category)
             if (metaText.isNotBlank()) {
                 line(metaText, fontSize = 8)
@@ -119,7 +121,7 @@ object DesktopResultReportPdf {
             current.appendTableHeader(y)
             y -= HeaderHeight
             category.results.forEach { result ->
-                ensure(RowHeight)
+                ensure(RowHeight + if (result.routeLength != null) 16.0 else 0.0)
                 current.appendResultRow(y, listOf(
                     result.placeText,
                     result.name,
@@ -132,6 +134,10 @@ object DesktopResultReportPdf {
                     result.controlsText
                 ))
                 y -= RowHeight
+                result.routeLength?.let {
+                    current.appendPdfText(Left + 4.0, y - 10.0, 8, "Estimated effective route length: ${it.text}")
+                    y -= 16.0
+                }
             }
             y -= 8.0
         }

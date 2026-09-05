@@ -596,8 +596,8 @@ class RaceSelectionFragment : Fragment() {
         intent.addCategory(Intent.CATEGORY_OPENABLE)
         val seriesName = raceViewModel.seriesNameForRace(raceId)
         if (seriesName == null) {
-            intent.type = "text/json"
-            intent.putExtra(Intent.EXTRA_TITLE, "race.ardfjs")
+            intent.type = "application/json"
+            intent.putExtra(Intent.EXTRA_TITLE, EventFileTransferPayloads.singleEventFileName("race"))
         } else {
             intent.type = EVENT_SERIES_ARCHIVE_CONTENT_TYPE
             intent.putExtra(Intent.EXTRA_TITLE, EventFileTransferPayloads.seriesPackageFileName(seriesName))

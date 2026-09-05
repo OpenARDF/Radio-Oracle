@@ -173,6 +173,135 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun addingCategoryActivatesMatchingUnlockedCourseMapping() {
+        val fox = EventControl(
+            id = "control-fox-2",
+            raceId = "race",
+            label = "2",
+            siCode = 132,
+            type = ControlPointType.CONTROL
+        )
+        val beacon = EventControl(
+            id = "control-beacon",
+            raceId = "race",
+            label = "B",
+            siCode = 136,
+            type = ControlPointType.BEACON
+        )
+        val mapping = EventCategoryData(
+            category = category("mapping-m70", "M70", order = 9).copy(
+                maxAge = 70,
+                lengthMeters = 2_133,
+                climbMeters = 40,
+                encryptedIdealOrder = "encrypted-order",
+                encryptedCourseInfo = "encrypted-course"
+            ),
+            controlPoints = emptyList(),
+            competitors = emptyList()
+        )
+        val courseInfo = ProtectedCourseInfo(
+            idealOrder = "2 B",
+            lengthMeters = 2_133,
+            climbMeters = 40,
+            controlPoints = listOf(
+                ProtectedCourseControlPoint(
+                    controlId = fox.id,
+                    label = fox.label,
+                    latitude = 36.1,
+                    longitude = -78.8,
+                    type = fox.type
+                ),
+                ProtectedCourseControlPoint(
+                    controlId = beacon.id,
+                    label = beacon.label,
+                    latitude = 36.2,
+                    longitude = -78.9,
+                    type = beacon.type
+                )
+            )
+        )
+        val original = projectFile(
+            categories = listOf(categoryData("cat-m21", "M21", order = 4)),
+            courseMappings = listOf(mapping),
+            controls = listOf(fox, beacon)
+        )
+
+        val outcome = EventProjectEditor.addCategoryActivatingCourseMapping(
+            projectFile = original,
+            categoryId = "cat-m70",
+            name = " M70 ",
+            protectedCourseInfoByCategoryId = mapOf(mapping.category.id to courseInfo),
+            controlPointIdFactory = { index -> "assigned-$index" }
+        )
+
+        val activated = outcome.projectFile.raceData.categories.last()
+        assertEquals("M70", activated.category.name)
+        assertEquals(70, activated.category.maxAge)
+        assertEquals(2_133, activated.category.lengthMeters)
+        assertEquals(40, activated.category.climbMeters)
+        assertEquals(5, activated.category.order)
+        assertEquals("encrypted-order", activated.category.encryptedIdealOrder)
+        assertEquals("encrypted-course", activated.category.encryptedCourseInfo)
+        assertEquals(listOf(fox.id, beacon.id), activated.controlPoints.map { it.controlId })
+        assertEquals(listOf("cat-m70", "cat-m70"), activated.controlPoints.map { it.categoryId })
+        assertEquals(listOf(1, 2), activated.controlPoints.map { it.order })
+        assertEquals(listOf(fox.id, beacon.id), activated.publicControlIds)
+        assertEquals(emptyList(), outcome.projectFile.raceData.courseMappings)
+        assertEquals(mapping.category.id, outcome.activatedCourseMappingId)
+        assertEquals(2, outcome.assignedControlCount)
+        assertEquals(0, outcome.unavailableControlCount)
+    }
+
+    @Test
+    fun addingCategoryActivatesPlaintextCourseMappingWithoutPasswordState() {
+        val fox = EventControl(
+            id = "control-fox-4",
+            raceId = "race",
+            label = "4",
+            siCode = 134,
+            type = ControlPointType.CONTROL
+        )
+        val courseInfo = ProtectedCourseInfo(
+            idealOrder = "4",
+            lengthMeters = 2_510,
+            climbMeters = 41,
+            controlPoints = listOf(
+                ProtectedCourseControlPoint(
+                    controlId = fox.id,
+                    label = fox.label,
+                    latitude = 36.1,
+                    longitude = -78.8,
+                    type = fox.type
+                )
+            )
+        )
+        val mapping = EventCategoryData(
+            category = category("mapping-m70", "M70").copy(
+                lengthMeters = 2_510,
+                climbMeters = 41,
+                idealOrder = courseInfo.idealOrder,
+                courseInfo = courseInfo
+            ),
+            controlPoints = emptyList(),
+            competitors = emptyList()
+        )
+
+        val outcome = EventProjectEditor.addCategoryActivatingCourseMapping(
+            projectFile = projectFile(courseMappings = listOf(mapping), controls = listOf(fox)),
+            categoryId = "cat-m70",
+            name = "M70",
+            controlPointIdFactory = { "assigned-$it" }
+        )
+
+        val activated = outcome.projectFile.raceData.categories.single()
+        assertEquals(2_510, activated.category.lengthMeters)
+        assertEquals(41, activated.category.climbMeters)
+        assertEquals(courseInfo, activated.category.courseInfo)
+        assertEquals(listOf(fox.id), activated.publicControlIds)
+        assertEquals(1, outcome.assignedControlCount)
+    }
+
+    @Test
     fun rejectsInvalidCategoryAdds() {
         val original = projectFile(
             categories = listOf(categoryData("cat-1", "M21"))

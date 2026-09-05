@@ -475,6 +475,26 @@ class DesktopVenueElevationCacheTest {
     }
 
     @Test
+    fun routeAnalysisSkipsUnrelatedGridBodiesAndRetainsSourcePrecedence() {
+        withTemporaryUserHome {
+            val directory = DesktopVenueElevationCache.cacheDirectory()
+            Files.createDirectories(directory)
+            writeCache(directory.resolve("usgs.roelev.json"), "USGS 3DEP", 1.0, 10.0)
+            writeCache(directory.resolve("lidar.roelev.json"), "Oregon DOGAMI LiDAR DTM", 3.0, 20.0)
+            // Valid distant metadata, deliberately unreadable body: it must never be parsed.
+            Files.writeString(directory.resolve("distant.roelev.json"),
+                cacheJson("Distant terrain", 3.0, 30.0).replace("44.9", "34.9").replace("45.1", "35.1")
+                    .substringBefore("\"elevations\"") + "\"elevations\": [INVALID]}")
+            val surface = DesktopVenueElevationCache.freezeForRouteAnalysis(bounds = DesktopVenueElevationBoundingBox(45.0, 45.01, -122.0, -121.99))
+            assertEquals(2, surface.sources.size)
+            assertEquals(20.0, surface.elevation(CourseGeoPoint(45.0, -122.0))!!, 0.0)
+            val restored = DesktopVenueElevationCache.restoreRouteAnalysisSurface(surface.sources)
+            assertEquals(surface.sources, restored.sources)
+            assertEquals(20.0, restored.elevation(CourseGeoPoint(45.0, -122.0))!!, 0.0)
+        }
+    }
+
+    @Test
     fun prefersNorthCarolinaLidarDemCacheOverFinerUsgsCache() {
         withTemporaryUserHome { home ->
             val cacheDirectory = home

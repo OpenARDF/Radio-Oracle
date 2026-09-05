@@ -326,12 +326,13 @@ object DesktopVenueElevationCache {
 
     fun suggestedBoundingBox(
         projectFile: EventProjectFile,
-        password: String
+        password: String?
     ): DesktopVenueElevationBoundingBox? {
+        val storagePassword = projectFile.courseDataPassword(password)
         val points = projectFile.raceData.categories.flatMap { categoryData ->
-            val courseInfo = categoryData.category.encryptedCourseInfo
-                ?.takeIf { it.isNotBlank() }
-                ?.let { encrypted -> runCatching { DesktopProtectedCourseOrder.decryptCourseInfo(encrypted, password) }.getOrNull() }
+            val courseInfo = runCatching {
+                categoryData.category.storedCourseInfo(storagePassword)
+            }.getOrNull()
                 ?: return@flatMap emptyList()
             courseInfo.allGeoPoints()
         }
@@ -471,6 +472,65 @@ object DesktopVenueElevationCache {
             overwrittenCount = overwrittenCount,
             targetDirectory = targetDirectory
         )
+    }
+
+    /** Freeze data and source precedence once. Lookup performs no file IO or live source selection. */
+    internal fun freezeForRouteAnalysis(
+        checkCancelled: () -> Unit = {},
+        bounds: DesktopVenueElevationBoundingBox? = null
+    ): DesktopFrozenElevationSurface {
+        // Inspect small metadata headers before parsing grids. Unrelated venue grids can be
+        // hundreds of megabytes, and cannot contribute to any straight leg inside these bounds.
+        val directory = cacheDirectory()
+        val candidates = if (!Files.isDirectory(directory)) emptyList() else Files.list(directory).use { stream ->
+            stream.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".roelev.json") }.sorted().toList()
+        }
+        val caches = candidates.mapNotNull { path ->
+            checkCancelled()
+            val metadata = readCacheMetadata(path)
+            if (bounds != null && !metadata.boundingBox.toPublic().intersects(bounds)) null
+            else parseCacheFile(Files.readString(path), path)
+        }.sortedWith(
+            compareBy<DesktopVenueElevationCacheFile> { it.sourcePriority() }
+                .thenBy { it.metadata.resolutionMeters }
+                .thenByDescending { it.metadata.createdAtIso }
+                .thenBy { it.path.fileName.toString() }
+        )
+        val sources = caches.map { cache ->
+            checkCancelled()
+            val encoded = cache.toJsonString()
+            val digest = DesktopClassicRouteAnalysis.sha256(encoded)
+            val archived = cacheDirectory().resolve("route-analysis-sources").resolve("$digest.json")
+            if (!Files.exists(archived)) writeDesktopTextAtomically(archived, encoded)
+            org.openardf.radiooracle.shared.event.RouteElevationSource(
+                contentSha256 = digest,
+                name = cache.metadata.sourceName,
+                resolutionMeters = cache.metadata.resolutionMeters
+            )
+        }
+        return DesktopFrozenElevationSurface(sources) { point ->
+            checkCancelled()
+            caches.firstNotNullOfOrNull { it.elevationMeters(point) }
+        }
+    }
+
+    /** Recreate an archived context without consulting current cache precedence or fetching terrain. */
+    internal fun restoreRouteAnalysisSurface(
+        sources: List<org.openardf.radiooracle.shared.event.RouteElevationSource>,
+        checkCancelled: () -> Unit = {}
+    ): DesktopFrozenElevationSurface {
+        val caches = sources.map { source ->
+            checkCancelled()
+            require(source.contentSha256.matches(Regex("[0-9a-f]{64}"))) { "Invalid terrain source digest." }
+            val path = cacheDirectory().resolve("route-analysis-sources").resolve("${source.contentSha256}.json")
+            val text = Files.readString(path)
+            require(DesktopClassicRouteAnalysis.sha256(text) == source.contentSha256) { "Archived terrain source has changed." }
+            parseCacheFile(text, path)
+        }
+        return DesktopFrozenElevationSurface(sources) { point ->
+            checkCancelled()
+            caches.firstNotNullOfOrNull { it.elevationMeters(point) }
+        }
     }
 
     fun elevationMeters(point: CourseGeoPoint): Double? =

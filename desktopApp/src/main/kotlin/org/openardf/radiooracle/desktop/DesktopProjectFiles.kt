@@ -62,7 +62,7 @@ object DesktopProjectFiles : ProjectFileStore {
                 return
             }
         path.parent?.let { Files.createDirectories(it) }
-        Files.writeString(path, EventProjectFileJson.encode(projectFile), StandardCharsets.UTF_8)
+        writeDesktopTextAtomically(path, EventProjectFileJson.encode(projectFile))
     }
 
     fun importAndroidRaceBackupJson(path: Path, idFactory: () -> String): EventProjectFile =
@@ -123,7 +123,7 @@ object DesktopProjectFiles : ProjectFileStore {
         projectFile: EventProjectFile,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ) {
-        writeText(path, EventCsvExports.results(projectFile.raceData, awardDisplayMode))
+        writeText(path, EventCsvExports.results(projectFile.raceData, awardDisplayMode, DesktopClassicRouteAnalysis.projection(projectFile)))
     }
 
     fun exportSplitResultsCsv(
@@ -131,7 +131,7 @@ object DesktopProjectFiles : ProjectFileStore {
         projectFile: EventProjectFile,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ) {
-        writeText(path, SplitResultExports.csv(projectFile.raceData, awardDisplayMode))
+        writeText(path, SplitResultExports.csv(projectFile.raceData, awardDisplayMode, routeLengths = DesktopClassicRouteAnalysis.projection(projectFile)))
     }
 
     fun exportSplitResultsPdf(
@@ -204,7 +204,8 @@ object DesktopProjectFiles : ProjectFileStore {
             HtmlResultExports.results(
                 projectFile.raceData,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                awardDisplayMode = awardDisplayMode
+                awardDisplayMode = awardDisplayMode,
+                routeLengths = DesktopClassicRouteAnalysis.projection(projectFile)
             )
         )
     }
@@ -220,7 +221,8 @@ object DesktopProjectFiles : ProjectFileStore {
             ResultReportExports.html(
                 projectFile.raceData,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                awardDisplayMode = awardDisplayMode
+                awardDisplayMode = awardDisplayMode,
+                routeLengths = DesktopClassicRouteAnalysis.projection(projectFile)
             )
         )
     }
@@ -236,7 +238,8 @@ object DesktopProjectFiles : ProjectFileStore {
             ResultReportExports.xml(
                 projectFile.raceData,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                awardDisplayMode = awardDisplayMode
+                awardDisplayMode = awardDisplayMode,
+                routeLengths = DesktopClassicRouteAnalysis.projection(projectFile)
             )
         )
     }
@@ -261,7 +264,8 @@ object DesktopProjectFiles : ProjectFileStore {
             TextResultExports.results(
                 projectFile.raceData,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                awardDisplayMode = awardDisplayMode
+                awardDisplayMode = awardDisplayMode,
+                routeLengths = DesktopClassicRouteAnalysis.projection(projectFile)
             )
         )
     }

@@ -73,9 +73,9 @@ data class EventCategory(
     val controlPointsString: String,
     val encryptedIdealOrder: String? = null,
     val encryptedCourseInfo: String? = null,
-    /** Plaintext course order used only after an organizer explicitly removes Race Password protection. */
+    /** Plaintext course order used whenever this Race File is not Race Password protected. */
     val idealOrder: String? = null,
-    /** Plaintext route details used only after an organizer explicitly removes Race Password protection. */
+    /** Plaintext route details used whenever this Race File is not Race Password protected. */
     val courseInfo: ProtectedCourseInfo? = null
 ) {
     /** Returns the event race type; legacy category-specific race type is ignored. */
@@ -92,12 +92,13 @@ data class EventCategory(
 }
 
 /**
- * Password-protected route-derived course data.
+ * Route-derived course data that may be stored as plaintext or password protected.
  *
  * KML/KMZ files may live outside the Race File, but their ideal order and route geometry are
- * sensitive before competition day. The desktop app therefore encrypts the detailed route payload
- * in EventCategory.encryptedCourseInfo or in an inactive EventRaceData.courseMappings entry;
- * public category length/climb fields may still mirror calculated route metrics.
+ * sensitive before competition day. A Race File can store the payload as readable
+ * EventCategory.courseInfo data or, after the user enables Race Password protection, as
+ * EventCategory.encryptedCourseInfo. Inactive imported routes use the same fields in
+ * EventRaceData.courseMappings; public category length/climb fields may mirror calculated metrics.
  */
 @Serializable
 data class ProtectedCourseInfo(

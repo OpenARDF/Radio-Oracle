@@ -62,7 +62,10 @@ enum class DesktopControlsRouteKmlKmzExportFormat(
 ) {
     Kml("kml", ".kml.zip"),
     Kmz("kmz", ".kmz.zip"),
-    Gpx("gpx", ".gpx.zip")
+    Gpx("gpx", ".gpx.zip");
+
+    val plainFileSuffix: String
+        get() = ".$contentExtension"
 }
 
 data class DesktopControlsRouteKmlKmzExportTarget(
@@ -75,7 +78,8 @@ data class DesktopControlsRouteKmlKmzExportSummary(
     val routeCount: Int,
     val controlCatalogCount: Int,
     val courseControlPointCount: Int,
-    val outputFormat: DesktopControlsRouteKmlKmzExportFormat
+    val outputFormat: DesktopControlsRouteKmlKmzExportFormat,
+    val encryptedArchive: Boolean = true
 )
 
 object DesktopControlsRouteKmlKmzExporter {
@@ -98,7 +102,7 @@ object DesktopControlsRouteKmlKmzExporter {
             "Race Password cannot be blank."
         }
 
-        val protectedCourseInfoByCategoryId = decryptProtectedCourseInfo(projectFile, trimmedPassword)
+        val protectedCourseInfoByCategoryId = storedCourseInfo(projectFile, trimmedPassword)
         val exportedCourseObjects = courseExportObjects(protectedCourseInfoByCategoryId.values)
         val controlCatalogControls = if (protectedCourseInfoByCategoryId.isEmpty()) {
             controlCatalogControls(projectFile, exportedCourseObjects)
@@ -141,21 +145,62 @@ object DesktopControlsRouteKmlKmzExporter {
             routeCount = protectedCourseInfoByCategoryId.values.count { it.route.isNotEmpty() },
             controlCatalogCount = controlCatalogControls.size,
             courseControlPointCount = exportedCourseObjects.courseObjects.size + exportedCourseObjects.controlPoints.size,
-            outputFormat = target.format
+            outputFormat = target.format,
+            encryptedArchive = true
         )
     }
 
-    private fun decryptProtectedCourseInfo(
+    fun exportPlainFile(
+        target: DesktopControlsRouteKmlKmzExportTarget,
+        projectFile: EventProjectFile
+    ): DesktopControlsRouteKmlKmzExportSummary {
+        require(!projectFile.hasEncryptedCategoryData()) {
+            "Race Password is required for encrypted course data."
+        }
+        val courseInfoByCategoryId = storedCourseInfo(projectFile, null)
+        val exportedCourseObjects = courseExportObjects(courseInfoByCategoryId.values)
+        val controlCatalogControls = if (courseInfoByCategoryId.isEmpty()) {
+            controlCatalogControls(projectFile, exportedCourseObjects)
+        } else {
+            emptyList()
+        }
+        val outputBytes = when (target.format) {
+            DesktopControlsRouteKmlKmzExportFormat.Kml -> buildKml(
+                projectFile,
+                courseInfoByCategoryId,
+                exportedCourseObjects,
+                controlCatalogControls
+            ).encodeToByteArray()
+            DesktopControlsRouteKmlKmzExportFormat.Kmz -> buildKmz(
+                buildKml(projectFile, courseInfoByCategoryId, exportedCourseObjects, controlCatalogControls)
+            )
+            DesktopControlsRouteKmlKmzExportFormat.Gpx -> buildGpx(
+                projectFile,
+                courseInfoByCategoryId,
+                exportedCourseObjects,
+                controlCatalogControls
+            ).encodeToByteArray()
+        }
+        target.path.parent?.let(Files::createDirectories)
+        Files.write(target.path, outputBytes)
+        return DesktopControlsRouteKmlKmzExportSummary(
+            categoryCount = exportCategoryData(projectFile).size,
+            routeCount = courseInfoByCategoryId.values.count { it.route.isNotEmpty() },
+            controlCatalogCount = controlCatalogControls.size,
+            courseControlPointCount = exportedCourseObjects.courseObjects.size + exportedCourseObjects.controlPoints.size,
+            outputFormat = target.format,
+            encryptedArchive = false
+        )
+    }
+
+    private fun storedCourseInfo(
         projectFile: EventProjectFile,
-        password: String
+        password: String?
     ): Map<String, ProtectedCourseInfo> =
         exportCategoryData(projectFile).mapNotNull { categoryData ->
-            categoryData.category.encryptedCourseInfo
-                ?.takeIf { it.isNotBlank() }
-                ?.let { encryptedValue ->
-                    categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
-                        .withFiniteCourseGeometry()
-                }
+            categoryData.category.storedCourseInfo(password)?.let { courseInfo ->
+                categoryData.category.id to courseInfo.withFiniteCourseGeometry()
+            }
         }.toMap()
 
     private fun buildKml(

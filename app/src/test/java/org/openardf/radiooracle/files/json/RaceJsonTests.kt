@@ -71,6 +71,10 @@ import org.junit.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import java.io.InputStream
+import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.runBlocking
+import org.openardf.radiooracle.backend.files.EventFileTransferUploads
+import org.openardf.radiooracle.shared.files.RaceBackupJsonImports
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -78,6 +82,26 @@ import java.util.UUID
 
 class RaceJsonTests {
     val dataProcessor: DataProcessor = mock()
+
+    @Test
+    fun exportedRaceTransfersAsModernJsonAndRemainsImportableWithLegacyExtension() = runBlocking {
+        val raceData = goldenRaceData()
+        `when`(dataProcessor.getRaceData(raceData.race.id)).thenReturn(raceData)
+        val bytes = ByteArrayOutputStream().use { output ->
+            JsonProcessor.exportRaceData(output, dataProcessor, raceData.race.id)
+            output.toByteArray()
+        }
+        val upload = EventFileTransferUploads.forRaceOrSeries("Transfer Race", null, bytes)
+        val text = upload.bytes.toString(Charsets.UTF_8)
+        val decoded = EventProjectFileJson.decode(text)
+
+        assertEquals("Transfer Race.json", upload.fileName)
+        assertEquals(raceData.race.id.toString(), decoded.raceData.race.id)
+        assertEquals(raceData.competitorData.size, decoded.raceData.competitorData.size)
+        assertEquals(decoded, RaceBackupJsonImports.projectFile(text) {
+            error("Modern IDs must be retained")
+        })
+    }
 
 //    @Test
 //    fun testToJson() {

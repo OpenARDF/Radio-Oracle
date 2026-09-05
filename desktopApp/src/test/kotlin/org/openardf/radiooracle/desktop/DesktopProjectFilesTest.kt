@@ -42,6 +42,8 @@ import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
+import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
@@ -319,6 +321,32 @@ class DesktopProjectFilesTest {
         assertEquals("M21", imported.raceData.categories.single().category.name)
         assertEquals("Alice", imported.raceData.competitorData.single().competitorCategory.competitor.firstName)
         assertEquals(ResultStatus.OK, imported.raceData.competitorData.single().readoutData?.result?.resultStatus)
+    }
+
+    @Test
+    fun opensModernAndroidTransferAndImportsPreviouslyMislabeledBackup() {
+        val directory = Files.createTempDirectory("rom-desktop-modern-android-transfer")
+        val project = EventProjectFile(
+            raceData = raceDataWithReadout(),
+            publicResultsPublication = PublicResultsPublication(
+                url = "https://example.org/results/",
+                publishedAtIso = "2026-09-05T18:00:00Z"
+            )
+        )
+        val text = EventProjectFileJson.encode(project)
+        val expected = EventProjectFileJson.decode(text)
+        val transferName = EventFileTransferPayloads.singleEventFileName(project.raceData.race.name)
+        assertTrue(DesktopProjectFilePaths.isProjectFileName(transferName))
+        val modernPath = directory.resolve(transferName)
+        val oldPath = directory.resolve("race.ardfjs")
+        Files.writeString(modernPath, text)
+        Files.writeString(oldPath, text)
+
+        assertEquals(expected, DesktopProjectFiles.read(modernPath))
+        assertEquals(expected, DesktopProjectFiles.importAndroidRaceBackupJson(oldPath) {
+            error("Modern IDs must be retained")
+        })
+        assertEquals(text, Files.readString(oldPath))
     }
 
     @Test
@@ -835,6 +863,17 @@ class DesktopProjectFilesTest {
 
         val lockedRaceWithResults = withLockedCourseData(raceDataWithReadout())
         val unlockedRaceWithResults = EventProjectFile(raceData = raceDataWithReadout())
+        val plaintextRaceWithResults = EventProjectFile(
+            raceData = raceDataWithReadout().copy(
+                categories = raceDataWithReadout().categories.map { categoryData ->
+                    categoryData.copy(
+                        category = categoryData.category.copy(
+                            courseInfo = ProtectedCourseInfo(sourceName = "plaintext-course.kml")
+                        )
+                    )
+                }
+            )
+        )
         val lockedRaceWithoutResults = withLockedCourseData(
             raceDataWithReadout().copy(competitorData = emptyList())
         )
@@ -844,6 +883,15 @@ class DesktopProjectFilesTest {
         assertFalse(publicResultsNeedCourseUnlock(listOf(lockedRaceWithResults), true))
         assertFalse(publicResultsNeedCourseUnlock(listOf(lockedRaceWithoutResults), false))
         assertFalse(publicResultsNeedCourseUnlock(listOf(unlockedRaceWithResults), false))
+        assertFalse(publicResultsNeedCourseUnlock(listOf(plaintextRaceWithResults), false))
+        assertEquals(
+            "plaintext-course.kml",
+            decryptedPublicResultsCourseState(
+                listOf(plaintextRaceWithResults),
+                plaintextRaceWithResults,
+                ""
+            ).protectedCourseInfoByCategoryId.values.single().sourceName
+        )
     }
 
     @Test

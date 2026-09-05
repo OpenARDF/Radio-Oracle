@@ -206,6 +206,7 @@ object DesktopAutomationCli {
             "event-series-start-fairness-verify" -> eventSeriesStartFairnessVerify(commandArgs, out, err)
             "event-start-list-verify" -> eventStartListVerify(commandArgs, out, err)
             "route-generator" -> routeGenerator(commandArgs, out, err)
+            "classic-route-lengths" -> classicRouteLengths(commandArgs, out, err)
             "readiness-summary" -> readinessSummary(commandArgs, out, err)
             "recalculate-results" -> recalculateResults(commandArgs, out, err)
             "export-public-results-site" -> exportPublicResultsSite(commandArgs, out, err)
@@ -2118,6 +2119,7 @@ object DesktopAutomationCli {
           event-start-list-verify <race-file-path> [--max-competitors <n>] [--sample-limit <n>] [--generator-samples <n>]
                                           Exhaustively count race start orders that score 100/100.
           route-generator <kml-or-kmz-path> [--type classic|foxoring|sprint] [--row-limit <n>] [--export <pdf-path>]
+          classic-route-lengths <input.rom.json> <output.rom.json>
                                           Generate Route Generator rows as JSON; optionally export PDF/KML.
           readiness-summary [--require-ready] <race-file-path>
                                           Print validation and readiness issues as JSON.

@@ -35,13 +35,10 @@ object DesktopProtectedControlLocationUpdater {
         controlId: String,
         latitudeText: String,
         longitudeText: String,
-        password: String,
+        password: String?,
         elevationLookup: (CourseGeoPoint) -> Double? = { null }
     ): DesktopProtectedControlLocationUpdateResult {
-        val trimmedPassword = password.trim()
-        require(trimmedPassword.isNotEmpty()) {
-            "Race Password is required."
-        }
+        val storagePassword = projectFile.courseDataPassword(password)
         val latitude = parseLatitude(latitudeText)
         val longitude = parseLongitude(longitudeText)
         return applyControlLocations(
@@ -54,7 +51,7 @@ object DesktopProtectedControlLocationUpdater {
                     longitude = longitude
                 )
             ),
-            password = trimmedPassword,
+            password = storagePassword,
             elevationLookup = elevationLookup
         )
     }
@@ -63,14 +60,11 @@ object DesktopProtectedControlLocationUpdater {
         projectFile: EventProjectFile,
         courseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
         updates: List<DesktopProtectedControlLocationUpdate>,
-        password: String,
+        password: String?,
         elevationLookup: (CourseGeoPoint) -> Double? = { null },
         invalidateAllReferencedProtectedCourses: Boolean = true
     ): DesktopProtectedControlLocationUpdateResult {
-        val trimmedPassword = password.trim()
-        require(trimmedPassword.isNotEmpty()) {
-            "Race Password is required."
-        }
+        val storagePassword = projectFile.courseDataPassword(password)
         val uniqueUpdates = updates.distinctBy { it.controlId }
         require(uniqueUpdates.isNotEmpty()) {
             "No control location updates were provided."
@@ -106,7 +100,6 @@ object DesktopProtectedControlLocationUpdater {
         }
         val updatedInfoByCategoryId = courseInfoByCategoryId.toMutableMap()
         val affectedCategoryIds = linkedSetOf<String>()
-        val encryptedCourseInfoByCategoryId = mutableMapOf<String, String>()
         courseInfoByCategoryId.forEach { (categoryId, courseInfo) ->
             val hasControlPoint = courseInfo.controlPoints.any { controlPoint ->
                 val update = updatesByControlId[controlPoint.controlId]
@@ -152,27 +145,21 @@ object DesktopProtectedControlLocationUpdater {
                     }
                 )
                 updatedInfoByCategoryId[categoryId] = updatedInfo
-                encryptedCourseInfoByCategoryId[categoryId] =
-                    DesktopProtectedCourseOrder.encryptCourseInfo(updatedInfo, trimmedPassword)
                 affectedCategoryIds += categoryId
             }
         }
 
-        val updatedCategories = projectFile.raceData.categories.map { categoryData ->
-            encryptedCourseInfoByCategoryId[categoryData.category.id]?.let { encryptedCourseInfo ->
-                categoryData.copy(
-                    category = categoryData.category.copy(encryptedCourseInfo = encryptedCourseInfo)
-                )
-            } ?: categoryData
+        var updatedProject = projectFile.copy(raceData = projectFile.raceData.copy(controls = updatedControls))
+        affectedCategoryIds.forEach { categoryId ->
+            updatedProject = updatedProject.withStoredCourseInfo(
+                categoryId,
+                updatedInfoByCategoryId[categoryId],
+                storagePassword
+            )
         }
 
         return DesktopProtectedControlLocationUpdateResult(
-            projectFile = projectFile.copy(
-                raceData = projectFile.raceData.copy(
-                    controls = updatedControls,
-                    categories = updatedCategories
-                )
-            ),
+            projectFile = updatedProject,
             courseInfoByCategoryId = updatedInfoByCategoryId,
             controlLabel = uniqueUpdates.singleOrNull()?.let { update ->
                 projectFile.raceData.controls.first { it.id == update.controlId }.publicControlLabel()

@@ -31,6 +31,7 @@ import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
+import org.openardf.radiooracle.shared.event.ResultRouteLength
 import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 
@@ -41,9 +42,10 @@ object HtmlResultExports {
         appVersion: String = "Desktop",
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
-        publicationStatus: PublicResultsPublicationStatus? = null
+        publicationStatus: PublicResultsPublicationStatus? = null,
+        routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): String {
-        val report = SplitResultExports.model(raceData, awardDisplayMode, publicationStatus)
+        val report = SplitResultExports.model(raceData, awardDisplayMode, publicationStatus, routeLengths)
         val awards = EventAwardDetails.from(raceData, awardDisplayMode)
 
         return buildString {
@@ -81,6 +83,11 @@ object HtmlResultExports {
                         ?.effectiveLengthMeters()
                 )
                 }
+            report.routeAnalysisNotice?.let {
+                append("<p class=\"meta\">")
+                appendHtml(it)
+                append("</p>")
+            }
             appendAwards(awards)
             append("<div class=\"generated\">Generated with Radio-Oracle ")
             appendHtml(appVersion)
@@ -96,7 +103,7 @@ object HtmlResultExports {
         if (category.results.isEmpty()) return
 
         append("<h2>")
-        appendHtml(category.name)
+        appendHtml(category.displayName)
         append("</h2>")
         if (effectiveLengthMeters != null) {
             append("<p class=\"meta\">Effective length: ")
@@ -138,6 +145,11 @@ object HtmlResultExports {
         append("</td><td>")
         appendHtml(result.transmittersText)
         append("</td></tr>")
+        result.routeLength?.let {
+            append("<tr><td colspan=\"9\">")
+            appendHtml("${ResultRouteLength.LABEL}: ${it.text}")
+            append("</td></tr>")
+        }
         if (result.splits.isNotEmpty()) {
             append("<tr><td colspan=\"9\" class=\"splits\">")
             append("<table><thead><tr>")

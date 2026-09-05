@@ -1771,6 +1771,36 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun savesCalculatedRouteAsPlaintextWithoutPassword() {
+        val projectFile = projectFile(foxCount = 3)
+        val courseInfo = protectedInfo(foxCount = 3)
+        val application = DesktopCourseCalculatedRouteApplication(
+            categoryId = CATEGORY_ID,
+            idealOrderText = courseInfo.idealOrder,
+            routePoints = courseInfo.route.map { point ->
+                CourseGeoPoint(point.latitude, point.longitude, point.elevationMeters)
+            },
+            routeLengthMeters = 4_100,
+            climbMeters = 105,
+            foxAssignments = emptyList()
+        )
+
+        val result = DesktopCourseAnalysisApplier.applyCalculatedRoute(
+            projectFile = projectFile,
+            courseInfo = courseInfo,
+            application = application,
+            password = null
+        )
+
+        val category = result.projectFile.raceData.categories.single().category
+        assertEquals(courseInfo.idealOrder, category.idealOrder)
+        assertEquals(4_100, category.courseInfo?.lengthMeters)
+        assertEquals(105, category.courseInfo?.climbMeters)
+        assertNull(category.encryptedIdealOrder)
+        assertNull(category.encryptedCourseInfo)
+    }
+
+    @Test
     fun updatesProtectedControlLocationAndInvalidatesStoredRouteGeometry() {
         val projectFile = projectFile(foxCount = 3)
         val protectedInfo = protectedInfo(foxCount = 3)

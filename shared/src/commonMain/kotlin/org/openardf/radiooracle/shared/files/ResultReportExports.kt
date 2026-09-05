@@ -34,6 +34,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.ResultRouteLength
 import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.event.resultCategories
@@ -45,7 +46,8 @@ object ResultReportExports {
     fun model(
         raceData: EventRaceData,
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): ResultReport {
         val placedByCategory = raceData.competitorData
             .groupBy { it.resultCategoryId() }
@@ -65,7 +67,8 @@ object ResultReportExports {
                         competitors = placedByCategory[categoryData.category.id].orEmpty(),
                         controlLabelsByCode = controlLabelsByCode,
                         protectedCourseInfo = protectedCourseInfoByCategoryId?.get(categoryData.category.id),
-                        includePublicCourseStats = protectedCourseInfoByCategoryId == null
+                        includePublicCourseStats = protectedCourseInfoByCategoryId == null,
+                        routeLengths = routeLengths
                     )
                 },
             awardCategories = awardCategories(awards)
@@ -76,17 +79,19 @@ object ResultReportExports {
         raceData: EventRaceData,
         appVersion: String = "Desktop",
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): String =
-        html(model(raceData, protectedCourseInfoByCategoryId, awardDisplayMode), appVersion)
+        html(model(raceData, protectedCourseInfoByCategoryId, awardDisplayMode, routeLengths), appVersion)
 
     fun xml(
         raceData: EventRaceData,
         appVersion: String = "Desktop",
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): String =
-        xml(model(raceData, protectedCourseInfoByCategoryId, awardDisplayMode), appVersion)
+        xml(model(raceData, protectedCourseInfoByCategoryId, awardDisplayMode, routeLengths), appVersion)
 
     fun html(report: ResultReport, appVersion: String = "Desktop"): String =
         buildString {
@@ -116,6 +121,7 @@ object ResultReportExports {
                 appendHtml(notice)
                 append("</div>")
             }
+            report.routeLengthCoverage?.let { append("<p>"); appendHtml(it); append("</p>") }
             report.categories.forEach { category ->
                 appendCategoryHtml(category)
             }
@@ -136,6 +142,7 @@ object ResultReportExports {
             appendTextElement("StartDateTime", report.startDateTimeIso, "  ")
             appendTextElement("RaceLevel", report.raceLevel, "  ")
             report.publicationNotice?.let { appendTextElement("PublicationNotice", it, "  ") }
+            report.routeLengthCoverage?.let { appendTextElement("RouteLengthCoverage", it, "  ") }
             append("  <Categories>\n")
             report.categories.forEach { category ->
                 append("    <Category id=\"${category.id.xmlEscaped()}\" name=\"${category.name.xmlEscaped()}\">\n")
@@ -158,6 +165,11 @@ object ResultReportExports {
                     appendTextElement("RunTime", result.runTimeText, "          ")
                     appendTextElement("Controls", result.controlsText, "          ")
                     appendTextElement("Splits", result.splitsText, "          ")
+                    result.routeLength?.let {
+                        appendTextElement("EstimatedEffectiveRouteLengthMeters", it.effectiveMeters.toString(), "          ")
+                        appendTextElement("AnalysisIdealEffectiveLengthMeters", it.idealEffectiveMeters.toString(), "          ")
+                        appendTextElement("RouteComparison", it.comparison, "          ")
+                    }
                     append("        </Result>\n")
                 }
                 append("      </Results>\n")
@@ -173,7 +185,8 @@ object ResultReportExports {
         competitors: List<EventCompetitorData>,
         controlLabelsByCode: Map<Int, String>,
         protectedCourseInfo: ProtectedCourseInfo?,
-        includePublicCourseStats: Boolean
+        includePublicCourseStats: Boolean,
+        routeLengths: Map<String, ResultRouteLength>
     ): ResultReportCategory? {
         val resultCompetitors = competitors.filter { it.readoutData != null }
         if (resultCompetitors.isEmpty()) return null
@@ -188,7 +201,7 @@ object ResultReportExports {
             climbMeters = if (includePublicCourseStats) category.climbMeters.takeIf { it > 0 } else protectedCourseInfo?.climbMeters,
             controlsText = category.controlPointsString,
             results = resultCompetitors.map { competitorData ->
-                competitorReport(competitorData, controlLabelsByCode)
+                competitorReport(competitorData, controlLabelsByCode).copy(routeLength = routeLengths[competitorData.readoutData?.result?.id])
             }
         )
     }
@@ -236,7 +249,7 @@ object ResultReportExports {
 
     private fun StringBuilder.appendCategoryHtml(category: ResultReportCategory) {
         append("<h2>")
-        appendHtml(category.name)
+        appendHtml(category.displayName)
         append("</h2>")
         append("<div class=\"meta\">")
         appendHtml(category.metaText())
@@ -272,6 +285,11 @@ object ResultReportExports {
             append("</td><td class=\"splits\">")
             appendHtml(result.splitsText)
             append("</td></tr>")
+            result.routeLength?.let {
+                append("<tr><td colspan=\"11\">")
+                appendHtml("${ResultRouteLength.LABEL}: ${it.text}")
+                append("</td></tr>")
+            }
         }
         append("</tbody></table>")
     }
@@ -436,7 +454,13 @@ data class ResultReport(
     val publicationNotice: String?,
     val categories: List<ResultReportCategory>,
     val awardCategories: List<ResultReportAwardCategory>
-)
+) {
+    val routeLengthCoverage: String? get() {
+        val rows = categories.flatMap { it.results }
+        val ready = rows.count { it.routeLength != null }
+        return if (ready == 0) null else ResultRouteLength.coverage(ready, rows.size)
+    }
+}
 
 data class ResultReportCategory(
     val id: String,
@@ -447,7 +471,11 @@ data class ResultReportCategory(
     val climbMeters: Int?,
     val controlsText: String,
     val results: List<ResultReportRow>
-)
+) {
+    val displayName: String get() = results.firstNotNullOfOrNull { it.routeLength }?.let {
+        "$name (${results.size})${it.categoryHeadingSuffix}"
+    } ?: name
+}
 
 data class ResultReportRow(
     val placeText: String,
@@ -460,7 +488,8 @@ data class ResultReportRow(
     val pointsText: String,
     val runTimeText: String,
     val controlsText: String,
-    val splitsText: String
+    val splitsText: String,
+    val routeLength: ResultRouteLength? = null
 )
 
 data class ResultReportAwardCategory(

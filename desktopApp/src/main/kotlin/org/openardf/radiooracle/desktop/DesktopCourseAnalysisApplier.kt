@@ -36,12 +36,9 @@ object DesktopCourseAnalysisApplier {
         projectFile: EventProjectFile,
         courseInfo: ProtectedCourseInfo,
         application: DesktopCourseCalculatedRouteApplication,
-        password: String
+        password: String?
     ): DesktopCourseCalculatedRouteApplyResult {
-        val trimmedPassword = password.trim()
-        require(trimmedPassword.isNotEmpty()) {
-            "Race Password is required."
-        }
+        val storagePassword = projectFile.courseDataPassword(password)
         require(projectFile.raceData.categories.any { it.category.id == application.categoryId }) {
             "Category was not found: ${application.categoryId}"
         }
@@ -66,28 +63,32 @@ object DesktopCourseAnalysisApplier {
                 )
             }
         ).withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = false)
-        val encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt(application.idealOrderText, trimmedPassword)
-        val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(updatedCourseInfo, trimmedPassword)
         val sameCourseCategoryIds = DesktopCourseAnalyzer
             .sameCourseCategories(projectFile, application.categoryId)
             .mapTo(mutableSetOf()) { it.category.id }
-        val updatedCategories = projectFile.raceData.categories.map { categoryData ->
+        var updatedProject = projectFile.copy(raceData = projectFile.raceData.copy(controls = updatedControls))
+        projectFile.raceData.categories.forEach { categoryData ->
             if (categoryData.category.id == application.categoryId) {
-                categoryData.copy(
-                    category = categoryData.category.copy(
-                        encryptedIdealOrder = encryptedIdealOrder,
-                        encryptedCourseInfo = encryptedCourseInfo
-                    )
+                updatedProject = updatedProject.withStoredIdealOrder(
+                    categoryData.category.id,
+                    application.idealOrderText,
+                    storagePassword
+                )
+                updatedProject = updatedProject.withStoredCourseInfo(
+                    categoryData.category.id,
+                    updatedCourseInfo,
+                    storagePassword
                 )
             } else {
                 val hasSameCourse = categoryData.category.id in sameCourseCategoryIds
                 val updatedOtherIdealOrder = if (hasSameCourse) {
                     application.idealOrderText
                 } else {
-                    categoryData.category.encryptedIdealOrder
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { encryptedValue ->
-                            val idealOrderText = DesktopProtectedCourseOrder.decrypt(encryptedValue, trimmedPassword)
+                    categoryData.category
+                        .takeIf { it.encryptedIdealOrder?.isNotBlank() == true || it.idealOrder != null }
+                        ?.storedIdealOrder(storagePassword)
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { idealOrderText ->
                             val resolvedControlIds = runCatching {
                                 ProtectedIdealOrderRules.resolveControlIds(idealOrderText, projectFile.raceData.controls)
                             }.getOrElse { error ->
@@ -104,10 +105,11 @@ object DesktopCourseAnalysisApplier {
                             }
                         }
                 }
-                val updatedOtherCourseInfo = categoryData.category.encryptedCourseInfo
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { encryptedValue ->
-                        DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, trimmedPassword)
+                val updatedOtherCourseInfo = categoryData.category
+                    .takeIf { it.encryptedCourseInfo?.isNotBlank() == true || it.courseInfo != null }
+                    ?.storedCourseInfo(storagePassword)
+                    ?.let { storedCourseInfo ->
+                        storedCourseInfo
                             .withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true)
                             .let { updatedInfo ->
                                 if (hasSameCourse) {
@@ -116,44 +118,36 @@ object DesktopCourseAnalysisApplier {
                                     updatedInfo
                                 }
                             }
-                    }
-                if (updatedOtherIdealOrder == null && updatedOtherCourseInfo == null) {
-                    categoryData
-                } else {
-                    categoryData.copy(
-                        category = categoryData.category.copy(
-                            encryptedIdealOrder = updatedOtherIdealOrder
-                                ?.let { DesktopProtectedCourseOrder.encrypt(it, trimmedPassword) }
-                                ?: categoryData.category.encryptedIdealOrder,
-                            encryptedCourseInfo = updatedOtherCourseInfo
-                                ?.let { DesktopProtectedCourseOrder.encryptCourseInfo(it, trimmedPassword) }
-                                ?: categoryData.category.encryptedCourseInfo
-                        )
+                }
+                if (updatedOtherIdealOrder != null) {
+                    updatedProject = updatedProject.withStoredIdealOrder(
+                        categoryData.category.id,
+                        updatedOtherIdealOrder,
+                        storagePassword
+                    )
+                }
+                if (updatedOtherCourseInfo != null) {
+                    updatedProject = updatedProject.withStoredCourseInfo(
+                        categoryData.category.id,
+                        updatedOtherCourseInfo,
+                        storagePassword
                     )
                 }
             }
         }
         return DesktopCourseCalculatedRouteApplyResult(
-            projectFile = projectFile.copy(
-                raceData = projectFile.raceData.copy(
-                    controls = updatedControls,
-                    categories = updatedCategories
-                )
-            ),
+            projectFile = updatedProject,
             courseInfo = updatedCourseInfo,
-            affectedCategoryCount = updatedCategories.count { it.category.id in sameCourseCategoryIds }
+            affectedCategoryCount = projectFile.raceData.categories.count { it.category.id in sameCourseCategoryIds }
         )
     }
 
     fun applyFoxRenumberingOnly(
         projectFile: EventProjectFile,
         renumbering: DesktopCourseWaitRenumbering,
-        password: String
+        password: String?
     ): DesktopCourseFoxRenumberingApplyResult {
-        val trimmedPassword = password.trim()
-        require(trimmedPassword.isNotEmpty()) {
-            "Race Password is required."
-        }
+        val storagePassword = projectFile.courseDataPassword(password)
         require(renumbering.improvesWait) {
             "No improved fox renumbering was calculated."
         }
@@ -168,11 +162,13 @@ object DesktopCourseAnalysisApplier {
         val updatedControlsById = updatedControls.associateBy { it.id }
 
         val updatedInfoByCategoryId = mutableMapOf<String, ProtectedCourseInfo>()
-        val encryptedInfoByCategoryId = mutableMapOf<String, String>()
-        val encryptedIdealOrderByCategoryId = mutableMapOf<String, String?>()
+        val updatedIdealOrderByCategoryId = mutableMapOf<String, String>()
         projectFile.raceData.categories.forEach { categoryData ->
-            categoryData.category.encryptedIdealOrder?.takeIf { it.isNotBlank() }?.let { encryptedIdealOrder ->
-                val idealOrderText = DesktopProtectedCourseOrder.decrypt(encryptedIdealOrder, trimmedPassword)
+            categoryData.category
+                .takeIf { it.encryptedIdealOrder?.isNotBlank() == true || it.idealOrder != null }
+                ?.storedIdealOrder(storagePassword)
+                ?.takeIf(String::isNotBlank)
+                ?.let { idealOrderText ->
                 val resolvedControlIds = runCatching {
                     ProtectedIdealOrderRules.resolveControlIds(idealOrderText, projectFile.raceData.controls)
                 }.getOrElse { error ->
@@ -189,54 +185,40 @@ object DesktopCourseAnalysisApplier {
                             ?: throw IllegalArgumentException("Stored ideal order control could not be preserved: $controlId")
                     }
                     .joinToString(" ")
-                encryptedIdealOrderByCategoryId[categoryData.category.id] =
-                    DesktopProtectedCourseOrder.encrypt(updatedIdealOrderText, trimmedPassword)
+                updatedIdealOrderByCategoryId[categoryData.category.id] = updatedIdealOrderText
             }
 
-            categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedCourseInfo ->
-                val courseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(encryptedCourseInfo, trimmedPassword)
+            categoryData.category.storedCourseInfo(storagePassword)?.let { courseInfo ->
                 val referencesChangedControl =
                     courseInfo.controlPoints.any { it.controlId in labelByControlId.keys } ||
                         courseInfo.courseObjects.any { it.id in labelByControlId.keys }
                 if (referencesChangedControl) {
                     val updatedInfo = courseInfo.withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true)
                     updatedInfoByCategoryId[categoryData.category.id] = updatedInfo
-                    encryptedInfoByCategoryId[categoryData.category.id] =
-                        DesktopProtectedCourseOrder.encryptCourseInfo(updatedInfo, trimmedPassword)
                 }
             }
         }
 
-        val updatedCategories = projectFile.raceData.categories.map { categoryData ->
+        var updatedProject = projectFile.copy(raceData = projectFile.raceData.copy(controls = updatedControls))
+        projectFile.raceData.categories.forEach { categoryData ->
             val categoryId = categoryData.category.id
-            val hasUpdatedIdealOrder = encryptedIdealOrderByCategoryId.containsKey(categoryId)
-            val encryptedCourseInfo = encryptedInfoByCategoryId[categoryId]
-            if (hasUpdatedIdealOrder || encryptedCourseInfo != null) {
-                categoryData.copy(
-                    category = categoryData.category.copy(
-                        encryptedIdealOrder = if (hasUpdatedIdealOrder) {
-                            encryptedIdealOrderByCategoryId[categoryId]
-                        } else {
-                            categoryData.category.encryptedIdealOrder
-                        },
-                        encryptedCourseInfo = encryptedCourseInfo ?: categoryData.category.encryptedCourseInfo
-                    )
+            updatedIdealOrderByCategoryId[categoryId]?.let { updatedIdealOrder ->
+                updatedProject = updatedProject.withStoredIdealOrder(
+                    categoryId,
+                    updatedIdealOrder,
+                    storagePassword
                 )
-            } else {
-                categoryData
+            }
+            updatedInfoByCategoryId[categoryId]?.let { updatedInfo ->
+                updatedProject = updatedProject.withStoredCourseInfo(categoryId, updatedInfo, storagePassword)
             }
         }
 
         return DesktopCourseFoxRenumberingApplyResult(
-            projectFile = projectFile.copy(
-                raceData = projectFile.raceData.copy(
-                    controls = updatedControls,
-                    categories = updatedCategories
-                )
-            ),
+            projectFile = updatedProject,
             courseInfoByCategoryId = updatedInfoByCategoryId,
             changedControlCount = labelByControlId.size,
-            affectedCategoryCount = (updatedInfoByCategoryId.keys + encryptedIdealOrderByCategoryId.keys).size
+            affectedCategoryCount = (updatedInfoByCategoryId.keys + updatedIdealOrderByCategoryId.keys).size
         )
     }
 }

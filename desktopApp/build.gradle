@@ -595,6 +595,18 @@ tasks.register("desktopAutomation", JavaExec) {
     workingDir(rootProject.projectDir)
 }
 
+// Opt-in real-terrain acceptance can reproduce older snapshots retaining every venue grid.
+// Ordinary synthetic unit tests keep Gradle's normal heap limit.
+tasks.withType(Test).configureEach {
+    def routeSmokeArchive = providers.environmentVariable("RADIO_ORACLE_ROUTE_SMOKE_ARCHIVE").orElse("").get()
+    def routeSmokeBaseline = providers.environmentVariable("RADIO_ORACLE_ROUTE_SMOKE_BASELINE").orElse("").get()
+    environment "RADIO_ORACLE_ROUTE_SMOKE_ARCHIVE", routeSmokeArchive
+    environment "RADIO_ORACLE_ROUTE_SMOKE_BASELINE", routeSmokeBaseline
+    if (!routeSmokeArchive.isBlank()) {
+        maxHeapSize = "3g"
+    }
+}
+
 tasks.register("desktopPrinterProbe", JavaExec) {
     group = "verification"
     description = "Lists desktop printers and optionally sends a system, raw queue, or Bluetooth serial ESC/POS test ticket."

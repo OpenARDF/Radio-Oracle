@@ -46,6 +46,7 @@ data class AndroidPublicResultsTarget(
     val raceCount: Int,
     val savedUrl: String?,
     val publishedAtIso: String?,
+    val hasCourseDiagrams: Boolean,
     val needsRacePasswordForDiagrams: Boolean
 ) {
     val canViewPublicResults: Boolean
@@ -92,6 +93,7 @@ class AndroidPublicResultsPublishingService(
                 raceCount = 1,
                 savedUrl = publication?.url,
                 publishedAtIso = publication?.publishedAtIso,
+                hasCourseDiagrams = raceData.hasCourseDiagrams(),
                 needsRacePasswordForDiagrams = raceData.needsPasswordForCourseDiagrams()
             )
         } else {
@@ -110,6 +112,7 @@ class AndroidPublicResultsPublishingService(
                 raceCount = races.size,
                 savedUrl = publication?.url,
                 publishedAtIso = publication?.publishedAtIso,
+                hasCourseDiagrams = races.any { it.hasCourseDiagrams() },
                 needsRacePasswordForDiagrams = races.any { it.needsPasswordForCourseDiagrams() }
             )
         }
@@ -273,6 +276,19 @@ class AndroidPublicResultsPublishingService(
         return categories.any { categoryData ->
             categoryData.category.id.toString() in categoryIdsWithResults &&
                 !categoryData.category.encryptedCourseInfo.isNullOrBlank()
+        }
+    }
+
+    private fun RaceData.hasCourseDiagrams(): Boolean {
+        val categoryIdsWithResults = EventResultDetails.from(toEventRaceData())
+            .mapNotNull(EventResultDetails::categoryId)
+            .toSet()
+        return categories.any { categoryData ->
+            categoryData.category.id.toString() in categoryIdsWithResults &&
+                (
+                    !categoryData.category.encryptedCourseInfo.isNullOrBlank() ||
+                        !categoryData.category.courseInfo.isNullOrBlank()
+                    )
         }
     }
 }

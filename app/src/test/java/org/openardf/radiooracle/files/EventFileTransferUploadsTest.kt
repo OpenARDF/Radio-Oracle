@@ -42,7 +42,7 @@ class EventFileTransferUploadsTest {
             bytes = bytes
         )
 
-        assertEquals("Day 1 Classic.ardfjs", upload.fileName)
+        assertEquals("Day 1 Classic.json", upload.fileName)
         assertEquals(EVENT_FILE_TRANSFER_CONTENT_TYPE, upload.contentType)
         assertArrayEquals(bytes, upload.bytes)
     }

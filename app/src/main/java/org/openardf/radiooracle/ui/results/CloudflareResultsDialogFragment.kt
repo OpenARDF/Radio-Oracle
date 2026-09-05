@@ -129,7 +129,9 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         progress = view.findViewById(R.id.cloudflare_progress)
 
         includeDiagrams.setOnCheckedChangeListener { _, checked ->
-            passwordLayout.visibility = if (checked) View.VISIBLE else View.GONE
+            passwordLayout.visibility = if (
+                checked && target?.needsRacePasswordForDiagrams == true
+            ) View.VISIBLE else View.GONE
         }
         publishButton.setOnClickListener { confirmAndPublish() }
         viewButton.setOnClickListener { openSavedUrl() }
@@ -191,7 +193,10 @@ class CloudflareResultsDialogFragment : DialogFragment() {
             getString(R.string.cloudflare_results_retention_replace)
         }
         diagramControls.visibility =
-            if (value.needsRacePasswordForDiagrams) View.VISIBLE else View.GONE
+            if (value.hasCourseDiagrams) View.VISIBLE else View.GONE
+        passwordLayout.visibility = if (
+            includeDiagrams.isChecked && value.needsRacePasswordForDiagrams
+        ) View.VISIBLE else View.GONE
         renderUrl(value.savedUrl)
         val settingsRejected = AndroidCloudflarePagesSettingsStore.isRejected(
             requireContext(),
@@ -260,7 +265,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
                         raceId = race.id,
                         settings = settings,
                         includeCourseDiagrams =
-                            target?.needsRacePasswordForDiagrams == true && includeDiagrams.isChecked,
+                            target?.hasCourseDiagrams == true && includeDiagrams.isChecked,
                         racePassword = passwordInput.text?.toString(),
                         publicationStatus = if (officialResults.isChecked) {
                             PublicResultsPublicationStatus.OFFICIAL

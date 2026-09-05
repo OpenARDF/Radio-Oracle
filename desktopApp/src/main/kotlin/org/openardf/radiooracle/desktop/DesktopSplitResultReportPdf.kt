@@ -42,7 +42,7 @@ object DesktopSplitResultReportPdf {
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
     ) {
         path.parent?.let(Files::createDirectories)
-        val report = SplitResultExports.model(projectFile.raceData, awardDisplayMode)
+        val report = SplitResultExports.model(projectFile.raceData, awardDisplayMode, routeLengths = DesktopClassicRouteAnalysis.projection(projectFile))
         Files.write(path, SplitResultPdfExports.pdf(report))
     }
 }

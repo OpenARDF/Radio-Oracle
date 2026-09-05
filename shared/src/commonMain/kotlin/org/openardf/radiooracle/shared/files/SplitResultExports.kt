@@ -34,6 +34,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
+import org.openardf.radiooracle.shared.event.ResultRouteLength
 import org.openardf.radiooracle.shared.publicresults.PublicResultsPublicationRules
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -91,14 +92,19 @@ data class SplitResultCompetitor(
     val pointsText: String,
     val runTimeText: String,
     val transmittersText: String,
-    val splits: List<SplitResultLeg>
+    val splits: List<SplitResultLeg>,
+    val routeLength: ResultRouteLength? = null
 )
 
 data class SplitResultCategory(
     val id: String,
     val name: String,
     val results: List<SplitResultCompetitor>
-)
+) {
+    val displayName: String get() = results.firstNotNullOfOrNull { it.routeLength }?.let {
+        "$name (${results.size})${it.categoryHeadingSuffix}"
+    } ?: name
+}
 
 data class SplitResultReport(
     val raceName: String,
@@ -110,6 +116,8 @@ data class SplitResultReport(
     val resultsById: Map<String, SplitResultCompetitor> = categories
         .flatMap(SplitResultCategory::results)
         .associateBy(SplitResultCompetitor::resultId)
+    val routeAnalysisNotice: String? get() = resultsById.values.count { it.routeLength != null }.takeIf { it > 0 }
+        ?.let { ResultRouteLength.coverage(it, resultsById.size) }
 }
 
 /** Shared split-result model and Excel-friendly export used by desktop, Android, and public sites. */
@@ -117,7 +125,8 @@ object SplitResultExports {
     fun model(
         raceData: EventRaceData,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
-        publicationStatus: PublicResultsPublicationStatus? = null
+        publicationStatus: PublicResultsPublicationStatus? = null,
+        routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): SplitResultReport {
         publicationStatus?.let { PublicResultsPublicationRules.requireReady(raceData, it) }
         val competitorsByResultId = raceData.competitorData
@@ -133,7 +142,7 @@ object SplitResultExports {
                 result = result,
                 controlsByCode = controlsByCode,
                 useControlLabels = useControlLabels
-            )
+            ).copy(routeLength = routeLengths[result.id])
         }
         val categoryKeys = unrankedResults
             .map { (result, _) -> result.categoryId.orEmpty() to result.categoryName }
@@ -165,8 +174,9 @@ object SplitResultExports {
     fun csv(
         raceData: EventRaceData,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
-        publicationStatus: PublicResultsPublicationStatus? = null
-    ): String = csv(model(raceData, awardDisplayMode, publicationStatus))
+        publicationStatus: PublicResultsPublicationStatus? = null,
+        routeLengths: Map<String, ResultRouteLength> = emptyMap()
+    ): String = csv(model(raceData, awardDisplayMode, publicationStatus, routeLengths))
 
     fun csv(report: SplitResultReport): String = buildString {
         appendCsvRow(
@@ -192,7 +202,8 @@ object SplitResultExports {
             "Leg Seconds",
             "Cumulative Time",
             "Cumulative Seconds",
-            "Leg Place"
+            "Leg Place",
+            *if (report.resultsById.values.any { it.routeLength != null }) arrayOf("Estimated effective route length (m)", "Analysis ideal effective length (m)", "Route comparison") else emptyArray()
         )
         report.categories.forEach { category ->
             category.results.forEach { result ->
@@ -344,7 +355,8 @@ object SplitResultExports {
             split?.legSeconds,
             split?.cumulativeTime,
             split?.cumulativeSeconds,
-            split?.legPlace
+            split?.legPlace,
+            *if (report.resultsById.values.any { it.routeLength != null }) arrayOf<Any?>(result.routeLength?.effectiveMeters, result.routeLength?.idealEffectiveMeters, result.routeLength?.comparison) else emptyArray()
         )
     }
 

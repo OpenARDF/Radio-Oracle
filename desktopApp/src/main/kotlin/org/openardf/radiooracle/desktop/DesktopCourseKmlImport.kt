@@ -225,7 +225,7 @@ object DesktopCourseKmlImporter {
     fun importProtectedCourseInfo(
         path: Path,
         projectFile: EventProjectFile,
-        password: String,
+        password: String?,
         categoryOverrideId: String? = null,
         elevationProvider: (CourseGeoPoint) -> Double? = { point -> DesktopVenueElevationCache.elevationMeters(point) },
         createMissingCategories: Boolean = false,
@@ -236,6 +236,7 @@ object DesktopCourseKmlImporter {
         siImportPolicy: DesktopCourseKmlSiImportPolicy = DesktopCourseKmlSiImportPolicy.PreserveExisting,
         selectedDuplicateRouteChoices: Map<String, String> = emptyMap()
     ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
+        val storagePassword = projectFile.courseDataPassword(password)
         val sourceSha256 = fileSha256(path)
         val parsedCourseData = parse(path)
         val routeCandidateCourseData = if (requireRoutes) {
@@ -403,8 +404,8 @@ object DesktopCourseKmlImporter {
         val categories = activeAndInactiveCourseCategories(labeledProject.raceData)
             .sortedWith(EventCategorySort.byDisplayName)
         val courseInfoByCategoryId = categories.mapNotNull { categoryData ->
-            categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }?.let { encryptedValue ->
-                categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
+            categoryData.category.storedCourseInfo(storagePassword)?.let { courseInfo ->
+                categoryData.category.id to courseInfo
             }
         }.toMap()
         val routeCategoryTargets = routeCategoryTargets(
@@ -440,7 +441,7 @@ object DesktopCourseKmlImporter {
                 projectFile = labeledProject,
                 courseInfoByCategoryId = courseInfoByCategoryId,
                 updates = updates,
-                password = password,
+                password = storagePassword,
                 elevationLookup = elevationProvider,
                 invalidateAllReferencedProtectedCourses = false
             )
@@ -449,7 +450,7 @@ object DesktopCourseKmlImporter {
             importControlsOnlyProtectedCourseInfo(
                 projectFile = locationUpdateResult?.projectFile ?: labeledProject,
                 matchedControls = controlsForLocationUpdates,
-                password = password,
+                password = storagePassword,
                 sourceName = path.fileName.toString(),
                 sourceSha256 = sourceSha256,
                 elevationProvider = elevationProvider
@@ -503,9 +504,7 @@ object DesktopCourseKmlImporter {
                 }
                 matchedCategoryCount++
 
-                val existingCourseInfo = categoryData.category.encryptedCourseInfo
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
+                val existingCourseInfo = courseInfoByCategoryId[categoryData.category.id]
                 val sameSourceCourseInfo = existingCourseInfo?.takeIf { it.sourceSha256 == sourceSha256 }
                 // Build the optional public assignment update from the unsampled LineString. Sampling
                 // is only for route/elevation facts; assignment matching should reflect the controls
@@ -677,19 +676,15 @@ object DesktopCourseKmlImporter {
                     courseObjects = courseObjects
                 )
                 missingElevationPointCount += missingElevationCount(protectedCourseInfo)
-                val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(protectedCourseInfo, password)
-                val encryptedIdealOrder = idealOrder.takeIf { it.isNotBlank() }?.let {
-                    DesktopProtectedCourseOrder.encrypt(it, password)
-                }
-                updatedProject = EventProjectEditor.updateCategoryEncryptedCourseInfo(
-                    updatedProject,
+                updatedProject = updatedProject.withStoredCourseInfo(
                     categoryData.category.id,
-                    encryptedCourseInfo
+                    protectedCourseInfo,
+                    storagePassword
                 )
-                updatedProject = EventProjectEditor.updateCategoryEncryptedIdealOrder(
-                    updatedProject,
+                updatedProject = updatedProject.withStoredIdealOrder(
                     categoryData.category.id,
-                    encryptedIdealOrder
+                    idealOrder,
+                    storagePassword
                 )
                 updatedProject = updateCategoryCalculatedCourseMetrics(
                     projectFile = updatedProject,
@@ -1334,7 +1329,7 @@ object DesktopCourseKmlImporter {
     suspend fun fetchProtectedCourseElevations(
         projectFile: EventProjectFile,
         categoryIds: List<String>,
-        password: String,
+        password: String?,
         elevationProvider: (suspend (CourseGeoPoint) -> Double?)? = null,
         batchElevationProvider: suspend (List<CourseGeoPoint>) -> List<Double?> = { points ->
             val pointProvider = elevationProvider
@@ -1353,13 +1348,13 @@ object DesktopCourseKmlImporter {
         },
         onProgress: (DesktopRouteElevationProgress) -> Unit = {}
     ): Pair<EventProjectFile, DesktopRouteElevationResult> {
+        val storagePassword = projectFile.courseDataPassword(password)
         val categoryIdSet = categoryIds.toSet()
         val categories = activeAndInactiveCourseCategories(projectFile.raceData)
             .filter { it.category.id in categoryIdSet }
             .mapNotNull { categoryData ->
-                val encryptedCourseInfo = categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }
+                val courseInfo = categoryData.category.storedCourseInfo(storagePassword)
                     ?: return@mapNotNull null
-                val courseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(encryptedCourseInfo, password)
                 if (courseInfo.route.size < 2) {
                     null
                 } else {
@@ -1544,10 +1539,10 @@ object DesktopCourseKmlImporter {
                 controlPoints = elevatedControlPoints,
                 courseObjects = elevatedCourseObjects
             )
-            updatedProject = EventProjectEditor.updateCategoryEncryptedCourseInfo(
-                updatedProject,
+            updatedProject = updatedProject.withStoredCourseInfo(
                 target.categoryId,
-                DesktopProtectedCourseOrder.encryptCourseInfo(updatedCourseInfo, password)
+                updatedCourseInfo,
+                storagePassword
             )
             updatedProject = updateCategoryCalculatedCourseMetrics(
                 projectFile = updatedProject,
@@ -1947,7 +1942,7 @@ object DesktopCourseKmlImporter {
     private fun importControlsOnlyProtectedCourseInfo(
         projectFile: EventProjectFile,
         matchedControls: List<CourseMatchedControl>,
-        password: String,
+        password: String?,
         sourceName: String,
         sourceSha256: String,
         elevationProvider: (CourseGeoPoint) -> Double?
@@ -1994,10 +1989,10 @@ object DesktopCourseKmlImporter {
                 controlPoints = controlPoints,
                 courseObjects = emptyList()
             )
-            updatedProject = EventProjectEditor.updateCategoryEncryptedCourseInfo(
-                updatedProject,
+            updatedProject = updatedProject.withStoredCourseInfo(
                 categoryData.category.id,
-                DesktopProtectedCourseOrder.encryptCourseInfo(protectedCourseInfo, password)
+                protectedCourseInfo,
+                password
             )
             affectedCategoryIds += categoryData.category.id
             categoryControls.mapTo(updatedControlIds) { it.controlId }
@@ -2097,14 +2092,14 @@ object DesktopCourseKmlImporter {
             .distinct()
             .filter { it in existingCategoryIds }
             .fold(projectFile) { currentProject, categoryId ->
-                EventProjectEditor.updateCategoryEncryptedIdealOrder(
-                    projectFile = EventProjectEditor.updateCategoryEncryptedCourseInfo(
+                EventProjectEditor.updateCategoryIdealOrder(
+                    projectFile = EventProjectEditor.updateCategoryCourseInfo(
                         currentProject,
                         categoryId,
-                        encryptedCourseInfo = null
+                        courseInfo = null
                     ),
                     categoryId = categoryId,
-                    encryptedIdealOrder = null
+                    idealOrder = null
                 )
             }
     }

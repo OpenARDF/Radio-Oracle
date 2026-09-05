@@ -46,6 +46,35 @@ import java.util.zip.ZipInputStream
 
 class DesktopControlsRouteKmlKmzExportTest {
     @Test
+    fun exportsPlainKmlWithoutPasswordWhenRaceFileIsNotEncrypted() {
+        val output = Files.createTempFile("radio-oracle-plain-controls-routes", ".kml")
+        val encryptedProject = sampleProject("course-key")
+        val plaintextProject = EventProjectEditor.updateCategoryCourseInfo(
+            sampleProjectWithoutProtectedCourses(encryptedProject),
+            "cat-m21",
+            sampleCourseInfo()
+        )
+
+        val summary = DesktopControlsRouteKmlKmzExporter.exportPlainFile(
+            target = DesktopControlsRouteKmlKmzExportTarget(
+                output,
+                DesktopControlsRouteKmlKmzExportFormat.Kml
+            ),
+            projectFile = plaintextProject
+        )
+
+        assertFalse(summary.encryptedArchive)
+        assertEquals(1, summary.routeCount)
+        assertTrue(Files.readString(output).contains("<name>M21 route</name>"))
+        assertThrows(IllegalArgumentException::class.java) {
+            DesktopControlsRouteKmlKmzExporter.exportPlainFile(
+                DesktopControlsRouteKmlKmzExportTarget(output, DesktopControlsRouteKmlKmzExportFormat.Kml),
+                encryptedProject
+            )
+        }
+    }
+
+    @Test
     fun exportsKmlInsideEncryptedZip() {
         val output = Files.createTempFile("radio-oracle-controls-routes", ".kml.zip")
         val project = sampleProject("course-key")

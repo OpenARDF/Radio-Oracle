@@ -25,6 +25,10 @@ function-size:
 test:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test
 
+# Read-only real-series acceptance; exports are written under desktopApp/build/reports.
+classic-route-smoke archive baseline:
+    RADIO_ORACLE_ROUTE_SMOKE_ARCHIVE={{quote(archive)}} RADIO_ORACLE_ROUTE_SMOKE_BASELINE={{quote(baseline)}} JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:cleanTest :desktopApp:test --tests '*DesktopClassicRouteArchiveSmokeTest'
+
 android-compile:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:compileDebugKotlin
 
@@ -168,6 +172,9 @@ event-start-list-verify event flags="":
 route-generator file flags="":
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='route-generator "{{file}}" {{flags}}'
 
+classic-route-lengths input output:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='classic-route-lengths "{{input}}" "{{output}}"'
+
 event-category-remove event category flags="":
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='remove-category "{{event}}" "{{category}}" {{flags}}'
 
@@ -185,6 +192,14 @@ desktop-launch:
     open "{{justfile_directory()}}/{{app_bundle}}"
     sleep 3
     pgrep -fl Radio-Oracle
+
+# Reuse the app's startup-file hook for repeatable UI tests; never closes an existing app.
+desktop-launch-file file:
+    @test -f {{quote(file)}} || { echo "Race/series file does not exist." >&2; exit 1; }
+    @if pgrep -x Radio-Oracle >/dev/null; then echo "Save and close Radio-Oracle before launching a test file." >&2; exit 1; fi
+    open "{{justfile_directory()}}/{{app_bundle}}" --args {{quote(file)}}
+    sleep 3
+    pgrep -x Radio-Oracle
 
 desktop-relaunch: desktop-close desktop-package desktop-launch
 

@@ -165,7 +165,6 @@ import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventAwardScope
 import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventCategoryCompetitorSync
-import org.openardf.radiooracle.shared.event.EventCategoryCompetitorSyncOutcome
 import org.openardf.radiooracle.shared.event.EventCategoryCompetitorSyncPlan
 import org.openardf.radiooracle.shared.event.EventCategoryDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
@@ -427,19 +426,11 @@ internal fun decryptedProtectedCourseState(
     val courseCategories = protectedCourseDataContainers(projectFile.raceData)
     return DesktopProtectedCourseState(
         protectedIdealOrderByCategoryId = courseCategories.associate { categoryData ->
-            val encryptedValue = categoryData.category.encryptedIdealOrder
-            categoryData.category.id to when {
-                !encryptedValue.isNullOrBlank() ->
-                    DesktopProtectedCourseOrder.decrypt(encryptedValue, password)
-                else -> categoryData.category.idealOrder.orEmpty()
-            }
+            categoryData.category.id to categoryData.category.storedIdealOrder(password)
         },
         protectedCourseInfoByCategoryId = courseCategories.mapNotNull { categoryData ->
             val category = categoryData.category
-            val courseInfo = category.encryptedCourseInfo
-                ?.takeIf(String::isNotBlank)
-                ?.let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
-                ?: category.courseInfo
+            val courseInfo = category.storedCourseInfo(password)
             courseInfo?.let { category.id to it }
         }.toMap()
     )
@@ -450,7 +441,7 @@ internal fun publicResultsNeedCourseUnlock(
     isProtectedCourseOrderUnlocked: Boolean
 ): Boolean =
     !isProtectedCourseOrderUnlocked && projectFiles.any { projectFile ->
-        EventResultDetails.from(projectFile.raceData).isNotEmpty() && projectFile.hasProtectedCategoryData()
+        EventResultDetails.from(projectFile.raceData).isNotEmpty() && projectFile.hasEncryptedCategoryData()
     }
 
 internal fun protectedCourseInfoForResultCategory(
@@ -478,9 +469,12 @@ internal fun decryptedPublicResultsCourseState(
     password: String
 ): DesktopProtectedCourseState {
     val trimmedPassword = password.trim()
-    require(trimmedPassword.isNotEmpty()) { "Race Password cannot be blank." }
-    projectFiles
-        .filter(EventProjectFile::hasProtectedCategoryData)
+    val allProjects = (projectFiles + currentProject).distinct()
+    require(allProjects.none(EventProjectFile::hasEncryptedCategoryData) || trimmedPassword.isNotEmpty()) {
+        "Race Password cannot be blank."
+    }
+    allProjects
+        .filter(EventProjectFile::hasEncryptedCategoryData)
         .forEach { project -> decryptedProtectedCourseState(project, trimmedPassword) }
     return decryptedProtectedCourseState(currentProject, trimmedPassword)
 }
@@ -512,7 +506,7 @@ internal fun loadPublicResultSeriesRaces(
         val courseInfo = when {
             isCurrentEvent && currentProtectedCourseInfoByCategoryId.isNotEmpty() ->
                 currentProtectedCourseInfoByCategoryId
-            project.hasUnencryptedCategoryData() ->
+            project.hasUnencryptedCategoryData() && !project.hasEncryptedCategoryData() ->
                 decryptedProtectedCourseState(project, "").protectedCourseInfoByCategoryId
             protectedCoursePassword != null -> runCatching {
                 decryptedProtectedCourseState(project, protectedCoursePassword).protectedCourseInfoByCategoryId
@@ -670,15 +664,6 @@ private enum class DesktopSportIdentAppendOutcome {
     DuplicateIgnored,
     DuplicateReplaced,
     DuplicateCreatedNew
-}
-
-private sealed interface DesktopCategoryListEdit {
-    data class Add(val name: String) : DesktopCategoryListEdit
-
-    data class Sync(
-        val missingCategoryIds: Set<String>,
-        val emptyCategoryIds: Set<String>
-    ) : DesktopCategoryListEdit
 }
 
 private val CategoryNameColumn = FixedTableColumn("Name", 150.dp)
@@ -1006,6 +991,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         val publicResultSitePublisher = remember { DesktopCloudflarePagesPublisher() }
         val ticketPrinter = remember { DesktopTicketPrinter() }
         val appCoroutineScope = rememberCoroutineScope()
+        val classicRouteAnalysis = remember { ClassicRouteAnalysisUi(appCoroutineScope) }
         val startupStatus = remember(startupPath) {
             openStartupProject(projectSession, startupPath, DesktopLastEventFilePreferences::rememberEventFile)
         }
@@ -1093,7 +1079,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         var isGoogleSheetImportDialogVisible by remember { mutableStateOf(false) }
         var isEventRegCompetitorImportDialogVisible by remember { mutableStateOf(false) }
         var pendingCourseKmlKmzUnlockAction by remember { mutableStateOf<CourseKmlKmzUnlockAction?>(null) }
-        var pendingProtectedStartListDrawRequest by remember { mutableStateOf<PendingProtectedStartListDrawRequest?>(null) }
+        var pendingProtectedCourseActionRequest by remember {
+            mutableStateOf<PendingProtectedCourseActionRequest?>(null)
+        }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
         var pendingControlsCsvSyncUnlockReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var pendingBulkCategoryAction by remember { mutableStateOf<BulkCategoryAction?>(null) }
@@ -1317,7 +1305,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun isProtectedCourseStateAvailable(project: EventProjectFile? = projectFile): Boolean =
-            protectedCoursePassword != null || project?.hasUnencryptedCategoryData() == true
+            project != null && (!project.hasEncryptedCategoryData() || protectedCoursePassword != null)
 
         fun deleteControlAfterProtectedRouteCheck(controlId: String, promptIfLocked: Boolean = true): Boolean {
             val currentProject = projectSession.currentProject
@@ -2956,7 +2944,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun exportCsv(title: String, suffix: String, export: (Path, EventProjectFile) -> Unit) {
-            val currentProject = projectSession.currentProject ?: return
+            val currentProject = classicRouteAnalysis.exportSnapshot ?: projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportCsv(title, currentProject.raceData.race.name, suffix)?.let { path ->
                 runCatching {
                     export(path, currentProject)
@@ -3073,7 +3061,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     categoryData.category.lengthMeters != 0 ||
                     categoryData.category.climbMeters != 0 ||
                     categoryData.category.encryptedIdealOrder?.isNotBlank() == true ||
-                    categoryData.category.encryptedCourseInfo?.isNotBlank() == true
+                    categoryData.category.encryptedCourseInfo?.isNotBlank() == true ||
+                    categoryData.category.idealOrder?.isNotBlank() == true ||
+                    categoryData.category.courseInfo != null
             }
             if (currentProject.raceData.controls.isEmpty() && affectedCategoryCount == 0) {
                 projectStatusText = "No controls to delete."
@@ -3135,10 +3125,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             runCatching {
                 val currentProject = projectFile
                     ?: throw IllegalStateException("Load a Race File before editing course order.")
-                val storesPlaintext = currentProject.hasUnencryptedCategoryData() &&
-                    !currentProject.hasEncryptedCategoryData()
-                val password = protectedCoursePassword
-                require(storesPlaintext || password != null) { "Unlock course order before editing." }
+                val storagePassword = currentProject.courseDataPassword(protectedCoursePassword)
                 val trimmedIdealOrder = idealOrderText.trim()
                 if (trimmedIdealOrder.isNotEmpty()) {
                     val assignedControls = assignedProtectedIdealOrderControls(currentProject, categoryId)
@@ -3148,17 +3135,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     ProtectedIdealOrderRules.validateAssignedToCategory(trimmedIdealOrder, assignedControls)
                 }
                 projectFile = projectSession.updateCurrentProject { currentProject ->
-                    if (storesPlaintext) {
-                        EventProjectEditor.updateCategoryIdealOrder(currentProject, categoryId, trimmedIdealOrder)
-                    } else {
-                        EventProjectEditor.updateCategoryEncryptedIdealOrder(
-                            currentProject,
-                            categoryId,
-                            trimmedIdealOrder.takeIf(String::isNotEmpty)?.let {
-                                DesktopProtectedCourseOrder.encrypt(it, requireNotNull(password))
-                            }
-                        )
-                    }
+                    currentProject.withStoredIdealOrder(categoryId, trimmedIdealOrder, storagePassword)
                 }
                 protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (categoryId to trimmedIdealOrder)
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -3168,8 +3145,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
         }
 
-        fun syncProtectedCourseState(updatedProject: EventProjectFile, password: String) {
-            val protectedState = decryptedProtectedCourseState(updatedProject, password)
+        fun syncProtectedCourseState(updatedProject: EventProjectFile, password: String?) {
+            val protectedState = decryptedProtectedCourseState(updatedProject, password.orEmpty())
             protectedIdealOrderByCategoryId = protectedState.protectedIdealOrderByCategoryId
             protectedCourseInfoByCategoryId = protectedState.protectedCourseInfoByCategoryId
             hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -3191,7 +3168,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                         syncProtectedCourseState(reloadedProject, password)
                     }
                 } ?: run {
-                    if (projectSession.currentProject?.hasUnencryptedCategoryData() != true) {
+                    if (projectSession.currentProject?.hasEncryptedCategoryData() == true) {
                         protectedIdealOrderByCategoryId = emptyMap()
                         protectedCourseInfoByCategoryId = emptyMap()
                     }
@@ -3205,10 +3182,6 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun useCalculatedCourseAnalysisRoute(application: DesktopCourseCalculatedRouteApplication): String {
-            val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock course order before applying calculated route."
-                return projectStatusText
-            }
             return runCatching {
                 val currentProject = projectFile
                     ?: throw IllegalStateException("Load a Race File before applying calculated route.")
@@ -3218,10 +3191,10 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     projectFile = currentProject,
                     courseInfo = currentCourseInfo,
                     application = application,
-                    password = password
+                    password = protectedCoursePassword
                 )
                 projectFile = projectSession.updateCurrentProject { result.projectFile }
-                syncProtectedCourseState(result.projectFile, password)
+                syncProtectedCourseState(result.projectFile, protectedCoursePassword)
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 projectStatusText =
                     "Saved the calculated route and applied its ideal order to ${result.affectedCategoryCount} " +
@@ -3235,20 +3208,16 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun applyCourseAnalysisFoxRenumberingOnly(renumbering: DesktopCourseWaitRenumbering): String {
-            val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock course order before saving fox renumbering."
-                return projectStatusText
-            }
             return runCatching {
                 val currentProject = projectFile
                     ?: throw IllegalStateException("Load a Race File before saving fox renumbering.")
                 val result = DesktopCourseAnalysisApplier.applyFoxRenumberingOnly(
                     projectFile = currentProject,
                     renumbering = renumbering,
-                    password = password
+                    password = protectedCoursePassword
                 )
                 projectFile = projectSession.updateCurrentProject { result.projectFile }
-                syncProtectedCourseState(result.projectFile, password)
+                syncProtectedCourseState(result.projectFile, protectedCoursePassword)
                 projectStatusText =
                     "Saved fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Save Race to write changes to disk."
                 projectStatusText
@@ -3272,10 +3241,6 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun updateProtectedControlLocation(controlId: String, latitudeText: String, longitudeText: String): String {
-            val password = protectedCoursePassword ?: run {
-                projectStatusText = "Unlock course order before updating control locations."
-                return projectStatusText
-            }
             return runCatching {
                 val currentProject = projectFile
                     ?: throw IllegalStateException("Load a Race File before updating control locations.")
@@ -3285,7 +3250,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     controlId = controlId,
                     latitudeText = latitudeText,
                     longitudeText = longitudeText,
-                    password = password,
+                    password = protectedCoursePassword,
                     elevationLookup = DesktopVenueElevationCache::elevationMeters
                 )
                 projectFile = projectSession.updateCurrentProject { result.projectFile }
@@ -3306,7 +3271,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         suspend fun fetchProtectedCourseElevationsForAnalysis(
             sourceName: String,
             categoryIds: List<String>,
-            password: String,
+            password: String?,
             allowInternetDownload: Boolean
         ): Pair<CourseAnalysisElevationPreparationResult, DesktopRouteElevationResult> {
             val currentProject = projectSession.currentProject ?: error("No Race File open.")
@@ -3440,7 +3405,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         suspend fun resolveCachedCourseAnalysisElevations(categoryId: String): CourseAnalysisElevationPreparationResult? {
-            val password = protectedCoursePassword ?: return null
+            val currentProject = projectSession.currentProject ?: return null
+            val password = currentProject.courseDataPassword(protectedCoursePassword)
             val categoryName = projectSession.currentProject
                 ?.raceData
                 ?.categories
@@ -3463,18 +3429,15 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             categoryId: String,
             summary: DesktopCourseAnalysisSummary
         ): CourseAnalysisElevationPreparationResult {
-            val password = protectedCoursePassword
             var latestProject = projectSession.currentProject ?: error("No Race File open.")
             var latestCourseInfo = protectedCourseInfoByCategoryId
             val statusParts = mutableListOf<String>()
             if (summary.hasMissingElevationData) {
-                if (password == null) {
-                    error("Unlock course order before downloading stored route elevations.")
-                }
+                val storagePassword = latestProject.courseDataPassword(protectedCoursePassword)
                 val (preparation, result) = fetchProtectedCourseElevationsForAnalysis(
                     sourceName = "Course Analysis internet download",
                     categoryIds = listOf(categoryId),
-                    password = password,
+                    password = storagePassword,
                     allowInternetDownload = true
                 )
                 latestProject = preparation.projectFile
@@ -3504,7 +3467,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             )
         }
 
-        fun startProtectedCourseElevationFetch(sourceName: String, categoryIds: List<String>, password: String) {
+        fun startProtectedCourseElevationFetch(sourceName: String, categoryIds: List<String>, password: String?) {
             if (courseKmlKmzElevationJob?.isActive == true) {
                 return
             }
@@ -3866,7 +3829,12 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                         "${selectedSummary.categoryAssignmentUpdates.size.takeIf { applyCategoryAssignments } ?: 0} assigned-control lists replaced.",
                         "${selectedSummary.createdCategoryNames.size} course mappings created.",
                         "${selectedSummary.createdControlNames.size} missing controls created.",
-                        "${selectedSummary.missingCategoryNames.size} category names were missing before review."
+                        "${selectedSummary.missingCategoryNames.size} category names were missing before review.",
+                        if (updatedProject.hasEncryptedCategoryData()) {
+                            "Stored course data remains Race Password encrypted."
+                        } else {
+                            "Stored course data is readable plaintext in this Race File."
+                        }
                     ) + listOf(updatedProject.resultImpactWarning("Course data changed").trim()).filter { it.isNotBlank() } +
                         selectedSummary.categoryAssumptions.map { assumption ->
                             "No category indication was found for route ${assumption.routeName}; assumed ${assumption.categoryName}."
@@ -3939,7 +3907,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun startCourseKmlKmzImport(
             path: Path,
-            password: String,
+            password: String?,
             categoryOverrideId: String? = null,
             requireRoutes: Boolean = true
         ) {
@@ -4145,7 +4113,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
         }
 
-        fun chooseImportCourseKmlKmzUnlocked(password: String, requireRoutes: Boolean = true) {
+        fun chooseImportCourseKmlKmzUnlocked(password: String?, requireRoutes: Boolean = true) {
             if (isImportingCourseKmlKmz) {
                 return
             }
@@ -4154,7 +4122,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
         }
 
-        fun chooseImportCourseGpxUnlocked(password: String, requireRoutes: Boolean = true) {
+        fun chooseImportCourseGpxUnlocked(password: String?, requireRoutes: Boolean = true) {
             if (isImportingCourseKmlKmz) {
                 return
             }
@@ -4164,8 +4132,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportCourseKmlKmz() {
+            val currentProject = projectSession.currentProject ?: return
             val password = protectedCoursePassword
-            if (password == null) {
+            if (currentProject.hasEncryptedCategoryData() && password == null) {
                 projectStatusText = "Unlock course order before importing KML/KMZ controls/route data."
                 pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.Import
                 return
@@ -4174,8 +4143,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportCourseGpx() {
+            val currentProject = projectSession.currentProject ?: return
             val password = protectedCoursePassword
-            if (password == null) {
+            if (currentProject.hasEncryptedCategoryData() && password == null) {
                 projectStatusText = "Unlock course order before importing GPX controls/route data."
                 pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ImportGpx
                 return
@@ -4184,8 +4154,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportControlsKmlKmz() {
+            val currentProject = projectSession.currentProject ?: return
             val password = protectedCoursePassword
-            if (password == null) {
+            if (currentProject.hasEncryptedCategoryData() && password == null) {
                 projectStatusText = "Unlock course order before importing KML/KMZ controls data."
                 pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ImportControls
                 return
@@ -4194,8 +4165,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportControlsGpx() {
+            val currentProject = projectSession.currentProject ?: return
             val password = protectedCoursePassword
-            if (password == null) {
+            if (currentProject.hasEncryptedCategoryData() && password == null) {
                 projectStatusText = "Unlock course order before importing GPX controls data."
                 pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ImportControlsGpx
                 return
@@ -4203,39 +4175,63 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             chooseImportCourseGpxUnlocked(password, requireRoutes = false)
         }
 
-        fun chooseExportCourseKmlKmzUnlocked(password: String) {
+        fun chooseExportCourseKmlKmzUnlocked(password: String?) {
             val currentProject = projectSession.currentProject ?: return
-            DesktopFileDialogs.chooseExportControlsRouteKmlKmz(currentProject.raceData.race.name)?.let { target ->
+            val encrypted = currentProject.hasEncryptedCategoryData()
+            DesktopFileDialogs.chooseExportControlsRouteKmlKmz(
+                eventName = currentProject.raceData.race.name,
+                encrypted = encrypted
+            )?.let { target ->
                 runCatching {
-                    val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
-                        target = target,
-                        projectFile = currentProject,
-                        password = password
-                    )
+                    val summary = if (encrypted) {
+                        DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+                            target = target,
+                            projectFile = currentProject,
+                            password = requireNotNull(password)
+                        )
+                    } else {
+                        DesktopControlsRouteKmlKmzExporter.exportPlainFile(target, currentProject)
+                    }
                     syncProjectState()
                     val formatName = summary.outputFormat.contentExtension.uppercase()
-                    projectStatusText =
-                        "Exported ${target.path.fileName} as an encrypted ZIP containing $formatName " +
-                            "with ${summary.courseControlPointCount} course objects and ${summary.routeCount} routes."
+                    val storageDescription = if (summary.encryptedArchive) {
+                        "an encrypted ZIP containing $formatName"
+                    } else {
+                        "a plaintext $formatName file"
+                    }
+                    projectStatusText = "Exported ${target.path.fileName} as $storageDescription " +
+                        "with ${summary.courseControlPointCount} course objects and ${summary.routeCount} routes."
                 }.onFailure { error ->
                     projectStatusText = "Controls/route KML/KMZ export failed: ${error.message ?: error::class.simpleName}"
                 }
             }
         }
 
-        fun chooseExportCourseGpxUnlocked(password: String) {
+        fun chooseExportCourseGpxUnlocked(password: String?) {
             val currentProject = projectSession.currentProject ?: return
-            DesktopFileDialogs.chooseExportControlsRouteGpx(currentProject.raceData.race.name)?.let { target ->
+            val encrypted = currentProject.hasEncryptedCategoryData()
+            DesktopFileDialogs.chooseExportControlsRouteGpx(
+                eventName = currentProject.raceData.race.name,
+                encrypted = encrypted
+            )?.let { target ->
                 runCatching {
-                    val summary = DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
-                        target = target,
-                        projectFile = currentProject,
-                        password = password
-                    )
+                    val summary = if (encrypted) {
+                        DesktopControlsRouteKmlKmzExporter.exportEncryptedZip(
+                            target = target,
+                            projectFile = currentProject,
+                            password = requireNotNull(password)
+                        )
+                    } else {
+                        DesktopControlsRouteKmlKmzExporter.exportPlainFile(target, currentProject)
+                    }
                     syncProjectState()
-                    projectStatusText =
-                        "Exported ${target.path.fileName} as an encrypted ZIP containing GPX " +
-                            "with ${summary.courseControlPointCount} course waypoints and ${summary.routeCount} routes."
+                    val storageDescription = if (summary.encryptedArchive) {
+                        "an encrypted ZIP containing GPX"
+                    } else {
+                        "a plaintext GPX file"
+                    }
+                    projectStatusText = "Exported ${target.path.fileName} as $storageDescription " +
+                        "with ${summary.courseControlPointCount} course waypoints and ${summary.routeCount} routes."
                 }.onFailure { error ->
                     projectStatusText = "Controls/route GPX export failed: ${error.message ?: error::class.simpleName}"
                 }
@@ -4243,16 +4239,26 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseExportCourseKmlKmz() {
-            projectStatusText = "Enter the Race Password before exporting protected controls/route KML/KMZ data."
-            pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.Export
+            val currentProject = projectSession.currentProject ?: return
+            if (currentProject.hasEncryptedCategoryData() && protectedCoursePassword == null) {
+                projectStatusText = "Enter the Race Password before exporting protected controls/route KML/KMZ data."
+                pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.Export
+            } else {
+                chooseExportCourseKmlKmzUnlocked(protectedCoursePassword)
+            }
         }
 
         fun chooseExportCourseGpx() {
-            projectStatusText = "Enter the Race Password before exporting protected controls/route GPX data."
-            pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ExportGpx
+            val currentProject = projectSession.currentProject ?: return
+            if (currentProject.hasEncryptedCategoryData() && protectedCoursePassword == null) {
+                projectStatusText = "Enter the Race Password before exporting protected controls/route GPX data."
+                pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ExportGpx
+            } else {
+                chooseExportCourseGpxUnlocked(protectedCoursePassword)
+            }
         }
 
-        fun chooseExportCourseOverlaysUnlocked(password: String) {
+        fun chooseExportCourseOverlaysUnlocked(password: String?) {
             val currentProject = projectSession.currentProject ?: return
             val defaultRadius = DesktopCourseOverlayExporter.defaultExclusionRadiusMeters(currentProject.raceData.race.raceType)
             DesktopFileDialogs.chooseExportCourseOverlays(
@@ -4279,8 +4285,13 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseExportCourseOverlays() {
-            projectStatusText = "Enter the Race Password before exporting OOM course overlay files."
-            pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ExportOverlays
+            val currentProject = projectSession.currentProject ?: return
+            if (currentProject.hasEncryptedCategoryData() && protectedCoursePassword == null) {
+                projectStatusText = "Enter the Race Password before exporting OOM course overlay files."
+                pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ExportOverlays
+            } else {
+                chooseExportCourseOverlaysUnlocked(protectedCoursePassword)
+            }
         }
 
         fun importAndroidRaceBackupJson(path: Path) {
@@ -4410,7 +4421,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun exportResultsHtml() {
-            val currentProject = projectSession.currentProject ?: return
+            val currentProject = classicRouteAnalysis.exportSnapshot ?: projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportHtml("Export Results HTML")?.let { path ->
                 runCatching {
                     DesktopProjectFiles.exportResultsHtml(
@@ -4428,7 +4439,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun exportResultReportHtml() {
-            val currentProject = projectSession.currentProject ?: return
+            val currentProject = classicRouteAnalysis.exportSnapshot ?: projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportHtml("Export Results Report HTML")?.let { path ->
                 runCatching {
                     DesktopProjectFiles.exportResultReportHtml(
@@ -4446,7 +4457,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun exportResultReportXml() {
-            val currentProject = projectSession.currentProject ?: return
+            val currentProject = classicRouteAnalysis.exportSnapshot ?: projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportXml("Export Results Report XML")?.let { path ->
                 runCatching {
                     DesktopProjectFiles.exportResultReportXml(
@@ -4464,7 +4475,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun exportResultReportPdf() {
-            val currentProject = projectSession.currentProject ?: return
+            val currentProject = classicRouteAnalysis.exportSnapshot ?: projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportResultReportPdf(
                 DesktopResultReportPdf.defaultFileName(currentProject)
             )?.let { path ->
@@ -4484,7 +4495,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun exportSplitResultPdf() {
-            val currentProject = projectSession.currentProject ?: return
+            val currentProject = classicRouteAnalysis.exportSnapshot ?: projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportSplitResultPdf(
                 DesktopSplitResultReportPdf.defaultFileName(currentProject)
             )?.let { path ->
@@ -4685,7 +4696,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun exportResultsText() {
-            val currentProject = projectSession.currentProject ?: return
+            val currentProject = classicRouteAnalysis.exportSnapshot ?: projectSession.currentProject ?: return
             DesktopFileDialogs.chooseExportTxt("Export Results TXT")?.let { path ->
                 runCatching {
                     DesktopProjectFiles.exportResultsText(
@@ -5709,38 +5720,36 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun applyCategoryListEdit(edit: DesktopCategoryListEdit): Boolean {
-            val result = runCatching {
-                var syncOutcome: EventCategoryCompetitorSyncOutcome? = null
-                projectFile = projectSession.updateCurrentProject { currentProject ->
-                    when (edit) {
-                        is DesktopCategoryListEdit.Add ->
-                            EventProjectEditor.addCategory(currentProject, UUID.randomUUID().toString(), edit.name)
-                        is DesktopCategoryListEdit.Sync ->
-                            EventCategoryCompetitorSync.apply(
-                                projectFile = currentProject,
-                                missingCategoryIdsToSync = edit.missingCategoryIds,
-                                emptyCategoryIdsToRemove = edit.emptyCategoryIds
-                            ).also { outcome ->
-                                syncOutcome = outcome
-                            }.projectFile
-                    }
+            return when (
+                val attempt = DesktopCategoryActions.attemptListEdit(
+                    projectFile = projectSession.currentProject,
+                    edit = edit,
+                    protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                    protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId
+                )
+            ) {
+                is DesktopCategoryListEditAttempt.RequiresCourseUnlock -> {
+                    pendingProtectedCourseActionRequest =
+                        PendingProtectedCourseActionRequest.ActivateCategory(attempt.requestedName)
+                    pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.ActivateCategory
+                    projectStatusText =
+                        "Unlock course data to activate ${attempt.mappingName} with its stored route, metrics, and assigned controls."
+                    true
                 }
-                hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = when (edit) {
-                    is DesktopCategoryListEdit.Add ->
-                        "Created category without course data. Add assigned controls or import KML/KMZ or GPX course data before Race Ops."
-                    is DesktopCategoryListEdit.Sync -> {
-                        val outcome = requireNotNull(syncOutcome)
-                        "Unsaved changes. Category sync added ${outcome.addedCategoryCount}, " +
-                            "repaired ${outcome.repairedAssignmentCount} competitor assignments, " +
-                            "and removed ${outcome.removedCategoryCount} empty categories."
-                    }
+                is DesktopCategoryListEditAttempt.Applied -> {
+                    val outcome = attempt.result
+                    projectFile = projectSession.updateCurrentProject { outcome.projectFile }
+                    protectedCourseInfoByCategoryId = outcome.protectedCourseInfoByCategoryId
+                    protectedIdealOrderByCategoryId = outcome.protectedIdealOrderByCategoryId
+                    hasUnsavedChanges = projectSession.hasUnsavedChanges
+                    projectStatusText = outcome.statusText
+                    true
+                }
+                is DesktopCategoryListEditAttempt.Failed -> {
+                    projectStatusText = attempt.message
+                    false
                 }
             }
-            result.onFailure { error ->
-                projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
-            }
-            return result.isSuccess
         }
 
         fun saveAsCurrentProject(suggestedFileName: String? = null): Boolean {
@@ -6734,6 +6743,13 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
 
         fun handleNavAction(action: DesktopNavAction) {
+            val routeExportActions = setOf(DesktopNavAction.ExportResultsCsv, DesktopNavAction.ExportSplitResultsCsv,
+                DesktopNavAction.ExportSplitResultsPdf, DesktopNavAction.ExportResultsText, DesktopNavAction.ExportResultsHtml,
+                DesktopNavAction.ExportResultReportHtml, DesktopNavAction.ExportResultReportXml, DesktopNavAction.ExportResultReportPdf)
+            if (classicRouteAnalysis.shouldWaitForExport(projectSession.currentProject) && classicRouteAnalysis.exportSnapshot == null && action in routeExportActions) {
+                projectSession.currentProject?.let { captured -> classicRouteAnalysis.requestExport(captured) { handleNavAction(action) } }
+                return
+            }
             handleEventFileNavAction(action) ||
                 handleImportNavAction(action) ||
                 handleBulkDeleteNavAction(action) ||
@@ -7126,8 +7142,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun requestOrDrawStartList(interval: String, options: StartDrawOptions) {
             val currentProject = projectSession.currentProject
-            if (currentProject != null && currentProject.hasProtectedCategoryData() && protectedCoursePassword == null) {
-                pendingProtectedStartListDrawRequest = PendingProtectedStartListDrawRequest(interval, options)
+            if (currentProject != null && currentProject.hasEncryptedCategoryData() && protectedCoursePassword == null) {
+                pendingProtectedCourseActionRequest =
+                    PendingProtectedCourseActionRequest.GenerateStartList(interval, options)
                 pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.GenerateStartList
                 projectStatusText = "Unlock course data before generating starts so first-fox spacing can be applied."
                 return
@@ -7174,10 +7191,19 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                             CourseKmlKmzUnlockAction.ExportGpx -> chooseExportCourseGpxUnlocked(unlockedPassword)
                             CourseKmlKmzUnlockAction.ExportOverlays -> chooseExportCourseOverlaysUnlocked(unlockedPassword)
                             CourseKmlKmzUnlockAction.GenerateStartList -> {
-                                val request = pendingProtectedStartListDrawRequest
-                                pendingProtectedStartListDrawRequest = null
+                                val request = pendingProtectedCourseActionRequest
+                                    as? PendingProtectedCourseActionRequest.GenerateStartList
+                                pendingProtectedCourseActionRequest = null
                                 if (request != null) {
                                     drawStartListWithCurrentCourseData(request.interval, request.options)
+                                }
+                            }
+                            CourseKmlKmzUnlockAction.ActivateCategory -> {
+                                val request = pendingProtectedCourseActionRequest
+                                    as? PendingProtectedCourseActionRequest.ActivateCategory
+                                pendingProtectedCourseActionRequest = null
+                                if (request != null) {
+                                    applyCategoryListEdit(DesktopCategoryListEdit.Add(request.categoryName))
                                 }
                             }
                             CourseKmlKmzUnlockAction.GeneratePublicResultsSite ->
@@ -7193,7 +7219,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 },
                 onCancel = {
                     pendingCourseKmlKmzUnlockAction = null
-                    pendingProtectedStartListDrawRequest = null
+                    pendingProtectedCourseActionRequest = null
                 },
                 onPublishWithoutDiagrams = {
                     pendingCourseKmlKmzUnlockAction = null
@@ -7253,7 +7279,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                         categoryData.category.lengthMeters != 0 ||
                         categoryData.category.climbMeters != 0 ||
                         categoryData.category.encryptedIdealOrder?.isNotBlank() == true ||
-                        categoryData.category.encryptedCourseInfo?.isNotBlank() == true
+                        categoryData.category.encryptedCourseInfo?.isNotBlank() == true ||
+                        categoryData.category.idealOrder?.isNotBlank() == true ||
+                        categoryData.category.courseInfo != null
                 } ?: 0,
                 hasProtectedCategoryData = currentProject?.hasProtectedCategoryData() == true,
                 onConfirm = {
@@ -7469,6 +7497,11 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             )
         }
 
+        DesktopClassicRouteAnalysisHost(projectFile, projectSession, classicRouteAnalysis, onChanged = { updated ->
+            projectFile = updated
+            hasUnsavedChanges = projectSession.hasUnsavedChanges
+            scheduleLocalResultsWebPageRefresh()
+        }) {
         RadioOManagerDesktopApp(
             projectFile = projectFile,
             eventFilePath = projectSession.currentPath,
@@ -8175,6 +8208,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 projectStatusText = "New Race File discarded."
             }
         )
+        }
 }
 
 @Composable
@@ -8318,17 +8352,18 @@ private fun PendingCourseUnlockDialog(
         CourseKmlKmzUnlockAction.ExportGpx -> "Export protected controls/routes"
         CourseKmlKmzUnlockAction.ExportOverlays -> "Export course overlays"
         CourseKmlKmzUnlockAction.GenerateStartList -> "Unlock course data for Start List"
+        CourseKmlKmzUnlockAction.ActivateCategory -> "Activate stored course mapping"
         CourseKmlKmzUnlockAction.GeneratePublicResultsSite -> "Include 2D course diagrams"
     }
     val description = when (action) {
         CourseKmlKmzUnlockAction.Import ->
-            "KML/KMZ controls/route data includes coordinates and route details that require the Race Password."
+            "This Race File already stores encrypted course data. Enter its Race Password before importing KML/KMZ controls and routes."
         CourseKmlKmzUnlockAction.ImportGpx ->
-            "GPX controls/route data includes coordinates and route details that require the Race Password."
+            "This Race File already stores encrypted course data. Enter its Race Password before importing GPX controls and routes."
         CourseKmlKmzUnlockAction.ImportControls ->
-            "KML/KMZ control-location data includes coordinates that require the Race Password."
+            "This Race File already stores encrypted course data. Enter its Race Password before importing KML/KMZ control locations."
         CourseKmlKmzUnlockAction.ImportControlsGpx ->
-            "GPX control-location data includes coordinates that require the Race Password."
+            "This Race File already stores encrypted course data. Enter its Race Password before importing GPX control locations."
         CourseKmlKmzUnlockAction.Export ->
             "Controls/route KML/KMZ export includes sensitive coordinates and routes. The exported file will be placed inside a password-locked ZIP."
         CourseKmlKmzUnlockAction.ExportGpx ->
@@ -8337,6 +8372,8 @@ private fun PendingCourseUnlockDialog(
             "Course overlay export uses protected course coordinates to create plain OpenOrienteering Mapper files for map production."
         CourseKmlKmzUnlockAction.GenerateStartList ->
             "Start List generation can use protected ideal-route first foxes to avoid starting similar competitors on the same first fox."
+        CourseKmlKmzUnlockAction.ActivateCategory ->
+            "The matching course mapping contains protected route and assigned-control data. Enter the Race Password to activate it as a category."
         CourseKmlKmzUnlockAction.GeneratePublicResultsSite ->
             "The published results can include 2D diagrams for courses with results. Enter the Race Password to include them, or continue without diagrams."
     }
@@ -8349,6 +8386,7 @@ private fun PendingCourseUnlockDialog(
         CourseKmlKmzUnlockAction.ExportGpx,
         CourseKmlKmzUnlockAction.ExportOverlays -> "Export"
         CourseKmlKmzUnlockAction.GenerateStartList -> "Unlock and Generate"
+        CourseKmlKmzUnlockAction.ActivateCategory -> "Unlock and Add"
         CourseKmlKmzUnlockAction.GeneratePublicResultsSite -> "Unlock and Continue"
     }
     val publicResultsAction = action == CourseKmlKmzUnlockAction.GeneratePublicResultsSite
@@ -11202,7 +11240,7 @@ private data class PendingCourseKmlKmzImportReview(
     val overwriteSiSummary: DesktopCourseKmlImportSummary?,
     val overwriteSiCreatedMissingCategoryProject: EventProjectFile?,
     val overwriteSiCreatedMissingCategorySummary: DesktopCourseKmlImportSummary?,
-    val password: String,
+    val password: String?,
     val categoryOverrideId: String?,
     val requireRoutes: Boolean
 )
@@ -11685,13 +11723,18 @@ private enum class CourseKmlKmzUnlockAction {
     ExportGpx,
     ExportOverlays,
     GenerateStartList,
+    ActivateCategory,
     GeneratePublicResultsSite
 }
 
-private data class PendingProtectedStartListDrawRequest(
-    val interval: String,
-    val options: StartDrawOptions
-)
+private sealed interface PendingProtectedCourseActionRequest {
+    data class GenerateStartList(
+        val interval: String,
+        val options: StartDrawOptions
+    ) : PendingProtectedCourseActionRequest
+
+    data class ActivateCategory(val categoryName: String) : PendingProtectedCourseActionRequest
+}
 
 private enum class BulkCategoryAction {
     DeleteAllAssignedControls,
@@ -11701,7 +11744,7 @@ private enum class BulkCategoryAction {
 private data class PendingCourseKmlKmzCategoryMapping(
     val sourceName: String,
     val path: Path,
-    val password: String,
+    val password: String?,
     val categoryOptions: List<Pair<String, String>>,
     val matchedControlPointCount: Int,
     val matchedFoxCount: Int,
@@ -14126,11 +14169,13 @@ private fun SectionWorkspace(
             )
         }
         if (section == DesktopSection.Results && projectFile != null) {
+            ClassicRouteAnalysisPanel(projectFile)
             ResultDetailsPanel(
                 results = EventResultDetails.from(projectFile.raceData, useAliases = areAliasesEnabled),
                 publicationNotice = projectFile.raceData.race.resultPublicationNotice(),
                 onUpdateReadoutStatus = onUpdateReadoutStatus,
-                onEditReadout = onEditReadout
+                onEditReadout = onEditReadout,
+                routeAnalysisProject = projectFile.takeIf { it.desktopRouteAnalysis != null }
             )
         }
         if (section == DesktopSection.AwardsResults && projectFile != null) {
@@ -15840,8 +15885,11 @@ private fun ResultDetailsPanel(
     results: List<EventResultDetails>,
     publicationNotice: String?,
     onUpdateReadoutStatus: (String, ResultStatus) -> Unit,
-    onEditReadout: (String) -> Unit
+    onEditReadout: (String) -> Unit,
+    routeAnalysisProject: EventProjectFile? = null
 ) {
+    val routeStatuses = remember(routeAnalysisProject) { routeAnalysisProject?.let(DesktopClassicRouteAnalysis::statuses).orEmpty() }
+    val routeLengths = remember(routeAnalysisProject) { routeAnalysisProject?.let(DesktopClassicRouteAnalysis::projection).orEmpty() }
     val horizontalScrollState = rememberScrollState()
     val tableWidth = fixedTableWidth(ResultTableColumns)
     val groupedResults = results.groupBy { it.categoryId to it.categoryName }
@@ -15861,10 +15909,14 @@ private fun ResultDetailsPanel(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 groupedResults.forEach { (category, categoryResults) ->
-                    ResultCategoryHeader(category.second, categoryResults.size, tableWidth)
+                    ResultCategoryHeader(category.second, categoryResults.size, tableWidth,
+                        categoryResults.firstNotNullOfOrNull { routeLengths[it.id] }?.categoryHeadingSuffix.orEmpty())
                     FixedDetailHeaderRow(ResultTableColumns)
                     categoryResults.forEach { result ->
                         ResultDetailRow(result, onUpdateReadoutStatus, onEditReadout)
+                        routeAnalysisProject?.let {
+                            Text("Estimated effective route length: ${routeStatuses[result.id] ?: "Not calculated"}", fontSize = 12.sp)
+                        }
                     }
                 }
             }
@@ -15881,10 +15933,11 @@ private fun ResultDetailsPanel(
 private fun ResultCategoryHeader(
     categoryName: String,
     resultCount: Int,
-    tableWidth: Dp
+    tableWidth: Dp,
+    idealRouteSuffix: String = ""
 ) {
     Text(
-        text = "$categoryName ($resultCount)",
+        text = "$categoryName ($resultCount)$idealRouteSuffix",
         fontWeight = FontWeight.Bold,
         modifier = Modifier
             .width(tableWidth)
@@ -20488,7 +20541,7 @@ private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
             ButtonLabel("Import Controls KML/KMZ...")
         }
         Text(
-            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update control locations. Control coordinates require the Race Password and are not written to public control fields.",
+            text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update control locations. KML/KMZ can update stored course control coordinates; a Race Password is required only when the Race File is encrypted. Coordinates are not written to public control fields.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -25052,36 +25105,15 @@ private fun selectedProtectedIdealOrderControlIds(
         ProtectedIdealOrderRules.resolveControlIds(idealOrderText, controls).toSet()
     }.getOrDefault(emptySet())
 
-private fun EventProjectFile.hasLockedProtectedCourseData(isProtectedCourseOrderUnlocked: Boolean): Boolean =
-    !isProtectedCourseOrderUnlocked &&
-        raceData.categories.any { it.category.encryptedCourseInfo?.isNotBlank() == true }
-
-private fun EventProjectFile.hasProtectedCategoryData(): Boolean =
-    protectedCourseDataContainers(raceData).any {
-        it.category.encryptedIdealOrder?.isNotBlank() == true ||
-            it.category.encryptedCourseInfo?.isNotBlank() == true ||
-            it.category.idealOrder?.isNotBlank() == true ||
-            it.category.courseInfo != null
-    }
-
-private fun EventProjectFile.hasEncryptedCategoryData(): Boolean =
-    protectedCourseDataContainers(raceData).any {
-        it.category.encryptedIdealOrder?.isNotBlank() == true ||
-            it.category.encryptedCourseInfo?.isNotBlank() == true
-    }
-
-private fun EventProjectFile.hasUnencryptedCategoryData(): Boolean =
-    protectedCourseDataContainers(raceData).any {
-        it.category.idealOrder != null || it.category.courseInfo != null
-    }
-
 private fun EventProjectFile.categoryHasLockedProtectedCourseData(
     categoryId: String,
     isProtectedCourseOrderUnlocked: Boolean
 ): Boolean =
     !isProtectedCourseOrderUnlocked &&
         raceData.categories.any {
-            it.category.id == categoryId && it.category.encryptedCourseInfo?.isNotBlank() == true
+            it.category.id == categoryId &&
+                (it.category.encryptedIdealOrder?.isNotBlank() == true ||
+                    it.category.encryptedCourseInfo?.isNotBlank() == true)
         }
 
 private fun EventProjectFile.lockedProtectedCourseWarning(isProtectedCourseOrderUnlocked: Boolean): String =

@@ -46,6 +46,33 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 class DesktopCourseOverlayExportTest {
     @Test
+    fun exportsPlaintextCourseOverlaysWithoutPassword() {
+        val outputDirectory = Files.createTempDirectory("radio-oracle-plaintext-course-overlays")
+        val baseMap = Files.createTempFile("radio-oracle-plaintext-base-map", ".xmap")
+        Files.writeString(baseMap, sampleBaseMap())
+        val plaintextProject = EventProjectEditor.updateCategoryCourseInfo(
+            sampleProject("course-key"),
+            "cat-m21",
+            sampleCourseInfo()
+        )
+
+        val summary = DesktopCourseOverlayExporter.exportOverlays(
+            target = DesktopCourseOverlayExportTarget(
+                baseMapPath = baseMap,
+                outputDirectory = outputDirectory,
+                startExclusionRadiusMeters = 750,
+                finishExclusionRadiusMeters = 400
+            ),
+            projectFile = plaintextProject,
+            password = null
+        )
+
+        assertTrue(Files.exists(summary.editableCompetitorPath))
+        assertTrue(Files.exists(summary.editableMasterPath))
+        assertTrue(Files.exists(summary.editableCustodianPath))
+    }
+
+    @Test
     fun exportsThreeEditableOomOverlaysWithAudienceSpecificContent() {
         val outputDirectory = Files.createTempDirectory("radio-oracle-course-overlays")
         val baseMap = Files.createTempFile("radio-oracle-base-map", ".xmap")

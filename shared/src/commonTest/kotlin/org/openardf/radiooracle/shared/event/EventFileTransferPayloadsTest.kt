@@ -52,7 +52,7 @@ class EventFileTransferPayloadsTest {
     @Test
     fun buildsSingleEventTransferMetadata() {
         assertEquals(
-            "Day 1 Classic.ardfjs",
+            "Day 1 Classic.json",
             EventFileTransferPayloads.fileNameForRaceOrSeries("Day 1 / Classic", null)
         )
         assertEquals(
@@ -75,6 +75,6 @@ class EventFileTransferPayloadsTest {
 
     @Test
     fun fallsBackToNeutralSingleEventName() {
-        assertEquals("race.ardfjs", EventFileTransferPayloads.singleEventFileName("  "))
+        assertEquals("race.json", EventFileTransferPayloads.singleEventFileName("  "))
     }
 }

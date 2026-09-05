@@ -168,12 +168,14 @@ object DesktopPublicResultSiteExports {
                 appVersion = appVersion,
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 awardDisplayMode = awardDisplayMode,
-                publicationStatus = publicationStatus
+                publicationStatus = publicationStatus,
+                routeLengths = DesktopClassicRouteAnalysis.projection(projectFile)
             )
             val splitResultReport = SplitResultExports.model(
                 projectFile.raceData,
                 awardDisplayMode,
-                publicationStatus
+                publicationStatus,
+                routeLengths = DesktopClassicRouteAnalysis.projection(projectFile)
             )
             writeText(dataDirectory.resolve("final-results.json"), finalResultsJson)
             writeText(dataDirectory.resolve("live-results.json"), liveResultsJson)
@@ -432,7 +434,8 @@ object DesktopPublicResultSiteExports {
         val splitResultsById = SplitResultExports.model(
             raceData,
             awardDisplayMode,
-            publicationStatus
+            publicationStatus,
+            routeLengths = DesktopClassicRouteAnalysis.projection(projectFile)
         ).resultsById
         return buildString {
             append("{\n")
@@ -468,6 +471,10 @@ object DesktopPublicResultSiteExports {
                 appendJsonString(category.first)
                 append(",\n      \"name\": ")
                 appendJsonString(category.second)
+                categoryResults.firstNotNullOfOrNull { splitResultsById[it.id]?.routeLength }?.let {
+                    append(",\n      \"heading\": ")
+                    appendJsonString("${category.second} (${categoryResults.size})${it.categoryHeadingSuffix}")
+                }
                 append(",\n      \"results\": [\n")
                 categoryResults.forEachIndexed { resultIndex, result ->
                     if (resultIndex > 0) append(",\n")
@@ -488,6 +495,12 @@ object DesktopPublicResultSiteExports {
                     appendJsonString(result.punchCodesText)
                     append(", \"splits\": ")
                     appendSplitsJson(splitResultsById[result.id]?.splits.orEmpty())
+                    splitResultsById[result.id]?.routeLength?.let { length ->
+                        append(", \"estimatedEffectiveRouteLengthMeters\": ${length.effectiveMeters}")
+                        append(", \"analysisIdealEffectiveLengthMeters\": ${length.idealEffectiveMeters}")
+                        append(", \"routeLengthText\": ")
+                        appendJsonString("Estimated effective route length: ${length.text}")
+                    }
                     append("}")
                 }
                 append("\n      ]\n")
@@ -699,14 +712,14 @@ object DesktopPublicResultSiteExports {
         }
         function resultRowsHtml(raceIndex,categoryIndex,resultIndex,result){
           const rowId=`split-${'$'}{raceIndex}-${'$'}{categoryIndex}-${'$'}{resultIndex}`;
-          return `<tr class="result-row" tabindex="0" role="button" aria-expanded="false" aria-controls="${'$'}{rowId}" data-split-target="${'$'}{rowId}"><td class="number">${'$'}{escapeHtml(result.place)}</td><td class="number">${'$'}{escapeHtml(result.bib)}</td><td>${'$'}{escapeHtml(result.competitor)}<small class="expand-hint">Tap for splits</small></td><td>${'$'}{escapeHtml(result.status)}</td><td class="number">${'$'}{escapeHtml(result.points)}</td><td>${'$'}{escapeHtml(result.runtime)}</td><td class="punches">${'$'}{escapeHtml(result.punches)}</td></tr><tr id="${'$'}{rowId}" class="split-row" hidden><td colspan="7"><div class="split-detail">${'$'}{splitRowsHtml(result)}</div></td></tr>`
+          return `<tr class="result-row" tabindex="0" role="button" aria-expanded="false" aria-controls="${'$'}{rowId}" data-split-target="${'$'}{rowId}"><td class="number">${'$'}{escapeHtml(result.place)}</td><td class="number">${'$'}{escapeHtml(result.bib)}</td><td>${'$'}{escapeHtml(result.competitor)}${'$'}{result.routeLengthText ? `<small>${'$'}{escapeHtml(result.routeLengthText)}</small>` : ""}<small class="expand-hint">Tap for splits</small></td><td>${'$'}{escapeHtml(result.status)}</td><td class="number">${'$'}{escapeHtml(result.points)}</td><td>${'$'}{escapeHtml(result.runtime)}</td><td class="punches">${'$'}{escapeHtml(result.punches)}</td></tr><tr id="${'$'}{rowId}" class="split-row" hidden><td colspan="7"><div class="split-detail">${'$'}{splitRowsHtml(result)}</div></td></tr>`
         }
         function resultsHtml(data,raceIndex,query=""){
           const normalized=query.trim().toLowerCase();
           const sections=data.categories.map((category,categoryIndex)=>{
             const rows=category.results.filter(result=>resultSearchText(result).includes(normalized));
             if(rows.length===0)return "";
-            return `<section class="category"><h3>${'$'}{escapeHtml(category.name)}</h3><table><thead><tr><th class="number">Place</th><th class="number">Bib</th><th>Competitor</th><th>Status</th><th class="number">Points</th><th>Runtime</th><th>Punches</th></tr></thead><tbody>${'$'}{rows.map((result,resultIndex)=>resultRowsHtml(raceIndex,categoryIndex,resultIndex,result)).join("")}</tbody></table></section>`
+            return `<section class="category"><h3>${'$'}{escapeHtml(category.heading || category.name)}</h3><table><thead><tr><th class="number">Place</th><th class="number">Bib</th><th>Competitor</th><th>Status</th><th class="number">Points</th><th>Runtime</th><th>Punches</th></tr></thead><tbody>${'$'}{rows.map((result,resultIndex)=>resultRowsHtml(raceIndex,categoryIndex,resultIndex,result)).join("")}</tbody></table></section>`
           }).join("");
           return sections || '<div class="empty-state">No matching results.</div>'
         }
@@ -831,7 +844,7 @@ object DesktopPublicResultSiteExports {
         }
         function resultRowsHtml(categoryIndex,resultIndex,result){
           const rowId=`split-${'$'}{categoryIndex}-${'$'}{resultIndex}`;
-          return `<tr class="result-row" tabindex="0" role="button" aria-expanded="false" aria-controls="${'$'}{rowId}" data-split-target="${'$'}{rowId}"><td class="number">${'$'}{escapeHtml(result.place)}</td><td class="number">${'$'}{escapeHtml(result.bib)}</td><td>${'$'}{escapeHtml(result.competitor)}<small class="expand-hint">Tap for splits</small></td><td>${'$'}{escapeHtml(result.status)}</td><td class="number">${'$'}{escapeHtml(result.points)}</td><td>${'$'}{escapeHtml(result.runtime)}</td><td class="punches">${'$'}{escapeHtml(result.punches)}</td></tr><tr id="${'$'}{rowId}" class="split-row" hidden><td colspan="7"><div class="split-detail">${'$'}{splitRowsHtml(result)}</div></td></tr>`
+          return `<tr class="result-row" tabindex="0" role="button" aria-expanded="false" aria-controls="${'$'}{rowId}" data-split-target="${'$'}{rowId}"><td class="number">${'$'}{escapeHtml(result.place)}</td><td class="number">${'$'}{escapeHtml(result.bib)}</td><td>${'$'}{escapeHtml(result.competitor)}${'$'}{result.routeLengthText ? `<small>${'$'}{escapeHtml(result.routeLengthText)}</small>` : ""}<small class="expand-hint">Tap for splits</small></td><td>${'$'}{escapeHtml(result.status)}</td><td class="number">${'$'}{escapeHtml(result.points)}</td><td>${'$'}{escapeHtml(result.runtime)}</td><td class="punches">${'$'}{escapeHtml(result.punches)}</td></tr><tr id="${'$'}{rowId}" class="split-row" hidden><td colspan="7"><div class="split-detail">${'$'}{splitRowsHtml(result)}</div></td></tr>`
         }
         function toggleResultRow(row,forceCollapsed=false){
           const targetId=row.dataset.splitTarget;
@@ -853,7 +866,7 @@ object DesktopPublicResultSiteExports {
             visible+=rows.length;
             const section=document.createElement("section");
             section.className="category";
-            section.innerHTML=`<h3>${'$'}{escapeHtml(category.name)}</h3><table><thead><tr><th class="number">Place</th><th class="number">Bib</th><th>Competitor</th><th>Status</th><th class="number">Points</th><th>Runtime</th><th>Punches</th></tr></thead><tbody>${'$'}{rows.map((result,resultIndex)=>resultRowsHtml(categoryIndex,resultIndex,result)).join("")}</tbody></table>`;
+            section.innerHTML=`<h3>${'$'}{escapeHtml(category.heading || category.name)}</h3><table><thead><tr><th class="number">Place</th><th class="number">Bib</th><th>Competitor</th><th>Status</th><th class="number">Points</th><th>Runtime</th><th>Punches</th></tr></thead><tbody>${'$'}{rows.map((result,resultIndex)=>resultRowsHtml(categoryIndex,resultIndex,result)).join("")}</tbody></table>`;
             root.appendChild(section)
           });
           if(visible===0){root.innerHTML='<div class="empty-state">No matching results.</div>'}

@@ -65,8 +65,9 @@ object SplitResultPdfExports {
     fun pdf(
         raceData: EventRaceData,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
-        publicationStatus: PublicResultsPublicationStatus? = null
-    ): ByteArray = pdf(SplitResultExports.model(raceData, awardDisplayMode, publicationStatus))
+        publicationStatus: PublicResultsPublicationStatus? = null,
+        routeLengths: Map<String, org.openardf.radiooracle.shared.event.ResultRouteLength> = emptyMap()
+    ): ByteArray = pdf(SplitResultExports.model(raceData, awardDisplayMode, publicationStatus, routeLengths))
 
     fun pdf(report: SplitResultReport): ByteArray =
         SimpleSplitPdf.bytes(pageContents(report), PageWidth, PageHeight)
@@ -89,6 +90,10 @@ object SplitResultPdfExports {
                 "Split Results   Start: ${report.startDateTimeIso}   Level: ${report.raceLevel}"
             )
             y -= 15.0
+            report.routeAnalysisNotice?.let {
+                page.appendPdfText(Left, y, 8, fitText(it, PageWidth - Left - Right, 8))
+                y -= 15.0
+            }
             report.publicationNotice?.takeIf(String::isNotBlank)?.let { notice ->
                 page.appendPdfText(Left, y, 9, fitText(notice, PageWidth - Left - Right, 9), bold = true)
                 y -= 15.0
@@ -127,6 +132,10 @@ object SplitResultPdfExports {
                 shaded = true
             )
             y -= SummaryRowHeight
+            result.routeLength?.let {
+                page.appendPdfText(Left + 4.0, y - 10.0, 9, "Estimated effective route length: ${it.text}")
+                y -= 15.0
+            }
         }
 
         if (report.categories.isEmpty()) {
@@ -136,11 +145,11 @@ object SplitResultPdfExports {
         }
 
         report.categories.forEach { category ->
-            newPage(category.name)
+            newPage(category.displayName)
             category.results.forEach { result ->
                 ensureCategorySpace(
-                    categoryName = category.name,
-                    space = SummaryRowHeight + SplitHeaderHeight + SplitRowHeight + 8.0
+                    categoryName = category.displayName,
+                    space = SummaryRowHeight + SplitHeaderHeight + SplitRowHeight + 8.0 + if (result.routeLength != null) 15.0 else 0.0
                 )
                 drawSummary(result)
                 val splitX = Left + 30.0
@@ -159,7 +168,7 @@ object SplitResultPdfExports {
                 } else {
                     result.splits.forEachIndexed { index, split ->
                         if (y - SplitRowHeight < Bottom) {
-                            newPage(category.name, continued = true)
+                            newPage(category.displayName, continued = true)
                             drawSummary(result, continued = true)
                             page.appendTableHeader(splitX, y, SplitColumns)
                             y -= SplitHeaderHeight

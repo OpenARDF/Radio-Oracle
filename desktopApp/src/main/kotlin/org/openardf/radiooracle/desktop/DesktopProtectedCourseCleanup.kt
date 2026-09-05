@@ -35,14 +35,7 @@ object DesktopProtectedCourseCleanup {
         controlId: String,
         password: String?
     ): DesktopProtectedCourseCleanupResult {
-        val trimmedPassword = password?.trim()?.takeIf(String::isNotEmpty)
-        require(
-            trimmedPassword != null ||
-                (projectFile.raceData.categories + projectFile.raceData.courseMappings)
-                    .any { it.category.courseInfo != null }
-        ) {
-            "Race Password is required for encrypted course data."
-        }
+        val storagePassword = projectFile.courseDataPassword(password)
 
         val nextCourseInfoByCategoryId = protectedCourseInfoByCategoryId.toMutableMap()
         var clearedCourseCount = 0
@@ -83,11 +76,11 @@ object DesktopProtectedCourseCleanup {
                 categoryData.copy(
                     category = categoryData.category.copy(
                         encryptedIdealOrder = null,
-                        encryptedCourseInfo = trimmedPassword?.let {
+                        encryptedCourseInfo = storagePassword?.let {
                             DesktopProtectedCourseOrder.encryptCourseInfo(prunedCourseInfo, it)
                         },
                         idealOrder = null,
-                        courseInfo = prunedCourseInfo.takeIf { trimmedPassword == null }
+                        courseInfo = prunedCourseInfo.takeIf { storagePassword == null }
                     )
                 )
             }

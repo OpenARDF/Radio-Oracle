@@ -34,6 +34,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.ResultRouteLength
 import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.event.resultCategories
@@ -48,7 +49,8 @@ object TextResultExports {
         raceData: EventRaceData,
         appVersion: String = "Desktop",
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): String {
         val placedByCategory = raceData.competitorData
             .groupBy { it.resultCategoryId() }
@@ -63,14 +65,15 @@ object TextResultExports {
             appendLine("Date/time: ${raceData.race.startDateTimeIso}")
             appendLine("Level: ${raceData.race.raceLevel.name}")
             awards.publicationNotice?.let { appendLine(it) }
+            if (routeLengths.isNotEmpty()) appendLine(ResultRouteLength.coverage(routeLengths.size, raceData.competitorData.count { it.readoutData != null }))
             appendLine()
             appendLine("Place\tName\tPerson ID\tRun time\tPoints\tControls")
             appendLine(RULE)
-            appendCategoryRows(raceData, placedByCategory, includeSplits = false, protectedCourseInfoByCategoryId)
+            appendCategoryRows(raceData, placedByCategory, includeSplits = false, protectedCourseInfoByCategoryId, routeLengths)
             appendLine(RULE)
             appendLine("Splits")
             appendLine(RULE)
-            appendCategoryRows(raceData, placedByCategory, includeSplits = true, protectedCourseInfoByCategoryId)
+            appendCategoryRows(raceData, placedByCategory, includeSplits = true, protectedCourseInfoByCategoryId, routeLengths)
             appendAwards(awards)
             appendLine("===========================================================================")
             appendLine("Generated with Radio-Oracle $appVersion")
@@ -81,7 +84,8 @@ object TextResultExports {
         raceData: EventRaceData,
         placedByCategory: Map<String?, List<EventCompetitorData>>,
         includeSplits: Boolean,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?,
+        routeLengths: Map<String, ResultRouteLength>
     ) {
         raceData.resultCategories()
             .forEach { categoryData ->
@@ -90,7 +94,8 @@ object TextResultExports {
                     placedByCategory[categoryData.category.id] ?: emptyList(),
                     raceData,
                     includeSplits,
-                    protectedCourseInfoByCategoryId
+                    protectedCourseInfoByCategoryId,
+                    routeLengths
                 )
             }
     }
@@ -100,14 +105,17 @@ object TextResultExports {
         competitors: List<EventCompetitorData>,
         raceData: EventRaceData,
         includeSplits: Boolean,
-        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>?,
+        routeLengths: Map<String, ResultRouteLength>
     ) {
         val resultCompetitors = competitors.filter { it.readoutData != null }
         if (resultCompetitors.isEmpty()) return
         val controlLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)
         val protectedCourseInfo = protectedCourseInfoByCategoryId?.get(categoryData.category.id)
 
-        append("Category ${categoryData.category.name}\tLimit: ${categoryData.category.effectiveTimeLimitSeconds(raceData.race) / 60}")
+        val routeHeading = resultCompetitors.firstNotNullOfOrNull { routeLengths[it.readoutData?.result?.id] }
+            ?.let { " (${resultCompetitors.size})${it.categoryHeadingSuffix}" }.orEmpty()
+        append("Category ${categoryData.category.name}$routeHeading\tLimit: ${categoryData.category.effectiveTimeLimitSeconds(raceData.race) / 60}")
         if (protectedCourseInfoByCategoryId == null) {
             append("\tLength: ${categoryData.category.lengthMeters / 1000.0} km")
         } else {
@@ -119,6 +127,9 @@ object TextResultExports {
         appendLine(RULE)
         resultCompetitors.forEach { competitorData ->
             appendCompetitorRow(competitorData, includeSplits, controlLabelsByCode)
+            routeLengths[competitorData.readoutData?.result?.id]?.let {
+                appendLine("\t${ResultRouteLength.LABEL}: ${it.text}")
+            }
         }
         appendLine()
     }

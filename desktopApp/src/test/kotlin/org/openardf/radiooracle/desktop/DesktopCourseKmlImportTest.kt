@@ -51,6 +51,36 @@ import kotlin.math.sin
 
 class DesktopCourseKmlImportTest {
     @Test
+    fun importsRouteAsPlaintextWhenRaceFileIsNotEncrypted() {
+        val kmlPath = Files.createTempFile("radio-oracle-plaintext-course", ".kml")
+        Files.writeString(kmlPath, sampleKml())
+        val project = EventProjectEditor.addCategory(
+            classicPresetProject(),
+            categoryId = "cat-m21",
+            name = "M21"
+        )
+
+        val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+            path = kmlPath,
+            projectFile = project,
+            password = null,
+            elevationProvider = { null }
+        )
+
+        val category = updated.raceData.categories.single().category
+        assertEquals(1, summary.importedCategoryCount)
+        assertEquals("31 32", category.idealOrder)
+        assertEquals("31 32", category.courseInfo?.idealOrder)
+        assertNull(category.encryptedIdealOrder)
+        assertNull(category.encryptedCourseInfo)
+
+        val cleared = DesktopCourseKmlImporter.clearStaleCourseMappings(updated, listOf("cat-m21"))
+            .raceData.categories.single().category
+        assertNull(cleared.idealOrder)
+        assertNull(cleared.courseInfo)
+    }
+
+    @Test
     fun importsRouteDerivedCourseInfoIntoProtectedFields() {
         val kmlPath = Files.createTempFile("radio-oracle-course", ".kml")
         Files.writeString(kmlPath, sampleKml())

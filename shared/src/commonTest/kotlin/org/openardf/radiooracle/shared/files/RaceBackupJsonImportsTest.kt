@@ -33,8 +33,61 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import kotlinx.serialization.SerializationException
+import org.openardf.radiooracle.shared.event.EventProjectFileFormat
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
+import org.openardf.radiooracle.shared.event.EventSeriesLink
+import org.openardf.radiooracle.shared.event.PublicResultsPublication
 
 class RaceBackupJsonImportsTest {
+    @Test
+    fun importsModernAndroidBackupWithoutReplacingIdsOrDroppingMetadata() {
+        var nextId = 0
+        val project = RaceBackupJsonImports.projectFile(androidRaceBackupJson()) { "id-${nextId++}" }.copy(
+            seriesLink = EventSeriesLink("series-id", "member-id"),
+            publicResultsPublication = PublicResultsPublication(
+                url = "https://example.org/results/",
+                publishedAtIso = "2026-09-05T18:00:00Z"
+            )
+        )
+        val text = EventProjectFileJson.encode(project)
+
+        val imported = RaceBackupJsonImports.projectFile(text) { error("Modern IDs must be retained") }
+
+        assertEquals(EventProjectFileJson.decode(text), imported)
+        assertEquals(project.raceData.race.id, imported.raceData.race.id)
+        assertEquals(project.seriesLink, imported.seriesLink)
+        assertEquals(project.publicResultsPublication, imported.publicResultsPublication)
+    }
+
+    @Test
+    fun rejectsFutureModernSchemaWithoutFallingBackToLegacyImport() {
+        var nextId = 0
+        val project = RaceBackupJsonImports.projectFile(androidRaceBackupJson()) { "id-${nextId++}" }
+        val futureVersion = EventProjectFileFormat.CURRENT_SCHEMA_VERSION + 1
+        val text = EventProjectFileJson.encode(project).replace(
+            "\"schemaVersion\": ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION}",
+            "\"schemaVersion\": $futureVersion"
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            RaceBackupJsonImports.projectFile(text) { error("Must not invoke the legacy importer") }
+        }
+
+        assertTrue(error.message.orEmpty().contains("Unsupported Radio-Oracle Race File schema version"))
+    }
+
+    @Test
+    fun rejectsIncompleteModernEnvelopeEvenWhenLegacyRaceNameIsPresent() {
+        assertFailsWith<SerializationException> {
+            RaceBackupJsonImports.projectFile(
+                """{"appName":"Radio-Oracle","race_name":"Incomplete modern file"}"""
+            ) { error("Must not invoke the legacy importer") }
+        }
+    }
+
     @Test
     fun importsAndroidRaceBackupIntoSharedProjectFile() {
         var nextId = 0

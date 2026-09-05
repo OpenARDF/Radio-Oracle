@@ -72,11 +72,11 @@ object DesktopCourseOverlayExporter {
     fun exportOverlays(
         target: DesktopCourseOverlayExportTarget,
         projectFile: EventProjectFile,
-        password: String
+        password: String?
     ): DesktopCourseOverlayExportSummary {
         require(target.startExclusionRadiusMeters >= 0) { "Start exclusion radius cannot be negative." }
         require(target.finishExclusionRadiusMeters >= 0) { "Finish exclusion radius cannot be negative." }
-        val courseInfos = decryptProtectedCourseInfo(projectFile, password.trim())
+        val courseInfos = storedCourseInfo(projectFile, projectFile.courseDataPassword(password))
         require(courseInfos.isNotEmpty()) {
             "No protected course locations are stored in this Race File."
         }
@@ -134,18 +134,14 @@ object DesktopCourseOverlayExporter {
         )
     }
 
-    private fun decryptProtectedCourseInfo(
+    private fun storedCourseInfo(
         projectFile: EventProjectFile,
-        password: String
+        password: String?
     ): Map<String, ProtectedCourseInfo> {
-        require(password.isNotBlank()) { "Race Password cannot be blank." }
         return projectFile.raceData.categories.mapNotNull { categoryData ->
-            categoryData.category.encryptedCourseInfo
-                ?.takeIf { it.isNotBlank() }
-                ?.let { encryptedValue ->
-                    categoryData.category.id to DesktopProtectedCourseOrder.decryptCourseInfo(encryptedValue, password)
-                        .withFiniteCourseGeometry()
-                }
+            categoryData.category.storedCourseInfo(password)?.let { courseInfo ->
+                categoryData.category.id to courseInfo.withFiniteCourseGeometry()
+            }
         }.toMap()
     }
 

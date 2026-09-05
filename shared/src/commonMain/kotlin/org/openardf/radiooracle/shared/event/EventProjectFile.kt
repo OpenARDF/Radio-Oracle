@@ -38,7 +38,9 @@ data class EventProjectFile(
     val appName: String = EventProjectFileFormat.APP_NAME,
     val raceData: EventRaceData,
     val seriesLink: EventSeriesLink? = null,
-    val publicResultsPublication: PublicResultsPublication? = null
+    val publicResultsPublication: PublicResultsPublication? = null,
+    /** Additive, independently versioned desktop metadata; old readers may omit it. */
+    val desktopRouteAnalysis: StoredClassicRouteAnalysis? = null
 ) {
     /** Returns true when this file schema can be read by the current shared code. */
     fun isSupportedSchema(): Boolean =
@@ -75,7 +77,17 @@ object EventProjectFileJson {
     fun normalizedForStorage(projectFile: EventProjectFile): EventProjectFile =
         reconcileStandardCategoryGenders(
             clearPublicControlLocations(clearLegacyCategoryRaceSettings(projectFile))
-        ).copy(schemaVersion = EventProjectFileFormat.CURRENT_SCHEMA_VERSION)
+        ).copy(
+            schemaVersion = EventProjectFileFormat.CURRENT_SCHEMA_VERSION,
+            desktopRouteAnalysis = projectFile.desktopRouteAnalysis?.let { metadata ->
+                if (metadata.version != 1) metadata else {
+                    val resultIds = projectFile.raceData.competitorData.mapNotNull { it.readoutData?.result?.id }.toSet()
+                    val retained = metadata.results.filterKeys { it in resultIds }
+                    val contextIds = retained.values.map { it.contextId }.toSet()
+                    metadata.copy(results = retained, contexts = metadata.contexts.filterKeys { it in contextIds })
+                }
+            }
+        )
 
     /** Encodes a Race File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =

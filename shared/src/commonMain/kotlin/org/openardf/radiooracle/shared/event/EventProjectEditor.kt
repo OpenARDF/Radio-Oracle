@@ -118,6 +118,15 @@ data class CompetitorStartBibChange(
     val importedBibNumber: String
 )
 
+data class EventCategoryAddOutcome(
+    val projectFile: EventProjectFile,
+    val categoryId: String,
+    val activatedCourseMappingId: String? = null,
+    val activatedCourseMappingName: String? = null,
+    val assignedControlCount: Int = 0,
+    val unavailableControlCount: Int = 0
+)
+
 /** Shared Race File editing helpers used by desktop and future non-Android flows. */
 object EventProjectEditor {
     /** Returns a copy of the Race File linked to a Race Series manifest entry. */
@@ -321,6 +330,111 @@ object EventProjectEditor {
                     competitors = emptyList()
                 )
             )
+        )
+    }
+
+    /**
+     * Adds an active category and consumes a same-named inactive course mapping when one exists.
+     *
+     * Imported course mappings deliberately keep protected control assignments out of the public
+     * category model. Callers that have unlocked the Race Password can supply the decrypted course
+     * state so activation also restores the exact assigned-control list.
+     */
+    @Suppress("DEPRECATION")
+    fun addCategoryActivatingCourseMapping(
+        projectFile: EventProjectFile,
+        categoryId: String,
+        name: String,
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
+        controlPointIdFactory: (Int) -> String
+    ): EventCategoryAddOutcome {
+        val addedProject = addCategory(projectFile, categoryId, name)
+        val trimmedName = name.trim()
+        val matchingCourseMappings = projectFile.raceData.courseMappings.filter { mapping ->
+            StandardCategoryRules.categoryNamesEquivalent(mapping.category.name, trimmedName)
+        }
+        require(matchingCourseMappings.size <= 1) {
+            "More than one stored course mapping matches $trimmedName."
+        }
+        val courseMapping = matchingCourseMappings.singleOrNull() ?: return EventCategoryAddOutcome(
+            projectFile = addedProject,
+            categoryId = categoryId
+        )
+        val courseInfo = protectedCourseInfoByCategoryId[courseMapping.category.id]
+            ?: courseMapping.category.courseInfo
+        require(courseMapping.category.encryptedCourseInfo.isNullOrBlank() || courseInfo != null) {
+            "Unlock protected course data before activating ${courseMapping.category.name}."
+        }
+        val controlsById = projectFile.raceData.controls.associateBy { it.id }
+        val mappedControlIds = when {
+            courseInfo != null && courseInfo.controlPoints.isNotEmpty() -> courseInfo.controlPoints.map { it.controlId }
+            courseMapping.publicControlIds.isNotEmpty() -> courseMapping.publicControlIds
+            else -> courseMapping.controlPoints
+                .sortedBy { it.order }
+                .mapNotNull { controlPoint ->
+                    controlPoint.controlId.takeIf { it in controlsById }
+                        ?: projectFile.raceData.controls.firstOrNull { control ->
+                            control.siCode == controlPoint.siCode && control.type == controlPoint.type
+                        }?.id
+                }
+        }.filter(String::isNotBlank).distinct()
+        val resolvedControls = mappedControlIds.mapNotNull(controlsById::get)
+        val controlPoints = resolvedControls.mapIndexed { index, control ->
+            EventControlPoint(
+                id = controlPointIdFactory(index),
+                categoryId = categoryId,
+                siCode = control.siCode,
+                type = control.type,
+                order = index + 1,
+                controlId = control.id
+            )
+        }
+        val controlPointsString = ControlPointRules.formatControlPoints(
+            controlPoints.map { controlPoint ->
+                ControlPointDefinition(
+                    siCode = controlPoint.siCode,
+                    type = controlPoint.type,
+                    order = controlPoint.order
+                )
+            }
+        )
+        val addedCategoryOrder = addedProject.raceData.categories
+            .first { it.category.id == categoryId }
+            .category
+            .order
+        val activatedCategory = courseMapping.category.copy(
+            id = categoryId,
+            raceId = projectFile.raceData.race.id,
+            name = trimmedName,
+            isMan = StandardCategoryRules.reconcileIsManWithName(trimmedName, courseMapping.category.isMan),
+            lengthMeters = courseInfo?.lengthMeters ?: courseMapping.category.lengthMeters,
+            climbMeters = courseInfo?.climbMeters ?: courseMapping.category.climbMeters,
+            order = addedCategoryOrder,
+            controlPointsString = controlPointsString
+        )
+        val activatedData = EventCategoryData(
+            category = activatedCategory,
+            controlPoints = controlPoints,
+            competitors = emptyList(),
+            publicControlIds = resolvedControls.map { it.id }
+        )
+        val updatedProject = addedProject.copy(
+            raceData = addedProject.raceData.copy(
+                categories = addedProject.raceData.categories.map { categoryData ->
+                    if (categoryData.category.id == categoryId) activatedData else categoryData
+                },
+                courseMappings = addedProject.raceData.courseMappings.filterNot { mapping ->
+                    mapping.category.id == courseMapping.category.id
+                }
+            )
+        )
+        return EventCategoryAddOutcome(
+            projectFile = updatedProject,
+            categoryId = categoryId,
+            activatedCourseMappingId = courseMapping.category.id,
+            activatedCourseMappingName = courseMapping.category.name,
+            assignedControlCount = resolvedControls.size,
+            unavailableControlCount = mappedControlIds.size - resolvedControls.size
         )
     }
 

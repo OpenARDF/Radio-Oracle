@@ -168,7 +168,8 @@ object EventCsvExports {
 
     fun results(
         raceData: EventRaceData,
-        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        routeLengths: Map<String, org.openardf.radiooracle.shared.event.ResultRouteLength> = emptyMap()
     ): String {
         val awards = EventAwardDetails.from(raceData, awardDisplayMode)
         val usaAwardByResultId = awards.categories
@@ -177,7 +178,10 @@ object EventCsvExports {
         val region2AwardByResultId = awards.categories
             .flatMap { it.region2Awards }
             .associate { it.resultId to it.awardText }
-        return EventResultDetails.from(raceData)
+        val header = if (routeLengths.isEmpty()) "" else "Place;Competitor;Status;Points;Run time" +
+            (if (awards.hasAwards) ";USA award;Region 2 award" else "") +
+            ";Estimated effective route length (m);Analysis ideal effective length (m);Route comparison\n"
+        return header + EventResultDetails.from(raceData)
             .joinRows { result ->
                 EventCsvRows.resultRow(
                     placeText = result.placeText,
@@ -185,9 +189,12 @@ object EventCsvExports {
                     statusLabel = result.statusLabel,
                     pointsText = result.pointsText,
                     runTimeText = result.runTimeText,
-                    usaAwardText = usaAwardByResultId[result.id].takeIf { awards.hasAwards },
-                    region2AwardText = region2AwardByResultId[result.id].takeIf { awards.hasAwards }
-                )
+                    usaAwardText = if (routeLengths.isNotEmpty() && awards.hasAwards) usaAwardByResultId[result.id].orEmpty() else usaAwardByResultId[result.id].takeIf { awards.hasAwards },
+                    region2AwardText = if (routeLengths.isNotEmpty() && awards.hasAwards) region2AwardByResultId[result.id].orEmpty() else region2AwardByResultId[result.id].takeIf { awards.hasAwards }
+                ) + if (routeLengths.isEmpty()) "" else {
+                    val length = routeLengths[result.id]
+                    ";${length?.effectiveMeters ?: ""};${length?.idealEffectiveMeters ?: ""};\"${length?.comparison.orEmpty().replace("\"", "\"\"")}\""
+                }
             }
     }
 

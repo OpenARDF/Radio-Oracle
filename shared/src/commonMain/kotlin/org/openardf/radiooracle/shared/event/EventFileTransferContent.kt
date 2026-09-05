@@ -52,7 +52,7 @@ object EventFileTransferPayloads {
         }
 
     fun singleEventFileName(eventName: String): String =
-        "${safeEventFileStem(eventName)}.ardfjs"
+        "${safeEventFileStem(eventName)}.json"
 
     fun seriesPackageFileName(seriesName: String): String =
         "${EventSeriesPackageContents.safePackageFileStem(seriesName)}$EVENT_SERIES_ARCHIVE_FILE_SUFFIX"
