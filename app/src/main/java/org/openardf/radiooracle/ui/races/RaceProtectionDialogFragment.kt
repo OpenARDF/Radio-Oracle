@@ -9,6 +9,7 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.fragment.app.DialogFragment
@@ -17,7 +18,10 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.backend.room.AndroidCourseProtectionState
@@ -111,28 +115,50 @@ class RaceProtectionDialogFragment : DialogFragment() {
             }
             isCancelable = false
             (dialog as? androidx.appcompat.app.AlertDialog)?.getButton(Dialog.BUTTON_NEGATIVE)?.isEnabled = false
-            submit.isEnabled = false
-            cancel.isEnabled = false
-            password.isEnabled = false
-            confirmation?.isEnabled = false
+            (requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .hideSoftInputFromWindow(password.windowToken, 0)
+            form.visibility = View.GONE
+            val progressPanel = LinearLayout(requireContext()).apply { orientation = LinearLayout.VERTICAL }
+            val progress = ProgressBar(requireContext(), null, android.R.attr.progressBarStyleHorizontal)
+            val stop = Button(requireContext()).apply { setText(R.string.general_cancel) }
+            progressPanel.addView(progress)
+            progressPanel.addView(stop)
+            content.addView(progressPanel)
+            var operation: Job? = null
+            stop.setOnClickListener {
+                stop.isEnabled = false
+                status.setText(R.string.race_protection_cancelling)
+                operation?.cancel()
+            }
             status.setText(R.string.race_protection_updating)
-            lifecycleScope.launch {
+            operation = lifecycleScope.launch {
                 try {
-                    protection.update(raceId, wholeSeries, value, encrypt = !removing)
+                    protection.update(raceId, wholeSeries, value, encrypt = !removing) { update ->
+                        withContext(Dispatchers.Main) {
+                            progress.max = update.totalCategories
+                            progress.progress = update.completedCategories
+                            stop.isEnabled = !update.saving
+                            status.text = if (update.saving) getString(R.string.race_protection_saving)
+                                else getString(R.string.race_protection_progress,
+                                    update.completedCategories, update.totalCategories, update.raceName)
+                        }
+                    }
                     password.text?.clear()
                     confirmation?.text?.clear()
                     state = protection.state(raceId, wholeSeries)
                     content.removeView(form)
                     renderState()
                 } catch (error: CancellationException) {
+                    password.text?.clear()
+                    confirmation?.text?.clear()
+                    form.visibility = View.VISIBLE
+                    status.setText(R.string.race_protection_cancelled)
                     throw error
                 } catch (error: Exception) {
                     status.text = error.message ?: getString(R.string.race_protection_failed)
-                    submit.isEnabled = true
-                    cancel.isEnabled = true
-                    password.isEnabled = true
-                    confirmation?.isEnabled = true
+                    form.visibility = View.VISIBLE
                 } finally {
+                    content.removeView(progressPanel)
                     isCancelable = true
                     (dialog as? androidx.appcompat.app.AlertDialog)?.getButton(Dialog.BUTTON_NEGATIVE)?.isEnabled = true
                 }

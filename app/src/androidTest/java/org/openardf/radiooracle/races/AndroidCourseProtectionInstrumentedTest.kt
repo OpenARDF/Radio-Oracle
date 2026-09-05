@@ -4,10 +4,12 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.openardf.radiooracle.backend.room.AndroidCourseProtection
+import org.openardf.radiooracle.backend.room.AndroidCourseProtectionProgress
 import org.openardf.radiooracle.backend.room.database.EventDatabase
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Race
@@ -33,12 +35,22 @@ class AndroidCourseProtectionInstrumentedTest {
             }
             database.categoryDao().createOrUpdateCategory(category)
             assertFalse(protection.state(race.id, false).encrypted)
-            protection.update(race.id, false, "test-password", true)
+            val progress = mutableListOf<AndroidCourseProtectionProgress>()
+            protection.update(race.id, false, "test-password", true) { progress += it }
+            assertEquals(listOf(0, 1), progress.map { it.completedCategories })
+            assertTrue(progress.last().saving)
             val encrypted = database.categoryDao().getCategory(category.id)!!
             assertNull(encrypted.courseInfo)
             assertNull(encrypted.idealOrder)
             assertEquals("Test course", ProtectedCourseCipher.decryptCourseInfo(encrypted.encryptedCourseInfo!!, "test-password").sourceName)
             assertTrue(runCatching { protection.update(race.id, false, "wrong-password", false) }.isFailure)
+            assertEquals(encrypted, database.categoryDao().getCategory(category.id))
+            val cancelled = runCatching {
+                protection.update(race.id, false, "test-password", false) {
+                    if (it.saving) throw CancellationException("Cancel before commit")
+                }
+            }.exceptionOrNull()
+            assertTrue(cancelled is CancellationException)
             assertEquals(encrypted, database.categoryDao().getCategory(category.id))
             protection.update(race.id, false, "test-password", false)
             assertEquals(category, database.categoryDao().getCategory(category.id))

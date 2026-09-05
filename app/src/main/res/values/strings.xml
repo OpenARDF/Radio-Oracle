@@ -483,6 +483,10 @@
     <string name="race_confirm_password">Confirm Race Password</string>
     <string name="race_password_mismatch">Passwords do not match.</string>
     <string name="race_protection_updating">Updating course protection. Please wait…</string>
+    <string name="race_protection_progress">Processing course data: %1$d of %2$d categories\n%3$s\nLarge series can take several minutes.</string>
+    <string name="race_protection_saving">Saving updated course data…</string>
+    <string name="race_protection_cancelling">Cancelling after the current category…</string>
+    <string name="race_protection_cancelled">Cancelled. No course protection changes were saved.</string>
     <string name="race_protection_failed">Course protection could not be updated.</string>
     <string name="cloudflare_results_password">Race Password</string>
     <string name="cloudflare_results_password_hint">Required to unlock protected course geometry.</string>

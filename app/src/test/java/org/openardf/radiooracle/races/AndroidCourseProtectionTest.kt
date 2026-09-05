@@ -2,12 +2,15 @@ package org.openardf.radiooracle.races
 
 import androidx.room.Room
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.openardf.radiooracle.backend.room.AndroidCourseProtection
+import org.openardf.radiooracle.backend.room.AndroidCourseProtectionProgress
 import org.openardf.radiooracle.backend.room.database.EventDatabase
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.EventSeries
@@ -80,6 +83,47 @@ class AndroidCourseProtectionTest {
         assertFalse(state.encrypted)
         assertFalse(state.hasCourseData)
         assertTrue(runCatching { protection.update(race.id, false, "test-password", true) }.isFailure)
+    }
+
+    @Test fun progressCoversEverySeriesCategoryBeforeSaving() = runBlocking {
+        val (first, _) = fixture("Day 1")
+        val (second, _) = fixture("Day 2")
+        series(first, second)
+        val progress = mutableListOf<AndroidCourseProtectionProgress>()
+        protection.update(first.id, true, "test-password", true) { progress += it }
+        assertEquals(listOf(0, 1, 2), progress.map { it.completedCategories })
+        assertTrue(progress.all { it.totalCategories == 2 })
+        assertEquals(listOf("Day 1", "Day 2"), progress.filterNot { it.saving }.map { it.raceName })
+        assertTrue(progress.last().saving)
+    }
+
+    @Test fun cancellationAfterOneCategoryLeavesAllSeriesMembersUnchanged() = runBlocking {
+        val (first, firstCategory) = fixture("Day 1")
+        val (second, secondCategory) = fixture("Day 2")
+        series(first, second)
+        val error = runCatching {
+            protection.update(first.id, true, "test-password", true) {
+                if (it.completedCategories == 1) throw CancellationException("Cancel requested")
+            }
+        }.exceptionOrNull()
+        assertTrue(error is CancellationException)
+        assertEquals(firstCategory, database.categoryDao().getCategory(firstCategory.id))
+        assertEquals(secondCategory, database.categoryDao().getCategory(secondCategory.id))
+    }
+
+    @Test fun concurrentEditsRemainPossibleAndPreventStaleProtectionWrites() = runBlocking {
+        val (race, category) = fixture("Practice")
+        val edited = category.copy(length = 5500)
+        val error = runCatching {
+            withTimeout(10_000) {
+                protection.update(race.id, false, "test-password", true) {
+                    if (!it.saving) database.categoryDao().createOrUpdateCategory(edited)
+                }
+            }
+        }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(error!!.message!!.contains("Race data changed"))
+        assertEquals(edited, database.categoryDao().getCategory(category.id))
     }
 
     private suspend fun fixture(name: String): Pair<Race, Category> {

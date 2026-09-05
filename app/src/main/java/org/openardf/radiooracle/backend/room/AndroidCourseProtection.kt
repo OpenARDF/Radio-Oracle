@@ -2,6 +2,9 @@ package org.openardf.radiooracle.backend.room
 
 import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
+import org.openardf.radiooracle.backend.logging.DebugLog
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.backend.room.database.EventDatabase
 import org.openardf.radiooracle.backend.room.entity.Category
@@ -16,6 +19,13 @@ import java.util.UUID
 
 data class AndroidCourseProtectionState(val encrypted: Boolean, val hasCourseData: Boolean)
 
+data class AndroidCourseProtectionProgress(
+    val completedCategories: Int,
+    val totalCategories: Int,
+    val raceName: String,
+    val saving: Boolean = false
+)
+
 /** Uses desktop's cipher and updates only course payloads, atomically across all series members. */
 class AndroidCourseProtection(private val database: EventDatabase) {
     suspend fun state(raceId: UUID, wholeSeries: Boolean): AndroidCourseProtectionState =
@@ -23,21 +33,33 @@ class AndroidCourseProtection(private val database: EventDatabase) {
             database.withTransaction { stateOf(targets(raceId, wholeSeries).flatMap { it.second }) }
         }
 
-    suspend fun update(raceId: UUID, wholeSeries: Boolean, password: String, encrypt: Boolean) =
-        withContext(Dispatchers.IO) {
-            database.withTransaction {
-                val targets = targets(raceId, wholeSeries)
-                val state = stateOf(targets.flatMap { it.second })
-                require(state.hasCourseData) { "There is no course or route data to encrypt." }
-                require(state.encrypted != encrypt) {
-                    "Protection has changed. Close and reopen Race Password Protection."
-                }
-                // Authenticate and transform every payload before writing any category.
-                val changed = withContext(Dispatchers.Default) {
-                    targets.flatMap { (race, categories) ->
+    suspend fun update(
+        raceId: UUID,
+        wholeSeries: Boolean,
+        password: String,
+        encrypt: Boolean,
+        onProgress: suspend (AndroidCourseProtectionProgress) -> Unit = {}
+    ) = withContext(Dispatchers.IO) {
+        // Release Room's transaction while doing expensive PBKDF2 work. Reads and readouts can continue.
+        val snapshot = database.withTransaction { targets(raceId, wholeSeries) }
+        val state = stateOf(snapshot.flatMap { it.second })
+        require(state.hasCourseData) { "There is no course or route data to encrypt." }
+        require(state.encrypted != encrypt) {
+            "Protection has changed. Close and reopen Race Password Protection."
+        }
+        val total = snapshot.sumOf { it.second.size }
+        val started = System.nanoTime()
+        DebugLog.info("CourseProtection", "Started encrypt=$encrypt series=$wholeSeries races=${snapshot.size} categories=$total")
+        try {
+            var completed = 0
+            val changed = withContext(Dispatchers.Default) {
+                snapshot.flatMap { (race, categories) ->
+                    categories.map { original ->
+                        currentCoroutineContext().ensureActive()
+                        onProgress(AndroidCourseProtectionProgress(completed, total, race.name))
                         val project = EventProjectFile(raceData = EventRaceData(
                             race.toEventRace(),
-                            categories.map { EventCategoryData(it.toEventCategory(), emptyList(), emptyList()) },
+                            listOf(EventCategoryData(original.toEventCategory(), emptyList(), emptyList())),
                             emptyList(), emptyList(), emptyList()
                         ))
                         val result = try {
@@ -46,19 +68,35 @@ class AndroidCourseProtection(private val database: EventDatabase) {
                         } catch (error: IllegalArgumentException) {
                             throw IllegalArgumentException("Race '${race.name}': ${error.message}", error)
                         }
-                        categories.zip(result.raceData.categories) { original, converted ->
-                            original.copy(
-                                encryptedIdealOrder = converted.category.encryptedIdealOrder,
-                                encryptedCourseInfo = converted.category.encryptedCourseInfo,
-                                idealOrder = converted.category.idealOrder,
-                                courseInfo = converted.category.courseInfo?.let(ProtectedCourseCipher::encodeCourseInfo)
-                            )
-                        }
+                        currentCoroutineContext().ensureActive()
+                        val converted = result.raceData.categories.single().category
+                        completed++
+                        original.copy(
+                            encryptedIdealOrder = converted.encryptedIdealOrder,
+                            encryptedCourseInfo = converted.encryptedCourseInfo,
+                            idealOrder = converted.idealOrder,
+                            courseInfo = converted.courseInfo?.let(ProtectedCourseCipher::encodeCourseInfo)
+                        )
+                    }.also {
+                        DebugLog.info("CourseProtection", "Processed categories=$completed/$total")
                     }
+                }
+            }
+            onProgress(AndroidCourseProtectionProgress(completed, total, "", saving = true))
+            currentCoroutineContext().ensureActive()
+            // Authenticate all payloads before writing, and reject concurrent edits instead of overwriting them.
+            database.withTransaction {
+                require(targets(raceId, wholeSeries) == snapshot) {
+                    "Race data changed during course protection. No protection changes were saved. Please retry."
                 }
                 changed.forEach { database.categoryDao().createOrUpdateCategory(it) }
             }
+            DebugLog.info("CourseProtection", "Completed categories=$total elapsedMs=${(System.nanoTime() - started) / 1_000_000}")
+        } catch (error: Exception) {
+            DebugLog.info("CourseProtection", "Stopped reason=${error.javaClass.simpleName} elapsedMs=${(System.nanoTime() - started) / 1_000_000}")
+            throw error
         }
+    }
 
     private suspend fun targets(raceId: UUID, wholeSeries: Boolean): List<Pair<Race, List<Category>>> {
         val ids = if (wholeSeries) {
