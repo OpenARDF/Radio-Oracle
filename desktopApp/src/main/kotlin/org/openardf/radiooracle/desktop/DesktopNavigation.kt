@@ -1340,7 +1340,7 @@ object DesktopNavigation {
 
     private val itemDescriptions: Map<String, String> = mapOf(
         "setup.event-file" to
-            "Use Race File to create, open, import, save, close, and inspect race files, including settings and readiness tools that affect the whole race.",
+            "Use Race File to create, open, import, save, close, and inspect race files, including Race Password protection and series protection when a series is open.",
         "setup.controls" to
             "Use Controls to manually enter controls, import controls and courses from supported file types, analyze courses with appropriate elevation data applied, and import elevation DEMs.",
         "setup.controls.elevation-cache" to
@@ -1362,9 +1362,9 @@ object DesktopNavigation {
         "setup.controls.export-controls" to
             "Use Export Controls CSV to write the current control catalog for review, backup, or editing outside the app.",
         "setup.controls.export-kml-kmz" to
-            "Use Export Controls KML/KMZ to write protected control and route geometry inside a password-locked ZIP file.",
+            "Use Export Controls KML/KMZ to export control and route geometry. A password-locked ZIP is used only when the Race File is encrypted.",
         "setup.controls.export-gpx" to
-            "Use Export Controls GPX to write protected control and route geometry as standard GPX inside a password-locked ZIP file.",
+            "Use Export Controls GPX to export control and route geometry as standard GPX. A password-locked ZIP is used only when the Race File is encrypted.",
         "setup.controls.import-iof-course-data" to
             "Use Import IOF CourseData XML to import schema-valid IOF CourseData controls, courses, and course assignments.",
         "setup.controls.export-iof-course-data" to
@@ -1576,7 +1576,7 @@ object DesktopNavigation {
         "setup.event-file.display-settings" to
             "Use Display Settings to configure readout and result display preferences.",
         "setup.event-file.app-settings" to
-            "Use App Settings to review app-level settings, hardware status, and race password options.",
+            "Use App Settings to review app-level settings, hardware status, and race award options.",
         "setup.event-file.series-settings" to
             "Use Race Series settings to create, link, change, remove, or validate the current Race File's series membership.",
         "setup.event-file.series-create" to

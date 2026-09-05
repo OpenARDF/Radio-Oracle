@@ -31,6 +31,32 @@ internal fun mergeClassicRouteAnalysis(
     ))
 }
 
+/** Use the same selected races for the password prompt and the calculation. */
+internal fun classicRouteAnalysisTargets(
+    project: EventProjectFile,
+    path: Path?,
+    series: Boolean
+): Map<String, Pair<Path?, EventProjectFile>> {
+    val targets = linkedMapOf<String, Pair<Path?, EventProjectFile>>()
+    if (series && path != null) {
+        DesktopEventSeriesArchiveWorkspaces.workspaceFor(path)?.memberPaths.orEmpty().forEach { member ->
+            val other = if (member == path) project else DesktopProjectFiles.read(member)
+            if (other.raceData.race.raceType == RaceType.CLASSIC) {
+                require(targets[other.raceData.race.id]?.first.let { it == null || it == member }) {
+                    "Selected races share a race identity; correct the series before analysis."
+                }
+                targets[other.raceData.race.id] = member to other
+            }
+        }
+    }
+    targets[project.raceData.race.id] = path to project
+    return targets
+}
+
+internal fun classicRouteAnalysisProtectedRaceNames(projects: List<EventProjectFile>): List<String> =
+    projects.filter { it.raceData.race.raceType == RaceType.CLASSIC && it.hasEncryptedCategoryData() }
+        .map { it.raceData.race.name }
+
 internal val LocalClassicRouteAnalysis = staticCompositionLocalOf<ClassicRouteAnalysisUi?> { null }
 
 internal class ClassicRouteAnalysisUi(
@@ -139,18 +165,9 @@ internal class ClassicRouteAnalysisUi(
         ownedPaths = setOf(path)
         ownedRaceIds = setOf(project.raceData.race.id)
         try {
-        if (series && path != null) {
-            DesktopEventSeriesArchiveWorkspaces.workspaceFor(path)?.memberPaths.orEmpty().forEach { member ->
-                val other = if (member == path) project else DesktopProjectFiles.read(member)
-                ownedPaths = ownedPaths + member
-                ownedRaceIds = ownedRaceIds + other.raceData.race.id
-                if (other.raceData.race.raceType == RaceType.CLASSIC) {
-                    require(pending[other.raceData.race.id]?.first.let { it == null || it == member }) { "Selected races share a race identity; correct the series before analysis." }
-                    pending[other.raceData.race.id] = member to other
-                }
-            }
-        }
-        pending[project.raceData.race.id] = path to project
+        pending.putAll(classicRouteAnalysisTargets(project, path, series))
+        ownedPaths = pending.values.map { it.first }.toSet()
+        ownedRaceIds = pending.keys.toSet()
         drain()
         } catch (e: Exception) {
             cancel()
@@ -315,26 +332,70 @@ internal fun DesktopClassicRouteAnalysisHost(
             text = { Text(message) }, confirmButton = { TextButton(onClick = { state.notification = null }) { Text("OK") } })
     }
     if (state.showDialog && project != null) {
-        var password by remember { mutableStateOf("") }
-        var watch by remember { mutableStateOf(false) }
-        var series by remember { mutableStateOf(false) }
-        AlertDialog(onDismissRequest = { state.showDialog = false }, title = { Text("Estimate effective route lengths") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Desktop Classic only. Verifies the ideal order using the same cached terrain and algorithm as the downloaded routes. No changes to scoring or the course design. Exports use completed estimates only; wait for completion for full coverage.")
-                    OutlinedTextField(password, { password = it }, label = { Text("Race Password (if protected)") }, visualTransformation = PasswordVisualTransformation())
-                    Row { Checkbox(watch, { watch = it }); Text("Also process new or corrected downloads while this app is open") }
-                    if (session.currentPath?.let { DesktopEventSeriesArchiveWorkspaces.workspaceFor(it) } != null) {
-                        Row { Checkbox(series, { series = it }); Text("Process all Classic races in this series") }
-                    }
-                    Text("Cached terrain sources are retained locally for provenance. Android does not calculate or export these estimates; transfer results here for desktop processing.")
-                }
-            }, confirmButton = { TextButton(onClick = {
-                state.showDialog = false
-                state.start(project, session.currentPath, password, watch, series)
-                password = ""
-            }) { Text("Start in background") } }, dismissButton = { TextButton(onClick = { state.showDialog = false }) { Text("Cancel") } })
+        ClassicRouteAnalysisStartDialog(project, session.currentPath, state)
     }
+}
+
+@Composable
+private fun ClassicRouteAnalysisStartDialog(
+    project: EventProjectFile,
+    path: Path?,
+    state: ClassicRouteAnalysisUi
+) {
+    var password by remember(project.raceData.race.id, path) { mutableStateOf("") }
+    var watch by remember { mutableStateOf(false) }
+    var series by remember { mutableStateOf(false) }
+    val protection by key(project, path, series) {
+        produceState<Result<List<String>>?>(null) {
+            value = withContext(Dispatchers.IO) {
+                runCatching {
+                    classicRouteAnalysisProtectedRaceNames(classicRouteAnalysisTargets(project, path, series).values.map { it.second })
+                }
+            }
+        }
+    }
+    val protectedRaces = protection?.getOrNull()
+    val needsPassword = !protectedRaces.isNullOrEmpty()
+    AlertDialog(
+        onDismissRequest = { state.showDialog = false },
+        title = { Text("Estimate effective route lengths") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Desktop Classic only. Verifies the ideal order using the same cached terrain and algorithm as the downloaded routes. No changes to scoring or the course design. Exports use completed estimates only; wait for completion for full coverage.")
+                if (path?.let { DesktopEventSeriesArchiveWorkspaces.workspaceFor(it) } != null) {
+                    Row { Checkbox(series, { series = it }); Text("Process all Classic races in this series") }
+                }
+                when {
+                    protection == null -> Text("Checking course protection…")
+                    protection?.isFailure == true -> Text("Could not check course protection: ${protection?.exceptionOrNull()?.message}")
+                    needsPassword -> {
+                        Text(if (series) "Course data is encrypted for: ${protectedRaces.orEmpty().joinToString()}. Enter the Race Password to read it."
+                            else "This race's course data is encrypted. Enter the Race Password to read it.")
+                        OutlinedTextField(
+                            password, { password = it }, label = { Text("Race Password") },
+                            singleLine = true, visualTransformation = PasswordVisualTransformation()
+                        )
+                        Text("Manage password protection on Setup > Race File.")
+                    }
+                    else -> Text(if (series) "The selected Classic races' course data is not encrypted. No Race Password is needed."
+                        else "This race's course data is not encrypted. No Race Password is needed.")
+                }
+                Row { Checkbox(watch, { watch = it }); Text("Also process new or corrected downloads while this app is open") }
+                Text("Cached terrain sources are retained locally for provenance. Android does not calculate or export these estimates; transfer results here for desktop processing.")
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = protectedRaces != null && (!needsPassword || password.isNotBlank()),
+                onClick = {
+                    state.showDialog = false
+                    state.start(project, path, if (needsPassword) password else "", watch, series)
+                    password = ""
+                }
+            ) { Text("Start") }
+        },
+        dismissButton = { TextButton(onClick = { state.showDialog = false }) { Text("Cancel") } }
+    )
 }
 
 @Composable

@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -34,6 +35,36 @@ import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 
 class DesktopCourseDataStorageTest {
+    @Test
+    fun noUnlockOrTokenPasswordPromptForPlaintextOrEmptyDataEvenWhenSessionIsLocked() {
+        val empty = project()
+        val plain = empty.withStoredCourseInfo(CATEGORY_ID, ProtectedCourseInfo(idealOrder = "1 2"), null)
+        val blankFields = empty.copy(raceData = empty.raceData.copy(categories = empty.raceData.categories.map {
+            it.copy(category = it.category.copy(encryptedIdealOrder = " ", encryptedCourseInfo = ""))
+        }))
+        for (value in listOf(empty, plain, blankFields)) {
+            assertFalse(value.hasLockedProtectedCourseData(false))
+            assertFalse(cloudflareApiTokenRevealNeedsPassword(value))
+        }
+        assertFalse(cloudflareApiTokenRevealNeedsPassword(null))
+    }
+
+    @Test
+    fun protectionInInactiveMappingsStillRequiresUnlockUntilRemoved() {
+        val protected = project().withStoredCourseInfo(CATEGORY_ID, ProtectedCourseInfo(idealOrder = "1 2"), PASSWORD)
+        val mapped = protected.copy(raceData = protected.raceData.copy(
+            categories = emptyList(), courseMappings = protected.raceData.categories
+        ))
+        assertTrue(mapped.hasLockedProtectedCourseData(false))
+        assertFalse(mapped.hasLockedProtectedCourseData(true))
+        assertTrue(cloudflareApiTokenRevealNeedsPassword(mapped))
+
+        val removed = DesktopProtectedCourseOrder.removeProjectCourseProtection(mapped, PASSWORD)
+        assertFalse(removed.hasLockedProtectedCourseData(false))
+        assertFalse(cloudflareApiTokenRevealNeedsPassword(removed))
+        assertEquals("1 2", removed.raceData.courseMappings.single().category.courseInfo?.idealOrder)
+    }
+
     @Test
     fun plaintextProjectReadsAndWritesCourseDataWithoutPassword() {
         val courseInfo = ProtectedCourseInfo(

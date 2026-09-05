@@ -14,6 +14,56 @@ import java.util.concurrent.CancellationException
 class DesktopClassicRouteAnalysisTest {
     private val flat = DesktopFrozenElevationSurface(listOf(RouteElevationSource("synthetic-flat-v1", "Synthetic flat terrain", 1.0))) { 100.0 }
 
+    @Test fun passwordRequirementIncludesProtectedMappingsButIgnoresNonClassicRaces() {
+        val plain = fixture()
+        val protected = plain.copy(raceData = plain.raceData.copy(
+            categories = emptyList(),
+            courseMappings = plain.raceData.categories.map {
+                it.copy(category = it.category.copy(encryptedCourseInfo = "protected-course"))
+            }
+        ))
+        val foxoring = protected.copy(raceData = protected.raceData.copy(
+            race = protected.raceData.race.copy(raceType = RaceType.FOXORING)
+        ))
+
+        assertTrue(classicRouteAnalysisProtectedRaceNames(listOf(plain, foxoring)).isEmpty())
+        assertEquals(listOf(protected.raceData.race.name), classicRouteAnalysisProtectedRaceNames(listOf(plain, protected)))
+    }
+
+    @Test fun seriesPasswordRequirementUsesSelectedClassicMembersAndCurrentUnsavedProtection() {
+        val plain = fixture()
+        val protected = plain.copy(raceData = plain.raceData.copy(
+            race = plain.raceData.race.copy(id = "protected-race", name = "Protected Classic"),
+            categories = plain.raceData.categories.map {
+                it.copy(category = it.category.copy(encryptedIdealOrder = "protected-order"))
+            }
+        ))
+        val foxoring = protected.copy(raceData = protected.raceData.copy(
+            race = protected.raceData.race.copy(id = "foxoring", name = "Foxoring", raceType = RaceType.FOXORING)
+        ))
+        val archive = EventSeriesArchive(EventSeriesFile(seriesId = "series", name = "Mixed series", events = listOf(
+            EventSeriesEvent("plain", "plain.json", 0, "Plain"),
+            EventSeriesEvent("protected", "protected.json", 1, "Protected"),
+            EventSeriesEvent("foxoring", "foxoring.json", 2, "Foxoring")
+        )), mapOf("plain" to plain, "protected" to protected, "foxoring" to foxoring))
+        val workspace = DesktopEventSeriesArchiveWorkspaces.create(
+            Files.createTempDirectory("route-password-selection-").resolve("series.roseries"), archive
+        )
+        try {
+            val path = workspace.memberPaths.first { it.fileName.toString() == "plain.json" }
+            val active = DesktopProjectFiles.read(path)
+            fun protectedNames(project: EventProjectFile, series: Boolean) = classicRouteAnalysisProtectedRaceNames(
+                classicRouteAnalysisTargets(project, path, series).values.map { it.second }
+            )
+            assertTrue(protectedNames(active, false).isEmpty())
+            assertEquals(listOf("Protected Classic"), protectedNames(active, true))
+            val unsaved = active.copy(raceData = active.raceData.copy(categories = protected.raceData.categories))
+            assertEquals(listOf(active.raceData.race.name), protectedNames(unsaved, false))
+            assertEquals(setOf(active.raceData.race.name, "Protected Classic"), protectedNames(unsaved, true).toSet())
+            assertFalse(DesktopProjectFiles.read(path).hasEncryptedCategoryData())
+        } finally { DesktopEventSeriesArchiveWorkspaces.close(workspace) }
+    }
+
     @Test fun backgroundProcessingAndExportWatermarkIgnoreLaterDownloads() = runBlocking {
         withContext(coroutineContext) {
             val dir = Files.createTempDirectory("route-worker-test-")

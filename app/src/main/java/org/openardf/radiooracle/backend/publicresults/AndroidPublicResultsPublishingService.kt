@@ -49,6 +49,9 @@ data class AndroidPublicResultsTarget(
     val hasCourseDiagrams: Boolean,
     val needsRacePasswordForDiagrams: Boolean
 ) {
+    fun requiresCoursePassword(includeCourseDiagrams: Boolean): Boolean =
+        includeCourseDiagrams && needsRacePasswordForDiagrams
+
     val canViewPublicResults: Boolean
         get() = !savedUrl.isNullOrBlank()
 }
@@ -245,52 +248,42 @@ class AndroidPublicResultsPublishingService(
         PublicResultsRaceRenderRequest(
             projectFile = EventProjectFile(raceData = toEventRaceData()),
             protectedCourseInfoByCategoryId = if (includeCourseDiagrams) {
-                unlockedCourseInfo(racePassword)
+                unlockedPublicResultsCourseInfo(racePassword)
             } else {
                 emptyMap()
             },
             publicationStatus = publicationStatus
         )
+}
 
-    private fun RaceData.unlockedCourseInfo(password: String?): Map<String, ProtectedCourseInfo> {
-        val value = password?.trim().orEmpty()
-        require(!needsPasswordForCourseDiagrams() || value.isNotEmpty()) {
-            "Race Password is required to include 2D course diagrams."
-        }
-        return categories.mapNotNull { categoryData ->
-            val category = categoryData.category
-            val courseInfo = category.encryptedCourseInfo
+internal fun RaceData.unlockedPublicResultsCourseInfo(password: String?): Map<String, ProtectedCourseInfo> {
+    val value = password?.trim().orEmpty()
+    require(!needsPasswordForCourseDiagrams() || value.isNotEmpty()) {
+        "Race Password is required to include 2D course diagrams."
+    }
+    return categoriesWithResults().mapNotNull { categoryData ->
+        val category = categoryData.category
+        val courseInfo = category.encryptedCourseInfo
+            ?.takeIf(String::isNotBlank)
+            ?.let { AndroidProtectedCourseInfo.decryptCourseInfo(it, value) }
+            ?: category.courseInfo
                 ?.takeIf(String::isNotBlank)
-                ?.let { AndroidProtectedCourseInfo.decryptCourseInfo(it, value) }
-                ?: category.courseInfo
-                    ?.takeIf(String::isNotBlank)
-                    ?.let(ProtectedCourseCipher::decodeCourseInfo)
-            courseInfo?.let { category.id.toString() to it }
-        }.toMap()
+                ?.let(ProtectedCourseCipher::decodeCourseInfo)
+        courseInfo?.let { category.id.toString() to it }
+    }.toMap()
+}
+
+private fun RaceData.categoriesWithResults() = EventResultDetails.from(toEventRaceData())
+    .mapNotNull(EventResultDetails::categoryId).toSet().let { categoryIds ->
+        categories.filter { it.category.id.toString() in categoryIds }
     }
 
-    private fun RaceData.needsPasswordForCourseDiagrams(): Boolean {
-        val categoryIdsWithResults = EventResultDetails.from(toEventRaceData())
-            .mapNotNull(EventResultDetails::categoryId)
-            .toSet()
-        return categories.any { categoryData ->
-            categoryData.category.id.toString() in categoryIdsWithResults &&
-                !categoryData.category.encryptedCourseInfo.isNullOrBlank()
-        }
-    }
+internal fun RaceData.needsPasswordForCourseDiagrams(): Boolean = categoriesWithResults().any {
+    !it.category.encryptedCourseInfo.isNullOrBlank()
+}
 
-    private fun RaceData.hasCourseDiagrams(): Boolean {
-        val categoryIdsWithResults = EventResultDetails.from(toEventRaceData())
-            .mapNotNull(EventResultDetails::categoryId)
-            .toSet()
-        return categories.any { categoryData ->
-            categoryData.category.id.toString() in categoryIdsWithResults &&
-                (
-                    !categoryData.category.encryptedCourseInfo.isNullOrBlank() ||
-                        !categoryData.category.courseInfo.isNullOrBlank()
-                    )
-        }
-    }
+private fun RaceData.hasCourseDiagrams(): Boolean = categoriesWithResults().any {
+    !it.category.encryptedCourseInfo.isNullOrBlank() || !it.category.courseInfo.isNullOrBlank()
 }
 
 internal fun publicResultsPublicationId(importSourceId: String?, localRaceId: UUID): String {

@@ -41,6 +41,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14063,6 +14065,24 @@ private fun SectionWorkspace(
             projectFile = projectFile,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
         )
+        if (section == DesktopSection.EventFile) {
+            AppSettingsSection("Race Password Protection") {
+                CoursePasswordSettingsPanel(
+                    projectFile = projectFile,
+                    isCourseDataUnlocked = isProtectedCourseOrderUnlocked,
+                    onUpdateCoursePassword = onUpdateProtectedCoursePassword
+                )
+            }
+            eventSeriesUiContext?.let { seriesContext ->
+                AppSettingsSection("Race Series Password Protection") {
+                    EventSeriesProtectionPanel(
+                        seriesContext = seriesContext,
+                        onRemoveCourseEncryption = onRemoveEventSeriesCourseEncryption,
+                        onEncryptCourseData = onEncryptEventSeriesCourseData
+                    )
+                }
+            }
+        }
         if (section == DesktopSection.SportIdentTools) {
             SportIdentToolsPanel()
         }
@@ -14242,12 +14262,10 @@ private fun SectionWorkspace(
                 awardDisplayMode = awardDisplayMode,
                 cloudflarePagesPublishSettings = cloudflarePagesPublishSettings,
                 cloudflarePagesSettingsRejection = cloudflarePagesSettingsRejection,
-                isCourseDataUnlocked = isProtectedCourseOrderUnlocked,
                 onSetUpdateCheckingEnabled = onSetUpdateCheckingEnabled,
                 onSetAwardDisplayMode = onSetAwardDisplayMode,
                 onUpdateRaceSettings = onUpdateRaceSettings,
-                onSetCloudflarePagesPublishSettings = onSetCloudflarePagesPublishSettings,
-                onUpdateCoursePassword = onUpdateProtectedCoursePassword
+                onSetCloudflarePagesPublishSettings = onSetCloudflarePagesPublishSettings
             )
         }
         SectionWorkspaceFooter(
@@ -15184,12 +15202,10 @@ private fun AppSettingsPanel(
     awardDisplayMode: EventAwardDisplayMode,
     cloudflarePagesPublishSettings: DesktopCloudflarePagesPublishSettings,
     cloudflarePagesSettingsRejection: String?,
-    isCourseDataUnlocked: Boolean,
     onSetUpdateCheckingEnabled: (Boolean) -> Unit,
     onSetAwardDisplayMode: (EventAwardDisplayMode) -> Unit,
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit,
-    onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean,
-    onUpdateCoursePassword: suspend (String, String, String) -> DesktopPasswordOperationResult
+    onSetCloudflarePagesPublishSettings: (DesktopCloudflarePagesPublishSettings) -> Boolean
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         AppSettingsSection("Updates") {
@@ -15230,15 +15246,6 @@ private fun AppSettingsPanel(
             DetailRow(
                 "Detected printers",
                 printerDiagnostics.detectedPrinterNames.joinToString().ifBlank { "None" }
-            )
-        }
-        AppSettingsSection(
-            if (projectFile?.hasCoursePasswordSet() == true) "Race Password Protection" else "Encrypt Race with Password"
-        ) {
-            CoursePasswordSettingsPanel(
-                projectFile = projectFile,
-                isCourseDataUnlocked = isCourseDataUnlocked,
-                onUpdateCoursePassword = onUpdateCoursePassword
             )
         }
         AppSettingsSection("Race awards") {
@@ -15335,7 +15342,8 @@ private fun CloudflarePagesPublishSettingsPanel(
     var retentionModeDraft by remember(settings) { mutableStateOf(settings.retentionMode) }
     var publicationStatusDraft by remember(settings) { mutableStateOf(settings.publicationStatus) }
     var saveConfirmationText by remember { mutableStateOf<String?>(null) }
-    val revealStateKey = projectFile?.raceData?.race?.id
+    val revealNeedsPassword = cloudflareApiTokenRevealNeedsPassword(projectFile)
+    val revealStateKey = projectFile?.raceData?.race?.id to revealNeedsPassword
     var isApiTokenVisible by remember(revealStateKey, settings.apiToken) { mutableStateOf(false) }
     var isTokenRevealDialogVisible by remember(revealStateKey) { mutableStateOf(false) }
     val savedSettings = settings.normalized()
@@ -15488,7 +15496,7 @@ private fun CloudflarePagesPublishSettingsPanel(
                     .weight(1f)
                     .commitOnEnter(::submitSettings)
             )
-            val revealDisabledReason = cloudflareApiTokenRevealDisabledReason(projectFile, apiTokenDraft)
+            val revealDisabledReason = cloudflareApiTokenRevealDisabledReason(apiTokenDraft)
             DisabledReasonTooltip(
                 if (isApiTokenVisible) null else revealDisabledReason
             ) {
@@ -15496,8 +15504,10 @@ private fun CloudflarePagesPublishSettingsPanel(
                     onClick = {
                         if (isApiTokenVisible) {
                             isApiTokenVisible = false
-                        } else {
+                        } else if (revealNeedsPassword) {
                             isTokenRevealDialogVisible = true
+                        } else {
+                            isApiTokenVisible = true
                         }
                     },
                     enabled = isApiTokenVisible || revealDisabledReason == null
@@ -15507,7 +15517,11 @@ private fun CloudflarePagesPublishSettingsPanel(
             }
         }
         Text(
-            text = "The API token is hidden by default. Showing the stored value requires the current Race Password.",
+            text = if (revealNeedsPassword) {
+                "The API token is hidden by default. Showing the stored value requires the current Race Password."
+            } else {
+                "The API token is hidden by default. Use Show API Token to reveal it; no Race Password is set."
+            },
             color = Color.DarkGray,
             fontSize = 13.sp
         )
@@ -15533,7 +15547,7 @@ private fun CloudflarePagesPublishSettingsPanel(
             }
         }
     }
-    if (isTokenRevealDialogVisible) {
+    if (isTokenRevealDialogVisible && revealNeedsPassword) {
         CloudflareApiTokenRevealDialog(
             onVerify = { password ->
                 projectFile?.racePasswordAuthorizesCloudflareTokenReveal(password) == true
@@ -15617,17 +15631,11 @@ private fun CloudflareApiTokenRevealDialog(
     )
 }
 
-private fun cloudflareApiTokenRevealDisabledReason(
-    projectFile: EventProjectFile?,
-    apiToken: String
-): String? =
-    when {
-        apiToken.isBlank() -> "Save a Cloudflare API token before trying to show it."
-        projectFile == null -> "Open a Race File with a Race Password before showing the API token."
-        !projectFile.hasCoursePasswordSet() ->
-            "Set a Race Password for the open Race File before showing the API token."
-        else -> null
-    }
+internal fun cloudflareApiTokenRevealNeedsPassword(projectFile: EventProjectFile?): Boolean =
+    projectFile?.hasEncryptedCategoryData() == true
+
+private fun cloudflareApiTokenRevealDisabledReason(apiToken: String): String? =
+    "Save a Cloudflare API token before trying to show it.".takeIf { apiToken.isBlank() }
 
 private fun cloudflarePagesSettingsDisabledReason(
     rawDraftSettings: DesktopCloudflarePagesPublishSettings,
@@ -15667,6 +15675,7 @@ private fun AppSettingsSection(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CoursePasswordSettingsPanel(
     projectFile: EventProjectFile?,
@@ -15674,6 +15683,7 @@ private fun CoursePasswordSettingsPanel(
     onUpdateCoursePassword: suspend (String, String, String) -> DesktopPasswordOperationResult
 ) {
     val hasCoursePassword = remember(projectFile) { projectFile?.hasCoursePasswordSet() == true }
+    var isSettingPassword by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf(false) }
     val operationScope = rememberCoroutineScope()
     var oldPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
     var newPasswordDraft by remember(projectFile?.raceData?.race?.id, hasCoursePassword) { mutableStateOf("") }
@@ -15712,16 +15722,21 @@ private fun CoursePasswordSettingsPanel(
                 projectFile == null ->
                     "Open or create a Race File before setting a Race Password."
                 hasCoursePassword ->
-                    "Resetting the Race Password requires the current Race Password. Sensitive Race File data is ${if (isCourseDataUnlocked) "currently unlocked" else "currently locked"}."
+                    "Course data is encrypted and ${if (isCourseDataUnlocked) "unlocked for this session" else "locked"}. Enter the current Race Password to change it or remove encryption."
                 else ->
-                    "Encrypt this Race File with a Race Password. Course and route data will no longer be stored as readable text."
+                    "Course data is not encrypted. No Race Password is required. Choose Encrypt Race to set a password for course and route data."
             },
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
-        Row(
+        if (projectFile == null) return@Column
+        if (!hasCoursePassword && !isSettingPassword) {
+            Button(onClick = { isSettingPassword = true }) { Text("Encrypt Race…") }
+            return@Column
+        }
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (hasCoursePassword) {
                 TextField(
@@ -17103,35 +17118,6 @@ private fun EventSeriesSettingsPanel(
     var fileNameDraft by remember(seriesContext.manifestPath) { mutableStateOf(currentFileNameStem) }
     val trimmedFileName = fileNameDraft.trim()
     val canApplyFileName = trimmedFileName.isNotBlank() && trimmedFileName != currentFileNameStem
-    val operationScope = rememberCoroutineScope()
-    val hasSeriesEncryption = seriesContext.encryptedRaceCount > 0
-    var passwordDraft by remember(seriesContext.manifestPath) { mutableStateOf("") }
-    var confirmPasswordDraft by remember(seriesContext.manifestPath) { mutableStateOf("") }
-    var isEncryptionConfirmationVisible by remember(seriesContext.manifestPath) { mutableStateOf(false) }
-    var isEncryptionOperationInProgress by remember(seriesContext.manifestPath) { mutableStateOf(false) }
-    var operationMessage by remember(seriesContext.manifestPath) { mutableStateOf<String?>(null) }
-    val canStartEncryptionOperation = seriesContext.raceCount > 0 &&
-        passwordDraft.isNotBlank() &&
-        (hasSeriesEncryption || confirmPasswordDraft.isNotBlank() && passwordDraft.trim() == confirmPasswordDraft.trim())
-    fun startEncryptionOperation() {
-        if (isEncryptionOperationInProgress) return
-        operationMessage = null
-        isEncryptionOperationInProgress = true
-        operationScope.launch {
-            val result = if (hasSeriesEncryption) {
-                onRemoveCourseEncryption(passwordDraft)
-            } else {
-                onEncryptCourseData(passwordDraft)
-            }
-            operationMessage = result.message
-            isEncryptionOperationInProgress = false
-            if (result.succeeded) {
-                passwordDraft = ""
-                confirmPasswordDraft = ""
-                isEncryptionConfirmationVisible = false
-            }
-        }
-    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = "Series File: ${seriesContext.manifestPath}",
@@ -17210,6 +17196,48 @@ private fun EventSeriesSettingsPanel(
             }
         }
         Divider()
+        EventSeriesProtectionPanel(seriesContext, onRemoveCourseEncryption, onEncryptCourseData)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EventSeriesProtectionPanel(
+    seriesContext: EventSeriesUiContext,
+    onRemoveCourseEncryption: suspend (String) -> DesktopPasswordOperationResult,
+    onEncryptCourseData: suspend (String) -> DesktopPasswordOperationResult
+) {
+    val operationScope = rememberCoroutineScope()
+    val hasSeriesEncryption = seriesContext.encryptedRaceCount > 0
+    var isSettingPassword by remember(seriesContext.manifestPath, hasSeriesEncryption) { mutableStateOf(false) }
+    var passwordDraft by remember(seriesContext.manifestPath) { mutableStateOf("") }
+    var confirmPasswordDraft by remember(seriesContext.manifestPath) { mutableStateOf("") }
+    var isEncryptionConfirmationVisible by remember(seriesContext.manifestPath) { mutableStateOf(false) }
+    var isEncryptionOperationInProgress by remember(seriesContext.manifestPath) { mutableStateOf(false) }
+    var operationMessage by remember(seriesContext.manifestPath) { mutableStateOf<String?>(null) }
+    val canStartEncryptionOperation = seriesContext.raceCount > 0 &&
+        passwordDraft.isNotBlank() &&
+        (hasSeriesEncryption || confirmPasswordDraft.isNotBlank() && passwordDraft.trim() == confirmPasswordDraft.trim())
+    fun startEncryptionOperation() {
+        if (isEncryptionOperationInProgress) return
+        operationMessage = null
+        isEncryptionOperationInProgress = true
+        operationScope.launch {
+            val result = if (hasSeriesEncryption) {
+                onRemoveCourseEncryption(passwordDraft)
+            } else {
+                onEncryptCourseData(passwordDraft)
+            }
+            operationMessage = result.message
+            isEncryptionOperationInProgress = false
+            if (result.succeeded) {
+                passwordDraft = ""
+                confirmPasswordDraft = ""
+                isEncryptionConfirmationVisible = false
+            }
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
             text = if (hasSeriesEncryption) {
                 "Remove Race Password protection from every encrypted Race File in this series."
@@ -17230,9 +17258,13 @@ private fun EventSeriesSettingsPanel(
             color = Color.DarkGray,
             fontSize = 13.sp
         )
-        Row(
+        if (!hasSeriesEncryption && !isSettingPassword) {
+            Button(onClick = { isSettingPassword = true }) { Text("Encrypt Race Series…") }
+            return@Column
+        }
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             TextField(
                 value = passwordDraft,
@@ -21130,7 +21162,7 @@ private fun CourseAnalysisPanel(
     onUpdateSpeedFactor: (Double) -> String
 ) {
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
-    if (!isUnlocked) {
+    if (projectFile.hasLockedProtectedCourseData(isUnlocked)) {
         fun unlock() {
             if (passwordDraft.isNotBlank() && onUnlock(passwordDraft)) {
                 passwordDraft = ""
@@ -23320,7 +23352,7 @@ private fun ProtectedCourseOrderPanel(
     var passwordDraft by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf("") }
     var locationStatusText by remember(projectFile.raceData.race.id, isUnlocked) { mutableStateOf<String?>(null) }
 
-    if (!isUnlocked) {
+    if (projectFile.hasLockedProtectedCourseData(isUnlocked)) {
         fun unlock() {
             if (passwordDraft.isNotBlank() && onUnlock(passwordDraft)) {
                 passwordDraft = ""

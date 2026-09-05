@@ -128,11 +128,8 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         closeButton = view.findViewById(R.id.cloudflare_close)
         progress = view.findViewById(R.id.cloudflare_progress)
 
-        includeDiagrams.setOnCheckedChangeListener { _, checked ->
-            passwordLayout.visibility = if (
-                checked && target?.needsRacePasswordForDiagrams == true
-            ) View.VISIBLE else View.GONE
-        }
+        includeDiagrams.setOnCheckedChangeListener { _, _ -> updatePasswordVisibility() }
+        updatePasswordVisibility()
         publishButton.setOnClickListener { confirmAndPublish() }
         viewButton.setOnClickListener { openSavedUrl() }
         settingsButton.setOnClickListener {
@@ -148,6 +145,12 @@ class CloudflareResultsDialogFragment : DialogFragment() {
     override fun onResume() {
         super.onResume()
         if (target != null) render()
+    }
+
+    private fun updatePasswordVisibility() {
+        val required = target?.requiresCoursePassword(includeDiagrams.isChecked) == true
+        passwordLayout.visibility = if (required) View.VISIBLE else View.GONE
+        if (!required) passwordInput.text?.clear()
     }
 
     private fun loadTarget() {
@@ -194,9 +197,7 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         }
         diagramControls.visibility =
             if (value.hasCourseDiagrams) View.VISIBLE else View.GONE
-        passwordLayout.visibility = if (
-            includeDiagrams.isChecked && value.needsRacePasswordForDiagrams
-        ) View.VISIBLE else View.GONE
+        updatePasswordVisibility()
         renderUrl(value.savedUrl)
         val settingsRejected = AndroidCloudflarePagesSettingsStore.isRejected(
             requireContext(),
