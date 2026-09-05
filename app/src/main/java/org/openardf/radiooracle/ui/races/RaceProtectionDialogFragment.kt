@@ -1,9 +1,12 @@
 package org.openardf.radiooracle.ui.races
 
 import android.app.Dialog
+import android.content.Context
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -81,11 +84,7 @@ class RaceProtectionDialogFragment : DialogFragment() {
                 setHint(label)
                 endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
             }
-            val input = TextInputEditText(layout.context).apply {
-                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                isSingleLine = true
-                isSaveEnabled = false
-            }
+            val input = racePasswordInput(layout.context)
             layout.addView(input)
             form.addView(layout)
             return input
@@ -99,6 +98,7 @@ class RaceProtectionDialogFragment : DialogFragment() {
         val cancel = Button(requireContext()).apply { setText(R.string.general_cancel) }
         form.addView(cancel)
         cancel.setOnClickListener { content.removeView(form); renderState() }
+        dialog?.enableRacePasswordInput(password)
         submit.setOnClickListener {
             val value = password.text?.toString().orEmpty().trim()
             if (value.isBlank()) {
@@ -146,6 +146,26 @@ class RaceProtectionDialogFragment : DialogFragment() {
                 putString("raceId", raceId.toString())
                 putBoolean("wholeSeries", wholeSeries)
             }
+        }
+    }
+}
+
+internal fun racePasswordInput(context: Context) = TextInputEditText(context).apply {
+    // setSingleLine changes the transformation; apply the password input type afterwards.
+    isSingleLine = true
+    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+    isSaveEnabled = false
+}
+
+/** AlertDialog initially contains no editor, so it blocks the IME until the form is added. */
+internal fun Dialog.enableRacePasswordInput(password: TextInputEditText) {
+    window?.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+    window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    password.requestFocus()
+    password.post {
+        if (password.isAttachedToWindow && password.hasFocus()) {
+            val keyboard = password.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            keyboard.showSoftInput(password, InputMethodManager.SHOW_IMPLICIT)
         }
     }
 }
