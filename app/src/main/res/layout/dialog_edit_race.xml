@@ -27,6 +27,22 @@
                 android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
 
+        <Button
+            android:id="@+id/race_dialog_protection"
+            style="@style/dialog_action_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/race_password_protection"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/race_dialog_series_protection"
+            style="@style/dialog_action_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/series_password_protection"
+            android:visibility="gone" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

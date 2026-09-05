@@ -81,6 +81,8 @@ class ARDFRepository private constructor(context: Context) {
         )
         .build()
 
+    val courseProtection by lazy { AndroidCourseProtection(eventDatabase) }
+
     //-------------------Races-------------------
     fun getRaces(): Flow<List<Race>> = eventDatabase.raceDao().getRaces()
     suspend fun getRace(id: UUID) = eventDatabase.raceDao().getRace(id)

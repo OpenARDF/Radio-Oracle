@@ -34,6 +34,8 @@ import androidx.fragment.app.setFragmentResult
 import androidx.fragment.app.setFragmentResultListener
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -105,6 +107,19 @@ class RaceEditDialogFragment : DialogFragment() {
         populateFields()
         setButtons()
         setPickers()
+        val protectionButton = view.findViewById<Button>(R.id.race_dialog_protection)
+        protectionButton.visibility = if (args.action == RaceEditActions.EDIT) View.VISIBLE else View.GONE
+        protectionButton.setOnClickListener {
+            RaceProtectionDialogFragment.newInstance(race.id).show(childFragmentManager, "race-protection")
+        }
+        if (args.action == RaceEditActions.EDIT) lifecycleScope.launch {
+            val seriesButton = view.findViewById<Button>(R.id.race_dialog_series_protection)
+            seriesButton.visibility = if (dataProcessor.getEventSeriesForRace(race.id) != null) View.VISIBLE else View.GONE
+            seriesButton.setOnClickListener {
+                RaceProtectionDialogFragment.newInstance(race.id, wholeSeries = true)
+                    .show(childFragmentManager, "series-protection")
+            }
+        }
     }
 
     /**
