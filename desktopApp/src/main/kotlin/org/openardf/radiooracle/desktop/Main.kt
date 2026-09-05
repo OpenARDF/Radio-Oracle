@@ -14065,7 +14065,7 @@ private fun SectionWorkspace(
             projectFile = projectFile,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
         )
-        if (section == DesktopSection.EventFile) {
+        if (section == DesktopSection.Races) {
             AppSettingsSection("Race Password Protection") {
                 CoursePasswordSettingsPanel(
                     projectFile = projectFile,
