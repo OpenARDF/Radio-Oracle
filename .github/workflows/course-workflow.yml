@@ -44,6 +44,16 @@ jobs:
           --args="course-workflow-report
           $GITHUB_WORKSPACE/desktopApp/build/reports/course-workflow/baseline.json
           $GITHUB_WORKSPACE/app/build/reports/course-workflow/android-transfer.json"
+      # Later filtered Gradle Test tasks replace their module's test-results directory.
+      - name: Preserve regression evidence before transfer tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: course-workflow-regression-evidence
+          if-no-files-found: error
+          path: |
+            **/build/reports/course-workflow/*.json
+            **/build/test-results/**/*.xml
       - name: Transfer the generated desktop archive through Android Room and back
         run: |
           ./scripts/gradle-sequential.sh :app:testDebugUnitTest --tests '*CourseWorkflowArchiveTransferTest' -PcourseWorkflowTransferDirectory="$GITHUB_WORKSPACE/desktopApp/build/reports/course-workflow"
