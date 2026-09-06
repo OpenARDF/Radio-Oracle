@@ -39,7 +39,8 @@ class CourseWorkflowArchiveTransferTest {
                 val stored = processor.getRaceData(native.race.id).toEventRaceData()
                 val restored = source.copy(raceData = stored)
                 val plain = if (encrypted) ProtectedCourseCipher.removeProjectCourseProtection(restored, "fixture-password") else restored
-                assertEquals(listOf(5, 5, 4), plain.raceData.competitorData.map { it.readoutData!!.result.points }.sortedDescending())
+                assertEquals(original.raceData.competitorData.map { it.readoutData!!.result.points }.sortedDescending(),
+                    plain.raceData.competitorData.map { it.readoutData!!.result.points }.sortedDescending())
                 assertEquals("passed", CourseWorkflowAudit.audit(plain.raceData).status)
                 restored
             }

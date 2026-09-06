@@ -6,7 +6,7 @@ Candidate in progress, 2026-09-06, based on `e4f6133a` on `Development1`. This s
 
 | Slice | Implemented and exercised | Acceptance boundary |
 | --- | --- | --- |
-| 0: reproducible workflow | Production import, three KML export/re-import/save/reopen iterations, Analyzer, Apply, venue redesign, synthetic SPORTident downloads, historical-copy refusal/recovery, local series replacement; per-step JSON | One complete Classic lifecycle; additional format cases at the service boundary |
+| 0: reproducible workflow | Production Create Course/import, three KML export/re-import/save/reopen iterations, Analyzer, Apply, venue redesign, synthetic SPORTident downloads, historical-copy refusal/recovery, local series replacement; per-step JSON | Classic 80m/2m, Sprint and Foxoring in one portable series; all four pass plaintext and encrypted Android Room return checks |
 | 1: identity | Shared explicit placement/control/SI bindings, complete ordered visits, semantic revision, actionable legacy ambiguity; schema 7 | Exhaustive Classic permutations/subsets, opaque IDs, role conflicts and invalid explicit bindings |
 | 2: drafts | Draft persisted within Race File, separate applied result state and unlocked caches; imports, point movement, ideal order, numbering and speed/elevation edits use candidate state; cancel/save/reopen | Unfinished drafts cannot replace scoring assignments; movement invalidates dependent routes/orders/metrics including inactive mappings |
 | 3: Apply | One prepare/validate/commit service; real Compose station review with coordinates; every required course calculated with accepted numbering; recorded races offer revised copy | Stale calculations, conflicting positions, missing courses, ambiguous mappings and recorded activity block commit; encrypted identical reapply preserves stored payloads |
@@ -43,9 +43,10 @@ Report validation returns 0 only when every requested report step passed; failed
 
 ## Evidence generated locally
 
-- `desktopApp/build/reports/course-workflow/baseline.json`: 12 desktop lifecycle steps passed.
+- `desktopApp/build/reports/course-workflow/baseline.json`: 16 desktop lifecycle steps passed. The additional formats use the production Create Course entry point, three KML iterations at each of two venues, Apply, recorded readouts, and course export verification.
 - `app/build/reports/course-workflow/android-transfer.json`: both portable identity/protection checks passed.
-- `desktopApp/build/reports/course-workflow/round-trip.json`: plaintext, encrypted, and applied-design/raw-punch comparisons passed after real Android Room persistence under Robolectric.
+- `desktopApp/build/reports/course-workflow/round-trip.json`: plaintext, encrypted, and applied-design/raw-punch comparisons passed after real Android Room persistence under Robolectric for all four formats. All recorded result fields are compared after excluding remapped database identities.
+- `desktopApp/build/reports/course-workflow/publication-candidate` and `publication-inventory.json`: synthetic four-race public site, 62 verified public artifacts including four PNG diagrams, ready for a disposable test destination.
 - Module `build/test-results` and `build/reports/tests` directories contain the JUnit evidence.
 - Classic identity coverage includes 120 permutations × 31 nonempty subsets for legacy identity and separately for explicit bindings.
 - Actual Compose review tests cover Prepare/Apply/save/reopen and Cancel; service tests cover stale calculations and incomplete review coverage.
@@ -54,9 +55,13 @@ Report validation returns 0 only when every requested report step passed; failed
 
 ## Release gates still open
 
-The aggregate workflow suite and final full suites passed: 661 shared tests, 872 desktop tests, and 255 Android tests, with zero failures. The ordinary full-suite run skipped 3 desktop and 1 Android opt-in cases; the archive and transfer hooks were executed separately and passed. The independent IOF schema gate passed. The actual last-opened championship archive passed retained-terrain reproduction (55 saved estimates, 9 exact ideal-order matches) and the four selected diagram checks on a read-only copy. The calculation method is now v3 so legacy fingerprints refresh after schema-7 binding fields were introduced. Packaged Mac UI, current Android device execution, and a controlled real deployment/fresh-download comparison remain open. CI configuration exists but has not been executed remotely. A synthetic SPORTident stream verifies software scoring only; physical station/card proof is separate.
+The aggregate workflow suite and final full suites passed: 661 shared tests, 872 desktop tests, and 255 Android tests, with zero failures. The ordinary full-suite run skipped 3 desktop and 1 Android opt-in cases; the archive and transfer hooks were executed separately and passed. The independent IOF schema gate passed. The actual last-opened championship archive passed retained-terrain reproduction (55 saved estimates, 9 exact ideal-order matches) and the four selected diagram checks on a read-only copy. The calculation method is now v3 so legacy fingerprints refresh after schema-7 binding fields were introduced.
 
-Broader stress coverage is still narrower than the entire proposed combinatorial matrix: the cross-platform lifecycle uses a Classic fixture, with Sprint/Foxoring application and identity cases tested separately. No claim is made that every combination of format, protection, device, terrain and deployment failure has been exercised together.
+`just desktop-package` passed runtime/distributable verification for implementation commit `2a903909`. The app was relaunched with the original championship archive; fresh PID 73432 and startup logs confirm version `1.0.42s` and the connected SPORTident station. Visual inspection of the packaged app remains blocked by the locked Mac. Current Android device execution and a controlled real deployment/fresh-download comparison remain open. The synthetic publication candidate is prepared; a disposable Cloudflare Pages destination has been requested. A synthetic SPORTident stream verifies software scoring only; physical card/download proof is separate.
+
+Remote CI exposed two provisioning issues before tests ran: missing SDK command-line tools and the Android package identifier (`platforms;android-37.0`). Both are corrected, and the Linux regression run now reaches the test/build step. Its outcome is still pending. `actionlint` passes.
+
+Broader stress coverage is still narrower than the entire proposed combinatorial matrix. All four formats now share the cross-platform acceptance archive, while ambiguity, mixed protection, recovery and failure injection are exercised in focused tests. No claim is made that every combination of format, protection, device, terrain and deployment failure has been exercised together.
 
 The file format deliberately advances to schema 7 while retaining reads of schemas 1–6. Older schema-6 clients must not edit new files. The Android database migration adds nullable portable metadata without changing legacy row identities. No production archive has been bulk rewritten by the acceptance tests.
 

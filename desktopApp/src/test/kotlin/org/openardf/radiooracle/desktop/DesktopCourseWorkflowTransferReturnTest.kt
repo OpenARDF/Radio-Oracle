@@ -27,7 +27,12 @@ class DesktopCourseWorkflowTransferReturnTest {
                     competitor.readoutData!!.punches.map { it.punch.let { listOf(it.siCode, it.punchType, it.siTimeSeconds, it.originalSiTimeSeconds) }.toString() }.joinToString("|")
                 }.sorted()
                 assertEquals(punches(original), punches(plain))
-                val destination = directory.resolve("returned-$mode.kml")
+                fun results(project: EventProjectFile) = project.raceData.competitorData.associate {
+                    val result = it.readoutData!!.result
+                    result.siNumber to result.copy(id = "", raceId = "", competitorId = null, categoryId = null)
+                }
+                assertEquals("Transfer changed a recorded result in $id", results(original), results(plain))
+                val destination = directory.resolve("returned-$mode-$id.kml")
                 DesktopControlsRouteKmlKmzExporter.exportPlainFile(DesktopControlsRouteKmlKmzExportTarget(destination,
                     DesktopControlsRouteKmlKmzExportFormat.Kml), plain)
                 val exported = DesktopCourseFileReader.read(destination).controls
