@@ -24,6 +24,9 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          log-accepted-android-sdk-licenses: false
       - name: Install the repository's Android platform
         run: sdkmanager 'platforms;android-37'
       - name: Run shared, desktop UI, storage, output and Android transfer checks
