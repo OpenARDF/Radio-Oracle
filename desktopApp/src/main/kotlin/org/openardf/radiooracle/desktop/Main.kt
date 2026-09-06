@@ -72,6 +72,7 @@ import androidx.compose.material.LocalTextStyle
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.material.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -327,7 +328,7 @@ internal fun protectedCourseStateCategories(raceData: EventRaceData): List<Event
 
 /** Returns every stored container that may hold encrypted course data, including name-overlapping mappings. */
 internal fun protectedCourseDataContainers(raceData: EventRaceData): List<EventCategoryData> =
-    raceData.categories + raceData.courseMappings
+    org.openardf.radiooracle.shared.event.EventCourseDrafts.protectedCategories(raceData)
 
 /** Normalizes names for matching active categories to their inactive course-mapping counterparts. */
 private fun String.protectedCourseStateCategoryMatchText(): String =
@@ -425,7 +426,7 @@ internal fun decryptedProtectedCourseState(
     projectFile: EventProjectFile,
     password: String
 ): DesktopProtectedCourseState {
-    val courseCategories = protectedCourseDataContainers(projectFile.raceData)
+    val courseCategories = projectFile.raceData.categories + projectFile.raceData.courseMappings
     return DesktopProtectedCourseState(
         protectedIdealOrderByCategoryId = courseCategories.associate { categoryData ->
             categoryData.category.id to categoryData.category.storedIdealOrder(password)
@@ -451,19 +452,14 @@ internal fun protectedCourseInfoForResultCategory(
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     resultCategoryId: String,
     resultCategoryName: String
-): ProtectedCourseInfo? =
-    protectedCourseInfoByCategoryId[resultCategoryId]
-        ?: protectedCourseDataContainers(projectFile.raceData)
-            .firstNotNullOfOrNull { categoryData ->
-                categoryData.category.id
-                    .takeIf {
-                        StandardCategoryRules.categoryNamesEquivalent(
-                            categoryData.category.name,
-                            resultCategoryName
-                        )
-                    }
-                    ?.let(protectedCourseInfoByCategoryId::get)
-            }
+): ProtectedCourseInfo? {
+    protectedCourseInfoByCategoryId[resultCategoryId]?.let { return it }
+    val matches = (projectFile.raceData.categories + projectFile.raceData.courseMappings)
+        .filter { StandardCategoryRules.categoryNamesEquivalent(it.category.name, resultCategoryName) }
+        .mapNotNull { protectedCourseInfoByCategoryId[it.category.id] }.distinct()
+    require(matches.size <= 1) { "Multiple different stored courses match $resultCategoryName. Review its course mapping before exporting." }
+    return matches.singleOrNull()
+}
 
 internal fun decryptedPublicResultsCourseState(
     projectFiles: List<EventProjectFile>,
@@ -487,17 +483,18 @@ internal fun loadPublicResultSeriesRaces(
     currentProject: EventProjectFile?,
     protectedCoursePassword: String?,
     currentProtectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
-    awardDisplayMode: EventAwardDisplayMode
+    awardDisplayMode: EventAwardDisplayMode,
+    includeCourseDiagrams: Boolean? = null
 ): Pair<String, List<DesktopPublicResultSeriesRace>> {
     val seriesFile = DesktopEventSeriesFiles.read(manifestPath)
     val seriesFolder = requireNotNull(manifestPath.parent) {
         "Race Series manifest has no parent folder."
     }
     val normalizedCurrentPath = currentPath?.toAbsolutePath()?.normalize()
-    val races = seriesFile.sortedEvents().mapNotNull { event ->
+    val races = seriesFile.sortedEvents().map { event ->
         val eventPath = seriesFolder.resolve(event.eventFilePath).normalize()
-        if (!DesktopEventSeriesFiles.exists(eventPath)) {
-            return@mapNotNull null
+        require(DesktopEventSeriesFiles.exists(eventPath)) {
+            "Series member ${event.displayName} is missing. Restore it or update series membership before publishing."
         }
         val isCurrentEvent = eventPath.toAbsolutePath().normalize() == normalizedCurrentPath
         val project = if (isCurrentEvent) {
@@ -505,7 +502,13 @@ internal fun loadPublicResultSeriesRaces(
         } else {
             DesktopEventSeriesFiles.readEvent(eventPath)
         }
+        val hasAppliedCourses = (project.raceData.categories + project.raceData.courseMappings).any {
+            it.category.courseInfo != null || !it.category.encryptedCourseInfo.isNullOrBlank()
+        }
+        val wantsCourses = includeCourseDiagrams == true && hasAppliedCourses
         val courseInfo = when {
+            includeCourseDiagrams == false -> emptyMap()
+            wantsCourses -> decryptedProtectedCourseState(project, protectedCoursePassword.orEmpty()).protectedCourseInfoByCategoryId
             isCurrentEvent && currentProtectedCourseInfoByCategoryId.isNotEmpty() ->
                 currentProtectedCourseInfoByCategoryId
             project.hasUnencryptedCategoryData() && !project.hasEncryptedCategoryData() ->
@@ -515,7 +518,7 @@ internal fun loadPublicResultSeriesRaces(
             }.getOrElse { emptyMap() }
             else -> emptyMap()
         }
-        DesktopPublicResultSeriesRace(project, courseInfo, awardDisplayMode)
+        DesktopPublicResultSeriesRace(project, courseInfo, awardDisplayMode, includeCourseDiagrams = if (includeCourseDiagrams == null) courseInfo.isNotEmpty() else wantsCourses)
     }
     return seriesFile.name to races
 }
@@ -994,6 +997,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         val ticketPrinter = remember { DesktopTicketPrinter() }
         val appCoroutineScope = rememberCoroutineScope()
         val classicRouteAnalysis = remember { ClassicRouteAnalysisUi(appCoroutineScope) }
+        val courseDesignUi = remember { DesktopCourseDesignUi() }
+        var publishResultsOnly by remember { mutableStateOf(false) }
         val startupStatus = remember(startupPath) {
             openStartupProject(projectSession, startupPath, DesktopLastEventFilePreferences::rememberEventFile)
         }
@@ -1600,7 +1605,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 ?.let { path -> "$rootUrl${path.trim('/')}/" }
                 ?: rootUrl
 
-        fun publicResultSeriesRaces(): Pair<String, List<DesktopPublicResultSeriesRace>>? =
+        fun publicResultSeriesRaces(includeCourseDiagrams: Boolean? = null): Pair<String, List<DesktopPublicResultSeriesRace>>? =
             currentSeriesManifestPath()?.let { manifestPath ->
                 loadPublicResultSeriesRaces(
                     manifestPath = manifestPath,
@@ -1608,7 +1613,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     currentProject = projectSession.currentProject,
                     protectedCoursePassword = protectedCoursePassword,
                     currentProtectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-                    awardDisplayMode = currentDesktopAwardDisplayMode()
+                    awardDisplayMode = currentDesktopAwardDisplayMode(),
+                    includeCourseDiagrams = includeCourseDiagrams
                 )
             }
 
@@ -1616,13 +1622,16 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             directory: Path,
             currentProject: EventProjectFile
         ): DesktopPublicResultSiteExportPaths {
-            val series = publicResultSeriesRaces()
+            val series = publicResultSeriesRaces(includeCourseDiagrams = !publishResultsOnly)
             return if (series == null) {
                 DesktopProjectFiles.exportPublicResultsSite(
                     directory,
                     currentProject,
-                    protectedCourseInfoByCategoryId.takeIf { isProtectedCourseStateAvailable() } ?: emptyMap(),
-                    currentDesktopAwardDisplayMode()
+                    if (publishResultsOnly) emptyMap() else decryptedProtectedCourseState(currentProject, protectedCoursePassword.orEmpty()).protectedCourseInfoByCategoryId,
+                    currentDesktopAwardDisplayMode(),
+                    includeCourseDiagrams = !publishResultsOnly && (currentProject.raceData.categories + currentProject.raceData.courseMappings).any {
+                        it.category.courseInfo != null || !it.category.encryptedCourseInfo.isNullOrBlank()
+                    }
                 )
             } else {
                 val seriesId = currentSeriesManifestPath()
@@ -3125,7 +3134,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun updateProtectedIdealOrder(categoryId: String, idealOrderText: String) {
             runCatching {
-                val currentProject = projectFile
+                val currentProject = projectFile?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate)
                     ?: throw IllegalStateException("Load a Race File before editing course order.")
                 val storagePassword = currentProject.courseDataPassword(protectedCoursePassword)
                 val trimmedIdealOrder = idealOrderText.trim()
@@ -3136,12 +3145,11 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     }
                     ProtectedIdealOrderRules.validateAssignedToCategory(trimmedIdealOrder, assignedControls)
                 }
-                projectFile = projectSession.updateCurrentProject { currentProject ->
-                    currentProject.withStoredIdealOrder(categoryId, trimmedIdealOrder, storagePassword)
+                projectFile = projectSession.updateCourseDraft(currentProject) { candidate ->
+                    candidate.withStoredIdealOrder(categoryId, trimmedIdealOrder, storagePassword)
                 }
-                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + (categoryId to trimmedIdealOrder)
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = "Unsaved changes."
+                projectStatusText = "Draft course order updated. Analyze and Apply reviewed courses before using it for the race."
             }.onFailure { error ->
                 projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
             }
@@ -3184,44 +3192,26 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun useCalculatedCourseAnalysisRoute(application: DesktopCourseCalculatedRouteApplication): String {
-            return runCatching {
-                val currentProject = projectFile
-                    ?: throw IllegalStateException("Load a Race File before applying calculated route.")
-                val currentCourseInfo = protectedCourseInfoByCategoryId[application.categoryId]
-                    ?: throw IllegalStateException("Course data is missing for the selected category.")
-                val result = DesktopCourseAnalysisApplier.applyCalculatedRoute(
-                    projectFile = currentProject,
-                    courseInfo = currentCourseInfo,
-                    application = application,
-                    password = protectedCoursePassword
-                )
-                projectFile = projectSession.updateCurrentProject { result.projectFile }
-                syncProtectedCourseState(result.projectFile, protectedCoursePassword)
-                hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText =
-                    "Saved the calculated route and applied its ideal order to ${result.affectedCategoryCount} " +
-                        "categor${if (result.affectedCategoryCount == 1) "y" else "ies"} with the same course. " +
-                        "Save Race to write changes to disk."
-                projectStatusText
-            }.getOrElse { error ->
-                projectStatusText = "Save calculated route failed: ${error.message ?: error::class.simpleName}"
-                projectStatusText
-            }
+            courseDesignUi.pendingApplication = application
+            return "Review station bindings and the complete change set before applying all race courses."
         }
 
         fun applyCourseAnalysisFoxRenumberingOnly(renumbering: DesktopCourseWaitRenumbering): String {
             return runCatching {
-                val currentProject = projectFile
+                val currentProject = projectFile?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate)
                     ?: throw IllegalStateException("Load a Race File before saving fox renumbering.")
+                require(renumbering.sourceSnapshotHash == org.openardf.radiooracle.shared.event.EventCourseDrafts.snapshotHash(currentProject)) {
+                    "The course draft changed after this numbering calculation. Analyze it again before saving."
+                }
                 val result = DesktopCourseAnalysisApplier.applyFoxRenumberingOnly(
                     projectFile = currentProject,
                     renumbering = renumbering,
                     password = protectedCoursePassword
                 )
-                projectFile = projectSession.updateCurrentProject { result.projectFile }
-                syncProtectedCourseState(result.projectFile, protectedCoursePassword)
+                projectFile = projectSession.updateCourseDraft(currentProject) { result.projectFile }
+                syncProtectedCourseState(requireNotNull(projectFile), protectedCoursePassword)
                 projectStatusText =
-                    "Saved fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Save Race to write changes to disk."
+                    "Saved draft fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Analyze the draft and Apply reviewed courses when the design is ready. Save Race preserves the draft."
                 projectStatusText
             }.getOrElse { error ->
                 projectStatusText = "Save fox renumbering failed: ${error.message ?: error::class.simpleName}"
@@ -3230,12 +3220,13 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun updateCourseAnalyzerSpeedFactor(factor: Double): String = runCatching {
-            projectFile ?: throw IllegalStateException("Load a Race File before updating Course Analyzer speed.")
-            projectFile = projectSession.updateCurrentProject { project ->
+            val candidate = projectFile?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate)
+                ?: throw IllegalStateException("Load a Race File before updating Course Analyzer speed.")
+            projectFile = projectSession.updateCourseDraft(candidate) { project ->
                 EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(project, factor)
             }
             hasUnsavedChanges = projectSession.hasUnsavedChanges
-            projectStatusText = "Course Analyzer speed factor updated. Unsaved changes."
+            projectStatusText = "Draft Course Analyzer speed factor updated. Unsaved changes."
             projectStatusText
         }.getOrElse { error ->
             projectStatusText = "Speed factor update failed: ${error.message ?: error::class.simpleName}"
@@ -3244,22 +3235,22 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun updateProtectedControlLocation(controlId: String, latitudeText: String, longitudeText: String): String {
             return runCatching {
-                val currentProject = projectFile
+                val currentProject = projectFile?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate)
                     ?: throw IllegalStateException("Load a Race File before updating control locations.")
+                val draftCourseInfo = decryptedProtectedCourseState(currentProject, protectedCoursePassword.orEmpty()).protectedCourseInfoByCategoryId
                 val result = DesktopProtectedControlLocationUpdater.applyControlLocation(
                     projectFile = currentProject,
-                    courseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                    courseInfoByCategoryId = draftCourseInfo,
                     controlId = controlId,
                     latitudeText = latitudeText,
                     longitudeText = longitudeText,
                     password = protectedCoursePassword,
                     elevationLookup = DesktopVenueElevationCache::elevationMeters
                 )
-                projectFile = projectSession.updateCurrentProject { result.projectFile }
-                protectedCourseInfoByCategoryId = result.courseInfoByCategoryId
+                projectFile = projectSession.updateCourseDraft(currentProject) { result.projectFile }
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 projectStatusText = if (result.affectedCategoryCount > 0) {
-                    "Updated ${result.controlLabel} location in ${result.affectedCategoryCount} stored course(s). Stored route geometry invalidated. Unsaved changes."
+                    "Updated draft ${result.controlLabel} location in ${result.affectedCategoryCount} course(s). Analyze and Apply reviewed courses to replace the applied design. Unsaved changes."
                 } else {
                     "Updated ${result.controlLabel} location. No stored courses referenced it. Unsaved changes."
                 }
@@ -3276,7 +3267,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             password: String?,
             allowInternetDownload: Boolean
         ): Pair<CourseAnalysisElevationPreparationResult, DesktopRouteElevationResult> {
-            val currentProject = projectSession.currentProject ?: error("No Race File open.")
+            val currentProject = projectSession.currentProject?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate) ?: error("No Race File open.")
             val currentJob = coroutineContext[Job]
             if (courseKmlKmzElevationJob?.isActive == true && courseKmlKmzElevationJob != currentJob) {
                 error("Course elevation retrieval is already running.")
@@ -3326,8 +3317,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 val (updatedProject, elevationResult) = fetchResult
                 val shouldPersistResult = allowInternetDownload || elevationResult.resolvedPointCount > 0
                 val resultProject = if (shouldPersistResult) {
-                    projectFile = projectSession.updateCurrentProject { updatedProject }
-                    syncProtectedCourseState(updatedProject, password)
+                    projectFile = projectSession.updateCourseDraft(currentProject) { updatedProject }
+                    syncProtectedCourseState(requireNotNull(projectFile), password)
                     updatedProject
                 } else {
                     currentProject
@@ -3345,7 +3336,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 projectStatusText = statusText
                 CourseAnalysisElevationPreparationResult(
                     projectFile = resultProject,
-                    protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                    protectedCourseInfoByCategoryId = withContext(Dispatchers.Default) { decryptedProtectedCourseState(resultProject, password.orEmpty()).protectedCourseInfoByCategoryId },
                     statusText = statusText
                 ) to elevationResult
             } finally {
@@ -3431,8 +3422,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             categoryId: String,
             summary: DesktopCourseAnalysisSummary
         ): CourseAnalysisElevationPreparationResult {
-            var latestProject = projectSession.currentProject ?: error("No Race File open.")
-            var latestCourseInfo = protectedCourseInfoByCategoryId
+            var latestProject = projectSession.currentProject?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate) ?: error("No Race File open.")
+            var latestCourseInfo = withContext(Dispatchers.Default) { decryptedProtectedCourseState(latestProject, protectedCoursePassword.orEmpty()).protectedCourseInfoByCategoryId }
             val statusParts = mutableListOf<String>()
             if (summary.hasMissingElevationData) {
                 val storagePassword = latestProject.courseDataPassword(protectedCoursePassword)
@@ -3785,7 +3776,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     selectedSummary.duplicateCategoryCount > 0 &&
                     selectedSummary.hasDuplicateMissingElevations
                 val projectToApply = if (isDuplicateElevationRetry) {
-                    projectSession.currentProject ?: selectedProject
+                    projectSession.currentProject?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate) ?: selectedProject
                 } else {
                     selectedProject
                 }
@@ -3808,10 +3799,11 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     projectAfterAssignments
                 }
                 checkpointBeforeImport("controls/route $formatLabel import ${review.sourceName}")
-                projectFile = projectSession.updateCurrentProject { updatedProject }
-                syncProtectedCourseState(updatedProject, review.password)
+                projectFile = projectSession.updateCourseDraft(review.baseProject) { updatedProject }
+                syncProtectedCourseState(requireNotNull(projectFile), review.password)
                 pendingCourseKmlKmzImportReview = null
-                recordActivity("Applied controls/route $formatLabel import ${review.sourceName}.")
+                recordActivity("Saved draft controls/route $formatLabel import ${review.sourceName}.")
+                projectStatusText = "Course draft updated. Analyze and Apply reviewed courses when ready. Save Race preserves the draft."
                 val retainedImportedSiConflictCount = selectedSummary.controlSiConflictCount
                     .takeIf { !overwriteImportedSiNumbers }
                     ?: 0
@@ -3913,7 +3905,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             categoryOverrideId: String? = null,
             requireRoutes: Boolean = true
         ) {
-            val currentProject = projectSession.currentProject ?: return
+            var currentProject = projectSession.currentProject?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate) ?: return
             val formatLabel = controlsRouteImportFormatLabel(path.fileName.toString())
             if (isImportingCourseKmlKmz) {
                 return
@@ -3987,7 +3979,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 if (!summary.hasDuplicateMissingElevations) {
                     return null
                 }
-                val projectBeforeRepair = projectSession.currentProject ?: return null
+                val projectBeforeRepair = currentProject
                 val (updatedProject, elevationResult) = DesktopCourseKmlImporter.fetchProtectedCourseElevations(
                     projectFile = projectBeforeRepair,
                     categoryIds = summary.matchedCategoryIds,
@@ -3997,8 +3989,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 if (elevationResult.resolvedPointCount == 0) {
                     return null
                 }
-                projectFile = projectSession.updateCurrentProject { updatedProject }
-                syncProtectedCourseState(updatedProject, password)
+                projectFile = projectSession.updateCourseDraft(projectBeforeRepair) { updatedProject }
+                syncProtectedCourseState(requireNotNull(projectSession.currentProject), password)
                 projectStatusText =
                     "Resolved ${elevationResult.resolvedPointCount} stored course elevations from the local elevation cache. Unsaved changes."
                 return updatedProject
@@ -4013,6 +4005,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     if (repairedProject == null) {
                         initialPreview
                     } else {
+                        currentProject = repairedProject
                         buildPreview(repairedProject)
                     }
                 }
@@ -4068,7 +4061,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                         pendingCourseKmlKmzCategoryMapping = null
                         // Identical imports skip the apply dialog, but the freshly-entered password
                         // still has to unlock the stored routes for Course Analyzer in this session.
-                        syncProtectedCourseState(updatedProject, password)
+                        syncProtectedCourseState(requireNotNull(projectSession.currentProject), password)
                         val duplicateMessage =
                             "Duplicate controls/route $formatLabel request: identical file already imported and all elevations are available."
                         pendingCourseKmlKmzImportWarning = PendingCourseKmlKmzImportWarning(
@@ -4097,7 +4090,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                         projectStatusText = if (summary.isDuplicateOnly) {
                             "Identical controls/route data already imported. Review missing elevation retrieval option."
                         } else {
-                            "Review imported controls/route data before applying it."
+                            "Review imported controls/route data before saving it as a course draft."
                         }
                     }
                 }.onFailure { error ->
@@ -4685,8 +4678,14 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun requestPublicResultsSite(publish: Boolean) {
-            val projects = publicResultSeriesRaces()?.second?.map(DesktopPublicResultSeriesRace::projectFile)
-                ?: listOfNotNull(projectSession.currentProject)
+            publishResultsOnly = false
+            val projects = runCatching {
+                publicResultSeriesRaces()?.second?.map(DesktopPublicResultSeriesRace::projectFile)
+                    ?: listOfNotNull(projectSession.currentProject)
+            }.getOrElse {
+                projectStatusText = "Cannot prepare series publication: ${it.message}"
+                return
+            }
             if (publicResultsNeedCourseUnlock(projects, isProtectedCourseStateAvailable())) {
                 DesktopPublicResultsRequestedAction.rememberPublish(publish)
                 pendingCourseKmlKmzUnlockAction = CourseKmlKmzUnlockAction.GeneratePublicResultsSite
@@ -7224,6 +7223,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     pendingProtectedCourseActionRequest = null
                 },
                 onPublishWithoutDiagrams = {
+                    publishResultsOnly = true
                     pendingCourseKmlKmzUnlockAction = null
                     DesktopPublicResultsRequestedAction.continueRequestedAction(
                         ::previewPublicResultsSite,
@@ -7503,6 +7503,30 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             projectFile = updated
             hasUnsavedChanges = projectSession.hasUnsavedChanges
             scheduleLocalResultsWebPageRefresh()
+        }) {
+        DesktopCourseDesignHost(projectFile, protectedCoursePassword, projectSession, courseDesignUi, onChanged = { updated, status ->
+            projectFile = updated
+            hasUnsavedChanges = projectSession.hasUnsavedChanges
+            projectStatusText = status
+            protectedCourseInfoByCategoryId = emptyMap()
+            protectedIdealOrderByCategoryId = emptyMap()
+            val passwordSnapshot = protectedCoursePassword
+            appCoroutineScope.launch {
+                val loaded = try {
+                    withContext(Dispatchers.Default) { decryptedProtectedCourseState(updated, passwordSnapshot.orEmpty()) }
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    if (projectSession.currentProject == updated && protectedCoursePassword == passwordSnapshot) {
+                        projectStatusText = "Course access changed. Unlock the current Race File to reload its courses."
+                    }
+                    return@launch
+                }
+                if (projectSession.currentProject == updated && protectedCoursePassword == passwordSnapshot) {
+                    protectedCourseInfoByCategoryId = loaded.protectedCourseInfoByCategoryId
+                    protectedIdealOrderByCategoryId = loaded.protectedIdealOrderByCategoryId
+                    scheduleLocalResultsWebPageRefresh()
+                }
+            }
         }) {
         RadioOManagerDesktopApp(
             projectFile = projectFile,
@@ -8210,6 +8234,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 projectStatusText = "New Race File discarded."
             }
         )
+        }
         }
 }
 
@@ -11767,14 +11792,14 @@ private enum class CourseAnalysisSaveAction(
     val message: String
 ) {
     CalculatedRoute(
-        buttonLabel = "Save Calculated Route",
-        title = "Save calculated route?",
-        message = "This will replace the saved route for the selected category and apply the generated ideal order to every category with the same assigned course. Any improved calculated fox numbering will also be saved to affected course data. The Race File will have unsaved changes until you click Save Race."
+        buttonLabel = "Review and Apply Courses",
+        title = "Review calculated route?",
+        message = "Review the physical SI station bindings, accepted numbering, and complete courses before applying this design to the race. Save Race writes the accepted design to disk."
     ),
     FoxRenumberingOnly(
-        buttonLabel = "Save Fox Renumbering Only",
+        buttonLabel = "Save Draft Numbering",
         title = "Save fox renumbering?",
-        message = "This will keep the saved route geometry, ignore calculated-route changes, and replace saved fox numbering with the Section 1 wait-time recommendation. The Race File will have unsaved changes until you click Save Race."
+        message = "Save the Section 1 numbering proposal in the course draft while retaining its current route geometry. Results continue using the applied courses. Analyze the draft and use Review and Apply Courses when ready."
     )
 }
 
@@ -11801,7 +11826,7 @@ internal fun retainedCourseAnalysisCourseInfo(
         val encryptedCourseInfo = categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }
             ?: return@forEach
         val courseInfo = currentCourseInfoByCategoryId[categoryData.category.id]
-            ?.takeIf { it.route.size >= 2 }
+            ?.takeIf { it.hasCourseAnalysisGeometry() }
             ?: return@forEach
         retained[categoryData.category.id] = RetainedCourseAnalysisCourseInfo(
             encryptedCourseInfo = encryptedCourseInfo,
@@ -11819,14 +11844,14 @@ internal fun effectiveCourseAnalysisCourseInfoByCategoryId(
     protectedCourseStateCategories(projectFile.raceData).mapNotNull { categoryData ->
         val categoryId = categoryData.category.id
         currentCourseInfoByCategoryId[categoryId]
-            ?.takeIf { it.route.size >= 2 }
+            ?.takeIf { it.hasCourseAnalysisGeometry() }
             ?.let { return@mapNotNull categoryId to it }
         val encryptedCourseInfo = categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }
             ?: return@mapNotNull null
         val retainedCourseInfo = retainedCourseInfoByCategoryId[categoryId]
             ?.takeIf { it.encryptedCourseInfo == encryptedCourseInfo }
             ?.courseInfo
-            ?.takeIf { it.route.size >= 2 }
+            ?.takeIf { it.hasCourseAnalysisGeometry() }
             ?: return@mapNotNull null
         categoryId to retainedCourseInfo
     }.toMap()
@@ -11844,7 +11869,7 @@ internal fun courseAnalysisRouteCategories(
 ): List<EventCategoryData> =
     protectedCourseStateCategories(projectFile.raceData)
         .filter { categoryData ->
-            analysisCourseInfoByCategoryId[categoryData.category.id]?.route.orEmpty().size >= 2
+            analysisCourseInfoByCategoryId[categoryData.category.id]?.hasCourseAnalysisGeometry() == true
         }
         .sortedWith(EventCategorySort.byDisplayName)
 
@@ -11981,7 +12006,8 @@ private suspend fun updateDesktopSeriesCourseEncryption(
     currentEventPath: Path?,
     currentProject: EventProjectFile?,
     password: String,
-    encrypt: Boolean
+    encrypt: Boolean,
+    beforeCommit: () -> Unit = {}
 ): DesktopSeriesCourseEncryptionUpdate = withContext(Dispatchers.Default) {
     val result = if (encrypt) {
         DesktopEventSeriesActions.protectCourseData(
@@ -11989,7 +12015,8 @@ private suspend fun updateDesktopSeriesCourseEncryption(
             manifestPath,
             password,
             currentEventPath,
-            currentProject
+            currentProject,
+            beforeCommit
         )
     } else {
         DesktopEventSeriesActions.removeCourseProtection(
@@ -11997,7 +12024,8 @@ private suspend fun updateDesktopSeriesCourseEncryption(
             manifestPath,
             password,
             currentEventPath,
-            currentProject
+            currentProject,
+            beforeCommit
         )
     }
     DesktopSeriesCourseEncryptionUpdate(
@@ -12031,6 +12059,9 @@ private class DesktopCourseProtectionOperations(
             }
         }.fold(
             onSuccess = { update ->
+                if (projectSession.currentProject != currentProject) {
+                    return failure("Race data changed during password processing. Retry using the current Race File.")
+                }
                 applyRaceUpdate(update)
                 success(
                     when {
@@ -12062,12 +12093,16 @@ private class DesktopCourseProtectionOperations(
                 "Series manifest not found near this Race File."
             }
             val update = updateDesktopSeriesCourseEncryption(
-                manifestPath,
-                currentEventPath,
-                currentProject,
-                password,
-                encrypt
+                manifestPath, currentEventPath, currentProject, password, encrypt,
+                beforeCommit = {
+                    require(projectSession.currentPath == currentEventPath && projectSession.currentProject == currentProject) {
+                        "The open race changed during series password processing. Retry using the current data."
+                    }
+                }
             )
+            require(projectSession.currentPath == currentEventPath && projectSession.currentProject == currentProject) {
+                "Series encryption was saved, but the open race changed during the disk write. Preserve those edits before reopening the series."
+            }
             currentEventPath?.let(projectSession::open)
             syncSeriesState(update.password)
             update
@@ -12445,7 +12480,12 @@ private fun RadioOManagerDesktopApp(
                 }
             }
             pendingCourseAnalysisSaveAction?.let { action ->
-                CourseAnalysisSaveActionDialog(
+                if (action == CourseAnalysisSaveAction.CalculatedRoute) {
+                    LaunchedEffect(action) {
+                        pendingCourseAnalysisSaveAction = null
+                        saveCourseAnalysisAction(action)
+                    }
+                } else CourseAnalysisSaveActionDialog(
                     action = action,
                     onConfirm = {
                         pendingCourseAnalysisSaveAction = null
@@ -12649,6 +12689,7 @@ private fun RadioOManagerDesktopApp(
                         siReaderState = siReaderState,
                         isEventFileOpen = projectFile != null,
                         isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
+                        hasEncryptedCourseData = projectFile?.hasEncryptedCategoryData() == true,
                         onLockProtectedCourseOrder = onLockProtectedCourseOrder
                     )
                 }
@@ -13628,7 +13669,7 @@ private fun CourseAnalysisNavigationActions(
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
-                text = "Save Calculated Route",
+                text = "Review and Apply Courses",
                 fontSize = 13.sp,
                 lineHeight = 15.sp,
                 maxLines = 2,
@@ -13649,7 +13690,7 @@ private fun CourseAnalysisNavigationActions(
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
-                text = "Save Fox Renumbering Only",
+                text = "Save Draft Numbering",
                 fontSize = 13.sp,
                 lineHeight = 15.sp,
                 maxLines = 2,
@@ -14044,12 +14085,19 @@ private fun SectionWorkspace(
             onDrawStartList = onDrawStartList
         )
         if (section == DesktopSection.CourseAnalysis && projectFile != null) {
-            CourseAnalysisPanel(
-                projectFile = projectFile,
+            val design = LocalCourseDesign.current
+            if (projectFile.raceData.courseDraft != null) {
+                Text("Course draft: results and downloads continue using the applied courses.")
+                TextButton(onClick = { design?.cancelDraft?.invoke() }) { Text("Discard course draft") }
+            }
+            if (projectFile.raceData.courseDraft != null && design?.project == null && isProtectedCourseOrderUnlocked) {
+                Text(design?.error ?: "Loading the course draft…")
+            } else CourseAnalysisPanel(
+                projectFile = design?.project ?: projectFile,
                 eventFilePath = eventFilePath,
                 isUnlocked = isProtectedCourseOrderUnlocked,
-                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
-                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                protectedIdealOrderByCategoryId = design?.courseState?.protectedIdealOrderByCategoryId ?: protectedIdealOrderByCategoryId,
+                protectedCourseInfoByCategoryId = design?.courseState?.protectedCourseInfoByCategoryId ?: protectedCourseInfoByCategoryId,
                 analysisResult = courseAnalysisResult,
                 onAnalysisResultChange = onCourseAnalysisResultChange,
                 applyStatusText = courseAnalysisApplyStatusText,
@@ -14410,15 +14458,22 @@ private fun SetupSectionWorkspaceContent(
         )
     }
     if (section == DesktopSection.ProtectedCourseOrder && projectFile != null) {
-        ProtectedCourseOrderPanel(
-            projectFile = projectFile,
-            isUnlocked = isProtectedCourseOrderUnlocked,
-            idealOrderByCategoryId = protectedIdealOrderByCategoryId,
-            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
-            onUnlock = onUnlockProtectedCourseOrder,
-            onUpdateIdealOrder = onUpdateProtectedIdealOrder,
-            onUpdateControlLocation = onUpdateProtectedControlLocation
-        )
+        val design = LocalCourseDesign.current
+        val candidate = design?.project
+        if (isProtectedCourseOrderUnlocked && candidate == null) {
+            Text(design?.error ?: "Loading course draft…")
+        } else {
+            Text("Course design edits are saved as a draft. Analyze and Apply reviewed courses when ready.")
+            ProtectedCourseOrderPanel(
+                projectFile = candidate ?: projectFile,
+                isUnlocked = isProtectedCourseOrderUnlocked,
+                idealOrderByCategoryId = design?.courseState?.protectedIdealOrderByCategoryId.orEmpty(),
+                protectedCourseInfoByCategoryId = design?.courseState?.protectedCourseInfoByCategoryId.orEmpty(),
+                onUnlock = onUnlockProtectedCourseOrder,
+                onUpdateIdealOrder = onUpdateProtectedIdealOrder,
+                onUpdateControlLocation = onUpdateProtectedControlLocation
+            )
+        }
     }
     if (
         competitorImportReview != null &&
@@ -21121,7 +21176,7 @@ private fun CourseAnalyzerGuidance() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
-            text = "Import course KML/KMZ or GPX data before running analysis.",
+            text = "Import course KML/KMZ or GPX data into a draft before running analysis. Save Race preserves both the draft and the applied courses.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
@@ -21134,8 +21189,8 @@ private fun CourseAnalyzerGuidance() {
             KmlImportInstruction("Optional KML/KMZ SS=#.## values in Start, fox, beacon, spectator, or LineString descriptions replace the race speed factor for the following leg; Finish SS values are ignored.")
             KmlImportInstruction("Choose a category, then Analyze to compare the saved route with the calculated route candidate.")
             KmlImportInstruction("Export Analysis writes the displayed analysis plus route/control data for external review.")
-            KmlImportInstruction("Save Calculated Route replaces saved route and numbering data when the calculated route is available.")
-            KmlImportInstruction("Save Fox Renumbering Only applies the Section 1 wait-time renumbering to the saved route when an improvement is available.")
+            KmlImportInstruction("Review and Apply Courses confirms SI stations, then applies accepted numbering, assignments, geometry, and metrics to all courses in this race.")
+            KmlImportInstruction("Save Draft Numbering stores a Section 1 numbering proposal in the draft; applied courses and results remain unchanged.")
         }
         Text(
             text = "Use the left-column menu buttons Import Course KML/KMZ... and Import Course GPX... to import route-bearing course data for a category before running analysis.",
@@ -21493,7 +21548,8 @@ private suspend fun analyzeCourseCategory(
             eventFileName = eventFilePath?.fileName?.toString(),
             elevationLookup = DesktopVenueElevationCache::elevationMeters,
             elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes,
-            magneticDeclinationProvider = DesktopMagneticDeclination::result
+            magneticDeclinationProvider = DesktopMagneticDeclination::result,
+            prepareApplication = true
         )
     }
 
@@ -25821,6 +25877,7 @@ private fun StatusStrip(
     siReaderState: DesktopSiReaderUiState,
     isEventFileOpen: Boolean,
     isProtectedCourseOrderUnlocked: Boolean,
+    hasEncryptedCourseData: Boolean,
     onLockProtectedCourseOrder: () -> Unit
 ) {
     val effectiveSeverity = if (siReaderState.severity == DesktopSiReaderSeverity.CONNECTED && !isEventFileOpen) {
@@ -25882,18 +25939,30 @@ private fun StatusStrip(
         )
         if (isProtectedCourseOrderUnlocked) {
             Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = "Unlocked",
-                modifier = Modifier
-                    .clickable(onClick = onLockProtectedCourseOrder)
-                    .border(1.dp, textColor)
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                color = textColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                softWrap = false
-            )
+            DisabledReasonTooltip(
+                if (hasEncryptedCourseData) {
+                    "Course data and ideal control order are unlocked for this session. " +
+                        "Click to lock them and require the Race Password again. " +
+                        "Saved course data remains encrypted."
+                } else {
+                    "Course data and ideal control order are available without a Race Password. " +
+                        "This Race File has no encrypted course data, so clicking here will not lock it. " +
+                        "Encrypt the course data with a Race Password to protect it."
+                }
+            ) {
+                Text(
+                    text = "Unlocked",
+                    modifier = Modifier
+                        .clickable(onClick = onLockProtectedCourseOrder)
+                        .border(1.dp, textColor)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    color = textColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
         }
     }
 }

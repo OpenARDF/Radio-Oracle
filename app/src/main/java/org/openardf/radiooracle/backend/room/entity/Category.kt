@@ -79,7 +79,8 @@ data class Category(
     @ColumnInfo(name = "encrypted_ideal_order") var encryptedIdealOrder: String? = null,
     @ColumnInfo(name = "encrypted_course_info") var encryptedCourseInfo: String? = null,
     @ColumnInfo(name = "ideal_order") var idealOrder: String? = null,
-    @ColumnInfo(name = "course_info") var courseInfo: String? = null
+    @ColumnInfo(name = "course_info") var courseInfo: String? = null,
+    @ColumnInfo(name = "portable_category_id") var portableCategoryId: String? = null
 ) : Serializable {
 
     /** Formats this category in the legacy CSV export row shape. */

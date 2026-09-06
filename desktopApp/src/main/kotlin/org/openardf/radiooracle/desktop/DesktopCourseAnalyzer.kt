@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.courseDescriptionSiCodeHint
+
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -37,6 +39,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCourseRuleCatalog
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseControlPoint
+import org.openardf.radiooracle.shared.event.stableResultControlIdentity
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectType
@@ -244,7 +247,10 @@ data class DesktopCourseCalculatedRouteApplication(
     val routePoints: List<CourseGeoPoint>,
     val routeLengthMeters: Int?,
     val climbMeters: Int?,
-    val foxAssignments: List<DesktopCourseCalculatedFoxAssignment>
+    val foxAssignments: List<DesktopCourseCalculatedFoxAssignment>,
+    val orderedPlacementIds: List<String> = emptyList(),
+    val courseObjects: List<ProtectedCourseObjectPoint> = emptyList(),
+    val sourceSnapshotHash: String? = null
 )
 
 data class DesktopCourseCalculatedFoxAssignment(
@@ -321,7 +327,8 @@ data class DesktopCourseWaitRenumbering(
     val bestTotalWaitSeconds: Int,
     val improvesWait: Boolean,
     val assignments: List<DesktopCourseWaitRenumberingAssignment>,
-    val suggestedWaitRows: List<DesktopCourseWaitRow> = emptyList()
+    val suggestedWaitRows: List<DesktopCourseWaitRow> = emptyList(),
+    val sourceSnapshotHash: String? = null
 )
 
 data class DesktopCourseWaitRenumberingAssignment(
@@ -370,7 +377,6 @@ enum class DesktopCourseMetricStatus {
  * time, but the current estimate does not apply a separate accumulated-fatigue adjustment.
  */
 object DesktopCourseAnalyzer {
-    private val STABLE_CONTROL_ID_PATTERN = Regex("""^control-(.+)-(\d+)-(control|beacon|separator)$""")
     private const val USA_RULES_DOCUMENT_LABEL = "USA Rules for Radio Orienteering, Effective Date: 1 Jan 2026"
     private const val CLASSIC_TRANSMIT_CYCLE_SECONDS = 300
     private const val CLASSIC_TRANSMIT_SLOT_SECONDS = 60
@@ -419,7 +425,7 @@ object DesktopCourseAnalyzer {
         val categoryData = protectedCourseStateCategories(projectFile.raceData).firstOrNull { it.category.id == categoryId }
             ?: return "Select a category before running analysis."
         val courseInfo = protectedCourseInfo?.withFiniteCourseGeometry()
-        if (courseInfo == null || courseInfo.route.size < 2) {
+        if (courseInfo == null || !courseInfo.hasCourseAnalysisGeometry()) {
             return "Stored course route data is unavailable for the selected category. Import course KML/KMZ or GPX data before running analysis."
         }
 
@@ -504,9 +510,13 @@ object DesktopCourseAnalyzer {
         elevationCacheNotes: (List<CourseGeoPoint>) -> List<String> = { emptyList() },
         magneticDeclinationProvider: (CourseGeoPoint) -> DesktopMagneticDeclinationResult? = { null },
         controlIdentityMode: DesktopCourseControlIdentityMode =
-            DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING
+            DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING,
+        allowFoxRenumbering: Boolean = true,
+        prepareApplication: Boolean = false
     ): DesktopCourseAnalysisSummary {
-        val rawProtectedCourseInfo = protectedCourseInfo
+        val rawProtectedCourseInfo = if (controlIdentityMode == DesktopCourseControlIdentityMode.RESULT_CONTROLS && protectedCourseInfo != null) {
+            org.openardf.radiooracle.shared.event.ResolvedCourseProjection.courseInfo(projectFile.raceData, categoryId, protectedCourseInfo)
+        } else protectedCourseInfo
         val courseInfo = rawProtectedCourseInfo?.withFiniteCourseGeometry()
         // Analyze the same active-or-inactive category set shown by the Course Analyzer picker.
         val categoryData = protectedCourseStateCategories(projectFile.raceData).first { it.category.id == categoryId }
@@ -518,7 +528,8 @@ object DesktopCourseAnalyzer {
             categoryName = category.name,
             compensationFactor = projectFile.raceData.race.courseAnalyzerSpeedCompensationFactor
         )
-        val idealOrderText = protectedIdealOrderText?.takeIf { it.isNotBlank() }
+        val idealOrderText = courseInfo?.takeIf { it.appliedBindings != null && controlIdentityMode == DesktopCourseControlIdentityMode.RESULT_CONTROLS }?.idealOrder
+            ?: protectedIdealOrderText?.takeIf { it.isNotBlank() }
             ?: courseInfo?.idealOrder?.takeIf { it.isNotBlank() }
         val categoryAssignedControls = assignedControls(projectFile, categoryId)
         val allProtectedControls = courseInfo
@@ -702,7 +713,7 @@ object DesktopCourseAnalyzer {
         val idealOrderMatches = calculatedRoute?.let {
             providedFoxIds.isNotEmpty() && providedFoxIds == calculatedFoxIds
         }
-        val calculatedRouteMatchesStored = idealOrderMatches == true
+        val calculatedRouteMatchesStored = idealOrderMatches == true && !prepareApplication
         val calculatedRouteElevationSamplePoints = if (
             start != null &&
             finish != null &&
@@ -755,7 +766,7 @@ object DesktopCourseAnalyzer {
                     missing += "Transmit slot could not be determined for control ${control.publicDisplayLabel()}."
                 }
         }
-        val waitRenumbering = if (includeWaitAnalysis) {
+        val waitRenumbering = (if (includeWaitAnalysis && allowFoxRenumbering) {
             waitRenumbering(providedControls) { slotOverrides ->
                 routeGeometryTiming(
                     route = route,
@@ -769,7 +780,7 @@ object DesktopCourseAnalyzer {
             }
         } else {
             null
-        }
+        })?.copy(sourceSnapshotHash = org.openardf.radiooracle.shared.event.EventCourseDrafts.snapshotHash(projectFile))
 
         val estimatedIdealSeconds = providedTiming.totalSeconds?.roundToInt()
         val elevationProfile = elevationProfile(route)
@@ -783,7 +794,7 @@ object DesktopCourseAnalyzer {
         } else {
             null
         }
-        val calculatedWaitRenumbering = if (includeWaitAnalysis) {
+        val calculatedWaitRenumbering = if (includeWaitAnalysis && allowFoxRenumbering) {
             calculatedRoute?.let { routeCandidate ->
                 waitRenumbering(routeCandidate.controls.map { it.control }) { slotOverrides ->
                     straightLineTiming(
@@ -1105,6 +1116,8 @@ object DesktopCourseAnalyzer {
             calculatedRouteApplication(
                 categoryId = categoryId,
                 controls = routeCandidate.controls,
+                stops = labeledCalculatedRouteStops,
+                courseObjects = courseObjectPoints,
                 labelOverrides = calculatedLabelOverrides,
                 routePoints = if (start != null && finish != null) {
                     sampledCalculatedRouteStopPoints(
@@ -1118,7 +1131,7 @@ object DesktopCourseAnalyzer {
                 },
                 routeLengthMeters = calculatedRouteAnalysis?.routeLengthMeters?.roundToInt(),
                 climbMeters = calculatedRouteAnalysis?.climbMeters?.roundToInt()
-            )
+            ).copy(sourceSnapshotHash = org.openardf.radiooracle.shared.event.EventCourseDrafts.snapshotHash(projectFile))
         }
         val profileRoutePoints = if (profileComparison.any { it.profile.isNotEmpty() }) {
             kmlFolders
@@ -1467,25 +1480,6 @@ object DesktopCourseAnalyzer {
     private fun String.singleAnalysisControlNumber(): Int? {
         val matches = Regex("""\d+""").findAll(this).map { it.value.toInt() }.toList()
         return matches.singleOrNull()
-    }
-
-    private fun String.stableResultControlIdentity(type: ControlPointType): String? {
-        val match = STABLE_CONTROL_ID_PATTERN.matchEntire(this) ?: return null
-        if (match.groupValues[3] != type.name.lowercase()) {
-            return null
-        }
-        return when (type) {
-            ControlPointType.CONTROL -> {
-                val labelToken = match.groupValues[1]
-                val foxNumber = ControlRoleLabelRules.foxNumber(labelToken) ?: return null
-                val compactLabel = labelToken.lowercase().filter(Char::isLetterOrDigit)
-                val isFast = compactLabel.endsWith("f") ||
-                    (compactLabel.startsWith("f") && compactLabel.drop(1).all(Char::isDigit))
-                "control:${if (isFast) "fast" else "standard"}:$foxNumber"
-            }
-            ControlPointType.BEACON -> "beacon"
-            ControlPointType.SEPARATOR -> "spectator"
-        }
     }
 
     private fun ProtectedCourseControlPoint.toEventControl(raceId: String): EventControl =
@@ -3240,6 +3234,8 @@ object DesktopCourseAnalyzer {
     private fun calculatedRouteApplication(
         categoryId: String,
         controls: List<ControlAnalysisPoint>,
+        stops: List<CalculatedRouteStop>,
+        courseObjects: List<ProtectedCourseObjectPoint>,
         labelOverrides: Map<String, String>,
         routePoints: List<CourseGeoPoint>,
         routeLengthMeters: Int?,
@@ -3254,6 +3250,12 @@ object DesktopCourseAnalyzer {
             routePoints = routePoints,
             routeLengthMeters = routeLengthMeters,
             climbMeters = climbMeters,
+            courseObjects = courseObjects,
+            orderedPlacementIds = listOfNotNull(courseObjects.singleOrNull { it.type == ProtectedCourseObjectType.START }?.id) +
+                stops.mapNotNull { stop -> stop.control?.id ?: courseObjects.singleOrNull {
+                    it.type == ProtectedCourseObjectType.WAYPOINT && it.label == stop.label &&
+                        it.latitude == stop.point.latitude && it.longitude == stop.point.longitude
+                }?.id } + listOfNotNull(courseObjects.singleOrNull { it.type == ProtectedCourseObjectType.FINISH }?.id),
             foxAssignments = controls
                 .filter { it.control.type == ControlPointType.CONTROL }
                 .map { controlPoint ->

@@ -59,6 +59,8 @@ object IofXmlExports {
         creator: String = "Radio-Oracle Desktop",
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null
     ): String {
+        val resolvedInfos = org.openardf.radiooracle.shared.event.ResolvedCourseProjection.courseInfos(
+            raceData, protectedCourseInfoByCategoryId.orEmpty())
         val raceStart = parseRaceStart(raceData.race.startDateTimeIso)
         val controlsById = raceData.controls.associateBy { it.id }
         val categoryCourses = raceData.categories
@@ -67,12 +69,12 @@ object IofXmlExports {
                 categoryData.toIofCourse(
                     raceData = raceData,
                     controlsById = controlsById,
-                    protectedCourseInfo = protectedCourseInfoByCategoryId?.get(categoryData.category.id)
+                    protectedCourseInfo = resolvedInfos[categoryData.category.id]
                 )
             }
         val controlDefinitions = categoryCourses.controlDefinitions(
             controls = raceData.controls,
-            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId.orEmpty()
+            protectedCourseInfoByCategoryId = resolvedInfos
         )
         return buildString {
             append("""<?xml version="1.0" encoding="UTF-8"?>""")

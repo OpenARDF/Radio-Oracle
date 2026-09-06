@@ -24,123 +24,24 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.withResultControlLabels
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
-import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
 import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 
 /** Applies a calculated Course Analyzer route back into the saved Race File model. */
 object DesktopCourseAnalysisApplier {
-    fun applyCalculatedRoute(
-        projectFile: EventProjectFile,
-        courseInfo: ProtectedCourseInfo,
-        application: DesktopCourseCalculatedRouteApplication,
-        password: String?
-    ): DesktopCourseCalculatedRouteApplyResult {
-        val storagePassword = projectFile.courseDataPassword(password)
-        require(projectFile.raceData.categories.any { it.category.id == application.categoryId }) {
-            "Category was not found: ${application.categoryId}"
-        }
+    fun prepare(project: EventProjectFile, selections: List<DesktopCourseRouteSelection>, password: String?): DesktopPreparedCourseDesign =
+        prepareCourseDesign(project, selections, password)
 
-        val labelByControlId = application.foxAssignments.associate { assignment ->
-            assignment.controlId to assignment.calculatedLabel
-        }
-        val updatedControls = projectFile.raceData.controls.withoutPublicCoordinates()
-        val updatedControlsById = updatedControls.associateBy { it.id }
-        val updatedCourseInfo = courseInfo.copy(
-            idealOrder = application.idealOrderText,
-            lengthMeters = application.routeLengthMeters,
-            climbMeters = application.climbMeters,
-            sourceName = "Course Analyzer calculated route",
-            sourceSha256 = "",
-            sampledPointCount = application.routePoints.size,
-            route = application.routePoints.map { point ->
-                ProtectedCourseRoutePoint(
-                    latitude = point.latitude,
-                    longitude = point.longitude,
-                    elevationMeters = point.elevationMeters
-                )
-            }
-        ).withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = false)
-        val sameCourseCategoryIds = DesktopCourseAnalyzer
-            .sameCourseCategories(projectFile, application.categoryId)
-            .mapTo(mutableSetOf()) { it.category.id }
-        var updatedProject = projectFile.copy(raceData = projectFile.raceData.copy(controls = updatedControls))
-        projectFile.raceData.categories.forEach { categoryData ->
-            if (categoryData.category.id == application.categoryId) {
-                updatedProject = updatedProject.withStoredIdealOrder(
-                    categoryData.category.id,
-                    application.idealOrderText,
-                    storagePassword
-                )
-                updatedProject = updatedProject.withStoredCourseInfo(
-                    categoryData.category.id,
-                    updatedCourseInfo,
-                    storagePassword
-                )
-            } else {
-                val hasSameCourse = categoryData.category.id in sameCourseCategoryIds
-                val updatedOtherIdealOrder = if (hasSameCourse) {
-                    application.idealOrderText
-                } else {
-                    categoryData.category
-                        .takeIf { it.encryptedIdealOrder?.isNotBlank() == true || it.idealOrder != null }
-                        ?.storedIdealOrder(storagePassword)
-                        ?.takeIf(String::isNotBlank)
-                        ?.let { idealOrderText ->
-                            val resolvedControlIds = runCatching {
-                                ProtectedIdealOrderRules.resolveControlIds(idealOrderText, projectFile.raceData.controls)
-                            }.getOrElse { error ->
-                                throw IllegalArgumentException(
-                                    "Stored ideal order could not be updated for ${categoryData.category.name}: ${error.message ?: error::class.simpleName}"
-                                )
-                            }
-                            resolvedControlIds.joinToString(" ") { controlId ->
-                                labelByControlId[controlId]
-                                    ?.let(::quoteIdealOrderToken)
-                                    ?: updatedControlsById[controlId]
-                                        ?.idealOrderToken(updatedControls)
-                                    ?: throw IllegalArgumentException("Stored ideal order control could not be preserved: $controlId")
-                            }
-                        }
-                }
-                val updatedOtherCourseInfo = categoryData.category
-                    .takeIf { it.encryptedCourseInfo?.isNotBlank() == true || it.courseInfo != null }
-                    ?.storedCourseInfo(storagePassword)
-                    ?.let { storedCourseInfo ->
-                        storedCourseInfo
-                            .withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true)
-                            .let { updatedInfo ->
-                                if (hasSameCourse) {
-                                    updatedInfo.copy(idealOrder = application.idealOrderText)
-                                } else {
-                                    updatedInfo
-                                }
-                            }
-                }
-                if (updatedOtherIdealOrder != null) {
-                    updatedProject = updatedProject.withStoredIdealOrder(
-                        categoryData.category.id,
-                        updatedOtherIdealOrder,
-                        storagePassword
-                    )
-                }
-                if (updatedOtherCourseInfo != null) {
-                    updatedProject = updatedProject.withStoredCourseInfo(
-                        categoryData.category.id,
-                        updatedOtherCourseInfo,
-                        storagePassword
-                    )
-                }
-            }
-        }
-        return DesktopCourseCalculatedRouteApplyResult(
-            projectFile = updatedProject,
-            courseInfo = updatedCourseInfo,
-            affectedCategoryCount = projectFile.raceData.categories.count { it.category.id in sameCourseCategoryIds }
-        )
-    }
+    fun prepareAll(project: EventProjectFile, accepted: DesktopCourseRouteSelection,
+                   reviewedBindingsByCategoryId: Map<String, Map<String, String>>, password: String?,
+                   elevationLookup: (CourseGeoPoint) -> Double? = { null }, checkCancelled: () -> Unit = {}): DesktopPreparedCourseDesign =
+        prepareAllCourseDesigns(project, accepted, reviewedBindingsByCategoryId, password, elevationLookup, checkCancelled)
+
+    fun commit(project: EventProjectFile, prepared: DesktopPreparedCourseDesign): EventProjectFile =
+        org.openardf.radiooracle.shared.event.EventCourseDrafts.commit(project, prepared.candidate, prepared.expectedCandidateHash)
 
     fun applyFoxRenumberingOnly(
         projectFile: EventProjectFile,
@@ -179,9 +80,9 @@ object DesktopCourseAnalysisApplier {
                 val updatedIdealOrderText = resolvedControlIds
                     .map { controlId ->
                         labelByControlId[controlId]
-                            ?.let(::quoteIdealOrderToken)
+                            ?.let(ProtectedIdealOrderRules::quoteToken)
                             ?: updatedControlsById[controlId]
-                                ?.idealOrderToken(updatedControls)
+                                ?.let { ProtectedIdealOrderRules.formatControlIds(listOf(it.id), updatedControls) }
                             ?: throw IllegalArgumentException("Stored ideal order control could not be preserved: $controlId")
                     }
                     .joinToString(" ")
@@ -193,7 +94,7 @@ object DesktopCourseAnalysisApplier {
                     courseInfo.controlPoints.any { it.controlId in labelByControlId.keys } ||
                         courseInfo.courseObjects.any { it.id in labelByControlId.keys }
                 if (referencesChangedControl) {
-                    val updatedInfo = courseInfo.withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true)
+                    val updatedInfo = courseInfo.withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true, projectFile.raceData.controls)
                     updatedInfoByCategoryId[categoryData.category.id] = updatedInfo
                 }
             }
@@ -225,7 +126,8 @@ object DesktopCourseAnalysisApplier {
 
 private fun ProtectedCourseInfo.withUpdatedProtectedLabels(
     labelByControlId: Map<String, String>,
-    markAnalyzerSavedNumbering: Boolean
+    markAnalyzerSavedNumbering: Boolean,
+    resultControls: List<EventControl> = emptyList()
 ): ProtectedCourseInfo {
     val descriptionByControlNumber = (controlPoints.map { it.label to it.description } +
         courseObjects.map { it.label to it.description })
@@ -234,7 +136,7 @@ private fun ProtectedCourseInfo.withUpdatedProtectedLabels(
     fun movedDescription(label: String, currentDescription: String?): String? =
         descriptionByControlNumber[label.courseDescriptionIdentityKey()] ?: currentDescription
 
-    return copy(
+    return withResultControlLabels(resultControls).copy(
         sourceName = if (markAnalyzerSavedNumbering && !sourceName.startsWith("Course Analyzer", ignoreCase = true)) {
             "Course Analyzer fox renumbering"
         } else {
@@ -266,40 +168,9 @@ private fun List<EventControl>.withoutPublicCoordinates(): List<EventControl> =
         }
     }
 
-private fun EventControl.idealOrderToken(controls: List<EventControl>): String {
-    val candidates = listOfNotNull(
-        publicLabel?.trim()?.takeIf { it.isNotEmpty() },
-        label.trim().takeIf { it.isNotEmpty() },
-        siCode.toString()
-    ).distinct()
-    return candidates
-        .map { token -> quoteIdealOrderToken(token) }
-        .firstOrNull { token ->
-            runCatching { ProtectedIdealOrderRules.resolveControlIds(token, controls) == listOf(id) }
-                .getOrDefault(false)
-        }
-        ?: label.trim()
-}
-
-private fun quoteIdealOrderToken(token: String): String {
-    val needsQuoting = token.any { it.isWhitespace() || it == ',' || it == ';' }
-    return when {
-        !needsQuoting -> token
-        '\'' !in token -> "'$token'"
-        '"' !in token -> "\"$token\""
-        else -> token
-    }
-}
-
 data class DesktopCourseFoxRenumberingApplyResult(
     val projectFile: EventProjectFile,
     val courseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     val changedControlCount: Int,
-    val affectedCategoryCount: Int
-)
-
-data class DesktopCourseCalculatedRouteApplyResult(
-    val projectFile: EventProjectFile,
-    val courseInfo: ProtectedCourseInfo,
     val affectedCategoryCount: Int
 )

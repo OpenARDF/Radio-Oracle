@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.courseDescriptionSiCodeHint
+
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files

@@ -79,6 +79,18 @@ class DesktopProjectSession(private val store: ProjectFileStore) {
         return updatedProject
     }
 
+    /** Commit only course fields from the same candidate that an import/calculation reviewed. */
+    fun updateCourseDraft(expectedCandidate: EventProjectFile, transform: (EventProjectFile) -> EventProjectFile): EventProjectFile =
+        updateCurrentProject { current ->
+            require(current.raceData.race.id == expectedCandidate.raceData.race.id &&
+                org.openardf.radiooracle.shared.event.EventCourseDrafts.snapshotHash(
+                    org.openardf.radiooracle.shared.event.EventCourseDrafts.candidate(current)) ==
+                org.openardf.radiooracle.shared.event.EventCourseDrafts.snapshotHash(expectedCandidate)) {
+                "Course data changed while this operation was running. Review the current draft and retry."
+            }
+            org.openardf.radiooracle.shared.event.EventCourseDrafts.edit(current, transform)
+        }
+
     /** Saves the current Race File to its existing path. */
     fun save() {
         val path = requireNotNull(currentPath) {

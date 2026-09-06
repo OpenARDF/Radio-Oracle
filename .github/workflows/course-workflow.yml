@@ -1,0 +1,57 @@
+name: Course workflow reliability
+
+on:
+  pull_request:
+  push:
+    branches: [Development1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: course-workflow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  course-workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Install the repository's Android platform
+        run: sdkmanager 'platforms;android-37'
+      - name: Run shared, desktop UI, storage, output and Android transfer checks
+        run: >-
+          xvfb-run --auto-servernum ./scripts/gradle-sequential.sh
+          :shared:desktopTest :desktopApp:test
+          --tests '*Course*' --tests '*DesktopClassicRoute*'
+          --tests '*DesktopProjectSessionTest' --tests '*DesktopProjectFilesTest'
+          --tests '*DesktopPublicResultsSiteMirrorTest' --tests '*DesktopCloudflarePagesPublisherTest'
+          :app:testDebugUnitTest --tests '*CourseWorkflow*Test'
+          --tests '*AndroidCourseProtectionTest' --tests '*AndroidPublicResults*Test'
+      - name: Require passing lifecycle reports
+        run: >-
+          ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation
+          --args="course-workflow-report
+          $GITHUB_WORKSPACE/desktopApp/build/reports/course-workflow/baseline.json
+          $GITHUB_WORKSPACE/app/build/reports/course-workflow/android-transfer.json"
+      - name: Transfer the generated desktop archive through Android Room and back
+        run: |
+          ./scripts/gradle-sequential.sh :app:testDebugUnitTest --tests '*CourseWorkflowArchiveTransferTest' -PcourseWorkflowTransferDirectory="$GITHUB_WORKSPACE/desktopApp/build/reports/course-workflow"
+          ./scripts/gradle-sequential.sh :desktopApp:test --tests '*DesktopCourseWorkflowTransferReturnTest' -PcourseWorkflowTransferDirectory="$GITHUB_WORKSPACE/desktopApp/build/reports/course-workflow"
+          ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args="course-workflow-report $GITHUB_WORKSPACE/desktopApp/build/reports/course-workflow/round-trip.json"
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: course-workflow-evidence
+          if-no-files-found: error
+          path: |
+            **/build/reports/course-workflow/*.json
+            **/build/test-results/**/*.xml

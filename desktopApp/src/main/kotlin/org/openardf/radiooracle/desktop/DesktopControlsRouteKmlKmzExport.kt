@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.courseDescriptionSiCodeHint
+
 import net.lingala.zip4j.ZipFile
 import net.lingala.zip4j.model.ZipParameters
 import net.lingala.zip4j.model.enums.AesKeyStrength
@@ -197,11 +199,10 @@ object DesktopControlsRouteKmlKmzExporter {
         projectFile: EventProjectFile,
         password: String?
     ): Map<String, ProtectedCourseInfo> =
-        exportCategoryData(projectFile).mapNotNull { categoryData ->
-            categoryData.category.storedCourseInfo(password)?.let { courseInfo ->
-                categoryData.category.id to courseInfo.withFiniteCourseGeometry()
-            }
-        }.toMap()
+        org.openardf.radiooracle.shared.event.ResolvedCourseProjection.courseInfos(projectFile.raceData,
+            exportCategoryData(projectFile).mapNotNull { categoryData ->
+                categoryData.category.storedCourseInfo(password)?.let { categoryData.category.id to it }
+            }.toMap()).mapValues { it.value.withFiniteCourseGeometry() }
 
     private fun buildKml(
         projectFile: EventProjectFile,

@@ -442,8 +442,7 @@ object DesktopCourseKmlImporter {
                 courseInfoByCategoryId = courseInfoByCategoryId,
                 updates = updates,
                 password = storagePassword,
-                elevationLookup = elevationProvider,
-                invalidateAllReferencedProtectedCourses = false
+                elevationLookup = elevationProvider
             )
         }
         val controlsOnlyProtectedImportResult = if (courseData.routes.isEmpty() && courseInfoByCategoryId.isEmpty()) {

@@ -51,7 +51,8 @@ data class ControlPoint(
     @ColumnInfo(name = "category_id") var categoryId: UUID,
     @ColumnInfo(name = "si_code") var siCode: Int,
     @ColumnInfo(name = "type") var type: ControlPointType,
-    @ColumnInfo(name = "order") var order: Int
+    @ColumnInfo(name = "order") var order: Int,
+    @ColumnInfo(name = "portable_control_id") var portableControlId: String? = null
 ) : Serializable {
 
     /** Formats this single control point as the compact CSV token used by exports. */

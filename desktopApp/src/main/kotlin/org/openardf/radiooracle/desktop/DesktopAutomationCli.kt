@@ -191,6 +191,12 @@ object DesktopAutomationCli {
                 0
             }
             "open-event-file" -> openEventFile(commandArgs, out, err)
+            "course-publication-manifest" -> DesktopCourseWorkflowCommands.publicationManifest(commandArgs, out, err)
+            "course-publication-verify" -> DesktopCourseWorkflowCommands.publicationVerify(commandArgs, out, err)
+            "course-apply-preview" -> DesktopCourseDesignCommands.preview(commandArgs, out, err)
+            "course-export-verify" -> DesktopCourseDesignCommands.exportVerify(commandArgs, out, err)
+            "course-audit" -> DesktopCourseWorkflowCommands.audit(commandArgs, out, err)
+            "course-workflow-report" -> DesktopCourseWorkflowCommands.verifyReports(commandArgs, out, err)
             "import-android-event-file" -> importAndroidEventFile(commandArgs, out, err)
             "export-android-event-file" -> exportAndroidEventFile(commandArgs, out, err)
             "import-competitors-csv" -> importCompetitorsCsv(commandArgs, out, err)
@@ -2090,6 +2096,12 @@ object DesktopAutomationCli {
           logs                            Initialize logging and print current log files as JSON.
           log-test [message]              Write a desktop automation log entry.
           open-event-file <path>          Decode and validate a Race File.
+          course-workflow-report <paths>  Verify workflow evidence; incomplete gates return nonzero.
+          course-publication-manifest <site> <output>  Validate a generated site and save its public byte inventory.
+          course-publication-verify <url> <inventory>  Fresh read-only verification; stale or missing bytes fail.
+          course-apply-preview <race-or-series> <design.json>  Read-only preparation with reviewed station bindings.
+          course-export-verify <race-or-series> <new-directory>  Generate and check applied course artifacts.
+          course-audit <path>             Read-only course binding and stale-data audit (Race File or .roseries).
           import-android-event-file <android-path> <desktop-path>
                                           Convert an Android Race File into a desktop Race File.
           export-android-event-file <desktop-path> <android-path>

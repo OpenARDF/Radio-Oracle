@@ -239,3 +239,12 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
         db.execSQL("ALTER TABLE `category` ADD COLUMN `course_info` TEXT")
     }
 }
+
+/** Preserve portable control references through Android's existing race/category storage. */
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE race ADD COLUMN portable_course_data TEXT")
+        db.execSQL("ALTER TABLE control_point ADD COLUMN portable_control_id TEXT")
+        db.execSQL("ALTER TABLE category ADD COLUMN portable_category_id TEXT")
+    }
+}

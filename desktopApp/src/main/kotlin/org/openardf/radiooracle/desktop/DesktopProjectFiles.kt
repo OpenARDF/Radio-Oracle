@@ -276,14 +276,16 @@ object DesktopProjectFiles : ProjectFileStore {
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
         publicationStatus: PublicResultsPublicationStatus =
-            DesktopPublicResultsPublicationSelection.consumeForGeneration()
+            DesktopPublicResultsPublicationSelection.consumeForGeneration(),
+        includeCourseDiagrams: Boolean = !protectedCourseInfoByCategoryId.isNullOrEmpty()
     ): DesktopPublicResultSiteExportPaths {
         val paths = DesktopPublicResultSiteExports.export(
             directory = directory,
             projectFile = projectFile,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             awardDisplayMode = awardDisplayMode,
-            publicationStatus = publicationStatus
+            publicationStatus = publicationStatus,
+            includeCourseDiagrams = includeCourseDiagrams
         )
         DesktopPublicResultsPublicationSelection.completeGeneration(publicationStatus)
         return paths

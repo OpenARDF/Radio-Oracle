@@ -56,7 +56,9 @@ data class Race(
     @ColumnInfo(name = "import_source_id") var importSourceId: String? = null,
     @ColumnInfo(name = "import_fingerprint") var importFingerprint: String? = null,
     @ColumnInfo(name = "public_results_url") var publicResultsUrl: String? = null,
-    @ColumnInfo(name = "public_results_published_at_iso") var publicResultsPublishedAtIso: String? = null
+    @ColumnInfo(name = "public_results_published_at_iso") var publicResultsPublishedAtIso: String? = null,
+    /** Portable catalog and inactive mappings; active category rows remain in their existing tables. */
+    @ColumnInfo(name = "portable_course_data") var portableCourseData: String? = null
 ) : Serializable {
     /** Default constructor used by edit screens and persistence tooling. */
     constructor() : this(

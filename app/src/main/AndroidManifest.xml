@@ -122,6 +122,7 @@
                 <action android:name="org.openardf.radiooracle.command.SEND_SERIES_TO_DESKTOP" />
                 <action android:name="org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT" />
                 <action android:name="org.openardf.radiooracle.command.RUN_IOF_XML_SMOKE" />
+                <action android:name="org.openardf.radiooracle.command.RUN_COURSE_WORKFLOW_SMOKE" />
             </intent-filter>
         </receiver>
     </application>

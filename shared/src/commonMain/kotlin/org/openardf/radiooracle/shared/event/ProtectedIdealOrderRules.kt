@@ -33,6 +33,21 @@ object ProtectedIdealOrderRules {
     private val tokenSeparators = Regex("""[\s,;]+""")
     private val numericToken = Regex("""\d+""")
 
+    /** Format the ordered identities using unambiguous existing labels or station codes. */
+    fun formatControlIds(ids: List<String>, controls: List<EventControl>): String = ids.joinToString(" ") { id ->
+        val control = requireNotNull(controls.singleOrNull { it.id == id }) { "Ordered race control is missing or ambiguous." }
+        val candidates = listOfNotNull(control.publicLabel?.takeIf(String::isNotBlank), control.label.takeIf(String::isNotBlank), control.siCode.toString())
+        candidates.map(::quoteToken).firstOrNull { token -> runCatching { resolveControlIds(token, controls) == listOf(id) }.getOrDefault(false) }
+            ?: throw IllegalArgumentException("Cannot format the ordered control ${control.publicLabel ?: control.label} unambiguously.")
+    }
+
+    fun quoteToken(token: String): String = when {
+        token.none { it.isWhitespace() || it == ',' || it == ';' } -> token
+        '\'' !in token -> "'$token'"
+        '"' !in token -> "\"$token\""
+        else -> throw IllegalArgumentException("Course label cannot be represented in ideal order text.")
+    }
+
     fun firstControlCode(idealOrderText: String, controls: List<EventControl>): Int? =
         resolveControls(idealOrderText, controls).firstOrNull()?.siCode
 

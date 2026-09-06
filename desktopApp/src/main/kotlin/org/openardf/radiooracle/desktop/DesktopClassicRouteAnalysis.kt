@@ -18,9 +18,15 @@ internal class DesktopFrozenElevationSurface(
 
 /** All calculation inputs are detached. Callers must revalidate before merging returned metadata. */
 internal object DesktopClassicRouteAnalysis {
-    const val METHOD = "classic-straight-25m-median50-prominence2-rounded-components-v1"
+    // Identity resolution is part of calculation provenance. Old numbers must not survive this change.
+    const val METHOD = "classic-straight-25m-median50-prominence2-rounded-components-applied-bindings-v3"
     const val PUNCH_POLICY = "ignore-unresolved-v1"
     private val json = Json { encodeDefaults = true }
+
+    fun needsMethodRefresh(project: EventProjectFile): Boolean = project.raceData.race.raceType == RaceType.CLASSIC &&
+        project.desktopRouteAnalysis?.let { saved -> saved.results.values.any {
+            saved.contexts[it.contextId]?.method != METHOD
+        } } == true
 
     fun terrainBounds(infos: Collection<ProtectedCourseInfo>): DesktopVenueElevationBoundingBox? {
         val points = infos.flatMap { info -> info.courseObjects.map { it.latitude to it.longitude } +
@@ -261,6 +267,7 @@ internal object DesktopClassicRouteAnalysis {
         val permuted = assigned.filter { it.type != ControlPointType.BEACON }
         require(permuted.isNotEmpty() && permuted.all { it.type == ControlPointType.CONTROL || it.type == ControlPointType.SEPARATOR }) { "Unsupported Classic control roles." }
         val points = assigned.associate { it.id to resolve(it, info, infos.values.toList()) }
+        require(points.values.distinct().size == assigned.size) { "Assigned controls do not have unique field locations." }
         val geometryKey = "$start|$finish|" + assigned.joinToString("|") { "${it.id}:${it.type}:${points.getValue(it.id)}" }
         sharedCourses[geometryKey]?.let { return it }
         val idealIds = DesktopCourseAnalyzer.classicIdealOrder(start, finish, permuted.map { it to points.getValue(it.id) },
@@ -277,25 +284,10 @@ internal object DesktopClassicRouteAnalysis {
     private class UnresolvedControlLocation(message: String) : IllegalArgumentException(message)
 
     internal fun resolve(control: EventControl, categoryInfo: ProtectedCourseInfo?, all: List<ProtectedCourseInfo>): CourseGeoPoint {
-        val infos = listOfNotNull(categoryInfo) + all.filter { it !== categoryInfo }
-        fun candidates(info: ProtectedCourseInfo, byId: Boolean): List<CourseGeoPoint> {
-            val labels = listOfNotNull(control.label, control.publicLabel).map { it.trim().lowercase() }
-            val type = when (control.type) {
-                ControlPointType.CONTROL -> ProtectedCourseObjectType.CONTROL
-                ControlPointType.BEACON -> ProtectedCourseObjectType.BEACON
-                ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
-                else -> null
-            }
-            return info.controlPoints.filter { it.type == control.type && if (byId) it.controlId == control.id else it.label.trim().lowercase() in labels }
-                .map { geo(it.latitude, it.longitude) } + info.courseObjects.filter { it.type == type && if (byId) it.id == control.id else it.label.trim().lowercase() in labels }
-                .map { geo(it.latitude, it.longitude) }
-        }
-        for (byId in listOf(true, false)) {
-            val matches = infos.flatMap { candidates(it, byId) }.distinct()
-            if (matches.size > 1) throw UnresolvedControlLocation("Ambiguous location for ${control.publicLabel ?: control.label}.")
-            matches.singleOrNull()?.let { return it }
-        }
-        throw UnresolvedControlLocation("No location for ${control.publicLabel ?: control.label} (SI ${control.siCode}).")
+        val resolution = CourseControlResolver.resolve(control, listOfNotNull(categoryInfo) + all.filter { it !== categoryInfo })
+        val point = resolution.location ?: throw UnresolvedControlLocation(requireNotNull(resolution.explanation))
+        // This calculation's frozen terrain surface supplies all elevations consistently.
+        return CourseGeoPoint(point.latitude, point.longitude)
     }
 
     private fun metrics(points: List<CourseGeoPoint>, lookup: (CourseGeoPoint) -> Double?, cache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>): Pair<Int, Int> {

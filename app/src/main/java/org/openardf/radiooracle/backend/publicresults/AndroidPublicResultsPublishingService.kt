@@ -172,7 +172,9 @@ class AndroidPublicResultsPublishingService(
         }
         val series = dataProcessor.getEventSeriesForRace(raceId)
         val generatedAt = Instant.now().toString()
-        val root = AndroidPublicResultsSiteMirror.prepare(appContext, settings)
+        val stage = AndroidPublicResultsSiteMirror.stageForPublish(appContext, settings)
+        try {
+        val root = stage.stagingDirectory.toFile()
         val export = if (series == null) {
             val raceData = dataProcessor.getRaceData(raceId)
             AndroidPublicResultsSiteExports.exportRace(
@@ -200,6 +202,7 @@ class AndroidPublicResultsPublishingService(
             )
         }
         val result = publisher.publish(export.directory, settings)
+        stage.promote()
         val url = CloudflarePagesPublisher.publicResultsUrl(result.url, export.eventPath)
         val persistenceWarning = runCatching {
             persistPublication(raceId, series, url, generatedAt)
@@ -211,6 +214,9 @@ class AndroidPublicResultsPublishingService(
             output = result.output,
             persistenceWarning = persistenceWarning
         )
+        } finally {
+            stage.discard()
+        }
     }
 
     private suspend fun persistPublication(
@@ -252,7 +258,8 @@ class AndroidPublicResultsPublishingService(
             } else {
                 emptyMap()
             },
-            publicationStatus = publicationStatus
+            publicationStatus = publicationStatus,
+            includeCourseDiagrams = includeCourseDiagrams
         )
 }
 

@@ -264,7 +264,8 @@ internal data class DesktopCloudflarePagesHttpRequest(
 
 internal data class DesktopCloudflarePagesHttpResponse(
     val statusCode: Int,
-    val body: String
+    val body: String,
+    val bodyBytes: ByteArray = body.toByteArray(StandardCharsets.UTF_8)
 )
 
 internal fun interface DesktopCloudflarePagesHttpTransport {
@@ -285,7 +286,7 @@ internal class JavaDesktopCloudflarePagesHttpTransport(
             .timeout(Duration.ofMinutes(2))
             .method(request.method, bodyPublisher)
         request.headers.forEach(builder::header)
-        val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-        return DesktopCloudflarePagesHttpResponse(response.statusCode(), response.body())
+        val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
+        return DesktopCloudflarePagesHttpResponse(response.statusCode(), response.body().toString(StandardCharsets.UTF_8), response.body())
     }
 }

@@ -292,14 +292,7 @@ object DesktopVenueElevationCache {
     @Volatile
     private var loadedCaches: List<DesktopVenueElevationCacheFile> = emptyList()
 
-    fun cacheDirectory(): Path =
-        Path.of(
-            System.getProperty("user.home"),
-            "Library",
-            "Application Support",
-            "Radio-Oracle",
-            "elevations"
-        )
+    fun cacheDirectory(): Path = DesktopAppDirectories.appDataDirectory().resolve("elevations")
 
     fun estimate(
         boundingBox: DesktopVenueElevationBoundingBox,
@@ -517,12 +510,13 @@ object DesktopVenueElevationCache {
     /** Recreate an archived context without consulting current cache precedence or fetching terrain. */
     internal fun restoreRouteAnalysisSurface(
         sources: List<org.openardf.radiooracle.shared.event.RouteElevationSource>,
-        checkCancelled: () -> Unit = {}
+        checkCancelled: () -> Unit = {},
+        sourceDirectory: Path = cacheDirectory().resolve("route-analysis-sources")
     ): DesktopFrozenElevationSurface {
         val caches = sources.map { source ->
             checkCancelled()
             require(source.contentSha256.matches(Regex("[0-9a-f]{64}"))) { "Invalid terrain source digest." }
-            val path = cacheDirectory().resolve("route-analysis-sources").resolve("${source.contentSha256}.json")
+            val path = sourceDirectory.resolve("${source.contentSha256}.json")
             val text = Files.readString(path)
             require(DesktopClassicRouteAnalysis.sha256(text) == source.contentSha256) { "Archived terrain source has changed." }
             parseCacheFile(text, path)

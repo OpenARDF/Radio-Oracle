@@ -65,7 +65,7 @@ object EventControlCatalog {
             .flatMap { it.controlPoints }
             .map { controlPoint ->
                 val label = aliasesByCode[controlPoint.siCode]?.name ?: defaultLabel(controlPoint)
-                EventControl(
+                raceData.controls.singleOrNull { it.id == controlPoint.controlId } ?: EventControl(
                     id = stableId(label, controlPoint.siCode, controlPoint.type),
                     raceId = raceData.race.id,
                     label = label,

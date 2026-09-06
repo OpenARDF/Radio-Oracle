@@ -25,21 +25,6 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
-import org.openardf.radiooracle.shared.sportident.SportIdentCodes
-
-internal fun String?.courseDescriptionSiCodeHint(): Int? =
-    this
-        ?.lineSequence()
-        ?.map { line -> line.trim() }
-        ?.mapNotNull { line ->
-            Regex("""^SI\s*=\s*(\d+)\s*$""", RegexOption.IGNORE_CASE)
-                .matchEntire(line)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.toIntOrNull()
-                ?.takeIf(SportIdentCodes::isSICodeValid)
-        }
-        ?.firstOrNull()
 
 internal fun String.courseDescriptionIdentityKey(): String {
     val normalized = trim().lowercase().replace(Regex("[^a-z0-9]+"), "")

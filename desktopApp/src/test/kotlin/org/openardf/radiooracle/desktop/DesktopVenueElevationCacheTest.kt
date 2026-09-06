@@ -885,12 +885,15 @@ class DesktopVenueElevationCacheTest {
 
     private fun withTemporaryUserHome(block: (Path) -> Unit) {
         val originalHome = System.getProperty("user.home")
+        val originalAppData = System.getProperty("radiooracle.appDataDirectory")
         val home = Files.createTempDirectory("radio-oracle-home")
         try {
             System.setProperty("user.home", home.toString())
+            System.setProperty("radiooracle.appDataDirectory", home.resolve("Library/Application Support/Radio-Oracle").toString())
             block(home)
         } finally {
             System.setProperty("user.home", originalHome)
+            if (originalAppData == null) System.clearProperty("radiooracle.appDataDirectory") else System.setProperty("radiooracle.appDataDirectory", originalAppData)
             home.toFile().deleteRecursively()
         }
     }

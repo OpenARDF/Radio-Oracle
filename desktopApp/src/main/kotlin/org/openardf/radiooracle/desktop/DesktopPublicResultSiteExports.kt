@@ -77,7 +77,8 @@ data class DesktopPublicResultSeriesRace(
     val projectFile: EventProjectFile,
     val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     val awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
-    val publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY
+    val publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY,
+    val includeCourseDiagrams: Boolean = protectedCourseInfoByCategoryId.isNotEmpty()
 )
 
 internal data class DesktopPublicResultCourseGraphic(
@@ -88,19 +89,18 @@ internal data class DesktopPublicResultCourseGraphic(
 
 internal fun publicResultCoursesForGraphics(
     race: DesktopPublicResultSeriesRace
-): List<DesktopPublicResultCourseGraphic> =
-    EventResultDetails.from(race.projectFile.raceData)
-        .mapNotNull { result ->
-            val categoryId = result.categoryId ?: return@mapNotNull null
-            val courseInfo = protectedCourseInfoForResultCategory(
-                projectFile = race.projectFile,
-                protectedCourseInfoByCategoryId = race.protectedCourseInfoByCategoryId,
-                resultCategoryId = categoryId,
-                resultCategoryName = result.categoryName
-            ) ?: return@mapNotNull null
-            DesktopPublicResultCourseGraphic(categoryId, result.categoryName, courseInfo)
-        }
-        .distinctBy { it.categoryId to it.categoryName }
+): List<DesktopPublicResultCourseGraphic> {
+    if (!race.includeCourseDiagrams) return emptyList()
+    val results = EventResultDetails.from(race.projectFile.raceData)
+    val available = results.mapNotNull { result ->
+        val id = result.categoryId ?: return@mapNotNull null
+        protectedCourseInfoForResultCategory(race.projectFile, race.protectedCourseInfoByCategoryId,
+            id, result.categoryName)?.let { id to it }
+    }.toMap()
+    return org.openardf.radiooracle.shared.publicresults.PublicResultsCourseSelection.resolve(
+        race.projectFile.raceData, available, results
+    ).map { DesktopPublicResultCourseGraphic(it.categoryId, it.categoryName, it.courseInfo) }
+}
 
 /** Writes the static public-results site that can be uploaded to Cloudflare Pages. */
 object DesktopPublicResultSiteExports {
@@ -118,11 +118,35 @@ object DesktopPublicResultSiteExports {
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
         publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY,
+        generatedAt: Instant = Instant.now(),
+        includeCourseDiagrams: Boolean = !protectedCourseInfoByCategoryId.isNullOrEmpty()
+    ): DesktopPublicResultSiteExportPaths = stagedExport(directory) { stage ->
+        val paths = exportPrepared(stage, projectFile, appVersion, protectedCourseInfoByCategoryId,
+            awardDisplayMode, publicationStatus, generatedAt)
+        val graphics = exportCourseGraphics(paths, DesktopPublicResultSeriesRace(projectFile,
+            protectedCourseInfoByCategoryId.orEmpty(), awardDisplayMode, publicationStatus, includeCourseDiagrams))
+        if (graphics.isNotEmpty()) {
+            val images = graphics.joinToString("\n") { "<img src=\"course-graphics/${it.fileName}\" alt=\"Course diagram\" style=\"max-width:100%;height:auto\">" }
+            writeText(paths.indexHtml, Files.readString(paths.indexHtml).replace("</main>",
+                "<section class=\"panel\"><h2>2D Course Diagrams</h2>$images</section></main>"))
+        }
+        paths
+    }
+
+
+    private fun exportPrepared(
+        directory: Path,
+        projectFile: EventProjectFile,
+        appVersion: String = "Desktop",
+        protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>? = null,
+        awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
+        publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY,
         generatedAt: Instant = Instant.now()
     ): DesktopPublicResultSiteExportPaths {
         PublicResultsPublicationRules.requireReady(projectFile.raceData, publicationStatus)
         val eventPath = eventPath(projectFile, generatedAt)
         val eventDirectory = directory.resolve(eventPath)
+        DesktopPublicResultsSiteMirror.deleteGeneratedSiteDirectory(directory, eventPath)
         val rootDataDirectory = directory.resolve("data")
         val assetsDirectory = eventDirectory.resolve("assets")
         val dataDirectory = eventDirectory.resolve("data")
@@ -143,7 +167,7 @@ object DesktopPublicResultSiteExports {
         val splitResultsPdfPath = downloadsDirectory.resolve("split-results.pdf")
 
         val unofficialResults = publicationStatus != PublicResultsPublicationStatus.OFFICIAL
-        writeText(indexPath, indexHtml(projectFile.raceData.race.name, unofficialResults))
+        writeText(indexPath, indexHtml(projectFile.raceData.race.name, unofficialResults, hasResults))
         writeText(assetsDirectory.resolve("site.css"), siteCss())
         writeText(assetsDirectory.resolve("site.js"), siteJs())
         writeText(directory.resolve("_headers"), headersText())
@@ -236,12 +260,24 @@ object DesktopPublicResultSiteExports {
         seriesId: String? = null,
         appVersion: String = "Desktop",
         generatedAt: Instant = Instant.now()
+    ): DesktopPublicResultSiteExportPaths = stagedExport(directory) { stage ->
+        exportSeriesPrepared(stage, seriesName, races, seriesId, appVersion, generatedAt)
+    }
+
+
+    private fun exportSeriesPrepared(
+        directory: Path,
+        seriesName: String,
+        races: List<DesktopPublicResultSeriesRace>,
+        seriesId: String? = null,
+        appVersion: String = "Desktop",
+        generatedAt: Instant = Instant.now()
     ): DesktopPublicResultSiteExportPaths {
         require(races.isNotEmpty()) {
             "The Race Series does not contain any races to publish."
         }
         val raceExports = races.map { race ->
-            val paths = export(
+            val paths = exportPrepared(
                 directory = directory,
                 projectFile = race.projectFile,
                 appVersion = appVersion,
@@ -259,6 +295,7 @@ object DesktopPublicResultSiteExports {
         }
         val seriesPath = seriesPath(seriesName, races.first().projectFile, generatedAt)
         val seriesDirectory = directory.resolve(seriesPath)
+        DesktopPublicResultsSiteMirror.deleteGeneratedSiteDirectory(directory, seriesPath)
         val assetsDirectory = seriesDirectory.resolve("assets")
         val dataDirectory = seriesDirectory.resolve("data")
         listOf(seriesDirectory, assetsDirectory, dataDirectory).forEach(Files::createDirectories)
@@ -317,26 +354,32 @@ object DesktopPublicResultSiteExports {
         )
     }
 
+    private fun stagedExport(directory: Path, generate: (Path) -> DesktopPublicResultSiteExportPaths): DesktopPublicResultSiteExportPaths {
+        val stage = DesktopPublicResultsSiteMirror.stageDirectory(directory)
+        try {
+            val generated = generate(stage.stagingDirectory)
+            org.openardf.radiooracle.shared.publicresults.PublicResultsArtifactVerification.manifest(
+                DesktopCloudflarePagesSiteReader.read(stage.stagingDirectory).readFrozenSite())
+            fun relocated(path: Path) = directory.resolve(stage.stagingDirectory.relativize(path))
+            val result = generated.copy(directory = directory, eventDirectory = relocated(generated.eventDirectory),
+                rootIndexHtml = relocated(generated.rootIndexHtml), indexHtml = relocated(generated.indexHtml),
+                publicResultsJson = relocated(generated.publicResultsJson), finalResultsJson = relocated(generated.finalResultsJson),
+                liveResultsJson = relocated(generated.liveResultsJson), iofResultListXml = relocated(generated.iofResultListXml),
+                printableResultsHtml = relocated(generated.printableResultsHtml), splitResultsCsv = relocated(generated.splitResultsCsv),
+                splitResultsPdf = relocated(generated.splitResultsPdf))
+            stage.promote()
+            return result
+        } finally {
+            stage.discard()
+        }
+    }
+
     private fun exportCourseGraphics(
         paths: DesktopPublicResultSiteExportPaths,
         race: DesktopPublicResultSeriesRace
     ): List<Path> {
         val graphicsDirectory = paths.eventDirectory.resolve("course-graphics")
         val resolvedCourses = publicResultCoursesForGraphics(race)
-        val resolvedCategoryIds = resolvedCourses.mapTo(mutableSetOf()) { it.categoryId }
-        EventResultDetails.from(race.projectFile.raceData)
-            .mapNotNull { result -> result.categoryId?.let { it to result.categoryName } }
-            .distinct()
-            .filterNot { (categoryId, _) -> categoryId in resolvedCategoryIds }
-            .forEach { (categoryId, categoryName) ->
-                if (race.protectedCourseInfoByCategoryId.isNotEmpty()) {
-                    DesktopDebugLog.warn(
-                        "PublicResults",
-                        "No unlocked course matched result category=$categoryName categoryId=$categoryId " +
-                            "race=${race.projectFile.raceData.race.name}."
-                    )
-                }
-            }
         val distinctCourses = resolvedCourses
             .groupBy { it.courseInfo }
             .map { (_, courses) ->
@@ -347,7 +390,7 @@ object DesktopPublicResultSiteExports {
         if (distinctCourses.isEmpty()) {
             return emptyList()
         }
-        return distinctCourses.mapNotNull { course ->
+        return distinctCourses.map { course ->
             val (categoryId, categoryName, courseInfo) = course
             runCatching {
                 val unavailableReason = DesktopCourseAnalyzer.analysisUnavailableReason(
@@ -362,7 +405,7 @@ object DesktopPublicResultSiteExports {
                         "Skipped 2D course diagram race=${race.projectFile.raceData.race.name} " +
                             "category=$categoryName reason=$unavailableReason"
                     )
-                    return@runCatching null
+                    throw IllegalArgumentException("Course diagram for $categoryName is incomplete: $unavailableReason")
                 }
                 val summary = DesktopCourseAnalyzer.analyze(
                     projectFile = race.projectFile,
@@ -374,7 +417,7 @@ object DesktopPublicResultSiteExports {
                     // even when Course Analyzer saved alternate planning-time fox numbering.
                     controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS
                 )
-                val routeMap = summary.routeMaps.firstOrNull() ?: return@runCatching null
+                val routeMap = requireNotNull(summary.routeMaps.firstOrNull()) { "No course diagram was produced for $categoryName." }
                 val fileName = "course-${categoryId.safePathSegment()}.png"
                 val path = graphicsDirectory.resolve(fileName)
                 DesktopCourseGraphic.writeWebPng(
@@ -394,7 +437,7 @@ object DesktopPublicResultSiteExports {
                     "2D course diagram failed race=${race.projectFile.raceData.race.name} " +
                         "category=$categoryName: ${error.message ?: error::class.simpleName}"
                 )
-            }.getOrNull()
+            }.getOrThrow()
         }
     }
 
@@ -514,7 +557,12 @@ object DesktopPublicResultSiteExports {
     private fun rootIndexHtml(races: List<PublishedEventSummary>): String =
         PublicResultsSiteCatalog.rootIndexHtml(races.map { it.toSharedEntry() })
 
-    private fun indexHtml(eventName: String, unofficialResults: Boolean): String {
+    private fun indexHtml(eventName: String, unofficialResults: Boolean, hasResults: Boolean): String {
+        val downloads = if (hasResults) listOf(
+            "printable-results.html" to "Printable HTML", "split-results.pdf" to "Split Results PDF",
+            "split-results.csv" to "Split Results CSV", "final-results.json" to "Final JSON",
+            "iof-result-list.xml" to "IOF XML"
+        ).joinToString("\n") { (file, label) -> "<a href=\"downloads/$file\">$label</a>" } else ""
         val resultsLabel = publicResultsLabel(unofficialResults)
         val comingSoonLabel = comingSoonResultsLabel(unofficialResults)
         val eyebrow = if (unofficialResults) {
@@ -555,11 +603,7 @@ object DesktopPublicResultSiteExports {
               <a class="parent-link" href="../">$parentLink</a>
             </div>
             <nav id="download-links" class="download-links" aria-label="Downloads">
-              <a href="downloads/printable-results.html">Printable HTML</a>
-              <a href="downloads/split-results.pdf">Split Results PDF</a>
-              <a href="downloads/split-results.csv">Split Results CSV</a>
-              <a href="downloads/final-results.json">Final JSON</a>
-              <a href="downloads/iof-result-list.xml">IOF XML</a>
+              $downloads
             </nav>
           </header>
 

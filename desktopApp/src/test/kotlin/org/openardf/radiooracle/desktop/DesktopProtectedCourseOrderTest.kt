@@ -143,7 +143,7 @@ class DesktopProtectedCourseOrderTest {
         val stored = EventProjectFileJson.decode(EventProjectFileJson.encode(unprotected))
         val category = stored.raceData.categories.single().category
 
-        assertEquals(6, stored.schemaVersion)
+        assertEquals(org.openardf.radiooracle.shared.event.EventProjectFileFormat.CURRENT_SCHEMA_VERSION, stored.schemaVersion)
         assertEquals("31 32", category.idealOrder)
         assertEquals(courseInfo, category.courseInfo)
         assertEquals(null, category.encryptedIdealOrder)

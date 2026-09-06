@@ -26,6 +26,7 @@ package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceBand
@@ -45,6 +46,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
+import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.event.ProtectedCourseObjectPoint
@@ -845,8 +847,8 @@ class DesktopProjectFilesTest {
             DesktopPublicResultSeriesRace(
                 projectFile = projectFile,
                 protectedCourseInfoByCategoryId = mapOf(
-                    firstCategoryData.category.id to ProtectedCourseInfo(sourceName = "course-one.kml"),
-                    secondCategory.id to ProtectedCourseInfo(sourceName = "course-two.kml")
+                    firstCategoryData.category.id to ProtectedCourseInfo(sourceName = "course-one.kml", route = listOf(ProtectedCourseRoutePoint(40.0, -75.0), ProtectedCourseRoutePoint(40.01, -75.0))),
+                    secondCategory.id to ProtectedCourseInfo(sourceName = "course-two.kml", route = listOf(ProtectedCourseRoutePoint(40.0, -75.0), ProtectedCourseRoutePoint(40.02, -75.0)))
                 )
             )
         )
@@ -991,6 +993,67 @@ class DesktopProjectFilesTest {
     }
 
 
+
+    @Test
+    fun revisedRaceCopyPreservesRegistrationsAndLeavesHistoricalPunchesUntouched() {
+        val original = EventProjectFile(raceData = raceDataWithReadout())
+        val before = org.openardf.radiooracle.shared.event.EventProjectFileJson.encode(original)
+        val copy = org.openardf.radiooracle.shared.event.EventProjectFactory.copyForCourseRedesign(original, "revised", "Revised race", "2026-09-07T10:00")
+        assertEquals(before, org.openardf.radiooracle.shared.event.EventProjectFileJson.encode(original))
+        assertEquals("revised", copy.raceData.race.id)
+        assertEquals(original.raceData.competitorData.size, copy.raceData.competitorData.size)
+        assertTrue(copy.raceData.competitorData.all { it.readoutData == null && it.competitorCategory.competitor.raceId == "revised" })
+        assertTrue(copy.raceData.unmatchedReadoutData.isEmpty())
+        assertNull(copy.publicResultsPublication)
+        assertNull(copy.seriesLink)
+        assertNull(copy.desktopRouteAnalysis)
+        org.openardf.radiooracle.shared.event.EventCourseDrafts.requireCurrent(copy)
+    }
+
+    @Test
+    fun failedCourseInclusiveSeriesExportPreservesThePreviousCompleteSite() {
+        val directory = Files.createTempDirectory("course-publication-rollback-")
+        val project = EventProjectFile(raceData = raceDataWithReadout())
+        val paths = DesktopPublicResultSiteExports.exportSeries(directory, "Series",
+            listOf(DesktopPublicResultSeriesRace(project)))
+        val before = Files.walk(directory).use { files -> files.filter { Files.isRegularFile(it) }
+            .toList().associate { directory.relativize(it).toString() to Files.readAllBytes(it).toList() } }
+        val broken = DesktopPublicResultSeriesRace(project,
+            mapOf("category" to ProtectedCourseInfo(idealOrder = "Fox 1")), includeCourseDiagrams = true)
+        assertTrue(runCatching { DesktopPublicResultSiteExports.exportSeries(directory, "Series", listOf(broken)) }.isFailure)
+        val after = Files.walk(directory).use { files -> files.filter { Files.isRegularFile(it) }
+            .toList().associate { directory.relativize(it).toString() to Files.readAllBytes(it).toList() } }
+        assertEquals(before, after)
+        assertTrue(Files.exists(paths.indexHtml))
+    }
+
+    @Test
+    fun replacingAnEventRemovesObsoleteGraphicsAndPreservesOtherEvents() {
+        val directory = Files.createTempDirectory("course-publication-replace-")
+        val project = EventProjectFile(raceData = raceDataWithReadout())
+        val old = DesktopPublicResultSiteExports.export(directory, project)
+        Files.createDirectories(old.eventDirectory.resolve("course-graphics"))
+        Files.writeString(old.eventDirectory.resolve("course-graphics/obsolete.svg"), "old course")
+        val other = project.copy(raceData = project.raceData.copy(race = project.raceData.race.copy(id = "other", name = "Other race")))
+        val otherPaths = DesktopPublicResultSiteExports.export(directory, other)
+        val otherBytes = Files.readAllBytes(otherPaths.indexHtml).toList()
+        DesktopPublicResultSiteExports.export(directory, project)
+        assertFalse(Files.exists(old.eventDirectory.resolve("course-graphics/obsolete.svg")))
+        assertEquals(otherBytes, Files.readAllBytes(otherPaths.indexHtml).toList())
+    }
+
+    @Test
+    fun unlockingAnAppliedRaceDoesNotExposeItsNewerDraftToResults() {
+        val source = EventProjectFile(raceData = raceDataWithReadout()).let { project ->
+            project.withStoredCourseInfo("category", ProtectedCourseInfo(sourceName = "applied.kml"), null)
+        }
+        val draft = org.openardf.radiooracle.shared.event.EventCourseDrafts.edit(source) {
+            it.withStoredCourseInfo("category", ProtectedCourseInfo(sourceName = "draft.kml"), null)
+        }
+        assertEquals("applied.kml", decryptedProtectedCourseState(draft, "").protectedCourseInfoByCategoryId.getValue("category").sourceName)
+        assertEquals("draft.kml", decryptedProtectedCourseState(org.openardf.radiooracle.shared.event.EventCourseDrafts.candidate(draft), "")
+            .protectedCourseInfoByCategoryId.getValue("category").sourceName)
+    }
 
     private fun raceData(): EventRaceData =
         EventRaceData(

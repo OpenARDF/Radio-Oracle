@@ -33,6 +33,10 @@ import java.time.Instant
 object DesktopAppDirectories {
     private const val APP_FOLDER = "Radio-Oracle"
 
+    /** Test/automation output roots are explicit; ordinary application paths retain platform defaults. */
+    fun appDataDirectory(): Path = System.getProperty("radiooracle.appDataDirectory")?.takeIf(String::isNotBlank)?.let(Path::of)
+        ?: appDataDirectory(osName = System.getProperty("os.name"))
+
     fun appDataDirectory(
         osName: String = System.getProperty("os.name"),
         userHome: Path = Path.of(System.getProperty("user.home")),

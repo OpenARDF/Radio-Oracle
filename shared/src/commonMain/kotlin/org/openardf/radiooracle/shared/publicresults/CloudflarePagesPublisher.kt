@@ -108,7 +108,8 @@ data class CloudflarePagesHttpRequest(
 
 data class CloudflarePagesHttpResponse(
     val statusCode: Int,
-    val body: String
+    val body: String,
+    val bodyBytes: ByteArray = body.toByteArray(Charsets.UTF_8)
 )
 
 class CloudflarePagesApiException(
@@ -132,8 +133,12 @@ fun interface CloudflarePagesHttpTransport {
 
 /** Shared Cloudflare direct-upload workflow used by desktop and Android. */
 class CloudflarePagesPublisher(
-    private val transport: CloudflarePagesHttpTransport
+    private val transport: CloudflarePagesHttpTransport,
+    private val verificationAttempts: Int = 6,
+    private val pauseBeforeVerificationRetry: () -> Unit = { Thread.sleep(2_000) }
 ) {
+    init { require(verificationAttempts in 1..30) { "Invalid public verification retry count." } }
+
     fun publish(
         request: CloudflarePagesPublishRequest,
         site: CloudflarePagesSite
@@ -152,6 +157,7 @@ class CloudflarePagesPublisher(
             "Cloudflare API token is required. Save it in Cloudflare Settings before publishing."
         }
 
+        val inventory = PublicResultsArtifactVerification.manifest(site)
         val uploadToken = uploadToken(normalized)
         val missingHashes = missingHashes(normalized, uploadToken, site.assets)
         val assetsByHash = site.assets.associateBy(CloudflarePagesAsset::hash)
@@ -167,6 +173,23 @@ class CloudflarePagesPublisher(
         val deployment = createDeployment(normalized, site)
         val deploymentUrl = deployment.string("url")
         val deploymentId = deployment.string("id")
+        val publicUrl = "https://${normalized.projectName}.pages.dev"
+        var failed = inventory.artifacts.map { it.path }
+        for (attempt in 0 until verificationAttempts) {
+            if (attempt > 0) pauseBeforeVerificationRetry()
+            failed = PublicResultsArtifactVerification.verify(inventory) { path ->
+                val response = transport.send(CloudflarePagesHttpRequest("GET",
+                    java.net.URI("$publicUrl/").resolve(java.net.URI(null, null, path, "roverify=${java.util.UUID.randomUUID()}", null)).toString(),
+                    mapOf("Cache-Control" to "no-cache, no-store", "Pragma" to "no-cache")))
+                require(response.statusCode in 200..299) { "Public artifact is not available." }
+                response.bodyBytes
+            }
+            if (failed.isEmpty()) break
+        }
+        require(failed.isEmpty()) {
+            "Cloudflare accepted deployment ${deploymentId ?: "(identity unavailable)"}, but fresh public verification failed for ${failed.size} of ${inventory.artifacts.size} artifacts. The public site may still be updating; verify it before treating this publication as complete."
+        }
+
         val output = buildString {
             append("Uploaded ${missingAssets.size} new content objects for ${site.assets.size} public site files")
             deploymentId?.let { append("; Cloudflare deployment $it created") }
@@ -174,7 +197,7 @@ class CloudflarePagesPublisher(
             if (!cacheUpdated) {
                 append(". Cloudflare did not update its upload cache, so the next publish may re-upload files")
             }
-            append('.')
+            append(". Fresh public downloads verified ${inventory.artifacts.size} artifacts.")
         }
         return CloudflarePagesPublishResult(
             projectName = normalized.projectName,

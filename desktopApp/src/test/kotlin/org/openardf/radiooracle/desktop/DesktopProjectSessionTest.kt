@@ -42,6 +42,27 @@ import java.nio.file.Path
 
 class DesktopProjectSessionTest {
     @Test
+    fun lateImportCannotOverwriteANewerDraftAndFailedSaveKeepsTheDraft() {
+        val store = object : ProjectFileStore {
+            override fun read(path: Path) = error("unused")
+            override fun write(path: Path, projectFile: EventProjectFile) { throw java.io.IOException("injected write failure") }
+        }
+        val session = DesktopProjectSession(store)
+        val initial = projectFile("Draft race")
+        session.newProject(initial)
+        session.updateCourseDraft(initial) { it.copy(raceData = it.raceData.copy(
+            race = it.raceData.race.copy(courseAnalyzerSpeedCompensationFactor = 1.25))) }
+        val draft = session.currentProject
+        assertEquals(1.0, draft!!.raceData.race.courseAnalyzerSpeedCompensationFactor, 0.0)
+        assertEquals(1.25, org.openardf.radiooracle.shared.event.EventCourseDrafts.candidate(draft).raceData.race.courseAnalyzerSpeedCompensationFactor, 0.0)
+        assertThrows(IllegalArgumentException::class.java) { session.updateCourseDraft(initial) { it } }
+        assertThrows(java.io.IOException::class.java) { session.saveAs(Path.of("failed.json")) }
+        assertEquals(draft, session.currentProject)
+        assertEquals(true, session.hasUnsavedChanges)
+        assertNull(session.currentPath)
+    }
+
+    @Test
     fun startsWithoutAnOpenProject() {
         val session = DesktopProjectSession(InMemoryProjectFileStore())
 

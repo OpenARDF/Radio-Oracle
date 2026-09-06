@@ -51,6 +51,7 @@ dependencies {
     implementation(libs.zxing.javase)
 
     testImplementation(libs.junit)
+    testImplementation(compose.desktop.uiTestJUnit4)
 }
 
 compose.desktop {
@@ -598,6 +599,8 @@ tasks.register("desktopAutomation", JavaExec) {
 // Opt-in real-terrain acceptance can reproduce older snapshots retaining every venue grid.
 // Ordinary synthetic unit tests keep Gradle's normal heap limit.
 tasks.withType(Test).configureEach {
+    systemProperty "radiooracle.appDataDirectory", layout.buildDirectory.dir("test-state/app-data").get().asFile.absolutePath
+    systemProperty "java.util.prefs.userRoot", layout.buildDirectory.dir("test-state/preferences").get().asFile.absolutePath
     def routeSmokeArchive = providers.environmentVariable("RADIO_ORACLE_ROUTE_SMOKE_ARCHIVE").orElse("").get()
     def routeSmokeBaseline = providers.environmentVariable("RADIO_ORACLE_ROUTE_SMOKE_BASELINE").orElse("").get()
     environment "RADIO_ORACLE_ROUTE_SMOKE_ARCHIVE", routeSmokeArchive
@@ -614,4 +617,10 @@ tasks.register("desktopPrinterProbe", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.printing.DesktopPrinterProbeKt")
+}
+
+tasks.withType(Test).configureEach {
+    if (providers.gradleProperty("courseWorkflowTransferDirectory").isPresent()) {
+        systemProperty "radiooracle.courseTransferDirectory", providers.gradleProperty("courseWorkflowTransferDirectory").get()
+    }
 }

@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 
@@ -61,10 +62,12 @@ object DesktopProtectedControlLocationUpdater {
         courseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
         updates: List<DesktopProtectedControlLocationUpdate>,
         password: String?,
-        elevationLookup: (CourseGeoPoint) -> Double? = { null },
-        invalidateAllReferencedProtectedCourses: Boolean = true
+        elevationLookup: (CourseGeoPoint) -> Double? = { null }
     ): DesktopProtectedControlLocationUpdateResult {
         val storagePassword = projectFile.courseDataPassword(password)
+        require(updates.groupBy { it.controlId }.values.all { it.distinct().size == 1 }) {
+            "Conflicting locations were supplied for the same control."
+        }
         val uniqueUpdates = updates.distinctBy { it.controlId }
         require(uniqueUpdates.isNotEmpty()) {
             "No control location updates were provided."
@@ -84,6 +87,18 @@ object DesktopProtectedControlLocationUpdater {
         require(missingControlId == null) {
             "Control was not found: $missingControlId"
         }
+        val categories = projectFile.raceData.categories + projectFile.raceData.courseMappings
+        require(courseInfoByCategoryId.keys.all { id -> categories.any { it.category.id == id } }) {
+            "A course category changed since its locations were loaded. Reload course data before editing."
+        }
+        val currentInfo = categories.mapNotNull { data ->
+            val stored = data.category.storedCourseInfo(storagePassword)
+            val loaded = courseInfoByCategoryId[data.category.id]
+            require(stored == null || loaded == null || stored == loaded) {
+                "Course data changed for ${data.category.name}. Reload course data before editing."
+            }
+            (stored ?: loaded)?.let { data.category.id to it }
+        }.toMap()
         val elevationByControlId = updatesByControlId.mapValues { (_, update) ->
             elevationLookup(CourseGeoPoint(latitude = update.latitude, longitude = update.longitude))
         }
@@ -95,49 +110,55 @@ object DesktopProtectedControlLocationUpdater {
             }
         }
 
-        val categoryNamesById = projectFile.raceData.categories.associate { categoryData ->
+        val categoryNamesById = (projectFile.raceData.categories + projectFile.raceData.courseMappings).associate { categoryData ->
             categoryData.category.id to categoryData.category.name
         }
-        val updatedInfoByCategoryId = courseInfoByCategoryId.toMutableMap()
+        val updatedInfoByCategoryId = currentInfo.toMutableMap()
         val affectedCategoryIds = linkedSetOf<String>()
-        courseInfoByCategoryId.forEach { (categoryId, courseInfo) ->
+        currentInfo.forEach { (categoryId, courseInfo) ->
+            val placementUpdates = updatesByControlId + courseInfo.appliedBindings?.controls.orEmpty().mapNotNull { binding ->
+                updatesByControlId[binding.controlId]?.let { binding.placementId to it }
+            }.toMap()
             val hasControlPoint = courseInfo.controlPoints.any { controlPoint ->
-                val update = updatesByControlId[controlPoint.controlId]
+                val update = placementUpdates[controlPoint.controlId]
                 update != null &&
-                    (invalidateAllReferencedProtectedCourses || controlPoint.locationDiffersFrom(update))
+                    controlPoint.locationDiffersFrom(update)
             }
             val hasCourseObject = courseInfo.courseObjects.any { courseObject ->
-                val update = updatesByControlId[courseObject.id]
+                val update = placementUpdates[courseObject.id]
                 update != null &&
-                    (invalidateAllReferencedProtectedCourses || courseObject.locationDiffersFrom(update))
+                    courseObject.locationDiffersFrom(update)
             }
             if (hasControlPoint || hasCourseObject) {
                 val updatedInfo = courseInfo.copy(
+                    idealOrder = "",
                     lengthMeters = null,
                     climbMeters = null,
-                    sourceName = "Control location update; stored route invalidated",
+                    sourceName = if (courseInfo.sourceName.startsWith("Course Analyzer", ignoreCase = true)) {
+                        "Course Analyzer; control location update; stored route invalidated"
+                    } else "Control location update; stored route invalidated",
                     sourceSha256 = "",
                     sampledPointCount = 0,
                     route = emptyList(),
                     controlPoints = courseInfo.controlPoints.map { controlPoint ->
-                        val update = updatesByControlId[controlPoint.controlId]
+                        val update = placementUpdates[controlPoint.controlId]
                         if (update != null) {
                             controlPoint.copy(
                                 latitude = update.latitude,
                                 longitude = update.longitude,
-                                elevationMeters = elevationByControlId[controlPoint.controlId]
+                                elevationMeters = elevationByControlId[update.controlId]
                             )
                         } else {
                             controlPoint
                         }
                     },
                     courseObjects = courseInfo.courseObjects.map { courseObject ->
-                        val update = updatesByControlId[courseObject.id]
+                        val update = placementUpdates[courseObject.id]
                         if (update != null) {
                             courseObject.copy(
                                 latitude = update.latitude,
                                 longitude = update.longitude,
-                                elevationMeters = elevationByControlId[courseObject.id]
+                                elevationMeters = elevationByControlId[update.controlId]
                             )
                         } else {
                             courseObject
@@ -155,7 +176,8 @@ object DesktopProtectedControlLocationUpdater {
                 categoryId,
                 updatedInfoByCategoryId[categoryId],
                 storagePassword
-            )
+            ).withStoredIdealOrder(categoryId, null, storagePassword)
+            updatedProject = EventProjectEditor.updateCategoryPhysicalStats(updatedProject, categoryId, "0", "0")
         }
 
         return DesktopProtectedControlLocationUpdateResult(

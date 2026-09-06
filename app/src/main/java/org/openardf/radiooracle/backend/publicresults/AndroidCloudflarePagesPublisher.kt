@@ -130,9 +130,11 @@ internal class OkHttpCloudflarePagesTransport(
             .method(request.method, requestBody)
         request.headers.forEach { (name, value) -> builder.header(name, value) }
         return client.newCall(builder.build()).execute().use { response ->
+            val bytes = response.body.bytes()
             CloudflarePagesHttpResponse(
                 statusCode = response.code,
-                body = response.body.string()
+                body = bytes.toString(Charsets.UTF_8),
+                bodyBytes = bytes
             )
         }
     }

@@ -190,3 +190,10 @@ dependencies {
     implementation(libs.okhttp.logging.interceptor)
 
 }
+
+// Explicit cross-platform acceptance input; ordinary unit tests do not read unrelated build artifacts.
+tasks.withType(Test).configureEach {
+    if (providers.gradleProperty("courseWorkflowTransferDirectory").isPresent()) {
+        systemProperty "radiooracle.courseTransferDirectory", providers.gradleProperty("courseWorkflowTransferDirectory").get()
+    }
+}

@@ -29,6 +29,7 @@ import org.openardf.radiooracle.shared.event.EVENT_SERIES_NAMED_FILE_SUFFIX
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventSeriesEvent
 import org.openardf.radiooracle.shared.event.EventSeriesFile
 import org.openardf.radiooracle.shared.event.EventSeriesFileJson
@@ -57,6 +58,18 @@ interface EventSeriesStore {
     fun write(path: Path, seriesFile: EventSeriesFile)
     fun readEvent(path: Path): EventProjectFile
     fun writeEvent(path: Path, projectFile: EventProjectFile)
+    fun eventFingerprint(path: Path): String = courseFileDigest(EventProjectFileJson.encode(readEvent(path)).toByteArray())
+    fun writeEvents(manifestPath: Path, updates: Map<Path, EventProjectFile>, expected: Map<Path, String>) {
+        require(updates.keys == expected.keys && updates.keys.all { eventFingerprint(it) == expected[it] }) { "Series course data changed before saving." }
+        val originals = updates.keys.associateWith(::readEvent)
+        val written = mutableListOf<Path>()
+        try {
+            updates.forEach { (path, project) -> written.add(path); writeEvent(path, project) }
+        } catch (failure: Exception) {
+            written.asReversed().forEach { path -> runCatching { writeEvent(path, originals.getValue(path)) }.exceptionOrNull()?.let(failure::addSuppressed) }
+            throw failure
+        }
+    }
     fun exists(path: Path): Boolean
     fun copyFile(source: Path, target: Path)
     fun moveManifest(source: Path, target: Path, seriesFile: EventSeriesFile) {
@@ -70,7 +83,10 @@ object DesktopEventSeriesFiles : EventSeriesStore {
         DesktopEventSeriesArchiveWorkspaces.workspaceFor(path)
             ?.takeIf { it.isManifestPath(path) }
             ?.readSeries()
-            ?: EventSeriesFileJson.decode(Files.readString(path, StandardCharsets.UTF_8))
+            ?: run {
+                DesktopCourseSeriesTransaction.recover(path)
+                EventSeriesFileJson.decode(Files.readString(path, StandardCharsets.UTF_8))
+            }
 
     override fun write(path: Path, seriesFile: EventSeriesFile) {
         DesktopEventSeriesArchiveWorkspaces.workspaceFor(path)
@@ -88,6 +104,21 @@ object DesktopEventSeriesFiles : EventSeriesStore {
 
     override fun writeEvent(path: Path, projectFile: EventProjectFile) {
         DesktopProjectFiles.write(path, projectFile)
+    }
+
+    override fun eventFingerprint(path: Path): String = if (DesktopEventSeriesArchiveWorkspaces.workspaceFor(path) != null) {
+        courseFileDigest(EventProjectFileJson.encode(readEvent(path)).toByteArray())
+    } else courseFileDigest(Files.readAllBytes(path))
+
+    override fun writeEvents(manifestPath: Path, updates: Map<Path, EventProjectFile>, expected: Map<Path, String>) {
+        val workspace = DesktopEventSeriesArchiveWorkspaces.workspaceFor(manifestPath)
+        if (workspace != null) {
+            require(updates.keys == expected.keys && updates.keys.all { eventFingerprint(it) == expected[it] }) { "Series course data changed before saving." }
+            val archive = updates.entries.fold(workspace.archive) { archive, (path, project) ->
+                archive.updateMember(requireNotNull(workspace.seriesEventIdForPath(path)) { "Selected Race File is outside this series." }, project)
+            }
+            workspace.replaceArchive(archive)
+        } else DesktopCourseSeriesTransaction.write(manifestPath, updates, expected)
     }
 
     override fun exists(path: Path): Boolean =
@@ -496,7 +527,8 @@ object DesktopEventSeriesActions {
         manifestPath: Path,
         password: String,
         currentEventPath: Path? = null,
-        currentProject: EventProjectFile? = null
+        currentProject: EventProjectFile? = null,
+        beforeCommit: () -> Unit = {}
     ): DesktopEventSeriesCourseProtectionRemoval {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) { "Current Race Password cannot be blank." }
@@ -505,6 +537,11 @@ object DesktopEventSeriesActions {
             "Race Series manifest must have a parent folder."
         }
         val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
+        val expected = seriesFile.sortedEvents().associate { event ->
+            val path = seriesFolder.resolve(event.eventFilePath).normalize()
+            require(store.exists(path)) { "Race File ${event.displayName} is missing." }
+            path to store.eventFingerprint(path)
+        }
         val sourceProjects = seriesFile.sortedEvents().map { event ->
             val path = seriesFolder.resolve(event.eventFilePath).normalize()
             require(store.exists(path)) {
@@ -536,7 +573,8 @@ object DesktopEventSeriesActions {
             }
             path to convertedProject
         }
-        converted.forEach { (path, project) -> store.writeEvent(path, project) }
+        beforeCommit()
+        store.writeEvents(manifestPath, converted.toMap(), expected)
         val updatedCurrentProject = normalizedCurrentPath?.let { currentPath ->
             converted.firstOrNull { (path, _) -> path.toAbsolutePath().normalize() == currentPath }?.second
         }
@@ -552,7 +590,8 @@ object DesktopEventSeriesActions {
         manifestPath: Path,
         password: String,
         currentEventPath: Path? = null,
-        currentProject: EventProjectFile? = null
+        currentProject: EventProjectFile? = null,
+        beforeCommit: () -> Unit = {}
     ): DesktopEventSeriesCourseProtectionRemoval {
         val trimmedPassword = password.trim()
         require(trimmedPassword.isNotEmpty()) { "Race Password cannot be blank." }
@@ -561,6 +600,11 @@ object DesktopEventSeriesActions {
             "Race Series manifest must have a parent folder."
         }
         val normalizedCurrentPath = currentEventPath?.toAbsolutePath()?.normalize()
+        val expected = seriesFile.sortedEvents().associate { event ->
+            val path = seriesFolder.resolve(event.eventFilePath).normalize()
+            require(store.exists(path)) { "Race File ${event.displayName} is missing." }
+            path to store.eventFingerprint(path)
+        }
         val converted = seriesFile.sortedEvents().map { event ->
             val path = seriesFolder.resolve(event.eventFilePath).normalize()
             require(store.exists(path)) {
@@ -581,7 +625,8 @@ object DesktopEventSeriesActions {
             val protectedProject = DesktopProtectedCourseOrder.protectProjectCourseData(project, trimmedPassword)
             path to protectedProject.withCoursePasswordMarker(trimmedPassword)
         }
-        converted.forEach { (path, project) -> store.writeEvent(path, project) }
+        beforeCommit()
+        store.writeEvents(manifestPath, converted.toMap(), expected)
         val updatedCurrentProject = normalizedCurrentPath?.let { currentPath ->
             converted.firstOrNull { (path, _) -> path.toAbsolutePath().normalize() == currentPath }?.second
         }

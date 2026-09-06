@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.courseDescriptionSiCodeHint
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -1401,7 +1403,7 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
-    fun appliesCalculatedRouteAndNumberingToSavedCourseData() {
+    fun calculatedDraftExportPreservesDescriptionsAndApplyRefusesRecordedActivity() {
         val projectFile = projectFile(
             foxCount = 3,
             publicLabels = listOf("Fox 3", "Fox 2", "Fox 1")
@@ -1446,87 +1448,11 @@ class DesktopCourseAnalyzerTest {
                 }
             )
         )
-        val originalPublicLabelsByControlId = projectWithResults.raceData.controls.associate { it.id to it.publicLabel }
-        val originalAliasesBySiCode = projectWithResults.raceData.aliases.associate { it.siCode to it.name }
         val originalPunch = projectWithResults.raceData.unmatchedReadoutData.single().punches.single()
-
-        val (updatedProject, updatedCourseInfo) = DesktopCourseAnalysisApplier.applyCalculatedRoute(
-            projectFile = projectWithResults,
-            courseInfo = protectedInfo,
-            application = application,
-            password = "test-password"
-        )
-
-        val updatedCategory = updatedProject.raceData.categories.single { it.category.id == CATEGORY_ID }.category
-        assertEquals(application.idealOrderText, DesktopProtectedCourseOrder.decrypt(requireNotNull(updatedCategory.encryptedIdealOrder), "test-password"))
-        val decryptedCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(requireNotNull(updatedCategory.encryptedCourseInfo), "test-password")
-        assertTrue(application.idealOrderText.contains("'Fox "))
-        assertEquals(
-            application.foxAssignments.map { it.calculatedLabel } + "Beacon",
-            org.openardf.radiooracle.shared.course.ControlPointRules.tokenizeControlPoints(application.idealOrderText)
-        )
-        assertEquals(application.idealOrderText, decryptedCourseInfo.idealOrder)
-        assertEquals(application.routeLengthMeters, decryptedCourseInfo.lengthMeters)
-        assertEquals(application.climbMeters, decryptedCourseInfo.climbMeters)
-        assertEquals("Course Analyzer calculated route", decryptedCourseInfo.sourceName)
-        assertEquals(application.routePoints.size, decryptedCourseInfo.sampledPointCount)
-        assertEquals(application.routePoints.map { it.latitude to it.longitude }, decryptedCourseInfo.route.map { it.latitude to it.longitude })
-        assertEquals(application.idealOrderText, updatedCourseInfo.idealOrder)
-        assertEquals(application.routePoints.size, updatedCourseInfo.route.size)
-        val secondCategory = updatedProject.raceData.categories.single { it.category.id == "category-m40" }.category
-        val secondIdealOrder = DesktopProtectedCourseOrder.decrypt(requireNotNull(secondCategory.encryptedIdealOrder), "test-password")
-        val secondCourseInfo = DesktopProtectedCourseOrder.decryptCourseInfo(requireNotNull(secondCategory.encryptedCourseInfo), "test-password")
-        assertEquals(
-            application.foxAssignments.map { it.calculatedLabel } + "Beacon",
-            org.openardf.radiooracle.shared.course.ControlPointRules.tokenizeControlPoints(secondIdealOrder)
-        )
-        application.foxAssignments.forEach { assignment ->
-            val expectedDescription = descriptionByIdentity.getValue(assignment.calculatedLabel.courseDescriptionIdentityKey())
-            assertEquals(
-                assignment.calculatedLabel,
-                secondCourseInfo.controlPoints.single { it.controlId == assignment.controlId }.label
-            )
-            assertEquals(
-                expectedDescription,
-                secondCourseInfo.controlPoints.single { it.controlId == assignment.controlId }.description
-            )
-            assertEquals(
-                assignment.calculatedLabel,
-                secondCourseInfo.courseObjects.single { it.id == assignment.controlId }.label
-            )
-            assertEquals(
-                expectedDescription,
-                secondCourseInfo.courseObjects.single { it.id == assignment.controlId }.description
-            )
-        }
-        val publicLabelsByControlId = updatedProject.raceData.controls.associate { it.id to it.publicLabel }
-        assertEquals(originalPublicLabelsByControlId, publicLabelsByControlId)
-        assertEquals(originalAliasesBySiCode, updatedProject.raceData.aliases.associate { it.siCode to it.name })
-        val updatedPunch = updatedProject.raceData.unmatchedReadoutData.single().punches.single()
-        assertEquals(originalPunch.punch.siCode, updatedPunch.punch.siCode)
-        assertEquals(originalPunch.alias?.name, updatedPunch.alias?.name)
-
-        val updatedSummary = DesktopCourseAnalyzer.analyze(
-            projectFile = updatedProject,
-            categoryId = CATEGORY_ID,
-            protectedCourseInfo = decryptedCourseInfo,
-            protectedIdealOrderText = DesktopProtectedCourseOrder.decrypt(requireNotNull(updatedCategory.encryptedIdealOrder), "test-password")
-        )
-        assertTrue(updatedSummary.missingElements.none { it.contains("Saved route order") })
-        val updatedRouteMap = requireNotNull(updatedSummary.providedRouteSection?.routeMap)
-        val updatedRouteOrder = requireNotNull(updatedSummary.providedRouteSection).routeOrder
-        assertEquals(updatedRouteOrder, updatedRouteMap.routeLabels)
-        assertEquals(
-            updatedRouteOrder,
-            updatedRouteMap.routePointIndexes.map { updatedRouteMap.points[it].label }
-        )
-        val savedFolder = updatedSummary.kmlFolders.single { it.title == "Saved foxes and route" }
-        application.foxAssignments.forEach { assignment ->
-            val expectedDescription = descriptionByIdentity.getValue(assignment.calculatedLabel.courseDescriptionIdentityKey())
-            val exportPoint = savedFolder.courseObjects.single { it.label == assignment.calculatedLabel }
-            assertEquals(expectedDescription, exportPoint.description)
-            assertEquals(expectedDescription.courseDescriptionSiCodeHint(), exportPoint.siCode)
-        }
+        val selection = DesktopCourseRouteSelection(protectedInfo, application,
+            protectedInfo.controlPoints.associate { it.controlId to it.controlId })
+        assertTrue(runCatching { DesktopCourseAnalysisApplier.prepare(projectWithResults, listOf(selection), "test-password") }.isFailure)
+        assertEquals(originalPunch, projectWithResults.raceData.unmatchedReadoutData.single().punches.single())
     }
 
     @Test
@@ -1630,7 +1556,7 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
-    fun appliesCalculatedIdealOrderToEveryCategoryWithTheSameAssignedCourse() {
+    fun preparesFullGeometryForSharedCoursesAndRecomputesDifferentSubsets() {
         val password = "test-password"
         val baseProject = projectFile(
             foxCount = 3,
@@ -1651,7 +1577,9 @@ class DesktopCourseAnalyzerTest {
             climbMeters = 432,
             route = sourceCourseInfo.route.reversed()
         )
-        val differentCourseInfo = protectedInfo(foxCount = 2)
+        val differentCourseInfo = sourceCourseInfo.copy(idealOrder = "31 32 Beacon",
+            controlPoints = sourceCourseInfo.controlPoints.filterNot { it.controlId == "control-3" },
+            courseObjects = sourceCourseInfo.courseObjects.filterNot { it.id == "control-3" })
         val projectWithCategories = baseProject
             .withSameCourseCategory(categoryId = "category-m40", categoryName = "M40")
             .withSameCourseCategory(categoryId = "category-w65", categoryName = "W65")
@@ -1675,52 +1603,19 @@ class DesktopCourseAnalyzerTest {
             )
         )
 
-        val result = DesktopCourseAnalysisApplier.applyCalculatedRoute(
-            projectFile = projectToUpdate,
-            courseInfo = sourceCourseInfo,
-            application = application,
-            password = password
-        )
-
-        assertEquals(2, result.affectedCategoryCount)
-        listOf(CATEGORY_ID, "category-m40").forEach { categoryId ->
-            val category = result.projectFile.raceData.categories.single { it.category.id == categoryId }.category
-            assertEquals(
-                application.idealOrderText,
-                DesktopProtectedCourseOrder.decrypt(requireNotNull(category.encryptedIdealOrder), password)
-            )
-            assertEquals(
-                application.idealOrderText,
-                DesktopProtectedCourseOrder.decryptCourseInfo(
-                    requireNotNull(category.encryptedCourseInfo),
-                    password
-                ).idealOrder
-            )
+        val reviewed = projectToUpdate.raceData.categories.associate { data ->
+            data.category.id to requireNotNull(data.category.storedCourseInfo(password)).controlPoints.associate { it.controlId to it.controlId }
         }
-        val updatedSameCourseInfo = result.projectFile.raceData.categories
-            .single { it.category.id == "category-m40" }
-            .category.encryptedCourseInfo
-            .let(::requireNotNull)
-            .let { DesktopProtectedCourseOrder.decryptCourseInfo(it, password) }
-        assertEquals(sameCourseInfo.lengthMeters, updatedSameCourseInfo.lengthMeters)
-        assertEquals(sameCourseInfo.climbMeters, updatedSameCourseInfo.climbMeters)
-        assertEquals(sameCourseInfo.route, updatedSameCourseInfo.route)
-
-        val differentCategory = result.projectFile.raceData.categories
-            .single { it.category.id == "category-w65" }
-            .category
-        val differentIdealOrder = DesktopProtectedCourseOrder.decrypt(
-            requireNotNull(differentCategory.encryptedIdealOrder),
-            password
-        )
-        assertFalse(differentIdealOrder == application.idealOrderText)
-        assertEquals(
-            differentCourseInfo.idealOrder,
-            DesktopProtectedCourseOrder.decryptCourseInfo(
-                requireNotNull(differentCategory.encryptedCourseInfo),
-                password
-            ).idealOrder
-        )
+        val prepared = DesktopCourseAnalysisApplier.prepareAll(projectToUpdate,
+            DesktopCourseRouteSelection(sourceCourseInfo, application.copy(sourceSnapshotHash = org.openardf.radiooracle.shared.event.EventCourseDrafts.snapshotHash(projectToUpdate)),
+                reviewed.getValue(CATEGORY_ID)), reviewed, password, elevationLookup = { 100.0 })
+        val result = DesktopCourseAnalysisApplier.commit(projectToUpdate, prepared)
+        val infos = result.raceData.categories.associate { it.category.id to requireNotNull(it.category.storedCourseInfo(password)) }
+        assertEquals(setOf(prepared.revision), infos.values.map { it.appliedBindings!!.revision }.toSet())
+        assertEquals(infos.getValue(CATEGORY_ID).idealOrder, infos.getValue("category-m40").idealOrder)
+        assertFalse(sameCourseInfo.route == infos.getValue("category-m40").route)
+        assertFalse(sameCourseInfo.lengthMeters == infos.getValue("category-m40").lengthMeters)
+        assertFalse(infos.getValue(CATEGORY_ID).idealOrder == infos.getValue("category-w65").idealOrder)
     }
 
     @Test
@@ -1814,38 +1709,29 @@ class DesktopCourseAnalyzerTest {
             changedLabelsByControlId.forEach { (controlId, expectedLabel) ->
                 assertEquals(expectedLabel, decryptedCourseInfo.controlPoints.single { it.controlId == controlId }.label)
                 assertEquals(expectedLabel, decryptedCourseInfo.courseObjects.single { it.id == controlId }.label)
+                val control = projectFile.raceData.controls.single { it.id == controlId }
+                assertEquals(control.publicLabel ?: control.label,
+                    decryptedCourseInfo.resultControlLabelsById.getValue(controlId))
             }
         }
     }
 
     @Test
     fun savesCalculatedRouteAsPlaintextWithoutPassword() {
-        val projectFile = projectFile(foxCount = 3)
         val courseInfo = protectedInfo(foxCount = 3)
-        val application = DesktopCourseCalculatedRouteApplication(
-            categoryId = CATEGORY_ID,
-            idealOrderText = courseInfo.idealOrder,
-            routePoints = courseInfo.route.map { point ->
-                CourseGeoPoint(point.latitude, point.longitude, point.elevationMeters)
-            },
-            routeLengthMeters = 4_100,
-            climbMeters = 105,
-            foxAssignments = emptyList()
-        )
-
-        val result = DesktopCourseAnalysisApplier.applyCalculatedRoute(
-            projectFile = projectFile,
-            courseInfo = courseInfo,
-            application = application,
-            password = null
-        )
-
-        val category = result.projectFile.raceData.categories.single().category
-        assertEquals(courseInfo.idealOrder, category.idealOrder)
+        val source = projectFile(foxCount = 3).withStoredCourseInfo(CATEGORY_ID, courseInfo, null)
+        val application = requireNotNull(DesktopCourseAnalyzer.analyze(source, CATEGORY_ID, courseInfo,
+            courseInfo.idealOrder, prepareApplication = true).calculatedRouteApplication).copy(routeLengthMeters = 4_100, climbMeters = 105)
+        val selection = DesktopCourseRouteSelection(courseInfo, application,
+            courseInfo.controlPoints.associate { it.controlId to it.controlId })
+        val prepared = DesktopCourseAnalysisApplier.prepare(source, listOf(selection), null)
+        val result = DesktopCourseAnalysisApplier.commit(source, prepared)
+        val category = result.raceData.categories.single().category
         assertEquals(4_100, category.courseInfo?.lengthMeters)
         assertEquals(105, category.courseInfo?.climbMeters)
         assertNull(category.encryptedIdealOrder)
         assertNull(category.encryptedCourseInfo)
+        assertNotNull(category.courseInfo?.appliedBindings)
     }
 
     @Test
@@ -2799,7 +2685,7 @@ class DesktopCourseAnalyzerTest {
     private fun pdfNumber(value: Double): String =
         String.format(Locale.US, "%.2f", value)
 
-    private fun sprintProjectFile(includeSpectator: Boolean = true, includeBeacon: Boolean = true): EventProjectFile {
+    internal fun sprintProjectFile(includeSpectator: Boolean = true, includeBeacon: Boolean = true): EventProjectFile {
         val controls = listOfNotNull(
             EventControl("control-slow-1", RACE_ID, "1", 31, ControlPointType.CONTROL, publicLabel = "1"),
             EventControl("control-slow-2", RACE_ID, "2", 32, ControlPointType.CONTROL, publicLabel = "2"),
@@ -2859,7 +2745,7 @@ class DesktopCourseAnalyzerTest {
         )
     }
 
-    private fun sprintProtectedInfo(includeSpectator: Boolean = true, includeBeacon: Boolean = true): ProtectedCourseInfo {
+    internal fun sprintProtectedInfo(includeSpectator: Boolean = true, includeBeacon: Boolean = true): ProtectedCourseInfo {
         val route = (0..7).map { index ->
             ProtectedCourseRoutePoint(
                 latitude = 39.0,

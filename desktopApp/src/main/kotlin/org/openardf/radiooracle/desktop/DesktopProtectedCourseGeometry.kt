@@ -77,3 +77,8 @@ private fun ProtectedCourseControlPoint.hasValidCoordinate(): Boolean =
 
 private fun ProtectedCourseObjectPoint.hasValidCoordinate(): Boolean =
     latitude.isValidLatitude() && longitude.isValidLongitude()
+
+/** A moved draft can be recalculated from its explicit endpoints after its old route is invalidated. */
+internal fun ProtectedCourseInfo.hasCourseAnalysisGeometry(): Boolean = route.size >= 2 ||
+    (courseObjects.count { it.type == org.openardf.radiooracle.shared.event.ProtectedCourseObjectType.START } == 1 &&
+        courseObjects.count { it.type == org.openardf.radiooracle.shared.event.ProtectedCourseObjectType.FINISH } == 1)

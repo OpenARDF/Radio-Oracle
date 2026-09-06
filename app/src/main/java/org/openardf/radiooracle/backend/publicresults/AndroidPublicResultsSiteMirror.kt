@@ -70,20 +70,22 @@ object AndroidPublicResultsSiteMirror {
         return File(File(context.filesDir, ROOT_FOLDER), "$readablePrefix-$digest")
     }
 
-    fun prepare(
+    fun stageForPublish(
         context: Context,
         settings: AndroidCloudflarePagesPublishSettings,
-        synchronizer: AndroidPublicResultsRemoteSynchronizer =
-            AndroidPublicResultsRemoteSynchronizer()
-    ): File {
-        val directory = directory(context, settings)
-        if (settings.retentionMode == AndroidPublicResultsRetentionMode.REPLACE_PREVIOUS) {
-            resetManagedDirectory(context, directory)
-        } else {
-            synchronizer.synchronize(settings.publicSiteBaseUrl(), directory, context.cacheDir)
+        synchronizer: AndroidPublicResultsRemoteSynchronizer = AndroidPublicResultsRemoteSynchronizer()
+    ): org.openardf.radiooracle.shared.publicresults.PublicResultsSiteStaging.Candidate {
+        val stage = org.openardf.radiooracle.shared.publicresults.PublicResultsSiteStaging.stageDirectory(
+            directory(context, settings).toPath(), retainExisting = false)
+        try {
+            if (settings.retentionMode != AndroidPublicResultsRetentionMode.REPLACE_PREVIOUS) {
+                synchronizer.synchronize(settings.publicSiteBaseUrl(), stage.stagingDirectory.toFile(), context.cacheDir)
+            }
+            return stage
+        } catch (error: Throwable) {
+            stage.discard()
+            throw error
         }
-        directory.mkdirs()
-        return directory
     }
 
     fun publishedEntryCount(
@@ -111,20 +113,6 @@ object AndroidPublicResultsSiteMirror {
         require(target.deleteRecursively()) {
             "Could not remove the previous public-results directory: $target"
         }
-    }
-
-    private fun resetManagedDirectory(context: Context, directory: File) {
-        val managedRoot = File(context.filesDir, ROOT_FOLDER).canonicalFile
-        val target = directory.canonicalFile
-        require(target.parentFile == managedRoot && target != managedRoot) {
-            "Refusing to reset an unmanaged public-results directory: $target"
-        }
-        if (target.exists()) {
-            require(target.deleteRecursively()) {
-                "Could not clear the prior public-results mirror."
-            }
-        }
-        target.mkdirs()
     }
 
     private fun isGeneratedSiteDirectory(directory: File): Boolean =

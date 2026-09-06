@@ -106,7 +106,8 @@ fun ControlPoint.toEventControlPoint(): EventControlPoint =
         categoryId = categoryId.toString(),
         siCode = siCode,
         type = type,
-        order = order
+        order = order,
+        controlId = portableControlId.orEmpty()
     )
 
 /** Converts the Android Room alias entity into the portable shared race model. */
@@ -234,7 +235,9 @@ fun RaceData.toEventRaceData(): EventRaceData {
         competitorData = competitorData.map { it.toEventCompetitorData() },
         unmatchedReadoutData = unmatchedReadoutData.map { it.toEventReadoutData() }
     )
-    return EventControlCatalog.backfillControls(EventProjectFile(raceData = raceData)).raceData
+    return restorePortableCourseData(raceData, race.portableCourseData, categories.mapNotNull { data ->
+        data.category.portableCategoryId?.let { it to data.category.id.toString() }
+    }.toMap())
 }
 
 /** Converts the portable shared race model back into an Android Room entity. */
@@ -275,7 +278,8 @@ private fun EventCategory.toRoomCategory(idMapper: RoomIdMapper): Category =
         encryptedIdealOrder = encryptedIdealOrder,
         encryptedCourseInfo = encryptedCourseInfo,
         idealOrder = idealOrder,
-        courseInfo = courseInfo?.let(ProtectedCourseCipher::encodeCourseInfo)
+        courseInfo = courseInfo?.let(ProtectedCourseCipher::encodeCourseInfo),
+        portableCategoryId = id
     )
 
 /** Converts the portable shared control-point model back into an Android Room entity. */
@@ -292,7 +296,8 @@ private fun EventControlPoint.toRoomControlPoint(
         categoryId = idMapper.uuidFor(categoryId),
         siCode = control?.siCode ?: siCode,
         type = control?.type ?: type,
-        order = order
+        order = order,
+        portableControlId = controlId.takeIf(String::isNotBlank)
     )
 }
 
@@ -503,7 +508,7 @@ fun EventRaceData.toRoomRaceData(): RaceData {
     val idMapper = RoomIdMapper()
     val controlsById = controls.associateBy { it.id }
     return RaceData(
-        race = race.toRoomRace(idMapper),
+        race = race.toRoomRace(idMapper).copy(portableCourseData = encodePortableCourseData(this)),
         categories = categories.map { it.toRoomCategoryData(idMapper, controlsById, race) },
         aliases = androidCompatibleAliases(idMapper),
         competitorData = competitorData.map { it.toRoomCompetitorData(idMapper) },

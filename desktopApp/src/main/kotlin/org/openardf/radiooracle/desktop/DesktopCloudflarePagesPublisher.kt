@@ -69,7 +69,7 @@ internal class DesktopCloudflarePagesPublisher(
                         body = sharedRequest.body
                     )
                 )
-                CloudflarePagesHttpResponse(response.statusCode, response.body)
+                CloudflarePagesHttpResponse(response.statusCode, response.body, response.bodyBytes)
             }
         )
         val result = sharedPublisher.publish(
@@ -80,18 +80,7 @@ internal class DesktopCloudflarePagesPublisher(
                 apiToken = request.apiToken,
                 userAgent = "Radio-Oracle Desktop"
             ),
-            site = CloudflarePagesSite(
-                assets = desktopSite.assets.map { asset ->
-                    CloudflarePagesAsset(
-                        relativePath = asset.relativePath,
-                        content = Files.readAllBytes(asset.source),
-                        contentType = asset.contentType,
-                        hash = asset.hash
-                    )
-                },
-                headersFile = desktopSite.headersFile?.let(Files::readAllBytes),
-                redirectsFile = desktopSite.redirectsFile?.let(Files::readAllBytes)
-            )
+            site = desktopSite.readFrozenSite()
         )
         return DesktopCloudflarePagesPublishResult(
             projectName = result.projectName,
@@ -106,3 +95,18 @@ internal class DesktopCloudflarePagesPublisher(
             CloudflarePagesPublisher.publicResultsUrl(baseUrl, eventPath)
     }
 }
+
+/** Freeze bytes once, checking any file changes against the reader's selected content hashes. */
+internal fun DesktopCloudflarePagesSite.readFrozenSite(): CloudflarePagesSite =
+CloudflarePagesSite(
+                assets = assets.map { asset ->
+                    CloudflarePagesAsset(
+                        relativePath = asset.relativePath,
+                        content = Files.readAllBytes(asset.source),
+                        contentType = asset.contentType,
+                        hash = asset.hash
+                    )
+                },
+                headersFile = headersFile?.let(Files::readAllBytes),
+                redirectsFile = redirectsFile?.let(Files::readAllBytes)
+            )

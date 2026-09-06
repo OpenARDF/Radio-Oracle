@@ -648,8 +648,7 @@ object EventProjectEditor {
         controlIds: List<String>,
         controlPointIdFactory: (Int) -> String
     ): EventProjectFile {
-        val categoryData = projectFile.raceData.categories.firstOrNull { it.category.id == categoryId }
-            ?: throw IllegalArgumentException("Category was not found: $categoryId")
+        requireNotNull(projectFile.raceData.categoryOrCourseMapping(categoryId)) { "Category was not found: $categoryId" }
         val controlsById = projectFile.raceData.controls.associateBy { it.id }
         val controls = controlIds.map { controlId ->
             controlsById[controlId] ?: throw IllegalArgumentException("Control was not found: $controlId")
@@ -858,6 +857,15 @@ object EventProjectEditor {
                 courseMappings = courseMappings
             )
         )
+    }
+
+    /** Validate a label permutation as a whole, using the same control rules and derived-field updates as an individual edit. */
+    fun replaceControlCatalog(projectFile: EventProjectFile, controls: List<EventControl>): EventProjectFile {
+        require(controls.map { it.id }.toSet() == projectFile.raceData.controls.map { it.id }.toSet() &&
+            controls.map { it.id }.distinct().size == controls.size) { "Catalog replacement must retain each control identity exactly once." }
+        val candidate = projectFile.copy(raceData = projectFile.raceData.copy(controls = controls))
+        return controls.fold(candidate) { project, control -> updateControl(project, control.id, control.label,
+            control.siCode.toString(), control.type, control.scored, control.publicLabel.orEmpty(), control.notes.orEmpty()) }
     }
 
     /** Returns a copy of the Race File with a global logical control appended. */

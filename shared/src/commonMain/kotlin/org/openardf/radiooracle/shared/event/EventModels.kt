@@ -110,7 +110,11 @@ data class ProtectedCourseInfo(
     val sampledPointCount: Int = 0,
     val route: List<ProtectedCourseRoutePoint> = emptyList(),
     val controlPoints: List<ProtectedCourseControlPoint> = emptyList(),
-    val courseObjects: List<ProtectedCourseObjectPoint> = emptyList()
+    val courseObjects: List<ProtectedCourseObjectPoint> = emptyList(),
+    /** Field labels before Course Analyzer renumbering, keyed by immutable geometry control ID. */
+    val resultControlLabelsById: Map<String, String> = emptyMap(),
+    /** Explicit reviewed field bindings; older course payloads have no applied revision. */
+    val appliedBindings: AppliedCourseBindings? = null
 )
 
 @Serializable
@@ -344,7 +348,9 @@ data class EventRaceData(
     val unmatchedReadoutData: List<EventReadoutData>,
     val controls: List<EventControl> = emptyList(),
     val startDrawSettings: StartDrawSettings? = null,
-    val courseMappings: List<EventCategoryData> = emptyList()
+    val courseMappings: List<EventCategoryData> = emptyList(),
+    /** Candidate course edits; results and race exports use the applied fields above. */
+    val courseDraft: EventCourseDraft? = null
 )
 
 /**

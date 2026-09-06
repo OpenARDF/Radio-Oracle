@@ -41,6 +41,21 @@ class DesktopPublicResultsSiteMirrorTest {
     )
 
     @Test
+    fun promotionRejectsExternalEditsAndPreservesTheChangedSite() {
+        val directory = Files.createTempDirectory("course-publication-conflict-")
+        Files.writeString(directory.resolve("keep.txt"), "before")
+        val stage = DesktopPublicResultsSiteMirror.stageDirectory(directory)
+        Files.writeString(stage.stagingDirectory.resolve("new.txt"), "candidate")
+        Files.writeString(directory.resolve("keep.txt"), "external edit")
+        try {
+            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { stage.promote() }
+            assertEquals("external edit", Files.readString(directory.resolve("keep.txt")))
+            assertFalse(Files.exists(directory.resolve("new.txt")))
+        } finally { stage.discard() }
+        assertFalse(Files.exists(stage.stagingDirectory))
+    }
+
+    @Test
     fun usesStableProjectAndBranchSpecificManagedDirectories() {
         val appData = Files.createTempDirectory("radio-oracle-app-data")
 

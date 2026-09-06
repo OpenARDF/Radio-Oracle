@@ -108,6 +108,7 @@ class AppCommandReceiver : BroadcastReceiver() {
             ACTION_SEND_EVENT_OR_SERIES_TO_DESKTOP -> sendEventOrSeriesToDesktop(dataProcessor, intent)
             ACTION_SEND_SERIES_TO_DESKTOP -> sendSeriesToDesktop(dataProcessor, intent)
             ACTION_LOG_SERIES_PACKAGE_FINGERPRINT -> logSeriesPackageFingerprint(dataProcessor, intent)
+            ACTION_RUN_COURSE_WORKFLOW_SMOKE -> CourseWorkflowDeviceSmoke.run(context, dataProcessor)
             ACTION_RUN_IOF_XML_SMOKE -> runIofXmlSmoke(context, dataProcessor, intent)
             ACTION_PRINT_STATUS -> printStatus(context)
             ACTION_SI_STATUS -> siStatus(context, dataProcessor)
@@ -892,6 +893,7 @@ class AppCommandReceiver : BroadcastReceiver() {
         const val ACTION_SEND_SERIES_TO_DESKTOP = "org.openardf.radiooracle.command.SEND_SERIES_TO_DESKTOP"
         const val ACTION_LOG_SERIES_PACKAGE_FINGERPRINT =
             "org.openardf.radiooracle.command.LOG_SERIES_PACKAGE_FINGERPRINT"
+        const val ACTION_RUN_COURSE_WORKFLOW_SMOKE = "org.openardf.radiooracle.command.RUN_COURSE_WORKFLOW_SMOKE"
         const val ACTION_RUN_IOF_XML_SMOKE = "org.openardf.radiooracle.command.RUN_IOF_XML_SMOKE"
         const val ACTION_PRINT_STATUS = "org.openardf.radiooracle.command.PRINT_STATUS"
         const val ACTION_SI_STATUS = "org.openardf.radiooracle.command.SI_STATUS"

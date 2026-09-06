@@ -45,6 +45,12 @@ class DesktopCloudflarePagesPublisherTest {
             DesktopCloudflarePagesHttpTransport { request ->
                 requests += request
                 when {
+                    request.uri.host == "openardf-results.pages.dev" -> {
+                        assertFalse(request.headers.containsKey("Authorization"))
+                        assertTrue(request.uri.query.startsWith("roverify="))
+                        val bytes = Files.readAllBytes(directory.resolve(request.uri.path.removePrefix("/")))
+                        DesktopCloudflarePagesHttpResponse(200, bytes.toString(StandardCharsets.UTF_8), bytes)
+                    }
                     request.uri.path.endsWith("/upload-token") ->
                         response("""{"jwt":"upload-jwt"}""")
                     request.uri.path == "/client/v4/pages/assets/check-missing" -> {
@@ -66,7 +72,7 @@ class DesktopCloudflarePagesPublisherTest {
 
         val result = publisher.publish(publishRequest(directory))
 
-        assertEquals(5, requests.size)
+        assertEquals(10, requests.size)
         assertEquals("GET", requests[0].method)
         assertEquals("Bearer api-token", requests[0].headers["Authorization"])
         assertEquals("Bearer upload-jwt", requests[1].headers["Authorization"])

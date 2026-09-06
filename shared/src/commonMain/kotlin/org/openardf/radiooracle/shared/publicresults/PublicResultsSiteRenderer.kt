@@ -44,7 +44,8 @@ data class PublicResultsRaceRenderRequest(
     val projectFile: EventProjectFile,
     val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     val awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
-    val publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY
+    val publicationStatus: PublicResultsPublicationStatus = PublicResultsPublicationStatus.PRELIMINARY,
+    val includeCourseDiagrams: Boolean = protectedCourseInfoByCategoryId.isNotEmpty()
 )
 
 data class RenderedPublicResultsRace(
@@ -271,26 +272,17 @@ object PublicResultsSiteRenderer {
         request: PublicResultsRaceRenderRequest,
         results: List<EventResultDetails>
     ): List<RenderedCourseGraphic> {
-        val courseRequests = results.mapNotNull { result ->
-            val categoryId = result.categoryId ?: return@mapNotNull null
-            val courseInfo = request.protectedCourseInfoByCategoryId[categoryId]
-                ?: return@mapNotNull null
-            Triple(categoryId, result.categoryName, courseInfo)
-        }.distinctBy { it.first }
-        return courseRequests
-            .groupBy { it.third }
-            .mapNotNull { (courseInfo, categories) ->
-                val first = categories.first()
-                val title = "${categories.map { it.second }.distinct().joinToString(", ")} course"
-                runCatching {
-                    RenderedCourseGraphic(
-                        fileName = "course-${
-                            PublicResultsSiteCatalog.safePathSegment(first.first, "course")
-                        }.svg",
-                        title = title,
-                        svg = CourseDiagramSvg.render(title, courseInfo)
-                    )
-                }.getOrNull()
+        if (!request.includeCourseDiagrams) return emptyList()
+        return PublicResultsCourseSelection.resolve(request.projectFile.raceData,
+            request.protectedCourseInfoByCategoryId, results)
+            .groupBy { it.courseInfo }
+            .map { (courseInfo, categories) ->
+                val title = "${categories.map { it.categoryName }.distinct().joinToString(", ")} course"
+                RenderedCourseGraphic(
+                    fileName = "course-${PublicResultsSiteCatalog.safePathSegment(categories.first().categoryId, "course")}.svg",
+                    title = title,
+                    svg = CourseDiagramSvg.render(title, courseInfo)
+                )
             }
     }
 

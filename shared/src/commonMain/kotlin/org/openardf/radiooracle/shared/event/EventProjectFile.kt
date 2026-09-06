@@ -92,7 +92,7 @@ object EventProjectFileJson {
                     metadata.copy(results = retained, contexts = metadata.contexts.filterKeys { it in contextIds })
                 }
             }
-        )
+        ).let { EventCourseDrafts.rebaseNormalizedDraft(projectFile, it) }
 
     /** Encodes a Race File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =
@@ -147,47 +147,27 @@ object EventProjectFileJson {
     }
 
     private fun clearPublicControlLocations(projectFile: EventProjectFile): EventProjectFile {
-        if (projectFile.raceData.controls.none { it.latitude != null || it.longitude != null }) {
+        if ((projectFile.raceData.controls + projectFile.raceData.courseDraft?.design?.controls.orEmpty()).none { it.latitude != null || it.longitude != null }) {
             return projectFile
         }
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
                 controls = projectFile.raceData.controls.map { control ->
                     control.copy(latitude = null, longitude = null)
-                }
+                },
+                courseDraft = projectFile.raceData.courseDraft?.let { draft -> draft.copy(design = draft.design.copy(
+                    controls = draft.design.controls.map { it.copy(latitude = null, longitude = null) })) }
             )
         )
     }
 
-    private fun clearLegacyCategoryRaceSettings(projectFile: EventProjectFile): EventProjectFile {
-        if (projectFile.raceData.categories.none { it.category.hasLegacyRaceSettings() }) {
-            return projectFile
+    private fun clearLegacyCategoryRaceSettings(projectFile: EventProjectFile): EventProjectFile =
+        EventCourseDrafts.mapProtectedCategories(projectFile) { data ->
+            if (data.category.hasLegacyRaceSettings()) data.copy(category = data.category.withEventLevelRaceSettings()) else data
         }
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(
-                categories = projectFile.raceData.categories.map { categoryData ->
-                    categoryData.copy(category = categoryData.category.withEventLevelRaceSettings())
-                }
-            )
-        )
-    }
 
-    private fun reconcileStandardCategoryGenders(projectFile: EventProjectFile): EventProjectFile {
-        val categories = projectFile.raceData.categories.map(::reconcileStandardCategoryGender)
-        val courseMappings = projectFile.raceData.courseMappings.map(::reconcileStandardCategoryGender)
-        if (
-            categories == projectFile.raceData.categories &&
-            courseMappings == projectFile.raceData.courseMappings
-        ) {
-            return projectFile
-        }
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(
-                categories = categories,
-                courseMappings = courseMappings
-            )
-        )
-    }
+    private fun reconcileStandardCategoryGenders(projectFile: EventProjectFile): EventProjectFile =
+        EventCourseDrafts.mapProtectedCategories(projectFile, ::reconcileStandardCategoryGender)
 
     private fun reconcileStandardCategoryGender(categoryData: EventCategoryData): EventCategoryData {
         val reconciledIsMan = StandardCategoryRules.reconcileIsManWithName(
@@ -215,7 +195,7 @@ object EventProjectFileJson {
 /** Schema metadata for portable Radio-Oracle Race Files. */
 object EventProjectFileFormat {
     const val APP_NAME = "Radio-Oracle"
-    const val CURRENT_SCHEMA_VERSION = 6
+    const val CURRENT_SCHEMA_VERSION = 7
 
     /** Returns true when the supplied schema version is within the supported range. */
     fun isSupportedSchema(schemaVersion: Int): Boolean =

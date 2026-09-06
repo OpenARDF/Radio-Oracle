@@ -270,6 +270,8 @@ internal class ClassicRouteAnalysisUi(
                     val ready = exportProject?.let { DesktopClassicRouteAnalysis.projection(it).size } ?: 0
                     val unavailable = calculated.results.values.count { it.length == null }
                     val stale = (calculated.results.size - ready - unavailable).coerceAtLeast(0)
+                    DesktopDebugLog.info("ClassicRouteAnalysis",
+                        "Completed race=$id method=${DesktopClassicRouteAnalysis.METHOD} identityRefresh=${DesktopClassicRouteAnalysis.needsMethodRefresh(captured)} ready=$ready unavailable=$unavailable stale=$stale saved=$saved")
                     outcomes[id] = Triple(ready, unavailable, stale)
                     if (saved) unsaved.remove(id) else unsaved.add(id)
                     status = "Classic route analysis complete: $ready current estimates, $unavailable unavailable, $stale changed inputs requiring recalculation. " +
@@ -413,6 +415,9 @@ internal fun ClassicRouteAnalysisPanel(project: EventProjectFile) {
         Text(state.status)
         if (project.desktopRouteAnalysis != null) {
             Text(savedSummary.first)
+            if (DesktopClassicRouteAnalysis.needsMethodRefresh(project)) {
+                Text("Saved route estimates require recalculation after the control-identity correction. Outdated estimates are excluded from results and exports. Choose Estimate effective route lengths to refresh them.")
+            }
             if (savedSummary.second > 0) Text("The verified analysis ideal differs from the saved course-design length for ${savedSummary.second} categories. Comparisons use the analysis ideal; the course design is unchanged.")
         }
         Text("Available in desktop result CSV, TXT, HTML, PDF, reports and website exports. Android, ARDF, IOF and ROBIS formats are unchanged.")

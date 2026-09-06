@@ -26,8 +26,8 @@ test:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test
 
 # Read-only real-series acceptance; exports are written under desktopApp/build/reports.
-classic-route-smoke archive baseline:
-    RADIO_ORACLE_ROUTE_SMOKE_ARCHIVE={{quote(archive)}} RADIO_ORACLE_ROUTE_SMOKE_BASELINE={{quote(baseline)}} JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:cleanTest :desktopApp:test --tests '*DesktopClassicRouteArchiveSmokeTest'
+classic-route-smoke archive baseline sources="":
+    RADIO_ORACLE_ROUTE_SMOKE_ARCHIVE={{quote(archive)}} RADIO_ORACLE_ROUTE_SMOKE_BASELINE={{quote(baseline)}} RADIO_ORACLE_ROUTE_SMOKE_SOURCES={{quote(sources)}} JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:cleanTest :desktopApp:test --tests '*DesktopClassicRouteArchiveSmokeTest' --tests '*DesktopPublishedCourseDiagramArchiveSmokeTest'
 
 android-compile:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:compileDebugKotlin
@@ -48,6 +48,10 @@ android-si-status serial="":
     else \
         "$ADB" shell am broadcast -a org.openardf.radiooracle.command.SI_STATUS -n org.openardf.radiooracle/.backend.commands.AppCommandReceiver; \
     fi
+
+android-course-workflow-smoke serial:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug
+    ./scripts/android-course-workflow-smoke.sh {{quote(serial)}}
 
 android-iof-smoke serial="" schema_path="":
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug
@@ -174,6 +178,38 @@ route-generator file flags="":
 
 classic-route-lengths input output:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='classic-route-lengths "{{input}}" "{{output}}"'
+
+course-publication-manifest site output:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-publication-manifest "{{site}}" "{{output}}"'
+
+course-publication-verify url inventory:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-publication-verify "{{url}}" "{{inventory}}"'
+
+course-apply-preview input design:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-apply-preview "{{input}}" "{{design}}"'
+
+course-export-verify input output:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-export-verify "{{input}}" "{{output}}"'
+
+course-audit input:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-audit "{{input}}"'
+
+# Synthetic workflow only; writes evidence under desktopApp/build/reports/course-workflow.
+course-workflow-test:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test --tests '*DesktopCourseWorkflowTest'
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-workflow-report "{{justfile_directory()}}/desktopApp/build/reports/course-workflow/baseline.json"'
+
+# Runs dependent platform phases in order; no private archive or device is used.
+course-workflow-transfer-test:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test --tests '*DesktopCourseWorkflowTest'
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:testDebugUnitTest --tests '*CourseWorkflowArchiveTransferTest' -PcourseWorkflowTransferDirectory="{{justfile_directory()}}/desktopApp/build/reports/course-workflow"
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:test --tests '*DesktopCourseWorkflowTransferReturnTest' -PcourseWorkflowTransferDirectory="{{justfile_directory()}}/desktopApp/build/reports/course-workflow"
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-workflow-report "{{justfile_directory()}}/desktopApp/build/reports/course-workflow/round-trip.json"'
+
+course-workflow-check:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :shared:desktopTest :desktopApp:test --tests '*Course*' --tests '*DesktopClassicRoute*' --tests '*DesktopProjectSessionTest' --tests '*DesktopProjectFilesTest' --tests '*DesktopPublicResultsSiteMirrorTest' --tests '*DesktopCloudflarePagesPublisherTest' :app:testDebugUnitTest --tests '*CourseWorkflow*Test' --tests '*AndroidCourseProtectionTest' --tests '*AndroidPublicResults*Test'
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-workflow-report "{{justfile_directory()}}/desktopApp/build/reports/course-workflow/baseline.json" "{{justfile_directory()}}/app/build/reports/course-workflow/android-transfer.json"'
+    just course-workflow-transfer-test
 
 event-category-remove event category flags="":
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='remove-category "{{event}}" "{{category}}" {{flags}}'

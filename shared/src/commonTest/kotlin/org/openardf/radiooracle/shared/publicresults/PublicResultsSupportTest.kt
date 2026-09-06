@@ -268,22 +268,20 @@ class PublicResultsSupportTest {
     }
 
     @Test
-    fun rendererSkipsIncompleteCourseGeometryWithoutBlockingResults() {
-        val rendered = PublicResultsSiteRenderer.renderRace(
-            request = PublicResultsRaceRenderRequest(
-                projectFile = EventProjectFile(raceData = raceData(RaceLevel.PRACTICE, true)),
-                protectedCourseInfoByCategoryId = mapOf(
-                    "category" to ProtectedCourseInfo(idealOrder = "Fox 1")
-                )
-            ),
-            generatedAtIso = "2026-07-27T12:00:00Z",
-            appVersion = "test"
-        )
-
-        assertEquals(1, rendered.resultCount)
-        assertTrue(rendered.courseGraphics.isEmpty())
-        assertTrue(rendered.files.keys.none { it.endsWith(".svg") })
-        assertTrue("downloads/live-results.json" in rendered.files)
+    fun courseInclusivePublishingRequiresCompleteGeometryAndCoverage() {
+        val project = EventProjectFile(raceData = raceData(RaceLevel.PRACTICE, true))
+        for (courses in listOf(emptyMap(), mapOf("category" to ProtectedCourseInfo(idealOrder = "Fox 1")))) {
+            assertFailsWith<IllegalArgumentException> {
+                PublicResultsSiteRenderer.renderRace(PublicResultsRaceRenderRequest(project, courses,
+                    includeCourseDiagrams = true), "2026-07-27T12:00:00Z", "test")
+            }
+            val rendered = PublicResultsSiteRenderer.renderRace(PublicResultsRaceRenderRequest(project, courses,
+                includeCourseDiagrams = false), "2026-07-27T12:00:00Z", "test")
+            assertEquals(1, rendered.resultCount)
+            assertTrue(rendered.courseGraphics.isEmpty())
+            assertTrue(rendered.files.keys.none { it.endsWith(".svg") })
+            assertTrue("downloads/live-results.json" in rendered.files)
+        }
     }
 
     private fun entry(path: String, publicationId: String) =

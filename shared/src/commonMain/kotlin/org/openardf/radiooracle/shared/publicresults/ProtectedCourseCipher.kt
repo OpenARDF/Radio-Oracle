@@ -27,6 +27,7 @@ package org.openardf.radiooracle.shared.publicresults
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventCourseDrafts
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import java.security.SecureRandom
@@ -161,12 +162,7 @@ object ProtectedCourseCipher {
                     )
                 )
             }
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(
-                categories = projectFile.raceData.categories.map(::reencrypt),
-                courseMappings = projectFile.raceData.courseMappings.map(::reencrypt)
-            )
-        )
+        return EventCourseDrafts.mapProtectedCategories(projectFile, ::reencrypt)
     }
 
     /**
@@ -203,16 +199,7 @@ object ProtectedCourseCipher {
                 )
             }
 
-        // Map both active categories and inactive imported course mappings. Decryption happens
-        // while constructing these lists; if any member rejects the password, no result is returned.
-        val categories = projectFile.raceData.categories.map(::remove)
-        val courseMappings = projectFile.raceData.courseMappings.map(::remove)
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(
-                categories = categories,
-                courseMappings = courseMappings
-            )
-        )
+        return EventCourseDrafts.mapProtectedCategories(projectFile, ::remove)
     }
 
     /** Applies Race Password protection to plaintext course data. */
@@ -238,12 +225,7 @@ object ProtectedCourseCipher {
                     )
                 )
             }
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(
-                categories = projectFile.raceData.categories.map(::protect),
-                courseMappings = projectFile.raceData.courseMappings.map(::protect)
-            )
-        )
+        return EventCourseDrafts.mapProtectedCategories(projectFile, ::protect)
     }
 
     private fun secretKey(password: String, salt: ByteArray, iterations: Int): SecretKeySpec {

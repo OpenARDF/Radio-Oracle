@@ -7,13 +7,11 @@ import kotlinx.coroutines.currentCoroutineContext
 import org.openardf.radiooracle.backend.logging.DebugLog
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.backend.room.database.EventDatabase
-import org.openardf.radiooracle.backend.room.entity.Category
-import org.openardf.radiooracle.backend.room.entity.Race
-import org.openardf.radiooracle.backend.shared.toEventCategory
-import org.openardf.radiooracle.backend.shared.toEventRace
-import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
+import org.openardf.radiooracle.backend.shared.toEventRaceData
+import org.openardf.radiooracle.backend.shared.encodePortableCourseData
+import org.openardf.radiooracle.shared.event.EventCourseDrafts
 import org.openardf.radiooracle.shared.event.EventProjectFile
-import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.publicresults.ProtectedCourseCipher
 import java.util.UUID
 
@@ -30,7 +28,7 @@ data class AndroidCourseProtectionProgress(
 class AndroidCourseProtection(private val database: EventDatabase) {
     suspend fun state(raceId: UUID, wholeSeries: Boolean): AndroidCourseProtectionState =
         withContext(Dispatchers.IO) {
-            database.withTransaction { stateOf(targets(raceId, wholeSeries).flatMap { it.second }) }
+            database.withTransaction { stateOf(targets(raceId, wholeSeries)) }
         }
 
     suspend fun update(
@@ -42,44 +40,38 @@ class AndroidCourseProtection(private val database: EventDatabase) {
     ) = withContext(Dispatchers.IO) {
         // Release Room's transaction while doing expensive PBKDF2 work. Reads and readouts can continue.
         val snapshot = database.withTransaction { targets(raceId, wholeSeries) }
-        val state = stateOf(snapshot.flatMap { it.second })
+        val state = stateOf(snapshot)
         require(state.hasCourseData) { "There is no course or route data to encrypt." }
         require(state.encrypted != encrypt) {
             "Protection has changed. Close and reopen Race Password Protection."
         }
-        val total = snapshot.sumOf { it.second.size }
+        val total = snapshot.sumOf { EventCourseDrafts.protectedCategories(it.toEventRaceData()).size }
         val started = System.nanoTime()
         DebugLog.info("CourseProtection", "Started encrypt=$encrypt series=$wholeSeries races=${snapshot.size} categories=$total")
         try {
             var completed = 0
             val changed = withContext(Dispatchers.Default) {
-                snapshot.flatMap { (race, categories) ->
-                    categories.map { original ->
-                        currentCoroutineContext().ensureActive()
-                        onProgress(AndroidCourseProtectionProgress(completed, total, race.name))
-                        val project = EventProjectFile(raceData = EventRaceData(
-                            race.toEventRace(),
-                            listOf(EventCategoryData(original.toEventCategory(), emptyList(), emptyList())),
-                            emptyList(), emptyList(), emptyList()
-                        ))
-                        val result = try {
-                            if (encrypt) ProtectedCourseCipher.protectProjectCourseData(project, password)
-                            else ProtectedCourseCipher.removeProjectCourseProtection(project, password)
-                        } catch (error: IllegalArgumentException) {
-                            throw IllegalArgumentException("Race '${race.name}': ${error.message}", error)
-                        }
-                        currentCoroutineContext().ensureActive()
-                        val converted = result.raceData.categories.single().category
-                        completed++
-                        original.copy(
-                            encryptedIdealOrder = converted.encryptedIdealOrder,
-                            encryptedCourseInfo = converted.encryptedCourseInfo,
-                            idealOrder = converted.idealOrder,
-                            courseInfo = converted.courseInfo?.let(ProtectedCourseCipher::encodeCourseInfo)
-                        )
-                    }.also {
-                        DebugLog.info("CourseProtection", "Processed categories=$completed/$total")
+                snapshot.map { original ->
+                    currentCoroutineContext().ensureActive()
+                    onProgress(AndroidCourseProtectionProgress(completed, total, original.race.name))
+                    val project = EventProjectFile(raceData = original.toEventRaceData())
+                    val result = try {
+                        if (encrypt) ProtectedCourseCipher.protectProjectCourseData(project, password)
+                        else ProtectedCourseCipher.removeProjectCourseProtection(project, password)
+                    } catch (error: IllegalArgumentException) {
+                        throw IllegalArgumentException("Race '${original.race.name}': ${error.message}", error)
                     }
+                    currentCoroutineContext().ensureActive()
+                    val byId = result.raceData.categories.associateBy { it.category.id }
+                    completed += EventCourseDrafts.protectedCategories(result.raceData).size
+                    original.copy(race = original.race.copy(portableCourseData = original.race.portableCourseData?.let { encodePortableCourseData(result.raceData) }),
+                        categories = original.categories.map { data ->
+                            val converted = byId.getValue(data.category.id.toString()).category
+                            data.copy(category = data.category.copy(
+                                encryptedIdealOrder = converted.encryptedIdealOrder, encryptedCourseInfo = converted.encryptedCourseInfo,
+                                idealOrder = converted.idealOrder, courseInfo = converted.courseInfo?.let(ProtectedCourseCipher::encodeCourseInfo),
+                                portableCategoryId = if (result.raceData.courseDraft != null) data.category.id.toString() else data.category.portableCategoryId))
+                        })
                 }
             }
             onProgress(AndroidCourseProtectionProgress(completed, total, "", saving = true))
@@ -89,7 +81,10 @@ class AndroidCourseProtection(private val database: EventDatabase) {
                 require(targets(raceId, wholeSeries) == snapshot) {
                     "Race data changed during course protection. No protection changes were saved. Please retry."
                 }
-                changed.forEach { database.categoryDao().createOrUpdateCategory(it) }
+                changed.forEach { race ->
+                    database.raceDao().updateRace(race.race)
+                    race.categories.forEach { database.categoryDao().createOrUpdateCategory(it.category) }
+                }
             }
             DebugLog.info("CourseProtection", "Completed categories=$total elapsedMs=${(System.nanoTime() - started) / 1_000_000}")
         } catch (error: Exception) {
@@ -98,7 +93,7 @@ class AndroidCourseProtection(private val database: EventDatabase) {
         }
     }
 
-    private suspend fun targets(raceId: UUID, wholeSeries: Boolean): List<Pair<Race, List<Category>>> {
+    private suspend fun targets(raceId: UUID, wholeSeries: Boolean): List<RaceData> {
         val ids = if (wholeSeries) {
             val series = requireNotNull(database.eventSeriesDao().getSeriesForRace(raceId)) {
                 "This race is no longer part of a Race Series."
@@ -109,11 +104,13 @@ class AndroidCourseProtection(private val database: EventDatabase) {
         } else listOf(raceId)
         return ids.map { id ->
             val race = requireNotNull(database.raceDao().getRace(id)) { "A selected race is missing." }
-            race to database.categoryDao().getCategoriesForRace(id)
+            RaceData(race, database.categoryDao().getCategoryDataForRace(id).map { it.copy(competitors = emptyList()) },
+                database.aliasDao().getAliasesByRace(id), emptyList(), emptyList())
         }
     }
 
-    private fun stateOf(categories: List<Category>): AndroidCourseProtectionState {
+    private fun stateOf(races: List<RaceData>): AndroidCourseProtectionState {
+        val categories = races.flatMap { EventCourseDrafts.protectedCategories(it.toEventRaceData()) }.map { it.category }
         val encrypted = categories.any { !it.encryptedIdealOrder.isNullOrBlank() || !it.encryptedCourseInfo.isNullOrBlank() }
         return AndroidCourseProtectionState(encrypted, encrypted || categories.any {
             it.idealOrder != null || it.courseInfo != null
