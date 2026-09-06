@@ -58,6 +58,7 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.nambimobile.widgets.efab.FabOption
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.ui.FabListClearance
 import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.files.DesktopFileTransferUpload
 import org.openardf.radiooracle.backend.files.EventFileTransferDownloader
@@ -130,6 +131,7 @@ class RaceSelectionFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        FabListClearance.bind(view as ViewGroup, recyclerView, view.findViewById(R.id.race_fab))
 
         toolbar = view.findViewById(R.id.race_toolbar)
         toolbar.setTitle(R.string.race_toolbar_title)

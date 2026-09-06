@@ -57,6 +57,7 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.CategoryData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.EventSeriesData
 import org.openardf.radiooracle.databinding.FragmentCategoriesBinding
 import org.openardf.radiooracle.ui.EventToolbarSupport
+import org.openardf.radiooracle.ui.FabListClearance
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
@@ -97,6 +98,7 @@ class CategoryFragment : Fragment() {
         categoryToolbar = view.findViewById(R.id.category_toolbar)
         categoryAddFab = view.findViewById(R.id.category_btn_add)
         categoryRecyclerView = view.findViewById(R.id.category_recycler_view)
+        FabListClearance.bind(view as ViewGroup, categoryRecyclerView, categoryAddFab)
 
         categoryToolbar.inflateMenu(R.menu.fragment_menu_category)
         categoryToolbar.setOnMenuItemClickListener {

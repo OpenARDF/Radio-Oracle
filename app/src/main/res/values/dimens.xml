@@ -1,6 +1,7 @@
 <resources>
     <!-- Default screen margins, per the Android Design guidelines. -->
     <dimen name="text_margin">16dp</dimen>
+    <dimen name="fab_list_clearance_gap">16dp</dimen>
     <dimen name="race_swipe_delete_padding">24dp</dimen>
     <dimen name="race_swipe_delete_text_size">16sp</dimen>
 </resources>

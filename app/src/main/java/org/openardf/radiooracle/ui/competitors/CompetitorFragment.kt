@@ -56,6 +56,7 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.databinding.FragmentCompetitorsBinding
 import org.openardf.radiooracle.ui.EventToolbarSupport
+import org.openardf.radiooracle.ui.FabListClearance
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
@@ -96,6 +97,11 @@ class CompetitorFragment : Fragment() {
         competitorToolbar = view.findViewById(R.id.competitor_fragment_toolbar)
         competitorAddFab = view.findViewById(R.id.competitor_btn_add)
         competitorTableView = view.findViewById(R.id.competitor_fragment_table_view)
+        FabListClearance.bind(
+            view as ViewGroup,
+            competitorTableView.findViewById(de.codecrafters.tableview.R.id.table_data_view),
+            competitorAddFab
+        )
         competitorDisplayTypePicker = view.findViewById(R.id.competitor_fragment_display_type)
 
         competitorToolbar.inflateMenu(R.menu.fragment_menu_competitor)

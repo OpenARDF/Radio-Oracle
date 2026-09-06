@@ -57,8 +57,17 @@ class ResultsFragmentRecyclerViewAdapter(
     RecyclerView.Adapter<RecyclerView.ViewHolder>(
     ) {
     val dataProcessor = DataProcessor.get()
+    private val hasEditedResults = values.any { row ->
+        row.competitorData.any { it.readoutData?.result?.modified == true }
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, child: Int): RecyclerView.ViewHolder {
+        if (child == FOOTER_VIEW_TYPE) {
+            return FooterViewHolder(
+                LayoutInflater.from(parent.context)
+                    .inflate(R.layout.recycler_item_result_footer, parent, false)
+            )
+        }
 
         return if (child == 0) {
             val rowView: View =
@@ -81,9 +90,13 @@ class ResultsFragmentRecyclerViewAdapter(
         }
     }
 
-    override fun getItemCount(): Int = values.size
+    override fun getItemCount(): Int = values.size + if (values.isNotEmpty()) 1 else 0
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        if (holder is FooterViewHolder) {
+            holder.note.text = if (hasEditedResults) context.getText(R.string.results_edited_note) else ""
+            return
+        }
         val dataList = values[position]
 
         if (dataList.isChild == 0) {
@@ -271,7 +284,8 @@ class ResultsFragmentRecyclerViewAdapter(
         notifyDataSetChanged()
     }
 
-    override fun getItemViewType(position: Int): Int = values[position].isChild
+    override fun getItemViewType(position: Int): Int =
+        if (position == values.size) FOOTER_VIEW_TYPE else values[position].isChild
 
     override fun getItemId(position: Int): Long {
         return position.toLong()
@@ -282,6 +296,10 @@ class ResultsFragmentRecyclerViewAdapter(
         val expandButton: ImageButton = row.findViewById(R.id.down_iv)
     }
 
+    class FooterViewHolder(row: View) : RecyclerView.ViewHolder(row) {
+        val note: TextView = row.findViewById(R.id.results_edited_note)
+    }
+
     class CompetitorViewHolder(row: View) : RecyclerView.ViewHolder(row) {
         val competitorPlace: TextView = row.findViewById(R.id.result_competitor_place)
         val competitorName: TextView = row.findViewById(R.id.result_competitor_name)
@@ -289,6 +307,10 @@ class ResultsFragmentRecyclerViewAdapter(
         val competitorPoints: TextView = row.findViewById(R.id.result_competitor_points)
 
         var timerJob: Job? = null
+    }
+
+    private companion object {
+        const val FOOTER_VIEW_TYPE = 2
     }
 }
 

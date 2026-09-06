@@ -601,6 +601,7 @@
     <string name="result_status_did_not_finish">Did Not Finish</string>
     <string name="result_status_over_limit">Over Time Limit</string>
     <string name="result_status_unofficial">Unofficial</string>
+    <string name="results_edited_note">* Results edited</string>
     <string name="result_status_error">Error</string>
 
     <string name="result_status_valid_short" translatable="false">OK</string>

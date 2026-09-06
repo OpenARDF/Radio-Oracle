@@ -53,6 +53,7 @@ import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultData
 import org.openardf.radiooracle.databinding.FragmentReadoutsBinding
 import org.openardf.radiooracle.ui.EventToolbarSupport
+import org.openardf.radiooracle.ui.FabListClearance
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.serializableCompat
 import org.openardf.radiooracle.ui.races.RaceEditDialogFragment
@@ -117,6 +118,7 @@ class ReadoutFragment : Fragment() {
         finishedProgressBar = view.findViewById(R.id.readouts_finished_progress_bar)
         limitProgressBar = view.findViewById(R.id.readouts_limit_progress_bar)
         readoutAddFab = view.findViewById(R.id.readout_btn_add)
+        FabListClearance.bind(view as ViewGroup, readoutRecyclerView, readoutAddFab)
 
         readoutToolbar.inflateMenu(R.menu.fragment_menu_readout)
         readoutToolbar.setOnMenuItemClickListener {
