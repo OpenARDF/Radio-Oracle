@@ -63,6 +63,54 @@ import kotlin.math.roundToInt
 
 class DesktopCourseAnalyzerTest {
     @Test
+    fun publishedImported80mDiagramsKeepFoxesWhoseLabelsSupersedeLegacyIds() {
+        val base = projectFile(5, (1..5).map { "Fox$it" }, (131..135).toList())
+        val currentIds = base.raceData.controls.associate { it.id to
+            "control-${it.publicLabel!!.lowercase()}-${it.siCode}-${it.type.name.lowercase()}" }
+        val legacyIds = mapOf(
+            "control-1" to "control-1-31-control",
+            "control-2" to "imported-uuid-2",
+            "control-3" to "control-2-32-control",
+            "control-4" to "imported-uuid-4",
+            "control-5" to "control-3-33-control",
+            "control-beacon" to "control-m-99-beacon"
+        )
+        val baseInfo = protectedInfo(5)
+        listOf("M21", "M50", "W55", "M60").forEach { name ->
+            val order = if (name in listOf("M21", "M50")) listOf(5, 3, 2, 4, 1) else listOf(3, 2, 4, 1)
+            val includedIds = order.map { "control-$it" } + "control-beacon"
+            val project = base.copy(raceData = base.raceData.copy(
+                controls = base.raceData.controls.map { c -> c.copy(id = currentIds.getValue(c.id)) },
+                categories = base.raceData.categories.map { c -> c.copy(
+                    category = c.category.copy(name = name),
+                    controlPoints = c.controlPoints.filter { it.controlId in includedIds }.map { p ->
+                        p.copy(controlId = currentIds.getValue(p.controlId))
+                    }
+                ) }
+            ))
+            val info = baseInfo.copy(
+                sourceName = "80m Course Data.kmz",
+                idealOrder = (order.map { "Fox$it" } + "Beacon").joinToString(" "),
+                controlPoints = baseInfo.controlPoints.filter { it.controlId in includedIds }.map { p -> p.copy(
+                    controlId = legacyIds.getValue(p.controlId),
+                    label = if (p.type == ControlPointType.CONTROL) "Fox${p.controlId.removePrefix("control-")}" else "Beacon"
+                ) },
+                courseObjects = baseInfo.courseObjects.filter { it.id !in legacyIds || it.id in includedIds }.map { p -> p.copy(
+                    id = legacyIds[p.id] ?: p.id,
+                    label = if (p.type == ProtectedCourseObjectType.CONTROL) "Fox${p.id.removePrefix("control-")}" else p.label
+                ) }
+            )
+            val summary = DesktopCourseAnalyzer.analyze(project, CATEGORY_ID, info, info.idealOrder,
+                controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS)
+            val map = requireNotNull(summary.providedRouteSection?.routeMap)
+            val foxes = map.points.filter { it.type == DesktopCourseRouteMapPointType.Control }.sortedBy { it.xFraction }
+            assertEquals(name, order.sorted().map { "Fox$it" }, foxes.map { it.label })
+            assertEquals(name, listOf("S") + order.sorted().map { "Fox$it" } + listOf("B", "F"),
+                map.routePointIndexes.map { map.points[it].label })
+        }
+    }
+
+    @Test
     fun analysisIsUnavailableWhenRouteGeometryCannotProduceRouteSections() {
         val routeOnlyInfo = protectedInfo(foxCount = 3).copy(
             idealOrder = "31 32 33 Beacon",

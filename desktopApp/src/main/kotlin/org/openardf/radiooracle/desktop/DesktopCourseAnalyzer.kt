@@ -1288,10 +1288,10 @@ object DesktopCourseAnalyzer {
         val protectedControls = courseInfo.controlPoints
             .map { protectedControl ->
                 assignedControlsById[protectedControl.controlId]
-                    ?: categoryAssignedControls.resultControlFor(protectedControl, controlIdentityMode)
+                    ?: categoryAssignedControls.resultControlFor(protectedControl, controlIdentityMode, courseInfo)
                     ?: categoryAssignedControls.foxoringControlFor(protectedControl, raceType)
                     ?: controlsById[protectedControl.controlId]
-                    ?: projectControls.resultControlFor(protectedControl, controlIdentityMode)
+                    ?: projectControls.resultControlFor(protectedControl, controlIdentityMode, courseInfo)
                     ?: projectControls.firstOrNull { it.matchesProtectedControl(protectedControl) }
                     ?: protectedControl.toEventControl(projectFile.raceData.race.id)
             }
@@ -1394,7 +1394,7 @@ object DesktopCourseAnalyzer {
         // current public label.
         return courseInfo.controlPoints.map { protectedControl ->
             val currentControl = controlsById[protectedControl.controlId]
-                ?: controls.resultControlFor(protectedControl, controlIdentityMode)
+                ?: controls.resultControlFor(protectedControl, controlIdentityMode, courseInfo)
                 ?: controls.foxoringControlFor(protectedControl, raceType)
             if (currentControl != null) {
                 currentControl.copy(
@@ -1409,9 +1409,14 @@ object DesktopCourseAnalyzer {
 
     private fun List<EventControl>.resultControlFor(
         protectedControl: ProtectedCourseControlPoint,
-        controlIdentityMode: DesktopCourseControlIdentityMode
+        controlIdentityMode: DesktopCourseControlIdentityMode,
+        courseInfo: ProtectedCourseInfo
     ): EventControl? {
-        if (controlIdentityMode != DesktopCourseControlIdentityMode.RESULT_CONTROLS) {
+        // Fresh imports can intentionally replace the numbering embedded in old control IDs.
+        // Only Analyzer-renumbered data needs those IDs to recover original field identities.
+        if (controlIdentityMode != DesktopCourseControlIdentityMode.RESULT_CONTROLS ||
+            !courseInfo.usesAnalyzerSavedNumbering()
+        ) {
             return null
         }
         val protectedIdentity = protectedControl.controlId.stableResultControlIdentity(protectedControl.type)
@@ -4192,7 +4197,8 @@ object DesktopCourseAnalyzer {
                     ProtectedCoordinateCandidate(
                         label = controlPoint.label,
                         type = controlPoint.type.toProtectedCourseObjectType(),
-                        stableIdentity = controlPoint.controlId.stableResultControlIdentity(controlPoint.type),
+                        stableIdentity = controlPoint.controlId.takeIf { courseInfo.usesAnalyzerSavedNumbering() }
+                            ?.stableResultControlIdentity(controlPoint.type),
                         point = controlPoint.toGeoPoint()
                     )
                 )
@@ -4209,7 +4215,8 @@ object DesktopCourseAnalyzer {
                             label = courseObject.label,
                             type = courseObject.type,
                             stableIdentity = courseObject.type.controlPointTypeOrNull()?.let { controlType ->
-                                courseObject.id.stableResultControlIdentity(controlType)
+                                courseObject.id.takeIf { courseInfo.usesAnalyzerSavedNumbering() }
+                                    ?.stableResultControlIdentity(controlType)
                             },
                             point = courseObject.toGeoPoint()
                         )
