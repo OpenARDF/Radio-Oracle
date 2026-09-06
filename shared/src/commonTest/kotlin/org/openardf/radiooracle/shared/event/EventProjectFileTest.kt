@@ -62,11 +62,55 @@ class EventProjectFileTest {
 
         assertTrue(encoded.contains("\"schemaVersion\": ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION}"))
         assertTrue(encoded.contains("\"appName\": \"Radio-Oracle\""))
+        assertTrue(encoded.contains("\"resultsScoringRevision\": ${EventResultScoringFormat.CURRENT_REVISION}"))
         assertTrue(encoded.contains("\"courseAnalyzerSpeedCompensationFactor\": 1.0"))
         assertEquals(original.schemaVersion, decoded.schemaVersion)
         assertEquals(original.appName, decoded.appName)
+        assertEquals(EventResultScoringFormat.CURRENT_REVISION, decoded.resultsScoringRevision)
         assertEquals(original.seriesLink, decoded.seriesLink)
         assertEquals(original.raceData.race, decoded.raceData.race)
+    }
+
+    @Test
+    fun migratesLegacyAutomaticBeaconOnlyResultToDnf() {
+        val legacyEncoded = EventProjectFileJson.encode(beaconOnlyProjectFile(automaticStatus = true))
+            .withoutResultsScoringRevision()
+
+        val decoded = EventProjectFileJson.decode(legacyEncoded)
+        val result = decoded.raceData.competitorData.single().readoutData!!.result
+
+        assertEquals(EventResultScoringFormat.CURRENT_REVISION, decoded.resultsScoringRevision)
+        assertEquals(ResultStatus.DID_NOT_FINISH, result.resultStatus)
+        assertEquals(0, result.points)
+    }
+
+    @Test
+    fun scoringMigrationPreservesManualBeaconOnlyStatus() {
+        val legacyEncoded = EventProjectFileJson.encode(beaconOnlyProjectFile(automaticStatus = false))
+            .withoutResultsScoringRevision()
+
+        val decoded = EventProjectFileJson.decode(legacyEncoded)
+        val result = decoded.raceData.competitorData.single().readoutData!!.result
+
+        assertEquals(ResultStatus.OK, result.resultStatus)
+        assertFalse(result.automaticStatus)
+    }
+
+    @Test
+    fun zeroFoxMigrationDoesNotRewriteOrienteeringResults() {
+        val projectFile = beaconOnlyProjectFile(automaticStatus = true).let { project ->
+            project.copy(
+                raceData = project.raceData.copy(
+                    race = project.raceData.race.copy(raceType = RaceType.ORIENTEERING)
+                )
+            )
+        }
+        val legacyEncoded = EventProjectFileJson.encode(projectFile).withoutResultsScoringRevision()
+
+        val result = EventProjectFileJson.decode(legacyEncoded)
+            .raceData.competitorData.single().readoutData!!.result
+
+        assertEquals(ResultStatus.OK, result.resultStatus)
     }
 
     @Test
@@ -333,6 +377,63 @@ class EventProjectFileTest {
                 )
             ),
             unmatchedReadoutData = listOf(readoutData())
+        )
+
+    private fun beaconOnlyProjectFile(automaticStatus: Boolean): EventProjectFile {
+        val base = raceData()
+        val beaconControlId = "control-beacon-136"
+        val beaconPoint = EventControlPoint(
+            id = "category-beacon-136",
+            categoryId = "category",
+            controlId = beaconControlId,
+            siCode = 136,
+            type = ControlPointType.BEACON,
+            order = 1
+        )
+        val categoryData = base.categories.single().copy(
+            category = base.categories.single().category.copy(controlPointsString = "136B"),
+            controlPoints = listOf(beaconPoint),
+            publicControlIds = listOf(beaconControlId)
+        )
+        val readout = readoutData().let { original ->
+            original.copy(
+                result = original.result.copy(
+                    automaticStatus = automaticStatus,
+                    resultStatus = ResultStatus.OK,
+                    points = 0
+                ),
+                punches = original.punches.map { aliasPunch ->
+                    aliasPunch.copy(punch = aliasPunch.punch.copy(siCode = 136))
+                }
+            )
+        }
+        val competitorData = base.competitorData.single().copy(
+            competitorCategory = EventCompetitorCategory(competitor(), categoryData.category),
+            readoutData = readout
+        )
+        return EventProjectFile(
+            raceData = base.copy(
+                categories = listOf(categoryData),
+                aliases = listOf(EventAlias("beacon-alias", "race", 136, "B")),
+                competitorData = listOf(competitorData),
+                unmatchedReadoutData = emptyList(),
+                controls = listOf(
+                    EventControl(
+                        id = beaconControlId,
+                        raceId = "race",
+                        label = "B",
+                        siCode = 136,
+                        type = ControlPointType.BEACON
+                    )
+                )
+            )
+        )
+    }
+
+    private fun String.withoutResultsScoringRevision(): String =
+        replace(
+            Regex("""\s+\"resultsScoringRevision\": ${EventResultScoringFormat.CURRENT_REVISION},\n"""),
+            "\n"
         )
 
     private fun competitor(): EventCompetitor =

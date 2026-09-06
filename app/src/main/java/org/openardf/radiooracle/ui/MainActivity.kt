@@ -62,6 +62,7 @@ import org.openardf.radiooracle.databinding.ActivityMainBinding
 import org.openardf.radiooracle.shared.device.SIReadoutReadinessRules
 import org.openardf.radiooracle.shared.device.SIReaderStatus
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
+import org.openardf.radiooracle.shared.event.EventResultScoringFormat
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,7 +83,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val KEY_RESULTS_SCORING_REVISION = "results_scoring_revision"
-        private const val RESULTS_SCORING_REVISION = 5
+        private const val RESULTS_SCORING_REVISION = EventResultScoringFormat.CURRENT_REVISION
     }
 
     private var usbDetachReceiver: BroadcastReceiver = object : BroadcastReceiver() {

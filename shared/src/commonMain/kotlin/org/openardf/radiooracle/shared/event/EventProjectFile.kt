@@ -29,13 +29,17 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /** File envelope for future shared Race File import/export. */
 @Serializable
 data class EventProjectFile(
     val schemaVersion: Int = EventProjectFileFormat.CURRENT_SCHEMA_VERSION,
     val appName: String = EventProjectFileFormat.APP_NAME,
+    /** Independently versioned automatic-result scoring rules applied to this file. */
+    val resultsScoringRevision: Int = EventResultScoringFormat.CURRENT_REVISION,
     val raceData: EventRaceData,
     val seriesLink: EventSeriesLink? = null,
     val publicResultsPublication: PublicResultsPublication? = null,
@@ -79,6 +83,7 @@ object EventProjectFileJson {
             clearPublicControlLocations(clearLegacyCategoryRaceSettings(projectFile))
         ).copy(
             schemaVersion = EventProjectFileFormat.CURRENT_SCHEMA_VERSION,
+            resultsScoringRevision = EventResultScoringFormat.CURRENT_REVISION,
             desktopRouteAnalysis = projectFile.desktopRouteAnalysis?.let { metadata ->
                 if (metadata.version != 1) metadata else {
                     val resultIds = projectFile.raceData.competitorData.mapNotNull { it.readoutData?.result?.id }.toSet()
@@ -100,8 +105,12 @@ object EventProjectFileJson {
      * version, but schema upgrades must still increment `schemaVersion`.
      */
     fun decode(text: String): EventProjectFile {
-        val raceDataJson = json.parseToJsonElement(text)
-            .jsonObject["raceData"]
+        val rootJson = json.parseToJsonElement(text).jsonObject
+        val storedResultsScoringRevision = rootJson["resultsScoringRevision"]
+            ?.jsonPrimitive
+            ?.intOrNull
+            ?: 0
+        val raceDataJson = rootJson["raceData"]
             ?.jsonObject
         val hasControlsField = raceDataJson
             ?.containsKey("controls") == true
@@ -125,9 +134,16 @@ object EventProjectFileJson {
         } else {
             backfilledProjectFile
         }
-        return EventStartNumbers.assignFromDrawnStartTimes(
+        val normalizedProjectFile = EventStartNumbers.assignFromDrawnStartTimes(
             reconcileStandardCategoryGenders(clearPublicControlLocations(migratedProjectFile))
         )
+        return if (storedResultsScoringRevision < EventResultScoringFormat.CURRENT_REVISION) {
+            EventProjectEditor.repairLegacyZeroFoxResults(normalizedProjectFile)
+                .projectFile
+                .copy(resultsScoringRevision = EventResultScoringFormat.CURRENT_REVISION)
+        } else {
+            normalizedProjectFile
+        }
     }
 
     private fun clearPublicControlLocations(projectFile: EventProjectFile): EventProjectFile {
@@ -204,4 +220,9 @@ object EventProjectFileFormat {
     /** Returns true when the supplied schema version is within the supported range. */
     fun isSupportedSchema(schemaVersion: Int): Boolean =
         schemaVersion in 1..CURRENT_SCHEMA_VERSION
+}
+
+/** Revision metadata for scoring migrations that do not otherwise change the Race File schema. */
+object EventResultScoringFormat {
+    const val CURRENT_REVISION = 6
 }

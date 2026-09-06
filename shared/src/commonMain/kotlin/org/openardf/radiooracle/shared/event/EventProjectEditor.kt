@@ -2862,12 +2862,36 @@ object EventProjectEditor {
     }
 
     /** Re-evaluates stored readouts after late course, category, control, or competitor changes. */
-    fun recalculateResults(projectFile: EventProjectFile): ResultRecalculationOutcome {
+    fun recalculateResults(projectFile: EventProjectFile): ResultRecalculationOutcome =
+        recalculateResults(projectFile) { _, _ -> true }
+
+    /** Repairs the legacy automatic OK status assigned to zero-fox radio-o readouts. */
+    fun repairLegacyZeroFoxResults(projectFile: EventProjectFile): ResultRecalculationOutcome =
+        recalculateResults(projectFile) { readout, competitor ->
+            val categoryId = readout.result.categoryId ?: competitor?.categoryId
+            val raceType = categoryId
+                ?.let { id -> projectFile.raceData.categories.firstOrNull { it.category.id == id } }
+                ?.category
+                ?.effectiveRaceType(projectFile.raceData.race)
+            readout.result.automaticStatus &&
+                readout.result.resultStatus == ResultStatus.OK &&
+                readout.result.points == 0 &&
+                readout.punches.any { it.punch.punchType == SIRecordType.CONTROL } &&
+                raceType in setOf(RaceType.CLASSIC, RaceType.SHORT, RaceType.FOXORING)
+        }
+
+    private fun recalculateResults(
+        projectFile: EventProjectFile,
+        shouldRecalculate: (EventReadoutData, EventCompetitor?) -> Boolean
+    ): ResultRecalculationOutcome {
         var recalculatedCount = 0
         var changedCount = 0
         var skippedStatusOnlyCount = 0
 
         fun EventReadoutData.recalculated(competitor: EventCompetitor?): EventReadoutData {
+            if (!shouldRecalculate(this, competitor)) {
+                return this
+            }
             val hasTimingOrPunches = result.startTimeSeconds != null ||
                 result.finishTimeSeconds != null ||
                 punches.isNotEmpty()
