@@ -28,7 +28,7 @@ jobs:
         with:
           log-accepted-android-sdk-licenses: false
       - name: Install the repository's Android platform
-        run: sdkmanager 'platforms;android-37'
+        run: sdkmanager 'platforms;android-37.0'
       - name: Run shared, desktop UI, storage, output and Android transfer checks
         run: >-
           xvfb-run --auto-servernum ./scripts/gradle-sequential.sh
