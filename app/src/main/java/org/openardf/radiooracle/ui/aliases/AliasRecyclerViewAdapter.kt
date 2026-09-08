@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.ui.aliases
 
 import android.content.Context
+import android.text.InputFilter
 import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
@@ -45,6 +46,8 @@ class AliasRecyclerViewAdapter(
     val raceId: UUID
 ) :
     RecyclerView.Adapter<AliasRecyclerViewAdapter.AliasViewHolder>() {
+    private val boundHolders = mutableSetOf<AliasViewHolder>()
+
     init {
         sortAliases()
     }
@@ -62,42 +65,24 @@ class AliasRecyclerViewAdapter(
         val item = values[position]
         holder.nameTextWatcher?.let { holder.name.removeTextChangedListener(it) }
         holder.codeTextWatcher?.let { holder.siCode.removeTextChangedListener(it) }
-        holder.siCode.setText(item.alias.siCode.toString())
-        holder.name.setText(item.alias.name)
+        holder.boundItem = item
+        boundHolders += holder
+        holder.siCode.setText(item.codeDraft)
+        // Imported aliases may be longer than the limits for newly authored aliases.
+        holder.name.filters = arrayOf(InputFilter.LengthFilter(maxOf(AliasRules.MAX_NAME_LENGTH, item.originalName.length)))
+        holder.name.setText(item.nameDraft)
+        refreshValidation()
 
-        // Add a warning to newly created wrapper via + button
-        if (!item.isNameValid) {
-            holder.name.error = holder.itemView.context.getString(R.string.general_required)
+        holder.nameTextWatcher = holder.name.doOnTextChanged { cs, _, _, _ ->
+            item.nameDraft = cs.toString()
+            refreshValidation()
         }
-
-        if (!item.isCodeValid) {
-            holder.siCode.error = holder.itemView.context.getString(R.string.general_required)
+        holder.codeTextWatcher = holder.siCode.doOnTextChanged { cs, _, _, _ ->
+            item.codeDraft = cs.toString()
+            refreshValidation()
         }
-
-        holder.nameTextWatcher = holder.name.doOnTextChanged { cs: CharSequence?, _, _, _ ->
-            val currentPosition = holder.currentPositionOrNull() ?: return@doOnTextChanged
-            try {
-                nameWatcher(currentPosition, cs.toString(), holder.name.context)
-            } catch (e: IllegalArgumentException) {
-                holder.name.error = e.message
-            }
-        }
-
-        holder.codeTextWatcher = holder.siCode.doOnTextChanged { cs: CharSequence?, _, _, _ ->
-            val currentPosition = holder.currentPositionOrNull() ?: return@doOnTextChanged
-            try {
-                codeWatcher(currentPosition, cs.toString(), holder.name.context)
-            } catch (e: IllegalArgumentException) {
-                holder.siCode.error = e.message
-            }
-        }
-
-        holder.siCode.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) {
-                sortAliases()
-                notifyDataSetChanged()
-            }
-        }
+        // Sorting on focus loss moves rows underneath an in-progress edit. Sort on open/save.
+        holder.siCode.onFocusChangeListener = null
 
         holder.addBtn.setOnClickListener {
             val currentPosition = holder.currentPositionOrNull() ?: return@setOnClickListener
@@ -113,39 +98,40 @@ class AliasRecyclerViewAdapter(
         }
     }
 
-    private fun codeWatcher(position: Int, code: String, context: Context) {
-        val result = AliasRules.validateCode(
-            code = code,
-            existingCodes = values.map { it.alias.siCode },
-            position = position
-        )
+    override fun onViewRecycled(holder: AliasViewHolder) {
+        holder.nameTextWatcher?.let(holder.name::removeTextChangedListener)
+        holder.codeTextWatcher?.let(holder.siCode::removeTextChangedListener)
+        holder.boundItem = null
+        boundHolders.remove(holder)
+        super.onViewRecycled(holder)
+    }
 
-        if (result == AliasValidationResult.Valid) {
-            values[position].isCodeValid = true
-            values[position].alias.siCode = code.toInt()
-        } else {
-            values[position].isCodeValid = false
-            throw IllegalArgumentException(result.toMessage(context))
+    private fun refreshValidation() {
+        val codes = values.map { it.codeDraft.toIntOrNull() ?: 0 }
+        val names = values.map { it.nameDraft }
+        values.forEachIndexed { index, item ->
+            val codeResult = AliasRules.validateCode(item.codeDraft, codes, index)
+            val nameResult = if (item.nameDraft.isNotBlank() && item.nameDraft == item.originalName) {
+                // Preserve existing/imported and standard numeric aliases; still check duplicates.
+                if (names.withIndex().any { it.index != index && it.value == item.nameDraft }) {
+                    AliasValidationResult.Duplicate
+                } else AliasValidationResult.Valid
+            } else AliasRules.validateName(item.nameDraft, names, index)
+            item.isCodeValid = codeResult == AliasValidationResult.Valid
+            item.isNameValid = nameResult == AliasValidationResult.Valid
+            if (item.isCodeValid) item.alias.siCode = item.codeDraft.toInt()
+            if (item.isNameValid) item.alias.name = item.nameDraft
+            boundHolders.filter { it.boundItem === item }.forEach { holder ->
+                holder.siCode.error = codeResult.takeUnless { item.isCodeValid }?.toMessage(holder.itemView.context)
+                holder.name.error = nameResult.takeUnless { item.isNameValid }?.toMessage(holder.itemView.context)
+            }
         }
     }
 
-    private fun nameWatcher(position: Int, name: String, context: Context) {
-        val result = AliasRules.validateName(
-            name = name,
-            existingNames = values.map { it.alias.name },
-            position = position
-        )
-
-        if (result == AliasValidationResult.Valid) {
-            values[position].isNameValid = true
-            values[position].alias.name = name
-        } else {
-            values[position].isNameValid = false
-            throw IllegalArgumentException(result.toMessage(context))
-        }
+    fun checkFields(): Boolean {
+        refreshValidation()
+        return values.all { it.isNameValid && it.isCodeValid }
     }
-
-    fun checkFields(): Boolean = values.all { a -> a.isNameValid && a.isCodeValid }
 
     fun getSortedAliases(): List<Alias> {
         sortAliases()
@@ -185,6 +171,7 @@ class AliasRecyclerViewAdapter(
         if (position in 0 until values.size) {
             values.removeAt(position)
             notifyItemRemoved(position)
+            refreshValidation()
         }
     }
 
@@ -262,6 +249,7 @@ class AliasRecyclerViewAdapter(
     }
 
     class AliasViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        var boundItem: AliasEditItemWrapper? = null
         var siCode: EditText = view.findViewById(R.id.alias_item_code)
         var name: EditText = view.findViewById(R.id.alias_item_name)
         var addBtn: ImageButton = view.findViewById(R.id.alias_item_add_btn)

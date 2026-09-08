@@ -18,14 +18,14 @@
 
     <EditText
         android:id="@+id/alias_item_name"
-        android:layout_width="80dp"
+        android:layout_width="0dp"
+        android:layout_weight="1"
         android:layout_height="45dp"
         android:layout_marginEnd="20dp"
         android:ems="10"
         android:hint="@string/general_name"
-        android:inputType="textCapWords"
-        android:maxLength="6"
-        android:digits="abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ/"
+        android:inputType="textNoSuggestions"
+        android:singleLine="true"
         android:textColor="@color/black"
         android:textColorHint="@color/grey" />
 

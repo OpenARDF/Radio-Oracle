@@ -32,6 +32,7 @@ import org.openardf.radiooracle.backend.room.database.EventDatabase
 import org.openardf.radiooracle.backend.room.database.MIGRATION_10_11
 import org.openardf.radiooracle.backend.room.database.MIGRATION_11_12
 import org.openardf.radiooracle.backend.room.database.MIGRATION_12_13
+import org.openardf.radiooracle.backend.room.database.MIGRATION_13_14
 import org.openardf.radiooracle.backend.room.database.MIGRATION_1_2
 import org.openardf.radiooracle.backend.room.database.MIGRATION_2_3
 import org.openardf.radiooracle.backend.room.database.MIGRATION_3_4
@@ -79,7 +80,8 @@ class ARDFRepository private constructor(context: Context) {
             MIGRATION_9_10,
             MIGRATION_10_11,
             MIGRATION_11_12,
-            MIGRATION_12_13
+            MIGRATION_12_13,
+            MIGRATION_13_14
         )
         .build()
 

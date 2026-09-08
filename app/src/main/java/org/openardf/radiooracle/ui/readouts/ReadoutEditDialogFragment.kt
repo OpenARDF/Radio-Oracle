@@ -176,6 +176,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
             competitorPicker.setText(getString(R.string.readout_unknown_competitor), false)
             editSwitch.visibility = View.GONE
             punchEditRecyclerView.visibility = View.VISIBLE
+            view?.findViewById<View>(R.id.readout_dialog_entry_help)?.visibility = View.VISIBLE
             modified = true     // Manually created readout is always modified
 
         } else {
@@ -271,7 +272,9 @@ class ReadoutEditDialogFragment : DialogFragment() {
         )
 
         punchEditRecyclerView.adapter =
-            PunchEditRecyclerViewAdapter(punchWrappers) { updateIssueExplanation() }
+            PunchEditRecyclerViewAdapter(
+                punchWrappers, selectedRaceViewModel.getAliasesByRace(args.raceId)
+            ) { updateIssueExplanation() }
 
         //Populate the status options
         for (status in ResultStatus.entries) {
@@ -336,6 +339,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
                 modified = true
                 editSwitch.visibility = View.GONE
                 punchEditRecyclerView.visibility = View.VISIBLE
+                view?.findViewById<View>(R.id.readout_dialog_entry_help)?.visibility = View.VISIBLE
             }
         }
 

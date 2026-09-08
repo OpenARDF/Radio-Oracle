@@ -334,22 +334,9 @@ class CategoryEditDialogFragment : DialogFragment() {
         input: String,
         categoryId: UUID
     ) =
-        if (shouldUseAliasEditor()) {
-            ControlPointsHelper.getControlPointsFromDisplayString(
-                input,
-                categoryId,
-                args.race.raceType,
-                getRaceAliases(),
-                requireContext()
-            )
-        } else {
-            ControlPointsHelper.getControlPointsFromString(
-                input,
-                categoryId,
-                args.race.raceType,
-                requireContext()
-            )
-        }
+        ControlPointsHelper.getControlPointsFromDisplayString(
+            input, categoryId, args.race.raceType, getRaceAliases(), requireContext()
+        )
 
     private fun shouldUseAliasEditor(): Boolean =
         args.race.raceType != RaceType.ORIENTEERING &&

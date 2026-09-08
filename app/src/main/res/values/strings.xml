@@ -137,8 +137,8 @@
     <string name="race_type">Race Type</string>
     <string name="race_api_key">API Key</string>
     <string name="race_limit_hint">Limit (min)</string>
-    <string name="race_start_time_hint">Start Time (hh:mm)</string>
-    <string name="race_relative_start_time_hint">Relative Start Time (mm:ss)</string>
+    <string name="race_start_time_hint">Start Time (hh:mm or hhmm)</string>
+    <string name="race_relative_start_time_hint">Relative Start Time (mmm:ss or mmmss)</string>
     <string name="race_end_confirmation">Do you really want to close the current race?</string>
 
     <string name="race_create">Create Race</string>
@@ -218,6 +218,8 @@
     <string name="readout_rented_si_number_title">Rented SI #</string>
 
     <string name="competitor_hint_code">Code</string>
+    <string name="readout_clock_entry_help">Time: HH:mm:ss or HHmmss (e.g. 123456). Each + adds a blank control and time; SI day/week carry forward.</string>
+    <string name="readout_control_entry_hint">Alias / SI station</string>
     <string name="competitor_hint_time_format" translatable="false">HH:MM:SS</string>
     <string name="competitor_hint_day">Day</string>
     <string name="competitor_hint_week">Week</string>

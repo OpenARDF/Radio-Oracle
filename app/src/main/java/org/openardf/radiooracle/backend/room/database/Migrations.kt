@@ -248,3 +248,32 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
         db.execSQL("ALTER TABLE category ADD COLUMN portable_category_id TEXT")
     }
 }
+
+/** Recover SI numbers discarded by the old "Create new readout" duplicate option. */
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Control punches retain the downloaded card number. Never infer it from a name,
+        // registration, or another readout, and leave conflicting or absent evidence alone.
+        db.execSQL(
+            """
+            UPDATE result
+            SET si_number = (
+                SELECT MIN(card_number) FROM punch
+                WHERE result_id = result.id AND race_id = result.race_id
+                    AND punch_type = 'CONTROL' AND card_number > 0
+            ), sent = 0
+            WHERE si_number IS NULL
+                AND 1 = (
+                    SELECT COUNT(DISTINCT card_number) FROM punch
+                    WHERE result_id = result.id AND race_id = result.race_id
+                        AND card_number > 0
+                )
+                AND EXISTS (
+                    SELECT 1 FROM punch
+                    WHERE result_id = result.id AND race_id = result.race_id
+                        AND punch_type = 'CONTROL' AND card_number > 0
+                )
+            """.trimIndent()
+        )
+    }
+}

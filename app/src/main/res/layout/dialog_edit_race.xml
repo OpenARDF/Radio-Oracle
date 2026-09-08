@@ -98,6 +98,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:id="@+id/race_dialog_start_time_layout"
                 android:hint="@string/race_start_time_hint"
                 app:endIconDrawable="@drawable/ic_clock"
                 app:endIconMode="custom">
@@ -109,7 +110,7 @@
                     android:layout_height="wrap_content"
                     android:clickable="true"
                     android:inputType="time"
-                    android:maxLength="5" />
+                    android:maxLength="8" />
 
             </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>

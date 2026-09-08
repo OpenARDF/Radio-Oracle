@@ -41,6 +41,7 @@ import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointValidationError
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
+import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 import java.util.UUID
 
 /**
@@ -215,14 +216,7 @@ object ControlPointsHelper {
         if (input.isBlank()) {
             return input
         }
-        val aliasesByName = aliases.associateBy { it.name }
-        val aliasesByEquivalentName = aliases.groupBy { it.name.aliasMatchKey() }
-            .mapNotNull { (name, matches) ->
-                matches.first().takeIf { matches.map(Alias::siCode).distinct().size == 1 }
-                    ?.let { name to it }
-            }.toMap()
-        fun findAlias(name: String): Alias? = aliasesByName[name]
-            ?: aliasesByEquivalentName[name.aliasMatchKey()].takeIf { name.any(Char::isLetter) }
+        fun findAlias(name: String): Alias? = findDisplayAlias(name, aliases)
         val tokens = ControlPointRules.tokenizeControlPoints(input)
         val resolved = mutableListOf<String>()
         var index = 0
@@ -241,6 +235,23 @@ object ControlPointsHelper {
             }
         }
         return resolved.joinToString(" ")
+    }
+
+    /** Resolves one punch using the same alias spelling rules as category controls. */
+    fun resolvePunchCode(input: String, aliases: List<Alias>): Int? {
+        val text = input.trim()
+        if (text.isEmpty()) return null
+        val code = findDisplayAlias(text, aliases)?.siCode ?: text.toIntOrNull()
+        return code?.takeIf(SportIdentCodes::isSICodeValid)
+    }
+
+    private fun findDisplayAlias(name: String, aliases: List<Alias>): Alias? {
+        val exact = aliases.filter { it.name == name }
+        val matches = if (exact.isNotEmpty()) exact else {
+            if (!name.any(Char::isLetter)) return null
+            aliases.filter { it.name.aliasMatchKey() == name.aliasMatchKey() }
+        }
+        return matches.firstOrNull()?.takeIf { matches.map(Alias::siCode).distinct().size == 1 }
     }
 
     private fun String.aliasMatchKey(): String =

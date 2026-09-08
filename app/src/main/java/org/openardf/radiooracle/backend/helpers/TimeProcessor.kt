@@ -73,6 +73,26 @@ object TimeProcessor {
         return Duration.ofSeconds(DurationFormatter.minuteStringToSeconds(string))
     }
 
+    /** Parses typed clock time: HHmm, HHmmss, HH:mm, or HH:mm:ss. */
+    fun parseClockInput(value: String): LocalTime {
+        val text = value.trim()
+        val normalized = when {
+            text.matches(Regex("[0-9]{4}")) -> text.chunked(2).joinToString(":")
+            text.matches(Regex("[0-9]{6}")) -> text.chunked(2).joinToString(":")
+            else -> text
+        }
+        return LocalTime.parse(normalized)
+    }
+
+    /** UI-only compact mmmss entry; file/import parsing keeps its explicit mmm:ss format. */
+    fun parseMinuteInput(value: String): Duration {
+        val text = value.trim()
+        val normalized = if (text.matches(Regex("[0-9]{3,5}"))) {
+            text.dropLast(2) + ":" + text.takeLast(2)
+        } else text
+        return minuteStringToDuration(normalized)
+    }
+
     /** Converts a competitor start offset into an absolute race date-time. */
     fun getAbsoluteDateTimeFromRelativeTime(
         startDateTime: LocalDateTime,

@@ -89,6 +89,14 @@
             android:textColor="@color/black" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/readout_dialog_entry_help"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:text="@string/readout_clock_entry_help" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/readout_dialog_punch_recycler_view"
         android:layout_width="match_parent"

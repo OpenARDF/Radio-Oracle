@@ -142,8 +142,12 @@ class RaceEditDialogFragment : DialogFragment() {
             dateView.setText(race.startDateTime.toLocalDate().toString())
         }
 
-        startTimeView.setOnClickListener {
-            findNavController().navigate(RaceEditDialogFragmentDirections.selectTime(race.startDateTime.toLocalTime()))
+        requireView().findViewById<com.google.android.material.textfield.TextInputLayout>(
+            R.id.race_dialog_start_time_layout
+        ).setEndIconOnClickListener {
+            val time = runCatching { TimeProcessor.parseClockInput(startTimeView.text.toString()) }
+                .getOrDefault(race.startDateTime.toLocalTime())
+            findNavController().navigate(RaceEditDialogFragmentDirections.selectTime(time))
         }
         setFragmentResultListener(TimePickerFragment.REQUEST_KEY_TIME) { _, bundle ->
             race.startDateTime = race.startDateTime.with(
@@ -189,7 +193,7 @@ class RaceEditDialogFragment : DialogFragment() {
         } else {
             View.VISIBLE
         }
-        startTimeView.setText(TimeProcessor.hoursMinutesFormatter(race.startDateTime))
+        startTimeView.setText(race.startDateTime.toLocalTime().withNano(0).toString())
         limitEditText.setText(race.timeLimit.toMinutes().toString())
 
         raceTypePicker.setText(dataProcessor.raceTypeToString(race.raceType), false)
@@ -213,7 +217,7 @@ class RaceEditDialogFragment : DialogFragment() {
                 race.raceType =
                     dataProcessor.raceTypeStringToEnum(raceTypePicker.text.toString())
                 race.startDateTime = race.startDateTime.with(
-                    LocalTime.parse(startTimeView.text.toString().trim())
+                    TimeProcessor.parseClockInput(startTimeView.text.toString())
                 )
                 race.raceLevel =
                     dataProcessor.raceLevelStringToEnum(raceLevelPicker.text.toString())
@@ -254,7 +258,7 @@ class RaceEditDialogFragment : DialogFragment() {
             valid = false
         } else {
             try {
-                LocalTime.parse(startTimeView.text.toString().trim())
+                TimeProcessor.parseClockInput(startTimeView.text.toString())
             } catch (e: Exception) {
                 startTimeView.error = getString(R.string.general_invalid)
                 valid = false

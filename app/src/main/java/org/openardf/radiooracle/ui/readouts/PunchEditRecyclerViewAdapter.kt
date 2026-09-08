@@ -38,24 +38,34 @@ import android.widget.TextView
 import androidx.core.widget.doOnTextChanged
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
+import org.openardf.radiooracle.backend.helpers.TimeProcessor
+import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.enums.PunchStatus
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
-import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.openardf.radiooracle.backend.wrappers.PunchEditItemWrapper
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
 import org.openardf.radiooracle.shared.sportident.SportIdentRunTimingStatus
 import java.time.Duration
-import java.time.LocalTime
 import java.util.UUID
 
 class PunchEditRecyclerViewAdapter(
     var values: ArrayList<PunchEditItemWrapper>,
+    private val aliases: List<Alias> = emptyList(),
     private val onPunchesChanged: (() -> Unit)? = null
 ) :
     RecyclerView.Adapter<PunchEditRecyclerViewAdapter.PunchViewHolder>() {
     private var semanticTimeErrorPositions: Set<Int> = emptySet()
+    private val boundHolders = mutableSetOf<PunchViewHolder>()
+
+    override fun onViewRecycled(holder: PunchViewHolder) {
+        holder.clearTextWatchers()
+        holder.boundItem = null
+        boundHolders.remove(holder)
+        super.onViewRecycled(holder)
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PunchViewHolder {
         val adapterLayout = LayoutInflater.from(parent.context)
@@ -70,10 +80,12 @@ class PunchEditRecyclerViewAdapter(
         val item = values[position]
 
         holder.clearTextWatchers()
+        holder.boundItem = item
+        boundHolders += holder
         holder.number.text = punchNumberLabel(position)
-        holder.time.setText(item.punch.siTime.getTimeString())
-        holder.weekday.setText(item.punch.siTime.getDayOfWeek().toString())
-        holder.week.setText(item.punch.siTime.getWeek().toString())
+        holder.time.setText(item.timeDraft)
+        holder.weekday.setText(item.dayDraft)
+        holder.week.setText(item.weekDraft)
         holder.installKeyboardDoneHandlers()
 
         holder.addBtn.setOnClickListener {
@@ -107,7 +119,7 @@ class PunchEditRecyclerViewAdapter(
             }
 
             SIRecordType.CONTROL -> {
-                holder.code.setText(item.displayCodeText())
+                holder.code.setText(item.codeDraft)
                 holder.code.isEnabled = true
                 holder.addBtn.visibility = View.VISIBLE
                 holder.deleteBtn.visibility = View.VISIBLE
@@ -122,18 +134,21 @@ class PunchEditRecyclerViewAdapter(
         val newSemanticTimeErrorPositions = semanticTimeErrorPositions()
         if (semanticTimeErrorPositions != newSemanticTimeErrorPositions) {
             semanticTimeErrorPositions = newSemanticTimeErrorPositions
-            notifyDataSetChanged()
+            // Validation must not rebind text or move the cursor while the user is typing.
+            boundHolders.forEach { it.refreshValidationErrors() }
         }
     }
 
     private fun semanticTimeErrorPositions(): Set<Int> {
         val startPosition = values.indexOfFirst { it.punch.punchType == SIRecordType.START }
         val finishPosition = values.indexOfFirst { it.punch.punchType == SIRecordType.FINISH }
-        val controls = values.withIndex().filter { it.value.punch.punchType == SIRecordType.CONTROL }
+        val controls = values.withIndex().filter {
+            it.value.punch.punchType == SIRecordType.CONTROL && it.value.isTimeValid
+        }
 
         val timing = SportIdentReadoutTiming.calculate(
-            startSeconds = values.getOrNull(startPosition)?.punch?.siTime?.getSeconds(),
-            finishSeconds = values.getOrNull(finishPosition)?.punch?.siTime?.getSeconds(),
+            startSeconds = values.getOrNull(startPosition)?.takeIf { it.isTimeValid }?.punch?.siTime?.getSeconds(),
+            finishSeconds = values.getOrNull(finishPosition)?.takeIf { it.isTimeValid }?.punch?.siTime?.getSeconds(),
             controlSeconds = controls.map { it.value.punch.siTime.getSeconds() }
         )
 
@@ -175,11 +190,14 @@ class PunchEditRecyclerViewAdapter(
                     SITime(values[position].punch.siTime),
                     SITime(values[position].punch.siTime),
                     SIRecordType.CONTROL,
-                    values[position].punch.order++,
+                    position + 1,
                     PunchStatus.UNKNOWN, Duration.ZERO,
-                ), false, true, true, true
-            )
+                ), false, false, true, true
+            ).apply {
+                timeDraft = ""
+            }
         )
+        values.forEachIndexed { index, row -> row.punch.order = index }
         notifyItemInserted(position + 1)
         notifyItemRangeChanged(position + 1, values.size - position - 1)
         onPunchesChanged?.invoke()
@@ -187,6 +205,7 @@ class PunchEditRecyclerViewAdapter(
 
     private fun deletePunch(position: Int) {
         values.removeAt(position)
+        values.forEachIndexed { index, row -> row.punch.order = index }
         notifyItemRemoved(position)
         notifyItemRangeChanged(position, values.size - position)
         onPunchesChanged?.invoke()
@@ -204,83 +223,45 @@ class PunchEditRecyclerViewAdapter(
         }
     }
 
-    //Text watchers
-    private fun codeWatcher(position: Int, text: String): Boolean {
-        if (position == RecyclerView.NO_POSITION) return true
-        if (values[position].matchesDisplayCodeText(text)) {
-            values[position].isCodeValid = true
-            onPunchesChanged?.invoke()
-            return true
+    // Update draft text even when it cannot yet be parsed. Callbacks target the bound row,
+    // never a captured adapter position that may have changed after insertion/deletion.
+    private fun codeWatcher(item: PunchEditItemWrapper, text: String): Boolean {
+        item.codeDraft = text
+        val code = ControlPointsHelper.resolvePunchCode(text, aliases)
+        item.isCodeValid = code != null
+        if (code != null) {
+            item.punch.siCode = code
+            item.aliasName = aliases.firstOrNull { it.siCode == code }?.name
         }
-        try {
-            val code = text.toInt()
-            if (SIConstants.isSICodeValid(code)) {
-                values[position].punch.siCode = code
-                values[position].aliasName = null
-                values[position].isCodeValid = true
-                onPunchesChanged?.invoke()
-            } else {
-                values[position].isCodeValid = false
-                onPunchesChanged?.invoke()
-                return false
-            }
-        } catch (e: Exception) {
-            values[position].isCodeValid = false
-            onPunchesChanged?.invoke()
-            return false
-        }
-        return true
+        onPunchesChanged?.invoke()
+        return item.isCodeValid
     }
 
-
-    private fun timeWatcher(position: Int, text: String): Boolean {
-        if (position == RecyclerView.NO_POSITION) return true
-        //Try parsing the time into SI time
-        try {
-            val time = LocalTime.parse(text)
-            values[position].punch.siTime.setTime(time)
-            values[position].isTimeValid = true
-            onPunchesChanged?.invoke()
-        } catch (e: Exception) {
-            values[position].isTimeValid = false
-            onPunchesChanged?.invoke()
-            return false
-        }
-        return true
+    private fun timeWatcher(item: PunchEditItemWrapper, text: String): Boolean {
+        item.timeDraft = text
+        val time = runCatching { TimeProcessor.parseClockInput(text) }.getOrNull()
+        item.isTimeValid = time != null
+        time?.let(item.punch.siTime::setTime)
+        onPunchesChanged?.invoke()
+        return item.isTimeValid
     }
 
-    private fun dayWatcher(position: Int, text: String): Boolean {
-        if (position == RecyclerView.NO_POSITION) return true
-        try {
-            val day = text.toInt()
-            if (day in 0..7) {
-                values[position].punch.siTime.setDayOfWeek(day)
-                values[position].isDayValid = true
-                onPunchesChanged?.invoke()
-            }
-        } catch (e: Exception) {
-            values[position].isDayValid = false
-            onPunchesChanged?.invoke()
-            return false
-        }
-        return true
+    private fun dayWatcher(item: PunchEditItemWrapper, text: String): Boolean {
+        item.dayDraft = text
+        val day = text.toIntOrNull()?.takeIf { it in 0..7 }
+        item.isDayValid = day != null
+        day?.let(item.punch.siTime::setDayOfWeek)
+        onPunchesChanged?.invoke()
+        return item.isDayValid
     }
 
-    private fun weekWatcher(position: Int, text: String): Boolean {
-        if (position == RecyclerView.NO_POSITION) return true
-        try {
-            val week = text.toInt()
-            if (week in 0..3) {
-                values[position].punch.siTime.setWeek(week)
-                values[position].isWeekValid = true
-                onPunchesChanged?.invoke()
-            }
-        } catch (e: Exception) {
-            values[position].isWeekValid = false
-            onPunchesChanged?.invoke()
-            return false
-        }
-        return true
+    private fun weekWatcher(item: PunchEditItemWrapper, text: String): Boolean {
+        item.weekDraft = text
+        val week = text.toIntOrNull()?.takeIf { it in 0..3 }
+        item.isWeekValid = week != null
+        week?.let(item.punch.siTime::setWeek)
+        onPunchesChanged?.invoke()
+        return item.isWeekValid
     }
 
     fun isValid(): Boolean {
@@ -293,6 +274,7 @@ class PunchEditRecyclerViewAdapter(
     }
 
     inner class PunchViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        var boundItem: PunchEditItemWrapper? = null
         var number: TextView = view.findViewById(R.id.punch_edit_item_number)
         var code: EditText = view.findViewById(R.id.punch_edit_item_si_code)
         var time: EditText = view.findViewById(R.id.punch_edit_item_time)
@@ -321,7 +303,7 @@ class PunchEditRecyclerViewAdapter(
             // does not mutate stale rows or hide the current explanation.
             codeTextWatcher = code.doOnTextChanged { cs: CharSequence?, _, _, _ ->
                 if (item.punch.punchType != SIRecordType.START && item.punch.punchType != SIRecordType.FINISH) {
-                    if (!codeWatcher(bindingAdapterPosition, cs.toString())) {
+                    if (!codeWatcher(item, cs.toString())) {
                         code.error = code.context.getString(R.string.general_invalid)
                     } else {
                         refreshValidationErrors()
@@ -330,7 +312,7 @@ class PunchEditRecyclerViewAdapter(
             }
 
             timeTextWatcher = time.doOnTextChanged { cs: CharSequence?, _, _, _ ->
-                if (!timeWatcher(bindingAdapterPosition, cs.toString())) {
+                if (!timeWatcher(item, cs.toString())) {
                     time.error = code.context.getString(R.string.general_invalid)
                 } else {
                     refreshValidationErrors()
@@ -338,7 +320,7 @@ class PunchEditRecyclerViewAdapter(
             }
 
             weekdayTextWatcher = weekday.doOnTextChanged { cs: CharSequence?, _, _, _ ->
-                if (!dayWatcher(bindingAdapterPosition, cs.toString())) {
+                if (!dayWatcher(item, cs.toString())) {
                     weekday.error = code.context.getString(R.string.general_invalid)
                 } else {
                     refreshValidationErrors()
@@ -346,7 +328,7 @@ class PunchEditRecyclerViewAdapter(
             }
 
             weekTextWatcher = week.doOnTextChanged { cs: CharSequence?, _, _, _ ->
-                if (!weekWatcher(bindingAdapterPosition, cs.toString())) {
+                if (!weekWatcher(item, cs.toString())) {
                     week.error = code.context.getString(R.string.general_invalid)
                 } else {
                     refreshValidationErrors()
@@ -357,18 +339,29 @@ class PunchEditRecyclerViewAdapter(
         fun installKeyboardDoneHandlers() {
             listOf(code, time, weekday, week).forEach { editor ->
                 editor.setOnEditorActionListener { view, actionId, event ->
-                    val isDoneAction = actionId == EditorInfo.IME_ACTION_DONE
-                    val isEnter = event?.keyCode == KeyEvent.KEYCODE_ENTER &&
-                        (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP)
-                    if (isDoneAction || isEnter) {
-                        view.clearFocus()
-                        val inputMethodManager =
-                            view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                        inputMethodManager?.hideSoftInputFromWindow(view.windowToken, 0)
-                        true
-                    } else {
-                        false
+                    val isAction = actionId == EditorInfo.IME_ACTION_DONE ||
+                        actionId == EditorInfo.IME_ACTION_NEXT
+                    val isEnter = event?.keyCode == KeyEvent.KEYCODE_ENTER
+                    if (!isAction && !isEnter) return@setOnEditorActionListener false
+                    // Consume both key events but advance only once.
+                    if (isEnter && event?.action == KeyEvent.ACTION_UP) return@setOnEditorActionListener true
+                    val item = boundItem ?: return@setOnEditorActionListener true
+                    val next = when {
+                        view == code -> if (item.isCodeValid) time else code
+                        !item.isCodeValid && code.isEnabled -> code
+                        !item.isTimeValid -> time
+                        !item.isDayValid -> weekday
+                        !item.isWeekValid -> week
+                        else -> null
                     }
+                    if (next != null) {
+                        next.requestFocus()
+                    } else {
+                        view.clearFocus()
+                        val manager = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                        manager?.hideSoftInputFromWindow(view.windowToken, 0)
+                    }
+                    true
                 }
             }
         }
@@ -382,10 +375,9 @@ class PunchEditRecyclerViewAdapter(
         }
 
         fun refreshValidationErrors() {
-            val position = bindingAdapterPosition
-            if (position != RecyclerView.NO_POSITION) {
-                applyValidationErrors(values[position], position)
-            }
+            val item = boundItem ?: return
+            val position = values.indexOf(item)
+            if (position >= 0) applyValidationErrors(item, position)
         }
     }
 

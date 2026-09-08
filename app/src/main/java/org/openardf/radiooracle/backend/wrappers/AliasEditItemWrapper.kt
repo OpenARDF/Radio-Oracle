@@ -33,6 +33,10 @@ data class AliasEditItemWrapper(
     var isCodeValid: Boolean,
     var isNameValid: Boolean,
 ) : Serializable {
+    val originalName: String = alias.name
+    var codeDraft: String = alias.siCode.takeIf { it != 0 }?.toString().orEmpty()
+    var nameDraft: String = alias.name
+
     companion object {
         /** Wraps aliases with optimistic valid flags for the edit UI. */
         fun getWrappers(aliases: ArrayList<Alias>): ArrayList<AliasEditItemWrapper> {

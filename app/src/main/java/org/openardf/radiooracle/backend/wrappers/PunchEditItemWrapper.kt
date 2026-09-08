@@ -43,6 +43,12 @@ data class PunchEditItemWrapper(
     var isWeekValid: Boolean,
     var aliasName: String? = null,
 ) {
+    // Preserve unfinished text independently of the last valid parsed punch.
+    var codeDraft: String = displayCodeText()
+    var timeDraft: String = punch.siTime.getTimeString()
+    var dayDraft: String = punch.siTime.getDayOfWeek().toString()
+    var weekDraft: String = punch.siTime.getWeek().toString()
+
     fun displayCodeText(): String =
         aliasName?.takeIf { it.isNotBlank() } ?: punch.siCode.takeIf { it != 0 }?.toString().orEmpty()
 

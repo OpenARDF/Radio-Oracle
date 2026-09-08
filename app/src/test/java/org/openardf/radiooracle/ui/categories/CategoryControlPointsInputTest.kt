@@ -57,6 +57,14 @@ class CategoryControlPointsInputTest {
     }
 
     @Test
+    fun assignControlsKeyboardAcceptsAliasesToo() {
+        val editor = LayoutInflater.from(context).inflate(R.layout.dialog_assign_control_points, null)
+            .findViewById<TextInputEditText>(R.id.assign_dialog_control_points)
+        editor.onCreateInputConnection(EditorInfo())!!.commitText("Fox 2 S1! B", 1)
+        assertEquals("Fox 2 S1! B", editor.text.toString())
+    }
+
+    @Test
     fun keyboardStillAcceptsRawSiCodesAndMarkers() {
         val editor = editor()
         editor.onCreateInputConnection(EditorInfo())!!.commitText("41 90! 99B", 1)

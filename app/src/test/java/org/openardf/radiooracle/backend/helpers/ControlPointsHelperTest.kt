@@ -37,6 +37,22 @@ import java.util.UUID
 
 class ControlPointsHelperTest {
     @Test
+    fun singlePunchUsesCategoryAliasMatchingWithoutCourseMarkers() {
+        val aliases = listOf(Alias(31, "1"), Alias(42, "Fox 2"), Alias(136, "B"))
+        listOf("fox2", "Fox 2", "MOI", "  Fox-2 ").forEach {
+            assertEquals(42, ControlPointsHelper.resolvePunchCode(it, aliases))
+        }
+        assertEquals(31, ControlPointsHelper.resolvePunchCode("1", aliases))
+        assertEquals(136, ControlPointsHelper.resolvePunchCode("B", aliases))
+        assertEquals(132, ControlPointsHelper.resolvePunchCode("132", aliases))
+        listOf("", "0", "512", "1024", "31 32", "Fox 2B", "missing").forEach {
+            assertEquals(null, ControlPointsHelper.resolvePunchCode(it, aliases))
+        }
+        assertEquals(null, ControlPointsHelper.resolvePunchCode("FOX2",
+            listOf(Alias(41, "Fox2"), Alias(42, "Fox 2"))))
+    }
+
+    @Test
     fun standaloneBeaconStaysSeparateFromTheFinalFox() {
         val aliases = listOf(Alias(41, "Fox 1"), Alias(42, "Fox 2"), Alias(136, "B"))
         val aliasesByCode = aliases.associateBy { it.siCode }

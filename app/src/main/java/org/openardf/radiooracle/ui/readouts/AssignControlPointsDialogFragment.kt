@@ -170,10 +170,11 @@ class AssignControlPointsDialogFragment : DialogFragment() {
             controlPointsEditText.text.toString().trim()
 
         selectedRaceViewModel.getCurrentRace()?.let { race ->
-            return ControlPointsHelper.getControlPointsFromString(
+            return ControlPointsHelper.getControlPointsFromDisplayString(
                 controlPointsString,
                 category.id,
                 race.raceType,
+                selectedRaceViewModel.getAliasesByRace(race.id),
                 requireContext()
             )
         }

@@ -242,7 +242,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
 
                 if (startTimeTextView.text.toString().trim().isNotBlank()) {
                     competitor.drawnRelativeStartTime =
-                        TimeProcessor.minuteStringToDuration(
+                        TimeProcessor.parseMinuteInput(
                             startTimeTextView.text.toString().trim()
                         )
                 } else {
@@ -365,7 +365,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
         //Check the start time
         if (startTimeTextView.text.toString().trim().isNotBlank()) {
             try {
-                TimeProcessor.minuteStringToDuration(startTimeTextView.text.toString().trim())
+                TimeProcessor.parseMinuteInput(startTimeTextView.text.toString().trim())
             } catch (e: Exception) {
                 startTimeTextView.error = getString(R.string.general_invalid)
                 valid = false
