@@ -303,6 +303,42 @@ class DesktopSeriesSportIdentReadoutRouterTest {
         assertEquals(300L, newlyStartedCompetitor.competitorCategory.competitor.drawnStartTimeSeconds)
     }
 
+    @Test
+    fun practiceSeriesRepeatDownloadsStayInMatchedRaceWithIndependentNumbering() {
+        val store = FakeSeriesStore()
+        val manifest = Path.of("/series/events.radio-oracle.json")
+        val eastPath = Path.of("/series/east.rom.json")
+        val westPath = Path.of("/series/west.rom.json")
+        store.seriesFiles[manifest] = seriesFile(event("east", "east.rom.json", "East"), event("west", "west.rom.json", "West"))
+        store.eventFiles[eastPath] = project("east-race", 31, 32, raceLevel = RaceLevel.PRACTICE)
+        store.eventFiles[westPath] = project("west-race", 41, 42, raceLevel = RaceLevel.PRACTICE)
+        val holder = SportIdentCardHolder("Alice", "Runner")
+        val eastCard = readout(31, 32).copy(cardHolder = holder)
+        val westCard = readout(41, 42).copy(cardHolder = holder)
+        val downloads = listOf(eastCard, westCard,
+            westCard.copy(finishTime = SportIdentTime(10, 31, 0)),
+            westCard.copy(punches = westCard.punches.reversed()), westCard)
+        downloads.forEachIndexed { index, download ->
+            val route = DesktopSeriesSportIdentReadoutRouter.matchingEventForReadout(store, manifest, download)!!
+            assertEquals(if (index == 0) eastPath else westPath, route.eventPath)
+            store.eventFiles[route.eventPath] = EventProjectEditor.addDownloadedSportIdentReadout(
+                projectFile = store.eventFiles.getValue(route.eventPath),
+                resultId = "result-$index",
+                cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+                readout = download,
+                readoutDateTimeIso = "2026-09-08T12:00:00",
+                punchIdFactory = { order, type -> "$index-$order-${type.name}" }
+            )
+        }
+        val east = store.eventFiles.getValue(eastPath).raceData
+        val west = store.eventFiles.getValue(westPath).raceData
+        assertEquals(listOf("RUNNER Alice"), east.competitorData.map { it.competitorCategory.competitor.fullName() })
+        assertEquals(listOf("RUNNER Alice", "RUNNER Alice (2)", "RUNNER Alice (3)"),
+            west.competitorData.map { it.competitorCategory.competitor.fullName() })
+        assertEquals(listOf("result-1", "result-2", "result-3"), west.competitorData.map { it.readoutData!!.result.id })
+        assertEquals(emptyList<Any>(), west.unmatchedReadoutData)
+    }
+
     private class FakeSeriesStore : EventSeriesStore {
         val seriesFiles = mutableMapOf<Path, EventSeriesFile>()
         val eventFiles = mutableMapOf<Path, EventProjectFile>()

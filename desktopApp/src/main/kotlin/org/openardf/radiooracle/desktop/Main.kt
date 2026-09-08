@@ -194,6 +194,7 @@ import org.openardf.radiooracle.shared.event.EventRaceDetails
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventReadoutData
+import org.openardf.radiooracle.shared.event.PracticeReadoutPolicy
 import org.openardf.radiooracle.shared.event.EventReadoutDuplicatePolicy
 import org.openardf.radiooracle.shared.event.EventReadoutDetails
 import org.openardf.radiooracle.shared.event.EventResult
@@ -1847,14 +1848,11 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 }
             }
             val isDuplicate = currentProject.raceData.containsReadoutForSiNumber(download.readout.siNumber)
-            val effectiveDuplicatePolicy = if (
-                isDuplicate &&
-                currentProject.raceData.race.raceLevel == RaceLevel.PRACTICE
-            ) {
-                EventReadoutDuplicatePolicy.CreateNew
-            } else {
+            val effectiveDuplicatePolicy = PracticeReadoutPolicy.duplicatePolicy(
+                currentProject.raceData,
+                download.readout,
                 readoutDuplicatePolicy
-            }
+            )
             if (isDuplicate && effectiveDuplicatePolicy == EventReadoutDuplicatePolicy.Reject) {
                 return DesktopSportIdentAppendOutcome.DuplicateIgnored
             }
@@ -15122,6 +15120,7 @@ private fun SiReadoutSettingsPanel(
             selectedPolicy = readoutDuplicatePolicy,
             onPolicySelected = onSetReadoutDuplicatePolicy
         )
+        Text("Practice races create numbered downloads for changed times or controls and ignore unchanged downloads.")
         Button(
             onClick = onInsertTestSportIdentDownloads,
             enabled = isEventFileOpen

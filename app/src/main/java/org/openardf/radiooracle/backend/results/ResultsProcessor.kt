@@ -32,6 +32,15 @@ import android.view.View
 import android.widget.Toast
 import androidx.preference.PreferenceManager
 import com.google.android.material.snackbar.Snackbar
+import java.time.Duration
+import java.time.LocalTime
+import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
@@ -49,29 +58,27 @@ import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.backend.shared.toEventCompetitorData
+import org.openardf.radiooracle.backend.shared.toEventRaceData
+import org.openardf.radiooracle.backend.shared.toRoomCompetitor
 import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.backend.sportident.SIPort.CardData
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import org.openardf.radiooracle.backend.wrappers.StatisticsWrapper
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
-import org.openardf.radiooracle.shared.results.CourseEvaluator
-import org.openardf.radiooracle.shared.results.EventResultPlacement
+import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.event.EventCategorySort
-import org.openardf.radiooracle.shared.sound.SoundType
+import org.openardf.radiooracle.shared.event.PracticeReadoutPolicy
+import org.openardf.radiooracle.shared.results.CourseEvaluator
 import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
+import org.openardf.radiooracle.shared.results.EventResultPlacement
+import org.openardf.radiooracle.shared.sound.SoundType
+import org.openardf.radiooracle.shared.sportident.SportIdentCardPunch
+import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTimingRepair
-import java.time.Duration
-import java.time.LocalTime
-import java.util.UUID
+import org.openardf.radiooracle.shared.sportident.SportIdentTime
 
 
 object ResultsProcessor {
@@ -247,6 +254,16 @@ object ResultsProcessor {
         dataProcessor: DataProcessor
     ): Boolean {
 
+        val isPractice = race.raceLevel == RaceLevel.PRACTICE
+        val practiceRaceData = if (isPractice) dataProcessor.getRaceData(race.id).toEventRaceData() else null
+        if (practiceRaceData != null && PracticeReadoutPolicy.containsIdenticalReadout(
+                practiceRaceData, cardData.toSharedReadout()
+            )
+        ) {
+            DebugLog.info("SI", "Unchanged Practice card read ignored si=${cardData.siNumber} race=${race.id}")
+            return false
+        }
+
         val sharedPref = PreferenceManager.getDefaultSharedPreferences(context)
         val preference =
             sharedPref.getString(
@@ -258,7 +275,7 @@ object ResultsProcessor {
         var createNewReadout = false
 
         // Select action if the readout already exists
-        if (exist) {
+        if (exist && !isPractice) {
             when (preference) {
 
                 // Create new readout
@@ -319,13 +336,17 @@ object ResultsProcessor {
             }
         }
 
-        val competitor = if (!createNewReadout) {
-            if (race.raceLevel == org.openardf.radiooracle.shared.domain.RaceLevel.PRACTICE) {
+        val competitor = when {
+            isPractice && exist -> {
                 dataProcessor.ensurePracticeCompetitorForCard(cardData, race)
-            } else {
-                dataProcessor.getCompetitorBySINumber(cardData.siNumber, race.id)
+                val raceData = dataProcessor.getRaceData(race.id).toEventRaceData()
+                PracticeReadoutPolicy.repeatCompetitor(raceData, cardData.siNumber, UUID.randomUUID().toString())
+                    ?.toRoomCompetitor()?.also { dataProcessor.createOrUpdateCompetitor(it) }
             }
-        } else null
+            isPractice -> dataProcessor.ensurePracticeCompetitorForCard(cardData, race)
+            !createNewReadout -> dataProcessor.getCompetitorBySINumber(cardData.siNumber, race.id)
+            else -> null
+        }
 
         val category = competitor?.categoryId?.let { dataProcessor.getCategory(it) }
 
@@ -409,6 +430,15 @@ object ResultsProcessor {
 
         return true
     }
+
+    private fun CardData.toSharedReadout(): SportIdentCardReadout = SportIdentCardReadout(
+        siNumber = siNumber,
+        series = 0,
+        checkTime = checkTime?.let { SportIdentTime(it.getSeconds()) },
+        startTime = startTime?.let { SportIdentTime(it.getSeconds()) },
+        finishTime = finishTime?.let { SportIdentTime(it.getSeconds()) },
+        punches = punchData.map { SportIdentCardPunch(it.siCode, SportIdentTime(it.siTime.getSeconds())) }
+    )
 
     private fun String?.normalizeDuplicatePreference(context: Context): String =
         when (this) {
@@ -751,12 +781,12 @@ object ResultsProcessor {
         var result = dataProcessor.getResultByCompetitor(competitorId)
         val competitor = dataProcessor.getCompetitor(competitorId)
 
-        //Try to get result by SI instead and update competitor ID
+        // Only claim an unmatched SI result; another Practice attempt keeps its own result.
         if (result == null && competitor?.siNumber != null) {
             val siResult = dataProcessor.getResultBySINumber(
                 competitor.siNumber!!, competitor.raceId
             )
-            if (siResult != null) {
+            if (siResult != null && siResult.competitorId == null) {
                 result = siResult
                 result.competitorId = competitorId
             }

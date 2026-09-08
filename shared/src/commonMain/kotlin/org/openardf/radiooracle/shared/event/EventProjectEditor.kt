@@ -3209,15 +3209,21 @@ object EventProjectEditor {
         require(readoutDateTimeIso.isNotBlank()) {
             "Readout date/time cannot be blank."
         }
+        val effectiveDuplicatePolicy = PracticeReadoutPolicy.duplicatePolicy(projectFile.raceData, readout, duplicatePolicy)
+        if (projectFile.raceData.race.raceLevel == RaceLevel.PRACTICE &&
+            effectiveDuplicatePolicy == EventReadoutDuplicatePolicy.Reject
+        ) {
+            return projectFile
+        }
         val hasDuplicateSiNumber = projectFile.raceData.containsReadoutForSiNumber(readout.siNumber)
         val workingProjectFile = when {
             !hasDuplicateSiNumber -> projectFile
-            duplicatePolicy == EventReadoutDuplicatePolicy.Replace -> removeReadoutForSiNumber(projectFile, readout.siNumber)
-            duplicatePolicy == EventReadoutDuplicatePolicy.CreateNew -> projectFile
+            effectiveDuplicatePolicy == EventReadoutDuplicatePolicy.Replace -> removeReadoutForSiNumber(projectFile, readout.siNumber)
+            effectiveDuplicatePolicy == EventReadoutDuplicatePolicy.CreateNew -> projectFile
             else -> throw IllegalArgumentException("Readout already exists for SI number: ${readout.siNumber}")
         }
 
-        val createNewReadout = hasDuplicateSiNumber && duplicatePolicy == EventReadoutDuplicatePolicy.CreateNew
+        val createNewReadout = hasDuplicateSiNumber && effectiveDuplicatePolicy == EventReadoutDuplicatePolicy.CreateNew
         val shouldCreatePracticeDuplicateCompetitor = createNewReadout &&
             workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE
         val existingMatchedCompetitorIndex = if (createNewReadout) {
@@ -3700,38 +3706,17 @@ object EventProjectEditor {
         competitorId: String,
         readout: SportIdentCardReadout
     ): EventProjectFile {
-        val matchingCompetitorData = raceData.competitorData.firstOrNull {
-            it.competitorCategory.competitor.siNumber == readout.siNumber
-        }
-        return if (matchingCompetitorData == null) {
-            withPracticeCompetitorForDownloadedReadout(competitorId, readout)
-        } else {
-            val matchingCompetitor = matchingCompetitorData.competitorCategory.competitor
-            val duplicateOrdinal = raceData.competitorData.count {
-                it.competitorCategory.competitor.siNumber == readout.siNumber
-            } + 1
-            val duplicateCompetitor = matchingCompetitor.copy(
-                id = competitorId,
-                lastName = "${matchingCompetitor.lastName} #$duplicateOrdinal",
-                index = "",
-                startNumber = null,
-                drawnStartTimeSeconds = null,
-                preferredStartGroup = null,
-                bibNumber = "",
-                callSign = normalizedCompetitorCallSign("")
-            )
-            copy(
-                raceData = raceData.copy(
-                    competitorData = raceData.competitorData + EventCompetitorData(
-                        competitorCategory = EventCompetitorCategory(
-                            competitor = duplicateCompetitor,
-                            category = matchingCompetitorData.competitorCategory.category
-                        ),
-                        readoutData = null
-                    )
+        val competitor = PracticeReadoutPolicy.repeatCompetitor(raceData, readout.siNumber, competitorId)
+            ?: return withPracticeCompetitorForDownloadedReadout(competitorId, readout)
+        val category = raceData.categories.firstOrNull { it.category.id == competitor.categoryId }?.category
+        return copy(
+            raceData = raceData.copy(
+                competitorData = raceData.competitorData + EventCompetitorData(
+                    competitorCategory = EventCompetitorCategory(competitor, category),
+                    readoutData = null
                 )
             )
-        }
+        )
     }
 
     private fun EventProjectFile.withResultPlaces(): EventProjectFile =
@@ -4363,29 +4348,6 @@ object EventProjectEditor {
         val siCode: Int,
         val siTimeSeconds: Long?
     )
-
-    private fun raceStartSecondsOfDay(startDateTimeIso: String): Long? {
-        val time = startDateTimeIso.substringAfter('T', missingDelimiterValue = "")
-            .substringBefore('.')
-            .substringBefore('Z')
-            .substringBefore('+')
-            .substringBefore('-')
-        if (time.isBlank()) {
-            return null
-        }
-        val parts = time.split(":")
-        if (parts.size < 2) {
-            return null
-        }
-        val hour = parts[0].toLongOrNull() ?: return null
-        val minute = parts[1].toLongOrNull() ?: return null
-        val second = parts.getOrNull(2)?.toLongOrNull() ?: 0
-        return if (hour in 0..23 && minute in 0..59 && second in 0..59) {
-            hour * 3600 + minute * 60 + second
-        } else {
-            null
-        }
-    }
 
     private fun parseNonNegativeInt(value: String, label: String): Int {
         val trimmed = value.trim()

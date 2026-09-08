@@ -3843,6 +3843,7 @@ class EventProjectEditorTest {
     @Test
     fun rejectsDuplicateDownloadedSportIdentReadout() {
         val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
             unmatchedReadouts = listOf(readout("existing", null, 2005010))
         )
 
@@ -3883,6 +3884,7 @@ class EventProjectEditorTest {
     @Test
     fun replacesDuplicateMatchedDownloadedSportIdentReadout() {
         val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
             competitors = listOf(
                 competitorData(
                     "comp-1",
@@ -3970,7 +3972,7 @@ class EventProjectEditorTest {
 
         val competitors = updated.raceData.competitorData.map { it.competitorCategory.competitor }
         assertEquals(listOf("comp-1", "practice-competitor-new-duplicate"), competitors.map { it.id })
-        assertEquals(listOf("Runner", "Runner #2"), competitors.map { it.lastName })
+        assertEquals(listOf("RUNNER Alice", "RUNNER Alice (2)"), competitors.map { it.fullName() })
         assertEquals(listOf(2005010, 2005010), competitors.map { it.siNumber })
         assertEquals(listOf("existing", "new-duplicate"), updated.raceData.competitorData.map { it.readoutData!!.result.id })
         assertEquals(
@@ -3979,6 +3981,80 @@ class EventProjectEditorTest {
         )
         assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
     }
+
+    @Test
+    fun practiceDownloadsAcceptEachDataChangeAndIgnoreEveryPreviouslyStoredRun() {
+        val original = sportIdentReadout(siNumber = 2005010)
+        val downloads = listOf(
+            original,
+            sportIdentReadout(siNumber = 2005010, checkSeconds = 300),
+            sportIdentReadout(siNumber = 2005010, startSeconds = 601),
+            sportIdentReadout(siNumber = 2005010, finishSeconds = 1801),
+            sportIdentReadout(siNumber = 2005010, firstControlSeconds = 901),
+            sportIdentReadout(siNumber = 2005010, controlCodes = listOf(31, 33)),
+            sportIdentReadout(siNumber = 2005010, controlCodes = listOf(32, 31)),
+            sportIdentReadout(siNumber = 2005010, controlCodes = listOf(31, 32, 31))
+        )
+        EventReadoutDuplicatePolicy.entries.forEach { configuredPolicy ->
+            var project = projectFile(competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", siNumber = 2005010)
+            ))
+            downloads.forEachIndexed { index, download ->
+                project = appendPracticeDownload(project, download, "run-$index", configuredPolicy)
+                val competitors = project.raceData.competitorData
+                assertEquals(index + 1, competitors.size)
+                val name = if (index == 0) "RUNNER Alice" else "RUNNER Alice (${index + 1})"
+                assertEquals(name, competitors.last().competitorCategory.competitor.fullName())
+                assertEquals(2005010, competitors.last().readoutData!!.result.siNumber)
+                assertEquals("run-0", competitors.first().readoutData!!.result.id)
+                // The policy must survive saving and reopening a Race File.
+                project = EventProjectFileJson.decode(EventProjectFileJson.encode(project))
+                // An old run reread after a newer run is still unchanged; reader metadata is irrelevant.
+                downloads.take(index + 1).forEach { previous ->
+                    assertEquals(project, appendPracticeDownload(project, previous.copy(
+                        cardHolder = SportIdentCardHolder("Different", "Metadata")
+                    ), "reread-$index", configuredPolicy))
+                }
+            }
+            assertEquals(emptyList(), project.raceData.unmatchedReadoutData)
+        }
+    }
+
+    @Test
+    fun automaticPracticeRepeatsDoNotApplyToOtherRaceLevels() {
+        RaceLevel.entries.filter { it != RaceLevel.PRACTICE }.forEach { level ->
+            val first = appendPracticeDownload(projectFile(raceLevel = level), sportIdentReadout(), "first")
+            assertFailsWith<IllegalArgumentException> {
+                appendPracticeDownload(first, sportIdentReadout(finishSeconds = 2000), "second")
+            }
+        }
+    }
+
+    @Test
+    fun unchangedPracticeReadoutWithDrawnStartDoesNotCreateAnotherRun() {
+        val competitor = competitorData("comp-1", "Alice", "Runner", siNumber = 2005010)
+        val withDrawnStart = competitor.copy(competitorCategory = competitor.competitorCategory.copy(
+            competitor = competitor.competitorCategory.competitor.copy(drawnStartTimeSeconds = 60)
+        ))
+        val download = sportIdentReadout(siNumber = 2005010, startSeconds = null)
+        val first = appendPracticeDownload(projectFile(competitors = listOf(withDrawnStart)), download, "first")
+        assertEquals(first, appendPracticeDownload(first, download, "second"))
+    }
+
+    private fun appendPracticeDownload(
+        project: EventProjectFile,
+        download: SportIdentCardReadout,
+        id: String,
+        policy: EventReadoutDuplicatePolicy = EventReadoutDuplicatePolicy.Reject
+    ): EventProjectFile = EventProjectEditor.addDownloadedSportIdentReadout(
+        projectFile = project,
+        resultId = id,
+        cardType = SportIdentProtocol.SI_CARD8_9_SIAC,
+        readout = download,
+        readoutDateTimeIso = "2026-09-08T12:00:00",
+        duplicatePolicy = policy,
+        punchIdFactory = { index, type -> "$id-$index-${type.name}" }
+    )
 
     @Test
     fun rejectsInvalidManualReadoutInputs() {

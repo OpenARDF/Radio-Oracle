@@ -215,6 +215,7 @@
     <string name="competitor_delete_all_confirmation">Do you really want to delete all competitors? This action CAN\'T be undone!</string>
     <string name="competitor_rent_chip">Rent Chip</string>
     <string name="readout_si_number_title">SI #</string>
+    <string name="readout_missing_si_number_hint">Enter the card number if known.</string>
     <string name="readout_rented_si_number_title">Rented SI #</string>
 
     <string name="competitor_hint_code">Code</string>
@@ -394,7 +395,7 @@
     <string name="preferences_sounds_enable_error_sounds">Sound effects</string>
     <string name="preferences_sounds_enable_sounds_hint">Play sounds for readout errors and unmatched cards</string>
     <string name="preferences_readout_duplicate_actions">Duplicate SI Card Actions</string>
-    <string name="preferences_readout_duplicate_actions_hint">Select what should be performed when a card is read twice.</string>
+    <string name="preferences_readout_duplicate_actions_hint">Select what happens when a card is read twice. Practice races always create numbered downloads for changed times or controls and ignore unchanged downloads.</string>
     <string name="preferences_readout_duplicate_ignore">Ignore</string>
     <string name="preferences_readout_duplicate_replace">Replace</string>
     <string name="preferences_readout_duplicate_new">Create New Readout</string>
@@ -791,7 +792,6 @@
         <item quantity="one">%d race</item>
         <item quantity="other">%d races</item>
     </plurals>
-    <string name="readout_missing_si_number_hint">Enter the card number if known.</string>
     <string name="diagnostic_logs_support">Support</string>
     <string name="diagnostic_logs_title">Diagnostic Logs</string>
     <string name="diagnostic_logs_summary">Save or share log files for troubleshooting</string>
