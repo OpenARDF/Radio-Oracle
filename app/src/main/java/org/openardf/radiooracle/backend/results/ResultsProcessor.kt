@@ -913,6 +913,16 @@ object ResultsProcessor {
             .flatMap { it.competitorData }
     }
 
+    /** Builds a complete backup snapshot while restoring transient result places. */
+    suspend fun getRaceSnapshotCompetitorDataByRace(
+        raceId: UUID,
+        dataProcessor: DataProcessor
+    ): List<CompetitorData> {
+        val rows = dataProcessor.getCompetitorDataFlowByRace(raceId).first()
+        val rankedResults = rows.toResultWrappers().flatMap { it.competitorData }
+        return rankedResults + rows.filter { it.readoutData == null }
+    }
+
     /**
      * Resets all the punches to unknown, e. g. when the category has been deleted
      */

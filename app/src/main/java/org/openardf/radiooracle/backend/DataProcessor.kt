@@ -826,8 +826,8 @@ class DataProcessor private constructor(context: Context) {
         val race = getRace(raceId)
         val categories = getCategoryDataForRace(raceId)
         val aliases = getAliasesByRace(raceId)
-        // Race snapshots must include registrations that do not have a result yet.
-        val competitorData = getCompetitorDataFlowByRace(raceId).first()
+        // Race snapshots need both result-free registrations and recomputed transient places.
+        val competitorData = ResultsProcessor.getRaceSnapshotCompetitorDataByRace(raceId, this)
         val unknownReadoutData =
             getResultDataFlowByRace(raceId).first().filter { it.competitorCategory == null }
                 .map { fil -> ReadoutData(fil.result, fil.punches) }

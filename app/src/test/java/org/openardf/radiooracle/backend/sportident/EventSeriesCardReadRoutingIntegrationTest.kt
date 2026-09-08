@@ -42,6 +42,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -483,6 +484,28 @@ class EventSeriesCardReadRoutingIntegrationTest {
     }
 
     @Test
+    fun raceSnapshotRanksResultsAndRetainsRegistrationsWithoutReadouts() = runBlocking {
+        val processor = DataProcessor.get()
+        val event = raceData("Snapshot", listOf(31, 32), siNumber = 1001)
+        processor.saveRaceData(event)
+        val registered = event.competitorData.single().competitorCategory.competitor
+        processor.createOrUpdateCompetitor(registered.copy(
+            id = UUID.randomUUID(),
+            siNumber = 1002,
+            firstName = "Waiting",
+            startNumber = 2
+        ))
+        assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(
+            card(1001, listOf(31, 32)), event.race))
+
+        val snapshot = processor.getRaceData(event.race.id).competitorData
+
+        assertEquals(2, snapshot.size)
+        assertEquals(1, snapshot.single { it.readoutData != null }.readoutData!!.result.place)
+        assertNull(snapshot.single { it.competitorCategory.competitor.siNumber == 1002 }.readoutData)
+    }
+
+    @Test
     fun practiceCardReusesRegisteredCompetitorWhenHistoricalCardResultBelongsToAnotherEntry() = runBlocking {
         val processor = DataProcessor.get()
         val event = raceData("Practice registration", listOf(31, 32), siNumber = 1001)
@@ -739,6 +762,10 @@ class EventSeriesCardReadRoutingIntegrationTest {
             for ((resultId, place) in expectedPlaces) {
                 assertEquals("$level result=$resultId", place, ResultsProcessor.getResultPlace(resultId, event.race.id, processor))
             }
+            val snapshotPlaces = processor.getRaceData(event.race.id).competitorData.associate {
+                it.readoutData!!.result.id to it.readoutData!!.result.place
+            }
+            assertEquals(level.name, expectedPlaces, snapshotPlaces)
         }
     }
 
