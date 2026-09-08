@@ -791,4 +791,13 @@
         <item quantity="one">%d race</item>
         <item quantity="other">%d races</item>
     </plurals>
+    <string name="readout_missing_si_number_hint">Enter the card number if known.</string>
+    <string name="diagnostic_logs_support">Support</string>
+    <string name="diagnostic_logs_title">Diagnostic Logs</string>
+    <string name="diagnostic_logs_summary">Save or share log files for troubleshooting</string>
+    <string name="diagnostic_logs_description">Share a diagnostic ZIP with your support contact. Include what happened, the approximate time, and the SI card number. Logs are captured automatically and older logs rotate out, so share soon after a problem.</string>
+    <string name="diagnostic_logs_share">Share Logs</string>
+    <string name="diagnostic_logs_save">Save ZIP</string>
+    <string name="diagnostic_logs_saved">Diagnostic ZIP saved. Attach it to your support message.</string>
+    <string name="diagnostic_logs_error">Could not save or share logs. Check storage or try Save ZIP and attach it to your message.</string>
 </resources>

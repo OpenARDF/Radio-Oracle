@@ -84,9 +84,13 @@ class DesktopRollingDebugLog(
         Files.write(activeFile(), bytes, StandardOpenOption.CREATE, StandardOpenOption.APPEND)
     }
 
+    @Synchronized
     fun logFiles(): List<Path> =
         (listOf(activeFile()) + (1 until retainedFileCount).map { archiveFile(it) })
             .filter(Files::exists)
+
+    @Synchronized
+    fun snapshot(): Map<String, ByteArray> = logFiles().associate { it.fileName.toString() to Files.readAllBytes(it) }
 
     fun sanitize(value: String): String =
         value
@@ -125,9 +129,16 @@ object DesktopDebugLog {
     @Volatile
     private var rollingLog: DesktopRollingDebugLog? = null
 
+    @Volatile private var sportIdentLog: DesktopRollingDebugLog? = null
+
+    @Synchronized
     fun initialize(logDirectory: Path = DesktopAppDirectories.logDirectory()) {
         rollingLog = DesktopRollingDebugLog(logDirectory)
+        sportIdentLog = DesktopRollingDebugLog(logDirectory, maxFileBytes = 2L * 1024 * 1024,
+            retainedFileCount = 4, fileName = "sportident.log")
         info("App", "Desktop debug log initialized at $logDirectory")
+        sportIdent("SESSION version=${DesktopBuildInfo.displayVersion} build=${DesktopBuildInfo.buildDateUtc} " +
+            "os=${System.getProperty("os.name")} ${System.getProperty("os.version")} diagnosticFormat=1 parser=preserve-incomplete-frames")
     }
 
     fun logDirectory(): Path =
@@ -135,6 +146,14 @@ object DesktopDebugLog {
 
     fun logFiles(): List<Path> =
         rollingLog?.logFiles() ?: emptyList()
+
+    fun sportIdent(message: String) {
+        runCatching { sportIdentLog?.write("D", "SITrace", message) }
+            .onFailure { warn("Diagnostics", "SPORTident trace write failed: ${it.javaClass.simpleName}") }
+    }
+
+    fun snapshot(): Map<String, ByteArray> =
+        rollingLog?.snapshot().orEmpty() + sportIdentLog?.snapshot().orEmpty()
 
     fun debug(tag: String, message: String) {
         write("D", tag, message)

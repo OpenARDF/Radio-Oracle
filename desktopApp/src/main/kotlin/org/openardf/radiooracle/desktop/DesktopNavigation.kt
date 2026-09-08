@@ -696,6 +696,14 @@ object DesktopNavigation {
                             requiresEventFile = false
                         ),
                         action(
+                            "setup.tools.logs",
+                            "Send Diagnostic Logs...",
+                            workflow,
+                            DesktopNavAction.ShowDebugLogHelp,
+                            requiresEventFile = false,
+                            section = DesktopSection.Tools
+                        ),
+                        action(
                             "setup.tools.about",
                             "About",
                             workflow,
@@ -947,14 +955,6 @@ object DesktopNavigation {
                     workflow,
                     listOf(
                         item("settings.beta-scope", "Beta Scope", workflow, DesktopSection.Settings, requiresEventFile = false),
-                        action(
-                            "settings.logs",
-                            "Logs...",
-                            workflow,
-                            DesktopNavAction.ShowDebugLogHelp,
-                            requiresEventFile = false,
-                            section = DesktopSection.Settings
-                        ),
                         action(
                             "settings.about",
                             "About Radio-Oracle...",
@@ -1544,11 +1544,11 @@ object DesktopNavigation {
         "settings.hardware" to
             "Use Hardware Preferences to review printer and hardware-related desktop settings.",
         "settings.help" to
-            "Use Help to view beta-scope notes, desktop logs, and application information.",
+            "Use Help to view beta-scope notes and application information.",
         "settings.beta-scope" to
             "Use Beta Scope to review what this desktop beta is intended to support and where caution is still needed.",
-        "settings.logs" to
-            "Use Logs to find the desktop debug-log location and related diagnostic information.",
+        "setup.tools.logs" to
+            "Export a diagnostic ZIP to attach to a support message, or open the log folder.",
         "settings.about" to
             "Use About Radio-Oracle to view the app version, project identity, and maintainer information.",
         "setup.event-file.new" to

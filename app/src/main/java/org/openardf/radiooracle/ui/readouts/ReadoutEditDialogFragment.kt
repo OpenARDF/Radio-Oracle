@@ -41,11 +41,13 @@ import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
+import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.sounds.SoundProcessor
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.logging.DebugLog
+import org.openardf.radiooracle.backend.results.ResultsProcessor
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
@@ -83,6 +85,9 @@ class ReadoutEditDialogFragment : DialogFragment() {
     private lateinit var competitorPicker: MaterialAutoCompleteTextView
     private lateinit var competitorPickerLayout: TextInputLayout
     private lateinit var siNumberView: TextView
+    private lateinit var siNumberInput: TextInputEditText
+    private lateinit var siNumberInputLayout: TextInputLayout
+    private var lastSuggestedSiNumber = ""
     private lateinit var categoryPicker: MaterialAutoCompleteTextView
     private lateinit var categoryPickerLayout: TextInputLayout
     private lateinit var raceStatusPicker: MaterialAutoCompleteTextView
@@ -134,6 +139,8 @@ class ReadoutEditDialogFragment : DialogFragment() {
         competitorPicker = view.findViewById(R.id.readout_dialog_competitor)
         competitorPickerLayout = view.findViewById(R.id.readout_dialog_competitor_layout)
         siNumberView = view.findViewById(R.id.readout_dialog_si_number)
+        siNumberInput = view.findViewById(R.id.readout_dialog_si_number_input)
+        siNumberInputLayout = view.findViewById(R.id.readout_dialog_si_number_input_layout)
         categoryPicker = view.findViewById(R.id.readout_dialog_category)
         categoryPickerLayout = view.findViewById(R.id.readout_dialog_category_layout)
         raceStatusPicker = view.findViewById(R.id.readout_dialog_status)
@@ -183,11 +190,6 @@ class ReadoutEditDialogFragment : DialogFragment() {
             dialog?.setTitle(R.string.readout_edit_readout)
             result = args.resultData!!.result.copyForEditing()
             origResult = args.resultData!!.result
-
-            siNumberView.text = requireContext().getString(
-                R.string.readout_si_number,
-                result.siNumber ?: "?"
-            )
 
             if (!args.resultData!!.result.automaticStatus) {
                 raceStatusPicker.setText(
@@ -275,6 +277,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
             PunchEditRecyclerViewAdapter(
                 punchWrappers, selectedRaceViewModel.getAliasesByRace(args.raceId)
             ) { updateIssueExplanation() }
+        updateSiNumberPreview()
 
         //Populate the status options
         for (status in ResultStatus.entries) {
@@ -311,6 +314,23 @@ class ReadoutEditDialogFragment : DialogFragment() {
         }
     }
 
+    private fun updateSiNumberPreview() {
+        val canEnterSiNumber = result.siNumber == null
+        siNumberInputLayout.visibility = if (canEnterSiNumber) View.VISIBLE else View.GONE
+        siNumberView.visibility = if (canEnterSiNumber) View.GONE else View.VISIBLE
+        val siNumber = ResultsProcessor.manualReadoutSiNumber(
+            result, competitor, args.resultData?.getPunchList().orEmpty()
+        )
+        siNumberView.text = getString(R.string.readout_si_number, siNumber ?: "?")
+        if (canEnterSiNumber) {
+            val currentText = siNumberInput.text.toString().trim()
+            if (currentText.isEmpty() || currentText == lastSuggestedSiNumber) {
+                siNumberInput.setText(siNumber?.toString().orEmpty())
+            }
+            lastSuggestedSiNumber = siNumber?.toString().orEmpty()
+        }
+    }
+
     private fun setButtons() {
 
         //Competitor picker
@@ -319,6 +339,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
                 competitorPickerLayout.error = ""
                 competitor = getCompetitorFromPicker()
                 result.competitorId = competitor?.id
+                updateSiNumberPreview()
 
                 setCategoryPicker()
             }
@@ -345,6 +366,9 @@ class ReadoutEditDialogFragment : DialogFragment() {
 
         okButton.setOnClickListener {
             if (validateFields()) {
+                if (siNumberInputLayout.visibility == View.VISIBLE) {
+                    result.siNumber = siNumberInput.text.toString().trim().toIntOrNull()
+                }
 
                 val punches = PunchEditItemWrapper.getPunches(
                     (punchEditRecyclerView.adapter as PunchEditRecyclerViewAdapter).values
@@ -392,6 +416,12 @@ class ReadoutEditDialogFragment : DialogFragment() {
 
     private fun validateFields(): Boolean {
         var valid = true
+
+        if (siNumberInputLayout.visibility == View.VISIBLE) {
+            val error = readoutSiNumberInputError(siNumberInput.text.toString())
+            siNumberInputLayout.error = error?.let { getString(it) }
+            if (error != null) valid = false
+        }
 
         //Check competitor
         if (result.competitorId != null

@@ -72,6 +72,25 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp" />
 
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/readout_dialog_si_number_input_layout"
+            style="@style/dialog_textView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/readout_si_number_title"
+            android:visibility="gone"
+            app:helperText="@string/readout_missing_si_number_hint">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/readout_dialog_si_number_input"
+                style="@style/dialog_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:singleLine="true" />
+        </com.google.android.material.textfield.TextInputLayout>
+
         <TextView
             android:id="@+id/readout_dialog_issue_explanation"
             style="@style/error_text"

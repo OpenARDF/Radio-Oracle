@@ -97,4 +97,81 @@ class SportIdentFrameParserTest {
 
         assertFalse(frame.crcValid ?: true)
     }
+
+    @Test
+    fun incompleteCardReplyNeverExposesMessagesInsideItsPayload() {
+        val nestedMessages = listOf(
+            byteArrayOf(SportIdentProtocol.STX, 45, 65, SportIdentProtocol.ETX),
+            SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.SI_CARD_REMOVED, ByteArray(6))
+                .drop(1).toByteArray()
+        )
+        for (nested in nestedMessages) {
+            val message = cardReplyContaining(nested)
+            for (length in 1 until message.size) {
+                val partial = message.copyOfRange(0, length)
+                for (requireCrc in listOf(false, true)) {
+                    assertNull(
+                        SportIdentFrameParser.firstFrame(partial, requireValidCrc = requireCrc),
+                        "Partial reply length=$length requireCrc=$requireCrc"
+                    )
+                    assertNull(SportIdentFrameParser.firstFrame(
+                        partial, commandFilter = nested[1], requireValidCrc = requireCrc
+                    ))
+                }
+            }
+            assertContentEquals(message, assertNotNull(SportIdentFrameParser.firstFrame(message)).raw)
+        }
+    }
+
+    @Test
+    fun invalidCrcSkipsTheWholeFrameBeforeFindingTheNextMessage() {
+        val invalid = cardReplyContaining(byteArrayOf(2, 45, 65, 3)).also {
+            it[it.lastIndex - 1] = (it[it.lastIndex - 1].toInt() xor 1).toByte()
+        }
+        val following = SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.PROBE_COMMAND, byteArrayOf(77))
+            .drop(1).toByteArray()
+
+        assertNull(SportIdentFrameParser.firstFrame(invalid))
+        assertContentEquals(following, assertNotNull(SportIdentFrameParser.firstFrame(invalid + following)).raw)
+        val diagnostic = assertNotNull(SportIdentFrameParser.firstFrame(invalid, requireValidCrc = false))
+        assertEquals(false, diagnostic.crcValid)
+        assertContentEquals(invalid, diagnostic.raw)
+    }
+
+    @Test
+    fun malformedTerminatorCanResynchronizeToFollowingFrame() {
+        val invalid = SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.PROBE_COMMAND, byteArrayOf(77))
+            .also { it[it.lastIndex] = 0 }
+        val following = SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.GET_SYSTEM_INFO, byteArrayOf(77))
+        val frame = assertNotNull(SportIdentFrameParser.firstFrame(invalid + following))
+        assertEquals(SportIdentProtocol.GET_SYSTEM_INFO, frame.command)
+    }
+
+    @Test
+    fun standardFrameWaitsForUnescapedTerminator() {
+        val message = byteArrayOf(2, 45, 16, 2, 16, 3, 65, 3)
+        for (length in 1 until message.size) {
+            assertNull(SportIdentFrameParser.firstFrame(message.copyOfRange(0, length)))
+        }
+        assertContentEquals(message, assertNotNull(SportIdentFrameParser.firstFrame(message)).raw)
+    }
+
+    @Test
+    fun commandFilterSkipsCompleteMessagesButWaitsForPartialMessages() {
+        val first = SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.PROBE_COMMAND, byteArrayOf(77))
+        val cardReply = cardReplyContaining(byteArrayOf(2, 45, 65, 3))
+        assertNull(SportIdentFrameParser.firstFrame(
+            first + cardReply.copyOfRange(0, 64), commandFilter = SportIdentProtocol.GET_SI_CARD8_9_SIAC
+        ))
+        assertContentEquals(cardReply, assertNotNull(SportIdentFrameParser.firstFrame(
+            first + cardReply, commandFilter = SportIdentProtocol.GET_SI_CARD8_9_SIAC
+        )).raw)
+    }
+
+    private fun cardReplyContaining(nested: ByteArray): ByteArray {
+        val data = ByteArray(131) { 65 }
+        nested.copyInto(data, destinationOffset = 20)
+        return SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.GET_SI_CARD8_9_SIAC, data)
+            .drop(1).toByteArray()
+    }
 }

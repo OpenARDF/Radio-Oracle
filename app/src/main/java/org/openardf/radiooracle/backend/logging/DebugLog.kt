@@ -28,24 +28,39 @@ import android.content.Context
 import android.util.Log
 import java.io.File
 
-/**
- * Hidden app-private debug log facade.
- *
- * The file log complements logcat for field diagnostics. It is deliberately not
- * exposed in normal UI and should contain only operational breadcrumbs that are
- * useful when reproducing device, import/export, or service problems.
- */
+/** App-private operational and SPORTident logs, exposed through user-initiated diagnostics export. */
 object DebugLog {
     private const val LOG_DIR_NAME = "debug-logs"
 
     @Volatile
     private var rollingLog: RollingDebugLog? = null
 
+    @Volatile private var sportIdentLog: RollingDebugLog? = null
+
     /** Configures logging under the app's private files directory. */
+    @Synchronized
     fun initialize(context: Context) {
-        rollingLog = RollingDebugLog(File(context.filesDir, LOG_DIR_NAME))
-        info("App", "Debug log initialized")
+        if (rollingLog != null) return
+        val directory = File(context.filesDir, LOG_DIR_NAME)
+        rollingLog = RollingDebugLog(directory)
+        sportIdentLog = RollingDebugLog(directory, maxFileBytes = 2L * 1024 * 1024,
+            retainedFileCount = 4, fileName = "sportident.log")
+        info("App", "Debug log initialized version=${org.openardf.radiooracle.BuildConfig.VERSION_NAME} " +
+            "build=${org.openardf.radiooracle.BuildConfig.BUILD_DATE_UTC} Android=${android.os.Build.VERSION.RELEASE} model=${android.os.Build.MODEL}")
+        sportIdent("SESSION version=${org.openardf.radiooracle.BuildConfig.VERSION_NAME} build=${org.openardf.radiooracle.BuildConfig.BUILD_DATE_UTC} " +
+            "Android=${android.os.Build.VERSION.RELEASE} model=${android.os.Build.MODEL} diagnosticFormat=1 parser=preserve-incomplete-frames")
     }
+
+    fun sportIdent(message: String) {
+        try {
+            sportIdentLog?.write("D", "SITrace", message)
+        } catch (error: Exception) {
+            warn("Diagnostics", "SPORTident trace write failed: ${error.javaClass.simpleName}")
+        }
+    }
+
+    fun snapshot(): Map<String, ByteArray> =
+        (rollingLog?.snapshot().orEmpty() + sportIdentLog?.snapshot().orEmpty())
 
     /** Writes a debug-level breadcrumb to the hidden file log. */
     fun debug(tag: String, message: String) {

@@ -50,6 +50,23 @@ class DesktopSportIdentFrameStreamTest {
     }
 
     @Test
+    fun splitCardPayloadCannotBecomeABogusStandardFrame() {
+        val payload = ByteArray(131) { 65 }.also {
+            byteArrayOf(2, 45, 65, 3).copyInto(it, destinationOffset = 20)
+        }
+        val reply = SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.GET_SI_CARD8_9_SIAC, payload)
+        for (split in 1 until reply.size) {
+            val port = ChunkedPort(listOf(reply.copyOfRange(0, split), reply.copyOfRange(split, reply.size)))
+            val stream = DesktopSportIdentFrameStream(port, nowMillis = advancingClock())
+            val frame = stream.nextFrame(deadlineMillis = 1_000)
+            assertNotNull(frame)
+            assertEquals(SportIdentProtocol.GET_SI_CARD8_9_SIAC, frame!!.command)
+            assertArrayEquals(payload, frame.data)
+            assertNull(stream.nextFrame(deadlineMillis = 1_000))
+        }
+    }
+
+    @Test
     fun returnsMultipleFramesFromOneSerialChunkInOrder() {
         val first = SportIdentProtocol.buildExtendedMessage(
             command = SportIdentProtocol.PROBE_COMMAND,

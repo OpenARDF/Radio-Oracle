@@ -65,6 +65,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.lang.Integer.min
+import java.util.UUID
+import org.openardf.radiooracle.shared.sportident.diagnosticHex
 import java.time.DateTimeException
 import java.time.LocalTime
 import kotlin.experimental.and
@@ -82,6 +84,7 @@ class SIPort(
     private var stationCodeNumber: Int? = null
     private var stationModeCode: Int? = null
     private var lastReadCardId: Int? = null
+    private var diagnosticReadId: String? = null
     private var waitingForRaceLogged = false
     private val cardCommandReader = AndroidSportIdentCardCommandReader(
         writeCommand = { command, payload ->
@@ -340,31 +343,42 @@ class SIPort(
         var valid = false
 
         if (waitForCardInsert(cardData)) {
-            setStatusReading(cardData.siNumber)
+            diagnosticReadId = UUID.randomUUID().toString()
+            DebugLog.sportIdent("READ_BEGIN monotonicMs=${android.os.SystemClock.elapsedRealtime()} read=$diagnosticReadId si=${cardData.siNumber} type=${cardData.cardType} " +
+                "race=${race.id} stationSerial=$serialNo stationCode=$stationCodeNumber stationMode=$stationModeCode extended=$extendedMode")
+            try {
+                setStatusReading(cardData.siNumber)
 
-            when (cardData.cardType) {
-                SI_CARD5 -> valid = card5Readout(cardData)
-                SI_CARD6 -> valid = card6Readout(cardData)
-                SI_CARD8_9_SIAC -> valid = card89SiacReadout(cardData)
-            }
-
-            //If the readout was valid, process the data further
-            if (valid) {
-                val stored = dataProcessor.processCardDataForCurrentRaceOrSeries(cardData, race) == true
-                if (stored) {
-                    lastReadCardId = cardData.siNumber
-                    DebugLog.info(
-                        "SI",
-                        "Card read stored id=${cardData.siNumber} punches=${cardData.punchData.size}"
-                    )
-                    setStatusRead(cardData.siNumber)
-                } else {
-                    DebugLog.warn("SI", "Card read ignored id=${cardData.siNumber}")
-                    setStatusConnected()
+                when (cardData.cardType) {
+                    SI_CARD5 -> valid = card5Readout(cardData)
+                    SI_CARD6 -> valid = card6Readout(cardData)
+                    SI_CARD8_9_SIAC -> valid = card89SiacReadout(cardData)
                 }
-            } else {
-                DebugLog.warn("SI", "Card read failed id=${cardData.siNumber}")
-                setStatusError(cardData.siNumber)
+
+                //If the readout was valid, process the data further
+                if (valid) {
+                    val stored = dataProcessor.processCardDataForCurrentRaceOrSeries(cardData, race) == true
+                    if (stored) {
+                        lastReadCardId = cardData.siNumber
+                        DebugLog.info(
+                            "SI",
+                            "Card read stored id=${cardData.siNumber} punches=${cardData.punchData.size}"
+                        )
+                        setStatusRead(cardData.siNumber)
+                    } else {
+                        DebugLog.warn("SI", "Card read ignored id=${cardData.siNumber}")
+                        setStatusConnected()
+                    }
+                } else {
+                    DebugLog.warn("SI", "Card read failed id=${cardData.siNumber}")
+                    setStatusError(cardData.siNumber)
+                }
+                DebugLog.sportIdent("READ_END read=$diagnosticReadId si=${cardData.siNumber} valid=$valid punches=${cardData.punchData.size}")
+            } catch (error: Exception) {
+                DebugLog.sportIdent("READ_EXCEPTION read=$diagnosticReadId ${error.stackTraceToString().take(8192)}")
+                throw error
+            } finally {
+                diagnosticReadId = null
             }
         }
     }
@@ -380,7 +394,11 @@ class SIPort(
         val result = cardCommandReader.read(
             command = command,
             payload = payload,
-            expectedReplyBytes = expectedReplyBytes
+            expectedReplyBytes = expectedReplyBytes,
+            diagnostics = { lines ->
+                val context = "read=$diagnosticReadId si=${cardData.siNumber} family=$family stage=$stage"
+                lines.forEach { DebugLog.sportIdent("$context $it") }
+            }
         )
         result.attempts.forEachIndexed { index, attempt ->
             attempt.failure?.let { failure ->
@@ -443,6 +461,8 @@ class SIPort(
         }
 
         val writtenBytes = port.syncWrite(buffer, READ_WRITE_TIMEOUT)
+        if (diagnosticReadId != null) DebugLog.sportIdent(
+            "TX_WIRE read=$diagnosticReadId written=$writtenBytes bytes=${buffer.size} hex=${buffer.diagnosticHex()}")
         return if (writtenBytes == buffer.size) 0 else -1
     }
 
@@ -454,6 +474,8 @@ class SIPort(
         buffer[3] = SIConstants.ETX
 
         val writtenBytes = port.syncWrite(buffer, READ_WRITE_TIMEOUT)
+        if (diagnosticReadId != null) DebugLog.sportIdent(
+            "TX_WIRE read=$diagnosticReadId written=$writtenBytes bytes=${buffer.size} hex=${buffer.diagnosticHex()}")
         return if (writtenBytes == buffer.size) 0 else -1
     }
 
@@ -464,6 +486,8 @@ class SIPort(
         buffer[2] = SIConstants.NAK
         buffer[3] = SIConstants.ETX
         val writtenBytes = port.syncWrite(buffer, READ_WRITE_TIMEOUT)
+        if (diagnosticReadId != null) DebugLog.sportIdent(
+            "TX_WIRE read=$diagnosticReadId written=$writtenBytes bytes=${buffer.size} hex=${buffer.diagnosticHex()}")
         return if (writtenBytes == buffer.size) 0 else -1
     }
 

@@ -26,6 +26,8 @@ package org.openardf.radiooracle.desktop.usb
 
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlockParser
+import org.openardf.radiooracle.desktop.DesktopDebugLog
+import java.util.UUID
 import org.openardf.radiooracle.shared.sportident.SportIdentCardCommandReader
 import org.openardf.radiooracle.shared.sportident.SportIdentCardEvent
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadFailure
@@ -171,37 +173,48 @@ class DesktopSportIdentCardBlockReader(
         port: DesktopSerialPort,
         inserted: SportIdentCardEvent.Inserted
     ): DesktopSportIdentCardBlockDownload {
-        val commandReader = SportIdentCardCommandReader(
-            writeCommand = { command, payload ->
-                val request = SportIdentProtocol.buildExtendedMessage(command, payload ?: byteArrayOf())
-                port.write(request) == request.size
-            },
-            readChunk = { _ -> port.read(MAX_FRAME_BYTES) },
-            sleepMillis = sleepMillis,
-            nowMillis = nowMillis,
-            attemptTimeoutMillis = cardReadAttemptTimeoutMs,
-            retryDelayMillis = cardReadRetryDelayMs,
-            maxAttempts = cardReadMaxAttempts
-        )
-        val blocks = when (inserted.cardType) {
-            SportIdentProtocol.SI_CARD5 -> emptyList()
-            SportIdentProtocol.SI_CARD6 -> readSi6BlocksOnOpenPort(commandReader)
-            SportIdentProtocol.SI_CARD8_9_SIAC -> readSi8Or9OrSiacBlocksOnOpenPort(commandReader)
-            else -> error(
-                "Only SI5/SI6/SI8/SI9/SIAC card download is supported; " +
-                    "got ${inserted.cardType.toHexString()}."
+        val readId = UUID.randomUUID().toString()
+        DesktopDebugLog.sportIdent("READ_BEGIN monotonicMs=${nowMillis()} read=$readId si=${inserted.siNumber} type=${inserted.cardType.toHexString()} extended=true port=${port.info.describe()}")
+        try {
+            val commandReader = SportIdentCardCommandReader(
+                writeCommand = { command, payload ->
+                    val request = SportIdentProtocol.buildExtendedMessage(command, payload ?: byteArrayOf())
+                    val written = port.write(request)
+                    DesktopDebugLog.sportIdent("TX_WIRE read=$readId written=$written bytes=${request.size} hex=${request.toHexString()}")
+                    written == request.size
+                },
+                readChunk = { _ -> port.read(MAX_FRAME_BYTES) },
+                sleepMillis = sleepMillis,
+                nowMillis = nowMillis,
+                attemptTimeoutMillis = cardReadAttemptTimeoutMs,
+                retryDelayMillis = cardReadRetryDelayMs,
+                maxAttempts = cardReadMaxAttempts,
+                diagnostics = { lines -> lines.forEach { DesktopDebugLog.sportIdent("read=$readId si=${inserted.siNumber} $it") } }
             )
+            val blocks = when (inserted.cardType) {
+                SportIdentProtocol.SI_CARD5 -> emptyList()
+                SportIdentProtocol.SI_CARD6 -> readSi6BlocksOnOpenPort(commandReader)
+                SportIdentProtocol.SI_CARD8_9_SIAC -> readSi8Or9OrSiacBlocksOnOpenPort(commandReader)
+                else -> error(
+                    "Only SI5/SI6/SI8/SI9/SIAC card download is supported; " +
+                        "got ${inserted.cardType.toHexString()}."
+                )
+            }
+            val readout = when (inserted.cardType) {
+                SportIdentProtocol.SI_CARD5 -> readSi5ReadoutOnOpenPort(commandReader)
+                SportIdentProtocol.SI_CARD6 -> SportIdentCardReadoutParser.parseSi6(combineSi6BlocksForAndroidParser(blocks))
+                SportIdentProtocol.SI_CARD8_9_SIAC -> SportIdentCardReadoutParser.parseSi8Or9OrSiac(
+                    combineBlocksForAndroidParser(blocks)
+                )
+                else -> null
+            } ?: error("Downloaded SI card blocks could not be parsed.")
+            writeAck(port, readId)
+            DesktopDebugLog.sportIdent("READ_END read=$readId si=${inserted.siNumber} parsed=true")
+            return DesktopSportIdentCardBlockDownload(inserted, blocks, readout)
+        } catch (error: Exception) {
+            DesktopDebugLog.sportIdent("READ_EXCEPTION read=$readId ${error.stackTraceToString().take(8192)}")
+            throw error
         }
-        val readout = when (inserted.cardType) {
-            SportIdentProtocol.SI_CARD5 -> readSi5ReadoutOnOpenPort(commandReader)
-            SportIdentProtocol.SI_CARD6 -> SportIdentCardReadoutParser.parseSi6(combineSi6BlocksForAndroidParser(blocks))
-            SportIdentProtocol.SI_CARD8_9_SIAC -> SportIdentCardReadoutParser.parseSi8Or9OrSiac(
-                combineBlocksForAndroidParser(blocks)
-            )
-            else -> null
-        } ?: error("Downloaded SI card blocks could not be parsed.")
-        writeAck(port)
-        return DesktopSportIdentCardBlockDownload(inserted, blocks, readout)
     }
 
     private fun readSi5ReadoutOnOpenPort(
@@ -328,9 +341,10 @@ class DesktopSportIdentCardBlockReader(
         error(message)
     }
 
-    private fun writeAck(port: DesktopSerialPort) {
+    private fun writeAck(port: DesktopSerialPort, readId: String) {
         val ack = SportIdentProtocol.buildAckMessage()
         val written = port.write(ack)
+        DesktopDebugLog.sportIdent("TX_ACK read=$readId written=$written bytes=${ack.size} hex=${ack.toHexString()}")
         if (written != ack.size) {
             error("Failed to write SI card-read ACK.")
         }

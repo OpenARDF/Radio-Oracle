@@ -60,6 +60,10 @@ class SettingsFragment : PreferenceFragmentCompat() {
     }
 
     private fun setPreferences() {
+        findPreference<androidx.preference.Preference>("diagnostic_logs")?.setOnPreferenceClickListener {
+            DiagnosticLogsDialogFragment().show(parentFragmentManager, "diagnostic_logs")
+            true
+        }
         val editor = prefs.edit()
 
         findPreference<CheckBoxPreference>(requireContext().getString(R.string.key_keep_screen_open))

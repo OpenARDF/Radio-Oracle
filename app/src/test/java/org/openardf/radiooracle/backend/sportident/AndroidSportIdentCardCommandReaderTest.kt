@@ -49,6 +49,29 @@ class AndroidSportIdentCardCommandReaderTest {
     }
 
     @Test
+    fun splitCardDataCannotBecomeAnUnknownCommandOrCardRemoval() {
+        val nestedMessages = listOf(
+            byteArrayOf(2, 45, 65, 3),
+            SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.SI_CARD_REMOVED, ByteArray(6)).dropWakeup()
+        )
+        for (nested in nestedMessages) {
+            val payload = ByteArray(131) { 65 }.also { nested.copyInto(it, destinationOffset = 20) }
+            val reply = SportIdentProtocol.buildExtendedMessage(COMMAND, payload).dropWakeup()
+            val chunkings = (1 until reply.size).map { split ->
+                listOf(reply.copyOfRange(0, split), reply.copyOfRange(split, reply.size))
+            } + listOf(reply.map { byteArrayOf(it) })
+            for (chunks in chunkings) {
+                val fixture = Fixture(listOf(chunks))
+                val result = fixture.reader().read(COMMAND, byteArrayOf(0), reply.size)
+                assertArrayEquals(reply, result.reply)
+                assertEquals(1, fixture.writeCount)
+                assertEquals(0, fixture.sleepCount)
+                assertEquals(emptyList<ByteArray>(), fixture.cachedFrames)
+            }
+        }
+    }
+
+    @Test
     fun retriesNegativeAcknowledgementAndRecovers() {
         val reply = cardBlockReply()
         val fixture = Fixture(

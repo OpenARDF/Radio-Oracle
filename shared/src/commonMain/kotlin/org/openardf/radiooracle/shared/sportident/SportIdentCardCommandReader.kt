@@ -48,7 +48,8 @@ class SportIdentCardCommandReader(
     private val nowMillis: () -> Long,
     private val attemptTimeoutMillis: Int = DEFAULT_ATTEMPT_TIMEOUT_MS,
     private val retryDelayMillis: Long = DEFAULT_RETRY_DELAY_MS,
-    private val maxAttempts: Int = SportIdentCardReadRetryPolicy.DEFAULT_MAX_ATTEMPTS
+    private val maxAttempts: Int = SportIdentCardReadRetryPolicy.DEFAULT_MAX_ATTEMPTS,
+    private val diagnostics: ((List<String>) -> Unit)? = null
 ) {
     init {
         require(attemptTimeoutMillis > 0) { "Card-read attempt timeout must be positive." }
@@ -59,47 +60,62 @@ class SportIdentCardCommandReader(
     fun read(
         command: Byte,
         payload: ByteArray?,
-        expectedReplyBytes: Int
+        expectedReplyBytes: Int,
+        diagnostics: ((List<String>) -> Unit)? = this.diagnostics
     ): SportIdentCardCommandRead {
         require(expectedReplyBytes > 0) { "Expected card-reply size must be positive." }
         val attempts = mutableListOf<SportIdentCardCommandAttempt>()
+        val trace = diagnostics?.let { SportIdentCommandTrace(nowMillis) }
+        trace?.record("BEGIN command=${command.toInt() and 0xff} payload=${payload?.diagnosticHex().orEmpty()} " +
+            "expectedReplyBytes=$expectedReplyBytes timeoutMs=$attemptTimeoutMillis retryDelayMs=$retryDelayMillis maxAttempts=$maxAttempts")
+        try {
+            repeat(maxAttempts) { attemptIndex ->
+                trace?.record("TX attempt=${attemptIndex + 1}")
+                val attempt = if (writeCommand(command, payload)) {
+                    readAttempt(
+                        command = command,
+                        expectedReplyBytes = expectedReplyBytes,
+                        attemptNumber = attemptIndex + 1,
+                        trace = trace
+                    )
+                } else {
+                    SportIdentCardCommandAttempt(
+                        attemptNumber = attemptIndex + 1,
+                        reply = null,
+                        failure = SportIdentCardReadFailure.WRITE_FAILED
+                    )
+                }
+                attempts += attempt
+                trace?.record("RESULT attempt=${attempt.attemptNumber} outcome=${attempt.failure ?: "OK"} replyBytes=${attempt.reply?.size ?: 0}")
 
-        repeat(maxAttempts) { attemptIndex ->
-            val attempt = if (writeCommand(command, payload)) {
-                readAttempt(
-                    command = command,
-                    expectedReplyBytes = expectedReplyBytes,
-                    attemptNumber = attemptIndex + 1
-                )
-            } else {
-                SportIdentCardCommandAttempt(
-                    attemptNumber = attemptIndex + 1,
-                    reply = null,
-                    failure = SportIdentCardReadFailure.WRITE_FAILED
-                )
-            }
-            attempts += attempt
+                if (attempt.reply != null) {
+                    return SportIdentCardCommandRead(attempt.reply, attempts)
+                }
 
-            if (attempt.reply != null) {
-                return SportIdentCardCommandRead(attempt.reply, attempts)
+                val failure = requireNotNull(attempt.failure)
+                if (!SportIdentCardReadRetryPolicy.canRetry(failure, attemptIndex, maxAttempts)) {
+                    return SportIdentCardCommandRead(reply = null, attempts = attempts)
+                }
+                if (retryDelayMillis > 0) {
+                    trace?.record("RETRY delayMs=$retryDelayMillis")
+                    sleepMillis(retryDelayMillis)
+                }
             }
 
-            val failure = requireNotNull(attempt.failure)
-            if (!SportIdentCardReadRetryPolicy.canRetry(failure, attemptIndex, maxAttempts)) {
-                return SportIdentCardCommandRead(reply = null, attempts = attempts)
-            }
-            if (retryDelayMillis > 0) {
-                sleepMillis(retryDelayMillis)
-            }
+            return SportIdentCardCommandRead(reply = null, attempts = attempts)
+        } catch (error: Exception) {
+            trace?.record("EXCEPTION ${error.stackTraceToString().take(8_192)}")
+            throw error
+        } finally {
+            trace?.flushTo(diagnostics)
         }
-
-        return SportIdentCardCommandRead(reply = null, attempts = attempts)
     }
 
     private fun readAttempt(
         command: Byte,
         expectedReplyBytes: Int,
-        attemptNumber: Int
+        attemptNumber: Int,
+        trace: SportIdentCommandTrace?
     ): SportIdentCardCommandAttempt {
         val deadlineMillis = nowMillis() + attemptTimeoutMillis
         var buffered = ByteArray(0)
@@ -116,6 +132,8 @@ class SportIdentCardCommandReader(
                 requireValidCrc = false
             )
             if (frame != null) {
+                trace?.record("FRAME command=${frame.command.toInt() and 0xff} bytes=${frame.raw.size} crcValid=${frame.crcValid} " +
+                    "bufferedBytes=${buffered.size} action=${if (frame.command == command) "reply" else "unsolicited"}")
                 buffered = buffered.discardThrough(frame.raw)
                 when {
                     frame.command == SportIdentProtocol.SI_CARD_REMOVED && frame.crcValid != false ->
@@ -126,6 +144,7 @@ class SportIdentCardCommandReader(
 
                     frame.command != command -> {
                         if (frame.crcValid != false) {
+                            trace?.record("CACHE command=${frame.command.toInt() and 0xff}")
                             cacheUnexpectedFrame(frame.raw)
                         }
                     }
@@ -150,15 +169,19 @@ class SportIdentCardCommandReader(
             if (remainingMillis <= 0) {
                 break
             }
+            val readStarted = nowMillis()
             val chunk = readChunk(remainingMillis.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            trace?.received(chunk, remainingMillis, nowMillis() - readStarted)
             if (chunk.isNotEmpty()) {
                 buffered += chunk
                 if (buffered.size > MAX_BUFFER_BYTES) {
+                    trace?.record("BUFFER_TRIM discardedBytes=${buffered.size - MAX_BUFFER_BYTES}")
                     buffered = buffered.takeLast(MAX_BUFFER_BYTES).toByteArray()
                 }
             }
         }
 
+        trace?.record("TIMEOUT bufferedBytes=${buffered.size} bufferedHex=${buffered.diagnosticHex()}")
         val failure = if (buffered.indexOfFirst { it == SportIdentProtocol.STX } >= 0) {
             SportIdentCardReadFailure.INVALID_FRAME
         } else {

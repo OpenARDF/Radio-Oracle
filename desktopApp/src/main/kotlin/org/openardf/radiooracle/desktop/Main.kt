@@ -1040,6 +1040,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         var androidFileReceiveServer by remember { mutableStateOf<DesktopAndroidFileReceiveServer?>(null) }
         var androidFileReceiveDialog by remember { mutableStateOf<DesktopAndroidFileReceiveDialogState?>(null) }
         var androidFileReceiveResultDialog by remember { mutableStateOf<DesktopAndroidFileReceiveResultDialogState?>(null) }
+        var isDiagnosticLogsDialogVisible by remember { mutableStateOf(false) }
         var isAboutDialogVisible by remember { mutableStateOf(false) }
         var isUpdateCheckingEnabled by remember {
             mutableStateOf(DesktopAppSettingsPreferences.isUpdateCheckingEnabled())
@@ -6731,9 +6732,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         fun handleAppNavAction(action: DesktopNavAction): Boolean =
             when (action) {
                 DesktopNavAction.ShowDebugLogHelp -> {
-                    val logDirectory = DesktopDebugLog.logDirectory()
-                    DesktopDebugLog.info("App", "User requested desktop log location")
-                    projectStatusText = "Desktop logs: $logDirectory"
+                    isDiagnosticLogsDialogVisible = true
                     true
                 }
                 DesktopNavAction.ShowAbout -> {
@@ -6850,6 +6849,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     projectStatusText = "National Start List defaults skipped."
                 }
             )
+        }
+        if (isDiagnosticLogsDialogVisible) {
+            DesktopDiagnosticLogsDialog(onDismiss = { isDiagnosticLogsDialogVisible = false })
         }
         if (isAboutDialogVisible) {
             AboutRadioOracleDialog(

@@ -337,7 +337,8 @@ object ResultsProcessor {
                 UUID.randomUUID(),
                 race.id,
                 competitor?.id,
-                if (!createNewReadout) cardData.siNumber else null,
+                // A duplicate is unmatched, but still belongs to the downloaded SI card.
+                cardData.siNumber,
                 cardData.cardType,
                 cardData.checkTime,
                 cardData.startTime,
@@ -465,6 +466,23 @@ object ResultsProcessor {
         }
     }
 
+    /** Manual entries use the selected registration when no recorded SI number exists. */
+    internal fun manualReadoutSiNumber(
+        result: Result,
+        competitor: Competitor?,
+        punches: List<Punch>
+    ): Int? {
+        result.siNumber?.let { return it }
+        if (result.cardType != 0.toByte() || competitor?.id != result.competitorId ||
+            competitor?.raceId != result.raceId
+        ) return null
+        val registeredSi = competitor.siNumber?.takeIf { it > 0 } ?: return null
+        if (punches.any { it.cardNumber != null && it.cardNumber!! > 0 && it.cardNumber != registeredSi }) {
+            return null
+        }
+        return registeredSi
+    }
+
     suspend fun processManualPunchData(
         result: Result,
         punches: ArrayList<Punch>,
@@ -483,6 +501,11 @@ object ResultsProcessor {
             if (competitor != null) {
                 result.competitorId = competitor.id
             }
+        }
+
+        result.siNumber = manualReadoutSiNumber(result, competitor, punches)
+        if (result.cardType == 0.toByte() && result.siNumber != null) {
+            punches.filter { it.cardNumber == null }.forEach { it.cardNumber = result.siNumber }
         }
 
         val category = if (competitor?.categoryId != null) {

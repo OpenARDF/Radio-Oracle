@@ -1129,7 +1129,7 @@ class DesktopNavigationTest {
             courseTools.children.map { it.label }
         )
         assertEquals(
-            listOf("Race Validator", "Course Tools", "SPORTident", "About"),
+            listOf("Race Validator", "Course Tools", "SPORTident", "Send Diagnostic Logs...", "About"),
             tools.children.map { it.label }
         )
         val about = tools.children.first { it.label == "About" }
@@ -1624,9 +1624,11 @@ class DesktopNavigationTest {
             .children
 
         assertEquals(DesktopSection.Settings, helpActions.first { it.label == "Beta Scope" }.section)
-        assertEquals(DesktopNavAction.ShowDebugLogHelp, helpActions.first { it.label == "Logs..." }.action)
         assertEquals(DesktopNavAction.ShowAbout, helpActions.first { it.label == "About Radio-Oracle..." }.action)
-        assertFalse(helpActions.first { it.label == "Logs..." }.requiresEventFile)
+        val logAction = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
+            .first { it.label == "More..." }.children.first { it.label == "Send Diagnostic Logs..." }
+        assertEquals(DesktopNavAction.ShowDebugLogHelp, logAction.action)
+        assertFalse(logAction.requiresEventFile)
         assertFalse(helpActions.first { it.label == "About Radio-Oracle..." }.requiresEventFile)
     }
 

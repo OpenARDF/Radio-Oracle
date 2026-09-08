@@ -30,9 +30,8 @@ import java.time.Instant
 /**
  * Writes a small rolling debug log into app-private storage.
  *
- * The logger is intentionally simple and synchronous because it is only used
- * for low-volume diagnostic breadcrumbs. Callers must avoid raw payloads,
- * credentials, and personally identifying race data.
+ * Operational callers must avoid credentials and broad race data. SPORTident
+ * packet diagnostics use a separate instance with independent retention.
  */
 class RollingDebugLog(
     private val directory: File,
@@ -60,9 +59,14 @@ class RollingDebugLog(
     }
 
     /** Returns the active log followed by retained archives that currently exist. */
+    @Synchronized
     fun logFiles(): List<File> =
         (listOf(activeFile()) + (1 until retainedFileCount).map { archiveFile(it) })
             .filter { it.exists() }
+
+    /** Copy all retained files under the same lock used for rotation/writes. */
+    @Synchronized
+    fun snapshot(): Map<String, ByteArray> = logFiles().associate { it.name to it.readBytes() }
 
     /** Sanitizes diagnostic text so each log event stays on a single readable line. */
     fun sanitize(value: String): String =

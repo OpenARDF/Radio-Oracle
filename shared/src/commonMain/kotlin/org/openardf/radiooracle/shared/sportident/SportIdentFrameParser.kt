@@ -41,15 +41,19 @@ object SportIdentFrameParser {
         var index = 0
         while (index < bytes.size) {
             val start = nextStartIndex(bytes, index) ?: return null
-            val frame = parseAt(bytes, start, requireValidCrc)
-            if (frame == null) {
-                index = start + 1
-                continue
+            when (val parsed = parseAt(bytes, start, requireValidCrc)) {
+                // A USB read can end anywhere inside a frame. Its payload is not a
+                // place to resynchronize: embedded STX/ETX bytes are ordinary data.
+                ParseResult.Incomplete -> return null
+                is ParseResult.Invalid -> index = start + parsed.bytesToSkip
+                is ParseResult.Complete -> {
+                    val frame = parsed.frame
+                    if (commandFilter == null || frame.command == commandFilter) {
+                        return frame
+                    }
+                    index = start + frame.raw.size
+                }
             }
-            if (commandFilter == null || frame.command == commandFilter) {
-                return frame
-            }
-            index = start + frame.raw.size
         }
         return null
     }
@@ -67,9 +71,9 @@ object SportIdentFrameParser {
         return null
     }
 
-    private fun parseAt(bytes: ByteArray, start: Int, requireValidCrc: Boolean): SportIdentFrame? {
-        if (bytes.size <= start + 1 || bytes[start] != SportIdentProtocol.STX) {
-            return null
+    private fun parseAt(bytes: ByteArray, start: Int, requireValidCrc: Boolean): ParseResult {
+        if (bytes.size <= start + 1) {
+            return ParseResult.Incomplete
         }
         val command = bytes[start + 1]
         return if (command.toUnsignedInt() > EXTENDED_COMMAND_MIN) {
@@ -84,20 +88,20 @@ object SportIdentFrameParser {
         start: Int,
         command: Byte,
         requireValidCrc: Boolean
-    ): SportIdentFrame? {
+    ): ParseResult {
         if (bytes.size <= start + 2) {
-            return null
+            return ParseResult.Incomplete
         }
 
         val dataLength = bytes[start + 2].toUnsignedInt()
         val totalLength = dataLength + EXTENDED_FRAME_OVERHEAD
         if (bytes.size < start + totalLength) {
-            return null
+            return ParseResult.Incomplete
         }
 
         val endIndex = start + totalLength - 1
         if (bytes[endIndex] != SportIdentProtocol.ETX) {
-            return null
+            return ParseResult.Invalid(bytesToSkip = 1)
         }
 
         val crcStart = start + 3 + dataLength
@@ -106,19 +110,21 @@ object SportIdentFrameParser {
         val actualCrc = SportIdentProtocol.calculateCrc(dataLength + 2, crcPayload)
         val crcValid = actualCrc == expectedCrc
         if (requireValidCrc && !crcValid) {
-            return null
+            // This complete frame is corrupt. Skip its payload as a unit so it
+            // cannot be mistaken for an unrelated standard frame without a CRC.
+            return ParseResult.Invalid(bytesToSkip = totalLength)
         }
 
-        return SportIdentFrame(
+        return ParseResult.Complete(SportIdentFrame(
             command = command,
             data = bytes.copyOfRange(start + 3, start + 3 + dataLength),
             raw = bytes.copyOfRange(start, start + totalLength),
             extended = true,
             crcValid = crcValid
-        )
+        ))
     }
 
-    private fun parseStandard(bytes: ByteArray, start: Int, command: Byte): SportIdentFrame? {
+    private fun parseStandard(bytes: ByteArray, start: Int, command: Byte): ParseResult {
         var escaped = false
         for (index in start + 2 until bytes.size) {
             val byte = bytes[index]
@@ -131,16 +137,22 @@ object SportIdentFrameParser {
                 continue
             }
             if (byte == SportIdentProtocol.ETX) {
-                return SportIdentFrame(
+                return ParseResult.Complete(SportIdentFrame(
                     command = command,
                     data = bytes.copyOfRange(start + 2, index),
                     raw = bytes.copyOfRange(start, index + 1),
                     extended = false,
                     crcValid = null
-                )
+                ))
             }
         }
-        return null
+        return ParseResult.Incomplete
+    }
+
+    private sealed interface ParseResult {
+        data object Incomplete : ParseResult
+        data class Invalid(val bytesToSkip: Int) : ParseResult
+        data class Complete(val frame: SportIdentFrame) : ParseResult
     }
 
     private const val EXTENDED_COMMAND_MIN = 0x80

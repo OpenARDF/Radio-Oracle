@@ -57,8 +57,9 @@ internal class AndroidSportIdentCardCommandReader(
     fun read(
         command: Byte,
         payload: ByteArray?,
-        expectedReplyBytes: Int
-    ): SportIdentCardCommandRead = reader.read(command, payload, expectedReplyBytes)
+        expectedReplyBytes: Int,
+        diagnostics: ((List<String>) -> Unit)? = null
+    ): SportIdentCardCommandRead = reader.read(command, payload, expectedReplyBytes, diagnostics)
 
     private companion object {
         const val DEFAULT_ATTEMPT_TIMEOUT_MS = SportIdentCardCommandReader.DEFAULT_ATTEMPT_TIMEOUT_MS

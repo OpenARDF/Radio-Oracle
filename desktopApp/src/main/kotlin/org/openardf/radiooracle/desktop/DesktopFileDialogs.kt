@@ -397,6 +397,12 @@ object DesktopFileDialogs {
             defaultFileName = eventName?.let(DesktopProjectFilePaths::defaultAndroidEventJsonFileName)
         ) { DesktopProjectFilePaths.withAndroidRaceBackupJsonExtension(it) }
 
+    fun chooseExportDiagnosticLogs(): Path? =
+        chooseSaveFile("Export Diagnostic Logs", "zip", "Radio-Oracle-logs.zip") {
+            if (it.fileName.toString().endsWith(".zip", ignoreCase = true)) it
+            else it.resolveSibling("${it.fileName}.zip")
+        }
+
     fun chooseExportAndroidEventSeriesPackage(defaultFileName: String): Path? =
         chooseSaveFile(
             title = "Save Radio-Oracle Series File",
