@@ -26,10 +26,8 @@ package org.openardf.radiooracle.ui
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.res.Configuration
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
@@ -64,6 +62,7 @@ import org.openardf.radiooracle.shared.device.SIReaderStatus
 import org.openardf.radiooracle.shared.event.EventFileTransferPayloads
 import org.openardf.radiooracle.shared.event.EventResultScoringFormat
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
+import org.openardf.radiooracle.ui.sportident.SportIdentUsbConnection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,6 +75,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var siStatusTextView: TextView
     private lateinit var dataProcessor: DataProcessor
+    private lateinit var siUsbConnection: SportIdentUsbConnection
     private var lastSiStationModeWarningKey: String? = null
     private var lastSiReaderStatus: SIReaderStatus? = null
     private var keepScreenOpen = false
@@ -84,18 +84,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val KEY_RESULTS_SCORING_REVISION = "results_scoring_revision"
         private const val RESULTS_SCORING_REVISION = EventResultScoringFormat.CURRENT_REVISION
-    }
-
-    private var usbDetachReceiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-
-            if (UsbManager.ACTION_USB_DEVICE_DETACHED == intent.action) {
-                val device: UsbDevice? = intent.parcelableExtraCompat(UsbManager.EXTRA_DEVICE)
-                device?.apply {
-                    dataProcessor.detachDevice(device)
-                }
-            }
-        }
     }
 
     override fun attachBaseContext(newBase: Context?) {
@@ -144,12 +132,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        siUsbConnection.resumed = true
+        siUsbConnection.refresh()
         if (keepScreenOpen) {
             holdCurrentScreenBrightness()
         }
     }
 
     override fun onPause() {
+        siUsbConnection.resumed = false
         releaseScreenBrightnessOverride()
         super.onPause()
     }
@@ -187,25 +178,23 @@ class MainActivity : AppCompatActivity() {
         refreshStoredResultsForCurrentScoringRules()
 
 
-        val filter = IntentFilter()
-        filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
-        registerReceiver(usbDetachReceiver, filter)
-
-        // Set the usb device
-        detectSIReader()
-
-        if (intent != null) {
-            val device: UsbDevice? = intent.parcelableExtraCompat(UsbManager.EXTRA_DEVICE)
-            if (device != null) {
-                dataProcessor.connectDevice(device)
-            }
-        }
-
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         val navView: NavigationBarView = findViewById(R.id.nav_view)
         siStatusTextView = binding.siStatusView
+        siUsbConnection = SportIdentUsbConnection(
+            this, savedInstanceState, dataProcessor::connectDevice, dataProcessor::detachDevice
+        ) {
+            if (dataProcessor.currentState.value?.siReaderState?.status == SIReaderStatus.DISCONNECTED) {
+                siStatusTextView.setText(siUsbConnection.disconnectedStatus)
+            }
+        }
+        siStatusTextView.setOnClickListener {
+            if (siUsbConnection.disconnectedStatus == R.string.si_usb_permission_missing) {
+                siUsbConnection.retryPermission()
+            }
+        }
 
         val navController = findNavController(R.id.nav_host_fragment_activity_main)
         navView.setupWithNavController(navController)
@@ -260,23 +249,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun detectSIReader() {
-        val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-        val deviceList = usbManager.deviceList
-        DebugLog.debug("USB", "Scanning ${deviceList.size} attached USB devices")
-        for (device in deviceList.values) {
-            if (usbManager.hasPermission(device)) {
-                DebugLog.info("USB", "Connecting already-permitted device ${device.vendorId}:${device.productId}")
-                dataProcessor.connectDevice(device)
-            } else {
-                DebugLog.debug("USB", "Attached device lacks permission ${device.vendorId}:${device.productId}")
-            }
-        }
+    override fun onSaveInstanceState(outState: Bundle) {
+        siUsbConnection.saveState(outState)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(usbDetachReceiver)
+        siUsbConnection.close()
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -287,7 +267,7 @@ class MainActivity : AppCompatActivity() {
             val device: UsbDevice? = intent.parcelableExtraCompat(UsbManager.EXTRA_DEVICE)
             if (device != null) {
                 DebugLog.info("USB", "USB attach intent for device ${device.vendorId}:${device.productId}")
-                dataProcessor.connectDevice(device)
+                siUsbConnection.refresh()
             }
             handleOpenedSeriesArchive(intent)
         }
@@ -445,7 +425,7 @@ class MainActivity : AppCompatActivity() {
 
                 SIReaderStatus.DISCONNECTED -> {
                     lastSiStationModeWarningKey = null
-                    siStatusTextView.setText(R.string.si_disconnected)
+                    siStatusTextView.setText(siUsbConnection.disconnectedStatus)
                 }
 
                 SIReaderStatus.READING -> {

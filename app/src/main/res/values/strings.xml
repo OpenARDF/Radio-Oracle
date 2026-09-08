@@ -240,6 +240,8 @@
     <string name="si_station_wrong_mode_title">SI Station Mode Warning</string>
     <string name="si_station_wrong_mode_message">SI station %1$d is connected, but it appears to be in %2$s mode instead of READOUT/SI MASTER. Reprogram the station in a download-capable mode before using it for SI-card downloads.</string>
     <string name="si_disconnected">SI station disconnected</string>
+    <string name="si_usb_permission_missing">SI station needs USB access. Tap here to allow.</string>
+    <string name="si_waiting_for_station">SI station detected. Waiting for station response.</string>
     <string name="si_reading">SI station %1$d reading card %2$d </string>
     <string name="si_card_error">SI station %1$d, error reading card %2$d </string>
     <string name="si_card_read">SI station %1$d, read card %2$d </string>
