@@ -55,7 +55,7 @@ data class EventCompetitorDetails(
             val categoryNamesById = raceData.categories.associate { it.category.id to it.category.name }
             val categoriesById = raceData.categories.associate { it.category.id to it.category }
             val eventYear = raceData.race.startDateTimeIso.trim().take(4).toIntOrNull()
-            return raceData.competitorData
+            return raceData.competitorData.registrations()
                 .map { competitorData ->
                     val competitorCategory = competitorData.competitorCategory
                     val competitor = competitorCategory.competitor

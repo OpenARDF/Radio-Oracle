@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.shared.printing
 
+import org.openardf.radiooracle.shared.event.resultCompetitorData
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.domain.toResultStatusCode
@@ -93,7 +94,7 @@ object FinishTicketRenderer {
     }
 
     private fun EventRaceData.findReadoutContext(resultId: String): ReadoutContext? {
-        competitorData.forEach { competitorData ->
+        resultCompetitorData().forEach { competitorData ->
             val readoutData = competitorData.readoutData
             if (readoutData?.result?.id == resultId) {
                 return ReadoutContext(readoutData, competitorData.competitorCategory)

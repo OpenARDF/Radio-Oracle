@@ -19,6 +19,7 @@
 
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.event.registrations
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventRaceData
 
@@ -130,7 +131,7 @@ object IofXmlImportMatcher {
             )
         }
 
-        val categoryCompetitors = raceData.competitorData.filter { data ->
+        val categoryCompetitors = raceData.competitorData.registrations().filter { data ->
             data.competitorCategory.category?.id == category.id ||
                 data.competitorCategory.competitor.categoryId == category.id
         }

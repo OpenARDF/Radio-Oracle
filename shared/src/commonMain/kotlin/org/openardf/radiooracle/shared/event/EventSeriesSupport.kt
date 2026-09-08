@@ -250,7 +250,7 @@ object EventSeriesSupport {
                 usedTargets += override.toCompetitorId
             }
 
-        fromEvent.projectFile.raceData.competitorData
+        fromEvent.projectFile.raceData.competitorData.registrations()
             .map { it.competitorCategory.competitor }
             .forEach { competitor ->
                 if (matches.any { it.fromCompetitorId == competitor.id }) {
@@ -297,7 +297,7 @@ object EventSeriesSupport {
     }
 
     fun startRowsFromEventFile(projectFile: EventProjectFile): List<CompetitorStartCsvImportRow> =
-        EventStartNumbers.assignFromDrawnStartTimes(projectFile).raceData.competitorData
+        EventStartNumbers.assignFromDrawnStartTimes(projectFile).raceData.competitorData.registrations()
             .map { it.competitorCategory.competitor }
             .filter { it.drawnStartTimeSeconds != null }
             .sortedWith(compareBy({ it.drawnStartTimeSeconds ?: Long.MAX_VALUE }, { it.fullName() }))
@@ -322,7 +322,7 @@ object EventSeriesSupport {
         issueLabel: String,
         issues: MutableList<EventSeriesValidationIssue>
     ): Map<String, EventCompetitor> {
-        val grouped = event.projectFile.raceData.competitorData
+        val grouped = event.projectFile.raceData.competitorData.registrations()
             .map { it.competitorCategory.competitor }
             .mapNotNull { competitor -> key(competitor)?.let { it to competitor } }
             .groupBy({ it.first }, { it.second })

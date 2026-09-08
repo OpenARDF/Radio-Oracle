@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.registrations
 import java.io.PrintStream
 import java.math.BigInteger
 import java.net.HttpURLConnection
@@ -484,7 +485,7 @@ object DesktopAutomationCli {
                     "path" to path.toAbsolutePath().normalize().toString(),
                     "raceName" to projectFile.raceData.race.name,
                     "categoryCount" to projectFile.raceData.categories.size,
-                    "competitorCount" to projectFile.raceData.competitorData.size,
+                    "competitorCount" to projectFile.raceData.competitorData.registrations().size,
                     "unmatchedReadoutCount" to projectFile.raceData.unmatchedReadoutData.size,
                     "validationErrorCount" to validationErrors.size,
                     "validationErrors" to validationErrors
@@ -911,7 +912,7 @@ object DesktopAutomationCli {
                     "target" to target.toAbsolutePath().normalize().toString(),
                     "raceName" to projectFile.raceData.race.name,
                     "categoryCount" to projectFile.raceData.categories.size,
-                    "competitorCount" to projectFile.raceData.competitorData.size,
+                    "competitorCount" to projectFile.raceData.competitorData.registrations().size,
                     "unmatchedReadoutCount" to projectFile.raceData.unmatchedReadoutData.size,
                     "validationErrorCount" to validationErrors.size,
                     "validationErrors" to validationErrors
@@ -944,7 +945,7 @@ object DesktopAutomationCli {
                     "target" to target.toAbsolutePath().normalize().toString(),
                     "raceName" to projectFile.raceData.race.name,
                     "categoryCount" to projectFile.raceData.categories.size,
-                    "competitorCount" to projectFile.raceData.competitorData.size,
+                    "competitorCount" to projectFile.raceData.competitorData.registrations().size,
                     "unmatchedReadoutCount" to projectFile.raceData.unmatchedReadoutData.size,
                     "validationErrorCount" to validationErrors.size,
                     "validationErrors" to validationErrors
@@ -1001,7 +1002,7 @@ object DesktopAutomationCli {
                     "invalidRowCount" to result.invalidLines.size,
                     "warnings" to outcome.warnings,
                     "categoryCount" to outcome.projectFile.raceData.categories.size,
-                    "competitorCount" to outcome.projectFile.raceData.competitorData.size,
+                    "competitorCount" to outcome.projectFile.raceData.competitorData.registrations().size,
                     "validationErrorCount" to validationErrors.size,
                     "validationErrors" to validationErrors
                 )

@@ -46,7 +46,7 @@ data class EventCategoryDetails(
     companion object {
         /** Builds display rows sorted the same way category administration presents them. */
         fun from(raceData: EventRaceData, useAliases: Boolean = true): List<EventCategoryDetails> {
-            val assignedCompetitorCountByCategoryId = raceData.competitorData
+            val assignedCompetitorCountByCategoryId = raceData.competitorData.registrations()
                 .mapNotNull { competitorData ->
                     competitorData.competitorCategory.category?.id
                         ?: competitorData.competitorCategory.competitor.categoryId

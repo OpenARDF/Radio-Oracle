@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.event.resultCompetitorData
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
@@ -49,7 +50,7 @@ object ResultReportExports {
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
         routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): ResultReport {
-        val placedByCategory = raceData.competitorData
+        val placedByCategory = raceData.resultCompetitorData()
             .groupBy { it.resultCategoryId() }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
         val controlLabelsByCode = FinalResultJsonExports.controlLabelsByCode(raceData)

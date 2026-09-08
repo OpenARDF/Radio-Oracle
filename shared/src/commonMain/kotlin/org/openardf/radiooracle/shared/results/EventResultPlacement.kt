@@ -65,12 +65,12 @@ object EventResultPlacement {
 
     /** Assigns places within each category while preserving the caller's competitor order. */
     fun assignPlacesByCategory(competitors: List<EventCompetitorData>): List<EventCompetitorData> {
-        val placedByCompetitorId = groupByCategoryAndSortByPlace(competitors)
+        val placedByResultId = groupByCategoryAndSortByPlace(competitors)
             .values
             .flatten()
-            .associateBy { it.competitorCategory.competitor.id }
+            .associateBy { it.readoutData?.result?.id }
         return competitors.map { competitorData ->
-            placedByCompetitorId[competitorData.competitorCategory.competitor.id] ?: competitorData
+            competitorData.readoutData?.result?.id?.let { placedByResultId[it] } ?: competitorData
         }
     }
 

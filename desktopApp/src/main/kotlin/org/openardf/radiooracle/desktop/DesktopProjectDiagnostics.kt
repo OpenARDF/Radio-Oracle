@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.registrations
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectSummary
 import org.openardf.radiooracle.shared.event.EventValidationRules
@@ -102,7 +103,7 @@ data class DesktopProjectDiagnostics(
             projectFile: EventProjectFile,
             protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
         ): List<String> {
-            val competitorCountsByCategoryId = projectFile.raceData.competitorData
+            val competitorCountsByCategoryId = projectFile.raceData.competitorData.registrations()
                 .mapNotNull { data ->
                     data.competitorCategory.competitor.categoryId ?: data.competitorCategory.category?.id
                 }

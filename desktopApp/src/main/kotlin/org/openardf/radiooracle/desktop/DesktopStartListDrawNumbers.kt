@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.registrations
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.StartDrawOptions
 import java.nio.file.Path
@@ -98,7 +99,7 @@ object DesktopStartListDrawNumbers {
         }
 
     fun startAssignmentSignature(projectFile: EventProjectFile): String =
-        projectFile.raceData.competitorData
+        projectFile.raceData.competitorData.registrations()
             .map { data ->
                 val competitor = data.competitorCategory.competitor
                 "${competitor.id}:${competitor.drawnStartTimeSeconds ?: "none"}"

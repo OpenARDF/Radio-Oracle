@@ -80,6 +80,10 @@ class RaceViewModel : ViewModel() {
             ?.name
     }
 
+    /** Creates a standalone race from one selected row, including a series member. */
+    suspend fun createRaceFromExisting(sourceRaceId: UUID, settings: Race, includeCompetitors: Boolean): Race =
+        dataProcessor.createRaceFromExisting(sourceRaceId, settings, includeCompetitors)
+
     /** Saves an imported full-race payload on a background dispatcher. */
     fun saveRaceData(raceData: RaceData) = CoroutineScope(Dispatchers.IO).launch {
         dataProcessor.saveRaceData(raceData)

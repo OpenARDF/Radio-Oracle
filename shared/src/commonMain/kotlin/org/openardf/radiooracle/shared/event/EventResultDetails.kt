@@ -55,7 +55,7 @@ data class EventResultDetails(
                 keySelector = { it.siCode },
                 valueTransform = { it.publicLabel?.takeIf(String::isNotBlank) ?: it.label }
             )
-            return EventResultPlacement.assignPlacesByCategory(raceData.competitorData).mapNotNull { competitorData ->
+            return EventResultPlacement.assignPlacesByCategory(raceData.resultCompetitorData()).mapNotNull { competitorData ->
                 val readoutData = competitorData.readoutData ?: return@mapNotNull null
                 val competitor = competitorData.competitorCategory.competitor
                 val resultCategoryId = readoutData.result.categoryId ?: competitor.categoryId

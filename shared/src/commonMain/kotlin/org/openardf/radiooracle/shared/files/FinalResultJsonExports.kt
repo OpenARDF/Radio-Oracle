@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.event.resultCompetitorData
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -99,7 +100,7 @@ object FinalResultJsonExports {
             }
                 .map { it.toFinalCategory(controlsById, protectedCourseInfoByCategoryId) },
             aliases = androidAliases(raceData),
-            competitors = raceData.competitorData
+            competitors = raceData.resultCompetitorData()
                 .map { it.toFinalCompetitor(raceData) }
                 .sortedWith(
                     EventCategorySort.byName<FinalCompetitorJson> { it.competitorCategory }

@@ -24,6 +24,9 @@
 
 package org.openardf.radiooracle.backend
 
+import org.openardf.radiooracle.backend.shared.toRoomRaceData
+import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventProjectFactory
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -804,12 +807,27 @@ class DataProcessor private constructor(context: Context) {
 
     //-----------------------RACE DATA-----------------------
 
+    /** Copy setup through the portable model, then remap every Room identity before saving atomically. */
+    suspend fun createRaceFromExisting(sourceRaceId: UUID, settings: Race, includeCompetitors: Boolean): Race {
+        require(getRace(sourceRaceId) != null) { "The source race no longer exists." }
+        val source = EventProjectFile(raceData = getRaceData(sourceRaceId).toEventRaceData())
+        val project = EventProjectFactory.copyForNewRace(source, settings.id.toString(), settings.name,
+            settings.startDateTime.toString(), includeCompetitors)
+        val copied = project.raceData.copy(race = project.raceData.race.copy(
+            raceType = settings.raceType, raceLevel = settings.raceLevel, raceBand = settings.raceBand,
+            timeLimitSeconds = settings.timeLimit.seconds, apiKey = settings.apiKey
+        )).toRoomRaceData().withFreshImportIds()
+        saveRaceData(copied)
+        DebugLog.info("Races", "Created race from existing source=$sourceRaceId race=${copied.race.id} includeCompetitors=$includeCompetitors")
+        return copied.race
+    }
+
     suspend fun getRaceData(raceId: UUID): RaceData {
         val race = getRace(raceId)
         val categories = getCategoryDataForRace(raceId)
         val aliases = getAliasesByRace(raceId)
-        val competitorData =
-            ResultsProcessor.getCompetitorDataByRace(raceId, this)
+        // Race snapshots must include registrations that do not have a result yet.
+        val competitorData = getCompetitorDataFlowByRace(raceId).first()
         val unknownReadoutData =
             getResultDataFlowByRace(raceId).first().filter { it.competitorCategory == null }
                 .map { fil -> ReadoutData(fil.result, fil.punches) }

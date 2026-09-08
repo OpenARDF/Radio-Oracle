@@ -276,6 +276,22 @@ class RaceSelectionFragment : Fragment() {
                 RaceEditDialogFragment.RaceEditActions.CREATE -> {
                     raceViewModel.createRace(race)
                 }
+                RaceEditDialogFragment.RaceEditActions.COPY -> {
+                    val sourceId = UUID.fromString(bundle.getString(RaceEditDialogFragment.BUNDLE_KEY_SOURCE_RACE))
+                    val includeCompetitors = bundle.getBoolean(RaceEditDialogFragment.BUNDLE_KEY_COPY_COMPETITORS)
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        try {
+                            val created = withContext(Dispatchers.IO) {
+                                raceViewModel.createRaceFromExisting(sourceId, race, includeCompetitors)
+                            }
+                            Toast.makeText(requireContext(), getString(R.string.race_copy_created, created.name), Toast.LENGTH_LONG).show()
+                        } catch (error: kotlinx.coroutines.CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            displayAlert(error.message ?: getString(R.string.race_copy_failed), R.string.race_copy_failed)
+                        }
+                    }
+                }
                 //Edit an existing race
                 RaceEditDialogFragment.RaceEditActions.EDIT -> {
                     raceViewModel.updateRace(race)
@@ -303,6 +319,9 @@ class RaceSelectionFragment : Fragment() {
             1 -> exportRace(race.id)
             2 -> prepareRaceForDesktopUpload(race)
             3 -> confirmRaceDeletion(race)
+            4 -> findNavController().navigate(
+                RaceSelectionFragmentDirections.raceCreateOfModify(RaceEditDialogFragment.RaceEditActions.COPY, position, race)
+            )
         }
     }
 

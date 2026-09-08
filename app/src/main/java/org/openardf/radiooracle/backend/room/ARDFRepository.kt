@@ -58,6 +58,8 @@ import org.openardf.radiooracle.backend.room.entity.embeddeds.EventSeriesData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import org.openardf.radiooracle.backend.room.entity.embeddeds.ReadoutData
 import java.util.UUID
 
 class ARDFRepository private constructor(context: Context) {
@@ -177,11 +179,13 @@ class ARDFRepository private constructor(context: Context) {
         eventDatabase.competitorDao().getHighestStartNumberByRace(raceId)
 
     fun getCompetitorDataFlowByRace(raceId: UUID): Flow<List<CompetitorData>> =
-        eventDatabase.competitorDao().getCompetitorDataFlow(raceId).map { competitorData ->
-            RaceScopedAliasResolver.resolveCompetitorData(
-                competitorData,
-                getAliasesByRace(raceId)
-            )
+        combine(eventDatabase.competitorDao().getCompetitorDataFlow(raceId), getResultDataFlowByRace(raceId)) { registrations, results ->
+            val byCompetitor = results.groupBy { it.result.competitorId }
+            registrations.flatMap { registration ->
+                byCompetitor[registration.competitorCategory.competitor.id]?.map {
+                    registration.copy(readoutData = ReadoutData(it.result, it.punches))
+                } ?: listOf(registration.copy(readoutData = null))
+            }
         }
 
     suspend fun getCompetitorsByCategory(categoryId: UUID) =

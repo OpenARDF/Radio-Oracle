@@ -115,7 +115,7 @@ class EventResultPlacementTest {
                 }
             ),
             readoutData = readout?.let {
-                EventReadoutData(result = it, punches = emptyList())
+                EventReadoutData(result = it.copy(id = "$id-${it.id}", competitorId = id), punches = emptyList())
             }
         )
 

@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.resultCompetitorData
+import org.openardf.radiooracle.shared.event.registrations
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -3110,7 +3112,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 return false
             }
             return runCatching {
-                val competitorCount = currentProject.raceData.competitorData.size
+                val competitorCount = currentProject.raceData.competitorData.registrations().size
                 val readoutCount = currentProject.raceData.competitorData.count { it.readoutData != null }
                 projectFile = projectSession.updateCurrentProject { project ->
                     EventProjectEditor.removeAllCompetitors(project)
@@ -7311,7 +7313,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         if (isDeleteAllCompetitorsDialogVisible) {
             val currentProject = projectSession.currentProject
             DeleteAllCompetitorsDialog(
-                competitorCount = currentProject?.raceData?.competitorData?.size ?: 0,
+                competitorCount = currentProject?.raceData?.competitorData?.registrations()?.size ?: 0,
                 matchedReadoutCount = currentProject?.raceData?.competitorData?.count { it.readoutData != null } ?: 0,
                 onConfirm = {
                     if (deleteAllCompetitors()) {
@@ -13123,7 +13125,7 @@ internal fun desktopEventFileFolderText(eventFilePath: Path?, workingFolder: Pat
 }
 
 private fun EventRaceData.readoutEditDraft(resultId: String): DesktopReadoutEditDraft? {
-    competitorData.forEach { data ->
+    resultCompetitorData().forEach { data ->
         val readoutData = data.readoutData ?: return@forEach
         if (readoutData.result.id == resultId) {
             val competitor = data.competitorCategory.competitor
@@ -15120,7 +15122,7 @@ private fun SiReadoutSettingsPanel(
             selectedPolicy = readoutDuplicatePolicy,
             onPolicySelected = onSetReadoutDuplicatePolicy
         )
-        Text("Practice races create numbered downloads for changed times or controls and ignore unchanged downloads.")
+        Text("Practice races create numbered downloads for changed times or controls and report unchanged downloads as duplicates.")
         Button(
             onClick = onInsertTestSportIdentDownloads,
             enabled = isEventFileOpen
@@ -25431,7 +25433,7 @@ private fun EventCategoryData.importControlPointsText(): String =
 
 internal fun EventProjectFile.competitorImportRows(): List<CompetitorCsvImportRow> {
     val categoriesById = raceData.categories.associateBy { it.category.id }
-    return raceData.competitorData
+    return raceData.competitorData.registrations()
         .map { competitorData ->
             val competitor = competitorData.competitorCategory.competitor
             CompetitorCsvImportRow(

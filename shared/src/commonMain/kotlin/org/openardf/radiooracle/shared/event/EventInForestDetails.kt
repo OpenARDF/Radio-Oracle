@@ -52,7 +52,7 @@ data class EventInForestDetails(
             var notStartedCount = 0
             var unscheduledCount = 0
 
-            raceData.competitorData.forEach { competitorData ->
+            raceData.competitorData.registrations().forEach { competitorData ->
                 val competitor = competitorData.competitorCategory.competitor
                 val startSeconds = competitor.drawnStartTimeSeconds
                 val readoutStatus = competitorData.readoutData?.result?.resultStatus

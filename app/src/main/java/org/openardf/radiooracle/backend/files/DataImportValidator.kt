@@ -156,7 +156,7 @@ object DataImportValidator {
     ) {
 
         val duplicateSINumbers = ImportValidationRules.duplicateSINumbers(
-            competitors.map { it.competitorCategory.competitor.siNumber }
+            competitors.distinctBy { it.competitorCategory.competitor.id }.map { it.competitorCategory.competitor.siNumber }
         )
 
         for (comp in competitors) {

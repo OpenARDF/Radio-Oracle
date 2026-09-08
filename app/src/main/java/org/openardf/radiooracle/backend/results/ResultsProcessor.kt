@@ -39,6 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import org.openardf.radiooracle.backend.shared.withPracticeDisplayNames
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.openardf.radiooracle.R
@@ -58,6 +59,7 @@ import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.backend.room.enums.ResultStatus
 import org.openardf.radiooracle.backend.room.enums.SIRecordType
 import org.openardf.radiooracle.backend.shared.toEventCompetitorData
+import org.openardf.radiooracle.backend.shared.toEventCompetitor
 import org.openardf.radiooracle.backend.shared.toEventRaceData
 import org.openardf.radiooracle.backend.shared.toRoomCompetitor
 import org.openardf.radiooracle.backend.sounds.SoundProcessor
@@ -68,6 +70,8 @@ import org.openardf.radiooracle.backend.wrappers.ResultWrapper
 import org.openardf.radiooracle.backend.wrappers.StatisticsWrapper
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.event.EventCategorySort
+import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.PracticeReadoutPolicy
 import org.openardf.radiooracle.shared.results.CourseEvaluator
 import org.openardf.radiooracle.shared.results.EvaluationControlPoint
@@ -256,11 +260,13 @@ object ResultsProcessor {
 
         val isPractice = race.raceLevel == RaceLevel.PRACTICE
         val practiceRaceData = if (isPractice) dataProcessor.getRaceData(race.id).toEventRaceData() else null
-        if (practiceRaceData != null && PracticeReadoutPolicy.containsIdenticalReadout(
-                practiceRaceData, cardData.toSharedReadout()
-            )
-        ) {
-            DebugLog.info("SI", "Unchanged Practice card read ignored si=${cardData.siNumber} race=${race.id}")
+        val identical = practiceRaceData?.let { PracticeReadoutPolicy.identicalReadout(it, cardData.toSharedReadout()) }
+        if (identical != null) {
+            if (repairPracticeReadout(practiceRaceData, identical, race, dataProcessor)) {
+                return true
+            }
+            DebugLog.warn("SI", "Duplicate Practice card read detected reason=unchanged-data si=${cardData.siNumber} race=${race.id} existingResult=${identical.result.id}")
+            showDuplicateReadoutFeedback(context, cardData.siNumber)
             return false
         }
 
@@ -312,37 +318,13 @@ object ResultsProcessor {
                         "Duplicate card read ignored reason=$duplicateReason " +
                             "id=${cardData.siNumber} race=${race.id} existingResult=${existingResult.id}"
                     )
-                    // Run on the main UI thread.
-                    CoroutineScope(Dispatchers.Main).launch {
-                        Toast.makeText(
-                            context,
-                            if (namedUnmatchedReadout) {
-                                context.getString(
-                                    R.string.readout_named_unmatched_si_exists,
-                                    cardData.siNumber
-                                )
-                            } else {
-                                context.getString(R.string.readout_si_exists, cardData.siNumber)
-                            },
-                            Toast.LENGTH_LONG
-                        )
-                            .show()
-                    }
-                    if (!namedUnmatchedReadout) {
-                        isToMakeSound(context, SoundType.DUPLICATE)
-                    }
+                    showDuplicateReadoutFeedback(context, cardData.siNumber, namedUnmatchedReadout)
                     return false
                 }
             }
         }
 
         val competitor = when {
-            isPractice && exist -> {
-                dataProcessor.ensurePracticeCompetitorForCard(cardData, race)
-                val raceData = dataProcessor.getRaceData(race.id).toEventRaceData()
-                PracticeReadoutPolicy.repeatCompetitor(raceData, cardData.siNumber, UUID.randomUUID().toString())
-                    ?.toRoomCompetitor()?.also { dataProcessor.createOrUpdateCompetitor(it) }
-            }
             isPractice -> dataProcessor.ensurePracticeCompetitorForCard(cardData, race)
             !createNewReadout -> dataProcessor.getCompetitorBySINumber(cardData.siNumber, race.id)
             else -> null
@@ -428,6 +410,35 @@ object ResultsProcessor {
             isToMakeSound(context, SoundType.RENT)
         }
 
+        return true
+    }
+
+    private fun showDuplicateReadoutFeedback(
+        context: Context,
+        siNumber: Int,
+        namedUnmatchedReadout: Boolean = false
+    ) {
+        CoroutineScope(Dispatchers.Main).launch {
+            val message = if (namedUnmatchedReadout) R.string.readout_named_unmatched_si_exists else R.string.readout_si_exists
+            Toast.makeText(context, context.getString(message, siNumber), Toast.LENGTH_LONG).show()
+        }
+        if (!namedUnmatchedReadout) isToMakeSound(context, SoundType.DUPLICATE)
+    }
+
+    private suspend fun repairPracticeReadout(
+        raceData: EventRaceData,
+        identical: EventReadoutData,
+        race: Race,
+        dataProcessor: DataProcessor
+    ): Boolean {
+        if (identical.result.competitorId != null) return false
+        val registered = raceData.competitorData.map { it.competitorCategory.competitor }
+            .distinctBy { it.id }.singleOrNull { it.siNumber == identical.result.siNumber } ?: return false
+        val competitorId = UUID.fromString(registered.id)
+        val result = dataProcessor.getResult(UUID.fromString(identical.result.id))
+        dataProcessor.createOrUpdateResult(result.copy(competitorId = competitorId, sent = false))
+        dataProcessor.createOrUpdateCompetitor(registered.toRoomCompetitor())
+        DebugLog.info("SI", "Repaired Practice readout registration result=${result.id} si=${result.siNumber} competitor=$competitorId race=${race.id}")
         return true
     }
 
@@ -778,22 +789,23 @@ object ResultsProcessor {
         race: Race,
         dataProcessor: DataProcessor
     ) {
-        var result = dataProcessor.getResultByCompetitor(competitorId)
+        val results = dataProcessor.getResultDataFlowByRace(race.id).first()
+            .map { it.result }.filter { it.competitorId == competitorId }.toMutableList()
         val competitor = dataProcessor.getCompetitor(competitorId)
 
         // Only claim an unmatched SI result; another Practice attempt keeps its own result.
-        if (result == null && competitor?.siNumber != null) {
+        if (results.isEmpty() && competitor?.siNumber != null) {
             val siResult = dataProcessor.getResultBySINumber(
                 competitor.siNumber!!, competitor.raceId
             )
             if (siResult != null && siResult.competitorId == null) {
-                result = siResult
-                result.competitorId = competitorId
+                siResult.competitorId = competitorId
+                results.add(siResult)
             }
         }
 
         //If result is found, recalculate it
-        if (result != null) {
+        results.forEach { result ->
             val punches = ArrayList(dataProcessor.getPunchesByResult(result.id))
             val category = competitor?.categoryId?.let { dataProcessor.getCategory(it) }
 
@@ -815,25 +827,25 @@ object ResultsProcessor {
         }
     }
 
-    suspend fun getCompetitorPlace(
-        competitorId: UUID,
+    suspend fun getResultPlace(
+        resultId: UUID,
         raceId: UUID,
         dataProcessor: DataProcessor
     ): Int? {
         val results = dataProcessor.getCompetitorDataFlowByRace(raceId)
         val sorted = results.first().groupByCategoryAndSortByPlace()
 
-        // Find the competitor in the sorted results
+        // Each Practice attempt has a separate place, even when the competitor ID is shared.
         return sorted.values.flatten()
-            .find { it.competitorCategory.competitor.id == competitorId }?.readoutData?.result?.place
+            .find { it.readoutData?.result?.id == resultId }?.readoutData?.result?.place
 
     }
 
     fun List<CompetitorData>.sortByPlace(): List<CompetitorData> {
-        val originalByCompetitorId = associateBy { it.competitorCategory.competitor.id.toString() }
+        val originalByResultId = associateBy { it.readoutData?.result?.id?.toString() ?: it.competitorCategory.competitor.id.toString() }
         return EventResultPlacement.sortByPlace(map { it.toEventCompetitorData() })
             .mapNotNull { sharedCompetitorData ->
-                val original = originalByCompetitorId[sharedCompetitorData.competitorCategory.competitor.id]
+                val original = originalByResultId[sharedCompetitorData.readoutData?.result?.id ?: sharedCompetitorData.competitorCategory.competitor.id]
                 sharedCompetitorData.readoutData?.let { sharedReadoutData ->
                     original?.readoutData?.result?.place = sharedReadoutData.result.place
                 }
@@ -885,7 +897,10 @@ object ResultsProcessor {
         dataProcessor: DataProcessor
     ): Flow<List<ResultWrapper>> {
         return dataProcessor.getCompetitorDataFlowByRace(raceId).map { resultDataList ->
-            resultDataList.toResultWrappers()
+            val displayRows = if (dataProcessor.getRace(raceId)?.raceLevel == RaceLevel.PRACTICE) {
+                resultDataList.withPracticeDisplayNames()
+            } else resultDataList
+            displayRows.toResultWrappers()
         }
     }
 

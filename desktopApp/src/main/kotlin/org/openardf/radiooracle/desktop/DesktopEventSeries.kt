@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.registrations
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_NAMED_FILE_SUFFIX
 import org.openardf.radiooracle.shared.event.EventCompetitor
@@ -697,10 +698,10 @@ object DesktopEventSeriesActions {
                     DesktopEventSeriesCompetitorMatchSummary(
                         firstEventName = left.event.displayName,
                         firstSeriesEventId = left.event.seriesEventId,
-                        firstCompetitorCount = left.projectFile.raceData.competitorData.size,
+                        firstCompetitorCount = left.projectFile.raceData.competitorData.registrations().size,
                         secondEventName = right.event.displayName,
                         secondSeriesEventId = right.event.seriesEventId,
-                        secondCompetitorCount = right.projectFile.raceData.competitorData.size,
+                        secondCompetitorCount = right.projectFile.raceData.competitorData.registrations().size,
                         includesCurrentEvent = normalizedCurrentPath != null &&
                             (leftPath == normalizedCurrentPath || rightPath == normalizedCurrentPath),
                         matchCount = report.matches.size,

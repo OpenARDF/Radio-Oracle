@@ -74,7 +74,7 @@ object EventCategoryCompetitorSync {
                 EventCategoryCompetitorSyncMissingCategory(
                     categoryId = categoryId,
                     categoryName = category.name,
-                    competitorCount = raceData.competitorData.count { data ->
+                    competitorCount = raceData.competitorData.registrations().count { data ->
                         data.effectiveCategoryId() == categoryId
                     },
                     existingEquivalentCategoryId = equivalentCategoryId
@@ -83,7 +83,7 @@ object EventCategoryCompetitorSync {
             .sortedBy { it.categoryName }
         val categoryIdsReceivingRepairedAssignments = missingCategories
             .mapNotNullTo(mutableSetOf()) { it.existingEquivalentCategoryId }
-        val assignedCountsByCategoryId = raceData.competitorData
+        val assignedCountsByCategoryId = raceData.competitorData.registrations()
             .mapNotNull { data -> data.effectiveCategoryId() }
             .groupingBy { it }
             .eachCount()
@@ -168,7 +168,7 @@ object EventCategoryCompetitorSync {
             }
         }
 
-        val competitorsByCategoryId = updatedProject.raceData.competitorData
+        val competitorsByCategoryId = updatedProject.raceData.competitorData.registrations()
             .map { it.competitorCategory.competitor }
             .groupBy { it.categoryId }
         updatedProject = updatedProject.copy(

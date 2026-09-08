@@ -36,6 +36,17 @@ import org.robolectric.RuntimeEnvironment
 @RunWith(RobolectricTestRunner::class)
 class RaceMenuTest {
     @Test
+    fun eachRaceMenuIncludesNewRaceFromExisting() {
+        val context = RuntimeEnvironment.getApplication()
+        val popup = PopupMenu(context, View(context))
+        popup.menuInflater.inflate(R.menu.context_menu_race, popup.menu)
+        assertEquals(listOf(R.id.menu_item_edit_race, R.id.menu_item_new_race_from_existing,
+            R.id.menu_item_export_race, R.id.menu_item_send_race_desktop, R.id.menu_item_delete_race),
+            (0 until popup.menu.size()).map { popup.menu.getItem(it).itemId })
+        assertEquals("New Race from Existing...", popup.menu.findItem(R.id.menu_item_new_race_from_existing).title.toString())
+    }
+
+    @Test
     fun sportIdentAppearsBetweenGlobalSettingsAndAbout() {
         val context = RuntimeEnvironment.getApplication()
         val popup = PopupMenu(context, View(context))

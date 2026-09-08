@@ -58,6 +58,7 @@ import org.openardf.radiooracle.ui.categories.CategoryDisplaySort
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import org.openardf.radiooracle.backend.shared.withPracticeReadoutNames
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -162,12 +163,12 @@ class SelectedRaceViewModel : ViewModel() {
                 }
                 competitorJob = launch {
                     dataProcessor.getCompetitorDataFlowByRace(id).collect {
-                        _competitorData.value = it
+                        _competitorData.value = it.groupBy { row -> row.competitorCategory.competitor.id }.values.map { rows -> rows.last() }
                     }
                 }
                 readoutJob = launch {
                     dataProcessor.getResultDataFlowByRace(id).collect {
-                        _readoutData.value = it
+                        _readoutData.value = if (race.raceLevel == org.openardf.radiooracle.shared.domain.RaceLevel.PRACTICE) it.withPracticeReadoutNames() else it
                     }
                 }
 

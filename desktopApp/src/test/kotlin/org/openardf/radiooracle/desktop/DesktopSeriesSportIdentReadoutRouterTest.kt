@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.resultCompetitorData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -248,28 +249,30 @@ class DesktopSeriesSportIdentReadoutRouterTest {
 
     @Test
     fun blankPracticeCardStartsOnlyPracticeEventsInMixedRaceLevelSeries() {
-        val store = FakeSeriesStore()
-        val manifestPath = Path.of("/series/events.radio-oracle.json")
-        val firstPath = Path.of("/series/first.rom.json")
-        val secondPath = Path.of("/series/second.rom.json")
-        store.seriesFiles[manifestPath] = seriesFile(
-            event("first", "first.rom.json", "First"),
-            event("second", "second.rom.json", "Second")
-        )
-        store.eventFiles[firstPath] = project("first-race", 31, raceLevel = RaceLevel.PRACTICE)
-        store.eventFiles[secondPath] = project("second-race", 41, raceLevel = RaceLevel.REGIONAL)
+        for (level in RaceLevel.entries.filter { it != RaceLevel.PRACTICE }) {
+            val store = FakeSeriesStore()
+            val manifestPath = Path.of("/series/events.radio-oracle.json")
+            val firstPath = Path.of("/series/first.rom.json")
+            val secondPath = Path.of("/series/second.rom.json")
+            store.seriesFiles[manifestPath] = seriesFile(
+                event("first", "first.rom.json", "First"),
+                event("second", "second.rom.json", "Second")
+            )
+            store.eventFiles[firstPath] = project("first-race", 31, raceLevel = RaceLevel.PRACTICE)
+            store.eventFiles[secondPath] = project("second-race", 41, raceLevel = level)
 
-        val update = DesktopSeriesSportIdentReadoutRouter.startPracticeCompetitorInForestAcrossSeries(
-            store = store,
-            manifestPath = manifestPath,
-            readout = blankReadout(),
-            readoutDateTime = LocalDateTime.parse("2026-06-23T18:05:00")
-        )
+            val update = DesktopSeriesSportIdentReadoutRouter.startPracticeCompetitorInForestAcrossSeries(
+                store = store,
+                manifestPath = manifestPath,
+                readout = blankReadout(),
+                readoutDateTime = LocalDateTime.parse("2026-06-23T18:05:00")
+            )
 
-        assertEquals(setOf(firstPath), update.updatedEventPaths)
-        assertEquals(1, update.updatedCompetitorCount)
-        assertEquals(1, store.eventFiles.getValue(firstPath).raceData.competitorData.size)
-        assertEquals(emptyList<EventProjectFile>(), listOf(store.eventFiles.getValue(secondPath)).filter { it.raceData.competitorData.isNotEmpty() })
+            assertEquals(setOf(firstPath), update.updatedEventPaths)
+            assertEquals(1, update.updatedCompetitorCount)
+            assertEquals(1, store.eventFiles.getValue(firstPath).raceData.competitorData.size)
+            assertEquals(emptyList<EventProjectFile>(), listOf(store.eventFiles.getValue(secondPath)).filter { it.raceData.competitorData.isNotEmpty() })
+        }
     }
 
     @Test
@@ -334,7 +337,7 @@ class DesktopSeriesSportIdentReadoutRouterTest {
         val west = store.eventFiles.getValue(westPath).raceData
         assertEquals(listOf("RUNNER Alice"), east.competitorData.map { it.competitorCategory.competitor.fullName() })
         assertEquals(listOf("RUNNER Alice", "RUNNER Alice (2)", "RUNNER Alice (3)"),
-            west.competitorData.map { it.competitorCategory.competitor.fullName() })
+            west.resultCompetitorData().map { it.competitorCategory.competitor.fullName() })
         assertEquals(listOf("result-1", "result-2", "result-3"), west.competitorData.map { it.readoutData!!.result.id })
         assertEquals(emptyList<Any>(), west.unmatchedReadoutData)
     }

@@ -344,6 +344,7 @@ data class EventRaceData(
     val race: EventRace,
     val categories: List<EventCategoryData>,
     val aliases: List<EventAlias>,
+    /** One row per result (or an empty registration); repeated competitor IDs refer to the same person. */
     val competitorData: List<EventCompetitorData>,
     val unmatchedReadoutData: List<EventReadoutData>,
     val controls: List<EventControl> = emptyList(),

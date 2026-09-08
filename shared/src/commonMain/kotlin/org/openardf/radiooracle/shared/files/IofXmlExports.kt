@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.event.resultCompetitorData
+import org.openardf.radiooracle.shared.event.registrations
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -100,7 +102,7 @@ object IofXmlExports {
             append("""<EntryList xmlns="$IOF_NAMESPACE" iofVersion="3.0" creator="${creator.xmlEscaped()}">""")
             append('\n')
             appendEvent(raceData, raceStart)
-            raceData.competitorData
+            raceData.competitorData.registrations()
                 .map { it.competitorCategory.competitor }
                 .sortedWith(compareBy<EventCompetitor>({ categoriesById[it.categoryId]?.category?.order ?: Int.MAX_VALUE }, { it.startNumber ?: Int.MAX_VALUE }, { it.fullName() }))
                 .forEach { competitor ->
@@ -143,7 +145,7 @@ object IofXmlExports {
     ): String {
         publicationStatus?.let { PublicResultsPublicationRules.requireReady(raceData, it) }
         val raceStart = parseRaceStart(raceData.race.startDateTimeIso)
-        val placedByCategory = raceData.competitorData
+        val placedByCategory = raceData.resultCompetitorData()
             .groupBy { it.resultCategoryId() }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
         return buildString {
@@ -616,7 +618,7 @@ object IofXmlExports {
     }
 
     private fun EventRaceData.competitorsFor(categoryData: EventCategoryData): List<EventCompetitor> =
-        competitorData
+        competitorData.registrations()
             .map { it.competitorCategory.competitor }
             .filter { it.categoryId == categoryData.category.id }
 

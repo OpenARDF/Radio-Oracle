@@ -40,7 +40,7 @@ data class EventProjectSummary(
             return EventProjectSummary(
                 raceName = raceData.race.name,
                 categoryCount = raceData.categories.size,
-                competitorCount = raceData.competitorData.size,
+                competitorCount = raceData.competitorData.registrations().size,
                 readoutCount = competitorReadoutCount + raceData.unmatchedReadoutData.size,
                 resultCount = competitorReadoutCount
             )

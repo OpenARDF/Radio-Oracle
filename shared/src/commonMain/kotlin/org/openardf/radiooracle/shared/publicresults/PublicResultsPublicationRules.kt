@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.shared.publicresults
 
+import org.openardf.radiooracle.shared.event.registrations
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.PRELIMINARY_RESULT_NOTICE
@@ -58,7 +59,7 @@ object PublicResultsPublicationRules {
         }
 
         val issues = mutableListOf<String>()
-        val competitorsWithoutResults = raceData.competitorData
+        val competitorsWithoutResults = raceData.competitorData.registrations()
             .filter { it.readoutData == null }
             .map { it.competitorCategory.competitor.fullName() }
         if (competitorsWithoutResults.isNotEmpty()) {
@@ -68,14 +69,14 @@ object PublicResultsPublicationRules {
             )
         }
 
-        val competitorsWithoutBibs = raceData.competitorData
+        val competitorsWithoutBibs = raceData.competitorData.registrations()
             .filter { it.competitorCategory.competitor.bibNumber.isBlank() }
             .map { it.competitorCategory.competitor.fullName() }
         if (competitorsWithoutBibs.isNotEmpty()) {
             issues += summarizedNames("competitors have no bib number", competitorsWithoutBibs)
         }
 
-        val duplicateBibs = raceData.competitorData
+        val duplicateBibs = raceData.competitorData.registrations()
             .map { it.competitorCategory.competitor }
             .filter { it.bibNumber.isNotBlank() }
             .groupBy { it.bibNumber.trim() }

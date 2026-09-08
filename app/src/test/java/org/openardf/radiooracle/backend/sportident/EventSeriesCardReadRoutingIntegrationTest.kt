@@ -24,7 +24,18 @@
 
 package org.openardf.radiooracle.backend.sportident
 
+import org.openardf.radiooracle.backend.shared.toEventReadoutData
+import org.openardf.radiooracle.shared.event.EventProjectFileJson
+import org.openardf.radiooracle.shared.event.resultCompetitorData
+import org.openardf.radiooracle.backend.results.ResultsProcessor
+import org.openardf.radiooracle.backend.shared.toRoomRaceData
+import org.openardf.radiooracle.backend.room.withFreshImportIds
+import org.openardf.radiooracle.backend.shared.withPracticeDisplayNames
+import org.openardf.radiooracle.backend.shared.toEventRaceData
+import org.openardf.radiooracle.shared.event.EventProjectSummary
+import org.openardf.radiooracle.shared.event.EventProjectFile
 import androidx.preference.PreferenceManager
+import android.os.Looper
 import org.openardf.radiooracle.R
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.async
@@ -57,6 +68,9 @@ import org.openardf.radiooracle.backend.sportident.SIPort.CardData
 import org.openardf.radiooracle.backend.sportident.SIPort.PunchData
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowMediaPlayer
+import org.robolectric.shadows.ShadowToast
 import org.robolectric.annotation.Config
 import java.time.Duration
 import java.time.LocalDateTime
@@ -312,45 +326,47 @@ class EventSeriesCardReadRoutingIntegrationTest {
 
     @Test
     fun nonPracticeSeriesCardReadStoresResultInMatchedEventAndRequestsSelection() = runBlocking {
-        val processor = DataProcessor.get()
-        val day1 = raceData(
-            "Regional Day 1",
-            listOf(31, 32),
-            siNumber = 1001,
-            raceLevel = RaceLevel.REGIONAL
-        )
-        val day2 = raceData(
-            "Regional Day 2",
-            listOf(41, 42),
-            siNumber = 1001,
-            raceLevel = RaceLevel.REGIONAL
-        )
-        val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
-        processor.saveRaceData(day1)
-        processor.saveRaceData(day2)
-        processor.saveEventSeries(
-            series = series,
-            members = listOf(
-                member(series.seriesId, "day-1", day1, order = 0),
-                member(series.seriesId, "day-2", day2, order = 1)
+        for (level in RaceLevel.entries.filter { it != RaceLevel.PRACTICE }) {
+            val processor = DataProcessor.get()
+            val day1 = raceData(
+                "$level Day 1",
+                listOf(31, 32),
+                siNumber = 1001,
+                raceLevel = level
             )
-        )
+            val day2 = raceData(
+                "$level Day 2",
+                listOf(41, 42),
+                siNumber = 1001,
+                raceLevel = level
+            )
+            val series = EventSeries(seriesId = "series-routing-${UUID.randomUUID()}", name = "Routing Series")
+            processor.saveRaceData(day1)
+            processor.saveRaceData(day2)
+            processor.saveEventSeries(
+                series = series,
+                members = listOf(
+                    member(series.seriesId, "day-1", day1, order = 0),
+                    member(series.seriesId, "day-2", day2, order = 1)
+                )
+            )
 
-        val selectionRequest = async {
-            withTimeout(1_000) { processor.raceSelectionRequests.first() }
+            val selectionRequest = async {
+                withTimeout(1_000) { processor.raceSelectionRequests.first() }
+            }
+            val stored = processor.processCardDataForCurrentRaceOrSeries(
+                cardData = card(siNumber = 1001, punches = listOf(41, 42)),
+                currentRace = day1.race
+            )
+
+            assertEquals(true, stored)
+            assertEquals(day2.race.id, selectionRequest.await())
+            assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(day1.race.id))
+            assertEquals(
+                listOf(ResultDataSummary(raceId = day2.race.id, siNumber = 1001)),
+                processor.resultSummaries(day2.race.id)
+            )
         }
-        val stored = processor.processCardDataForCurrentRaceOrSeries(
-            cardData = card(siNumber = 1001, punches = listOf(41, 42)),
-            currentRace = day1.race
-        )
-
-        assertEquals(true, stored)
-        assertEquals(day2.race.id, selectionRequest.await())
-        assertEquals(emptyList<ResultDataSummary>(), processor.resultSummaries(day1.race.id))
-        assertEquals(
-            listOf(ResultDataSummary(raceId = day2.race.id, siNumber = 1001)),
-            processor.resultSummaries(day2.race.id)
-        )
     }
 
     @Test
@@ -397,6 +413,137 @@ class EventSeriesCardReadRoutingIntegrationTest {
     }
 
     @Test
+    fun unchangedPracticeDownloadShowsNormalDuplicateWarningAndSound() = runBlocking {
+        val processor = DataProcessor.get()
+        val context = RuntimeEnvironment.getApplication()
+        val preferences = PreferenceManager.getDefaultSharedPreferences(context)
+        listOf(RaceLevel.REGIONAL, RaceLevel.PRACTICE).forEach { level ->
+            val event = raceData("Duplicate feedback", listOf(31, 32), siNumber = 1001, raceLevel = level)
+            val download = card(1001, listOf(31, 32))
+            preferences.edit().putBoolean(context.getString(R.string.key_readout_error_sounds), false)
+                .putString(context.getString(R.string.key_readout_duplicate),
+                    context.getString(R.string.preferences_readout_duplicate_ignore_value)).commit()
+            processor.saveRaceData(event)
+            assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(download, event.race))
+            val before = processor.getRaceData(event.race.id).toEventRaceData()
+
+            listOf(true, false).forEach { soundEnabled ->
+                preferences.edit().putBoolean(context.getString(R.string.key_readout_error_sounds), soundEnabled).commit()
+                val players = mutableListOf<ShadowMediaPlayer>()
+                ShadowMediaPlayer.setMediaInfoProvider { ShadowMediaPlayer.MediaInfo(1000, 0) }
+                ShadowMediaPlayer.setCreateListener { _, player -> players.add(player) }
+                ShadowToast.reset()
+
+                assertEquals(false, processor.processCardDataForCurrentRaceOrSeries(download, event.race))
+                shadowOf(Looper.getMainLooper()).idle()
+                assertEquals(context.getString(R.string.readout_si_exists, 1001), ShadowToast.getTextOfLatestToast())
+                assertEquals(if (soundEnabled) listOf(R.raw.si_duplicate) else emptyList<Int>(),
+                    players.map { it.sourceResId })
+                assertEquals(before, processor.getRaceData(event.race.id).toEventRaceData())
+                ShadowMediaPlayer.resetStaticState()
+            }
+        }
+    }
+
+    @Test
+    fun changedPracticeDownloadKeepsNumberingWithoutDuplicateAlert() = runBlocking {
+        val processor = DataProcessor.get()
+        val context = RuntimeEnvironment.getApplication()
+        val event = raceData("Practice changed download", listOf(31, 32), siNumber = 1001)
+        val download = card(1001, listOf(31, 32))
+        processor.saveRaceData(event)
+        processor.processCardDataForCurrentRaceOrSeries(download, event.race)
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean(context.getString(R.string.key_readout_error_sounds), true).commit()
+        val players = mutableListOf<ShadowMediaPlayer>()
+        ShadowMediaPlayer.setMediaInfoProvider { ShadowMediaPlayer.MediaInfo(1000, 0) }
+        ShadowMediaPlayer.setCreateListener { _, player -> players.add(player) }
+        ShadowToast.reset()
+
+        assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(
+            download.copy(finishTime = SITime(36001)), event.race))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(null, ShadowToast.getTextOfLatestToast())
+        assertTrue(players.isEmpty())
+        assertEquals(setOf("Runner", "Runner (2)"), processor.getRaceData(event.race.id).competitorData.withPracticeDisplayNames()
+            .map { it.competitorCategory.competitor.firstName }.toSet())
+        assertEquals(2, processor.resultSummaries(event.race.id).size)
+        ShadowMediaPlayer.resetStaticState()
+    }
+
+    @Test
+    fun raceSnapshotRetainsRegisteredCompetitorsWithoutReadouts() = runBlocking {
+        val processor = DataProcessor.get()
+        val event = raceData("Practice registration", listOf(31, 32), siNumber = 1001)
+        processor.saveRaceData(event)
+
+        assertEquals(event.competitorData.single().competitorCategory.competitor.id,
+            processor.getRaceData(event.race.id).competitorData.single().competitorCategory.competitor.id)
+        assertTrue(processor.resultSummaries(event.race.id).isEmpty())
+    }
+
+    @Test
+    fun practiceCardReusesRegisteredCompetitorWhenHistoricalCardResultBelongsToAnotherEntry() = runBlocking {
+        val processor = DataProcessor.get()
+        val event = raceData("Practice registration", listOf(31, 32), siNumber = 1001)
+        processor.saveRaceData(event)
+        processor.processCardDataForCurrentRaceOrSeries(card(1001, listOf(31, 32)), event.race)
+        val original = processor.getCompetitorBySINumber(1001, event.race.id)!!
+        val originalResult = processor.getResultByCompetitor(original.id)!!
+        processor.createOrUpdateCompetitor(original.copy(siNumber = 9991001))
+        val registered = original.copy(id = UUID.randomUUID(), firstName = "Registered", startNumber = 2)
+        processor.createOrUpdateCompetitor(registered)
+
+        assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(
+            card(1001, listOf(31, 32)).copy(finishTime = SITime(36001)), event.race))
+
+        val stored = processor.getRaceData(event.race.id)
+        assertEquals(setOf(original.id, registered.id),
+            stored.competitorData.map { it.competitorCategory.competitor.id }.toSet())
+        assertEquals(registered.id, processor.getResultByCompetitor(registered.id)?.competitorId)
+        assertEquals(originalResult.id, processor.getResultByCompetitor(original.id)?.id)
+        assertTrue(stored.unmatchedReadoutData.isEmpty())
+        assertEquals("Registered", processor.getCompetitor(registered.id)?.firstName)
+        assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(
+            card(1001, listOf(31, 32)).copy(finishTime = SITime(36002)), event.race))
+        assertEquals(setOf("Runner", "Registered", "Registered (2)"),
+            processor.getRaceData(event.race.id).competitorData.withPracticeDisplayNames().map { it.competitorCategory.competitor.firstName }.toSet())
+    }
+
+    @Test
+    fun practiceRereadRepairsUnmatchedDownloadWithoutAddingResultOrStealingHistoricalRun() = runBlocking {
+        val processor = DataProcessor.get()
+        val event = raceData("Practice repair", listOf(31, 32), siNumber = 1001)
+        processor.saveRaceData(event)
+        processor.processCardDataForCurrentRaceOrSeries(card(1001, listOf(31, 32)), event.race)
+        val original = processor.getCompetitorBySINumber(1001, event.race.id)!!
+        val originalResult = processor.getResultByCompetitor(original.id)!!
+        processor.createOrUpdateCompetitor(original.copy(siNumber = 9991001))
+        val registered = original.copy(id = UUID.randomUUID(), firstName = "Registered", startNumber = 2)
+        processor.createOrUpdateCompetitor(registered)
+        val download = card(1001, listOf(31, 32)).copy(finishTime = SITime(36001))
+        processor.processCardDataForCurrentRaceOrSeries(download, event.race)
+        val latest = processor.getResultDataFlowByRace(event.race.id).first().last().result
+        processor.createOrUpdateResult(latest.copy(competitorId = null))
+        processor.createOrUpdateCompetitor(registered)
+
+        assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(download, event.race))
+        assertEquals(latest.id, processor.getResultByCompetitor(registered.id)?.id)
+        assertEquals("Registered", processor.getCompetitor(registered.id)?.firstName)
+        assertEquals(originalResult.id, processor.getResultByCompetitor(original.id)?.id)
+        assertEquals(2, processor.resultSummaries(event.race.id).size)
+        assertTrue(processor.getRaceData(event.race.id).unmatchedReadoutData.isEmpty())
+        assertEquals(false, processor.processCardDataForCurrentRaceOrSeries(download, event.race))
+
+        // Editing the canonical name must not turn an unchanged reread into a new result.
+        processor.createOrUpdateCompetitor(registered.copy(firstName = "Renamed"))
+        assertEquals(false, processor.processCardDataForCurrentRaceOrSeries(download, event.race))
+        assertEquals("Renamed", processor.getCompetitor(registered.id)?.firstName)
+        assertEquals(2, processor.resultSummaries(event.race.id).size)
+
+    }
+
+    @Test
     fun practiceRepeatsPreserveAllRunsAndIgnoreIdenticalDataRegardlessOfPreference() = runBlocking {
         val processor = DataProcessor.get()
         val context = RuntimeEnvironment.getApplication()
@@ -425,8 +572,12 @@ class EventSeriesCardReadRoutingIntegrationTest {
                 assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(download, practice.race))
                 val stored = processor.getRaceData(practice.race.id)
                 assertEquals(index + 1, stored.competitorData.size)
+                assertEquals(1, processor.getCompetitorsByCategory(practice.categories.single().category.id).size)
+                assertEquals(setOf(practice.competitorData.single().competitorCategory.competitor.id),
+                    stored.competitorData.map { it.readoutData!!.result.competitorId }.toSet())
+                assertEquals(setOf("Runner"), stored.competitorData.map { it.competitorCategory.competitor.firstName }.toSet())
                 val expectedNames = (1..index + 1).map { if (it == 1) "1001 Runner" else "1001 Runner ($it)" }.toSet()
-                assertEquals(expectedNames, stored.competitorData.map { it.competitorCategory.competitor.getFullName() }.toSet())
+                assertEquals(expectedNames, stored.competitorData.withPracticeDisplayNames().map { it.competitorCategory.competitor.getFullName() }.toSet())
                 assertTrue(stored.competitorData.all {
                     it.readoutData?.result?.siNumber == 1001 &&
                         it.readoutData?.result?.competitorId == it.competitorCategory.competitor.id
@@ -438,6 +589,34 @@ class EventSeriesCardReadRoutingIntegrationTest {
                 assertEquals(index + 1, processor.resultSummaries(practice.race.id).size)
             }
         }
+    }
+
+    @Test
+    fun practiceRaceFileRoundTripKeepsOneRoomRegistrationAndEveryResult() = runBlocking {
+        val processor = DataProcessor.get()
+        val event = raceData("Practice transfer", listOf(31, 32), siNumber = 1001)
+        processor.saveRaceData(event)
+        (1..3).forEach { attempt ->
+            processor.processCardDataForCurrentRaceOrSeries(card(1001, listOf(31, 32)).copy(finishTime = SITime(36000L + attempt)), event.race)
+        }
+        val registered = processor.getCompetitorBySINumber(1001, event.race.id)!!
+        processor.createOrUpdateCompetitor(registered.copy(firstName = "Nadia"))
+        val snapshot = processor.getRaceData(event.race.id)
+        assertEquals(setOf("Nadia"), snapshot.competitorData.map { it.competitorCategory.competitor.firstName }.toSet())
+        val encoded = org.openardf.radiooracle.shared.event.EventProjectFileJson.encode(EventProjectFile(raceData = snapshot.toEventRaceData()))
+        val decoded = org.openardf.radiooracle.shared.event.EventProjectFileJson.decode(encoded).raceData.toRoomRaceData().withFreshImportIds()
+        org.openardf.radiooracle.backend.files.DataImportValidator.validateRaceDataImport(decoded, RuntimeEnvironment.getApplication())
+        processor.saveRaceData(decoded)
+        val reopened = processor.getRaceData(decoded.race.id)
+        assertEquals(1, reopened.competitorData.map { it.competitorCategory.competitor.id }.toSet().size)
+        assertEquals(1, processor.getCompetitorsByCategory(decoded.categories.single().category.id).size)
+        assertEquals(3, reopened.competitorData.map { it.readoutData!!.result.id }.toSet().size)
+        assertEquals(3, ResultsProcessor.getResultWrapperFlowByRace(decoded.race.id, processor).first().sumOf { it.competitorData.size })
+        assertEquals(setOf("Nadia", "Nadia (2)", "Nadia (3)"), reopened.competitorData.withPracticeDisplayNames()
+            .map { it.competitorCategory.competitor.firstName }.toSet())
+        val newest = processor.getResultDataFlowByRace(decoded.race.id).first().last()
+        val ticket = org.openardf.radiooracle.backend.prints.PrintProcessor(RuntimeEnvironment.getApplication(), processor).formatFinishTicket(newest)
+        assertTrue(ticket!!.contains("Nadia (3)"))
     }
 
     @Test
@@ -458,7 +637,7 @@ class EventSeriesCardReadRoutingIntegrationTest {
         assertEquals(false, processor.processCardDataForCurrentRaceOrSeries(westCard, east.race))
         assertEquals(listOf("1001 Runner"), processor.getRaceData(east.race.id).competitorData.map { it.competitorCategory.competitor.getFullName() })
         assertEquals(setOf("1001 Runner", "1001 Runner (2)", "1001 Runner (3)"),
-            processor.getRaceData(west.race.id).competitorData.map { it.competitorCategory.competitor.getFullName() }.toSet())
+            processor.getRaceData(west.race.id).competitorData.withPracticeDisplayNames().map { it.competitorCategory.competitor.getFullName() }.toSet())
         assertEquals(1, processor.resultSummaries(east.race.id).size)
         assertEquals(3, processor.resultSummaries(west.race.id).size)
     }
@@ -478,6 +657,88 @@ class EventSeriesCardReadRoutingIntegrationTest {
             assertEquals(false, processor.processCardDataForCurrentRaceOrSeries(card(1001, listOf(32, 31)), event.race))
             assertEquals(1, processor.resultSummaries(event.race.id).size)
             assertEquals(1, processor.getRaceData(event.race.id).competitorData.size)
+        }
+    }
+
+    @Test
+    fun everyNonPracticeLevelKeepsConfiguredDuplicatePolicyAndRegistrationIdentity() = runBlocking {
+        val processor = DataProcessor.get()
+        val context = RuntimeEnvironment.getApplication()
+        val preferences = PreferenceManager.getDefaultSharedPreferences(context)
+        val policies = listOf(
+            R.string.preferences_readout_duplicate_ignore_value,
+            R.string.preferences_readout_duplicate_replace_value,
+            R.string.preferences_readout_duplicate_new_value
+        )
+        for (level in RaceLevel.entries.filter { it != RaceLevel.PRACTICE }) {
+            for (policy in policies) for (registered in listOf(true, false)) for (changed in listOf(false, true)) {
+                val label = "$level policy=${context.getString(policy)} registered=$registered changed=$changed"
+                preferences.edit().putString(context.getString(R.string.key_readout_duplicate), context.getString(policy)).commit()
+                val event = raceData(label, listOf(31, 32), if (registered) 1001 else null, raceLevel = level)
+                processor.saveRaceData(event)
+                val download = card(1001, listOf(31, 32)).copy(cardName = "1001 Runner")
+                assertEquals(label, true, processor.processCardDataForCurrentRaceOrSeries(download, event.race))
+                val original = processor.getResultDataFlowByRace(event.race.id).first().single()
+                val before = processor.getRaceData(event.race.id).toEventRaceData()
+                val reread = if (changed) download.copy(finishTime = SITime(36001L)) else download
+                val rejected = policy == R.string.preferences_readout_duplicate_ignore_value
+                val createNew = policy == R.string.preferences_readout_duplicate_new_value
+                val replaced = policy == R.string.preferences_readout_duplicate_replace_value
+                assertEquals(label, !rejected, processor.processCardDataForCurrentRaceOrSeries(reread, event.race))
+                val rows = processor.getResultDataFlowByRace(event.race.id).first()
+                val after = processor.getRaceData(event.race.id).toEventRaceData()
+                assertEquals(label, if (createNew) 2 else 1, rows.size)
+                assertEquals(label, !replaced, rows.any { it.result.id == original.result.id })
+                assertEquals(label, if (registered) 1 else 0,
+                    processor.getCompetitorsByCategory(event.categories.single().category.id).size)
+                assertEquals(label, if (registered) 1 else 0, rows.count { it.result.competitorId != null })
+                assertTrue(label, rows.all { it.result.siNumber == 1001 })
+                if (rejected) assertEquals(label, before, after)
+                if (createNew) assertEquals(label, original.toEventReadoutData(), processor.getResultData(original.result.id).toEventReadoutData())
+                if (!rejected) {
+                    val added = rows.single { it.result.id != original.result.id }
+                    assertEquals(label, reread.finishTime?.getSeconds(), added.result.finishTime?.getSeconds())
+                    assertEquals(label, if (registered && replaced) event.competitorData.single().competitorCategory.competitor.id else null,
+                        added.result.competitorId)
+                }
+                assertEquals(label, after.competitorData, after.resultCompetitorData())
+                val displayed = ResultsProcessor.getResultWrapperFlowByRace(event.race.id, processor).first()
+                    .flatMap { it.competitorData }
+                assertEquals(label, if (registered) listOf("Runner") else emptyList<String>(),
+                    displayed.map { it.competitorCategory.competitor.firstName })
+                val reopened = EventProjectFileJson.decode(EventProjectFileJson.encode(EventProjectFile(raceData = after))).raceData
+                assertEquals(label, level, reopened.race.raceLevel)
+                assertEquals(label, after.competitorData.map { it.readoutData }, reopened.competitorData.map { it.readoutData })
+                assertEquals(label, after.unmatchedReadoutData, reopened.unmatchedReadoutData)
+                if (registered) assertEquals(label, event.competitorData.single().competitorCategory.competitor,
+                    processor.getCompetitor(event.competitorData.single().competitorCategory.competitor.id))
+            }
+        }
+    }
+
+    @Test
+    fun resultDetailsReportEachResultsOwnPlaceAtEveryRaceLevel() = runBlocking {
+        val processor = DataProcessor.get()
+        for (level in RaceLevel.entries) {
+            val event = raceData("$level places", listOf(31, 32), siNumber = 1001, raceLevel = level)
+            processor.saveRaceData(event)
+            if (level != RaceLevel.PRACTICE) {
+                val registration = event.competitorData.single().competitorCategory.competitor
+                for (si in listOf(1002, 1003)) {
+                    processor.createOrUpdateCompetitor(registration.copy(id = UUID.randomUUID(), siNumber = si, lastName = si.toString()))
+                }
+            }
+            val expectedPlaces = mutableMapOf<UUID, Int>()
+            listOf(3, 1, 2).forEachIndexed { index, place ->
+                val si = if (level == RaceLevel.PRACTICE) 1001 else 1001 + index
+                assertEquals(level.name, true, processor.processCardDataForCurrentRaceOrSeries(
+                    card(si, listOf(31, 32)).copy(finishTime = SITime(36000L + place)), event.race))
+                val added = processor.getResultDataFlowByRace(event.race.id).first().single { it.result.id !in expectedPlaces }
+                expectedPlaces[added.result.id] = place
+            }
+            for ((resultId, place) in expectedPlaces) {
+                assertEquals("$level result=$resultId", place, ResultsProcessor.getResultPlace(resultId, event.race.id, processor))
+            }
         }
     }
 

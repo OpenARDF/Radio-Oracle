@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.event.resultCompetitorData
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.SIRecordType
@@ -129,7 +130,7 @@ object SplitResultExports {
         routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): SplitResultReport {
         publicationStatus?.let { PublicResultsPublicationRules.requireReady(raceData, it) }
-        val competitorsByResultId = raceData.competitorData
+        val competitorsByResultId = raceData.resultCompetitorData()
             .mapNotNull { competitorData ->
                 competitorData.readoutData?.result?.id?.let { resultId -> resultId to competitorData }
             }

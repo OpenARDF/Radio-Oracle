@@ -48,6 +48,10 @@ data class EventResultSendPlan(
 
 /** Shared result-service policy helpers that do not perform network or persistence work. */
 object EventResultSending {
+    /** Each Practice attempt has its own delivery state, even when the competitor ID is shared. */
+    fun unsentResultIds(results: List<EventCompetitorData>): Set<String> =
+        results.mapNotNull { it.readoutData?.result?.takeIf { result -> !result.sent }?.id }.toSet()
+
     /** Returns competitor ids for readouts that exist and have not yet been marked sent. */
     fun unsentCompetitorIds(results: List<EventCompetitorData>): Set<String> {
         return results

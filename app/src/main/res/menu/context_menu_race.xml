@@ -7,6 +7,9 @@
         android:layout_height="wrap_content"
         android:title="@string/race_edit" />
     <item
+        android:id="@+id/menu_item_new_race_from_existing"
+        android:title="@string/race_new_from_existing" />
+    <item
         android:id="@+id/menu_item_export_race"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

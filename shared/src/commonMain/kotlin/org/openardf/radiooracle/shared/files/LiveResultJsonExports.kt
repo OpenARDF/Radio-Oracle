@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.event.resultCompetitorData
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -53,7 +54,7 @@ object LiveResultJsonExports {
         json.encodeToString(resultRows(raceData, resultIds))
 
     fun resultRows(raceData: EventRaceData, resultIds: Set<String>? = null): List<LiveResultCompetitorJson> =
-        raceData.competitorData.mapNotNull { competitorData ->
+        raceData.resultCompetitorData().mapNotNull { competitorData ->
             val readoutData = competitorData.readoutData ?: return@mapNotNull null
             if (resultIds != null && readoutData.result.id !in resultIds) {
                 return@mapNotNull null

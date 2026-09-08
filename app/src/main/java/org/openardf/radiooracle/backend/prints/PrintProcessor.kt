@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.backend.prints
 
+import org.openardf.radiooracle.backend.shared.withPracticeReadoutNames
+import kotlinx.coroutines.flow.first
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
@@ -234,6 +236,10 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
             )
             return null
         }
+        val displayData = if (resultData.competitorCategory != null && race.raceLevel == org.openardf.radiooracle.shared.domain.RaceLevel.PRACTICE) {
+            dataProcessor.getResultDataFlowByRace(race.id).first().withPracticeReadoutNames()
+                .firstOrNull { it.result.id == resultData.result.id } ?: resultData
+        } else resultData
         val competitor = resultData.competitorCategory?.competitor
         val category = resultData.competitorCategory?.category?.name ?: "?"
         val punches = getPunchesFormatted(resultData.punches, race.raceType)
@@ -252,7 +258,7 @@ class PrintProcessor(context: Context, private val dataProcessor: DataProcessor)
 
         return "[C]<b>${race.name}</b>\n" +
                 "[L]\n" +
-                "[L]${getMaxCompetitorName(resultData)}\n" +
+                "[L]${getMaxCompetitorName(displayData)}\n" +
                 "[L]$siNumber\n" +
                 (bibNumber?.let { "[L]Bib: $it\n" } ?: "") +
                 "[L]${context.getString(R.string.general_category)}: $category\n\n" +

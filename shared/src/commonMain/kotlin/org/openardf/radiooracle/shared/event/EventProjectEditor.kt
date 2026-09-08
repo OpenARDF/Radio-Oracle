@@ -1430,7 +1430,7 @@ object EventProjectEditor {
             .flatMap(::startGroupHistoryFromStartRows)
             .groupBy({ it.competitorKey }, { it.startGroup })
             .mapValues { (_, startGroups) -> startGroups.groupingBy { it }.eachCount() }
-        val currentCompetitors = projectFile.raceData.competitorData.map { it.competitorCategory.competitor }
+        val currentCompetitors = projectFile.raceData.competitorData.registrations().map { it.competitorCategory.competitor }
         val assignedStartGroups = balancedStartGroupAssignments(
             competitors = currentCompetitors,
             historyByCompetitorKey = historyByCompetitorKey,
@@ -1466,7 +1466,7 @@ object EventProjectEditor {
         val categoryQueues = projectFile.raceData.categories
             .sortedWith(compareBy({ it.category.order }, { it.category.name }))
             .mapNotNull { categoryData ->
-                val categoryCompetitors = projectFile.raceData.competitorData
+                val categoryCompetitors = projectFile.raceData.competitorData.registrations()
                     .filter { data ->
                         data.competitorCategory.category?.id == categoryData.category.id ||
                             data.competitorCategory.competitor.categoryId == categoryData.category.id
@@ -1567,14 +1567,14 @@ object EventProjectEditor {
         }
         require(
             siNumberValue == null || projectFile.raceData.competitorData.noneIndexed { index, data ->
-                index != competitorPosition && data.competitorCategory.competitor.siNumber == siNumberValue
+                data.competitorCategory.competitor.id != competitorId && data.competitorCategory.competitor.siNumber == siNumberValue
             }
         ) {
             "SI number must be unique."
         }
 
         val competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
-            if (index == competitorPosition) {
+            if (data.competitorCategory.competitor.id == competitorId) {
                 val competitorCategory = data.competitorCategory
                 data.copy(
                     competitorCategory = competitorCategory.copy(
@@ -1888,7 +1888,7 @@ object EventProjectEditor {
     ): CompetitorCsvImportOutcome {
         var categories = projectFile.raceData.categories
         var courseMappings = projectFile.raceData.courseMappings
-        val competitors = projectFile.raceData.competitorData.toMutableList()
+        val competitors = projectFile.raceData.competitorData.registrations().toMutableList()
         val warnings = mutableListOf<String>()
         var nextCategoryOrder = (categories.maxOfOrNull { it.category.order } ?: -1) + 1
         var importedCount = 0
@@ -2114,7 +2114,7 @@ object EventProjectEditor {
             val removedIds = removedCompetitors
                 .map { it.competitorCategory.competitor.id }
                 .toSet()
-            val unmatchedReadouts = removedCompetitors.mapNotNull { data ->
+            val unmatchedReadouts = projectFile.raceData.competitorData.filter { it.competitorCategory.competitor.id in removedIds }.mapNotNull { data ->
                 data.readoutData?.let { readoutData ->
                     readoutData.copy(result = readoutData.result.copy(competitorId = null))
                 }
@@ -2197,7 +2197,12 @@ object EventProjectEditor {
         val raceData = projectFile.raceData.copy(
             categories = categories,
             courseMappings = courseMappings,
-            competitorData = competitors,
+            competitorData = competitors.flatMap { registration ->
+                val existingResults = projectFile.raceData.competitorData.filter {
+                    it.competitorCategory.competitor.id == registration.competitorCategory.competitor.id && it.readoutData != null
+                }
+                existingResults.map { registration.copy(readoutData = it.readoutData) }.ifEmpty { listOf(registration) }
+            },
             unmatchedReadoutData = unmatchedReadouts
         )
         val importedProjectFile = EventStartNumbers.assignFromDrawnStartTimes(
@@ -2260,21 +2265,21 @@ object EventProjectEditor {
                 val bibNumber = row.bibNumber.trim()
                 require(
                     siNumber == null || competitorData.noneIndexed { index, data ->
-                        index != competitorPosition && data.competitorCategory.competitor.siNumber == siNumber
+                        data.competitorCategory.competitor.id != competitorData[competitorPosition].competitorCategory.competitor.id && data.competitorCategory.competitor.siNumber == siNumber
                     }
                 ) {
                     "SI number must be unique."
                 }
                 require(
                     !updateBibNumbers || bibNumber.isBlank() || competitorData.noneIndexed { index, data ->
-                        index != competitorPosition && data.competitorCategory.competitor.bibNumber == bibNumber
+                        data.competitorCategory.competitor.id != competitorData[competitorPosition].competitorCategory.competitor.id && data.competitorCategory.competitor.bibNumber == bibNumber
                     }
                 ) {
                     "Bib number must be unique."
                 }
 
                 competitorData = competitorData.mapIndexed { index, data ->
-                    if (index == competitorPosition) {
+                    if (data.competitorCategory.competitor.id == competitorData[competitorPosition].competitorCategory.competitor.id) {
                         val competitorCategory = data.competitorCategory
                         val competitor = competitorCategory.competitor
                         data.copy(
@@ -2322,6 +2327,7 @@ object EventProjectEditor {
     ): Int? =
         withIndex()
             .filter { (_, data) -> predicate(data.competitorCategory.competitor) }
+            .distinctBy { it.value.competitorCategory.competitor.id }
             .singleOrNull()
             ?.index
 
@@ -2371,7 +2377,7 @@ object EventProjectEditor {
                     val controlCard = matchedEntry.entry.controlCard
                     require(
                         controlCard == null || competitorData.noneIndexed { otherIndex, data ->
-                            otherIndex != competitorPosition &&
+                            data.competitorCategory.competitor.id != competitorId &&
                                 data.competitorCategory.competitor.siNumber == controlCard
                         }
                     ) {
@@ -2380,7 +2386,7 @@ object EventProjectEditor {
                     val bibNumber = matchedEntry.entry.bibNumber?.trim().orEmpty()
                     require(
                         bibNumber.isBlank() || competitorData.noneIndexed { otherIndex, data ->
-                            otherIndex != competitorPosition &&
+                            data.competitorCategory.competitor.id != competitorId &&
                                 data.competitorCategory.competitor.bibNumber == bibNumber
                         }
                     ) {
@@ -2388,7 +2394,7 @@ object EventProjectEditor {
                     }
 
                     competitorData = competitorData.mapIndexed { dataIndex, data ->
-                        if (dataIndex == competitorPosition) {
+                        if (data.competitorCategory.competitor.id == competitorId) {
                             val competitorCategory = data.competitorCategory
                             val competitor = competitorCategory.competitor
                             data.copy(
@@ -2527,11 +2533,10 @@ object EventProjectEditor {
         val unmatchedReadoutData = if (deleteReadout) {
             projectFile.raceData.unmatchedReadoutData
         } else {
-            removedCompetitorData.readoutData?.let { readoutData ->
-                projectFile.raceData.unmatchedReadoutData + readoutData.copy(
-                    result = readoutData.result.copy(competitorId = null)
-                )
-            } ?: projectFile.raceData.unmatchedReadoutData
+            projectFile.raceData.unmatchedReadoutData + competitorData
+                .filter { it.competitorCategory.competitor.id == competitorId }
+                .mapNotNull { it.readoutData }
+                .map { it.copy(result = it.result.copy(competitorId = null)) }
         }
 
         return projectFile.copy(
@@ -2600,7 +2605,7 @@ object EventProjectEditor {
         require(competitorIndex >= 0) {
             "Competitor was not found: $trimmedCompetitorId"
         }
-        require(projectFile.raceData.competitorData[competitorIndex].readoutData == null) {
+        require(projectFile.raceData.race.raceLevel == RaceLevel.PRACTICE || projectFile.raceData.competitorData[competitorIndex].readoutData == null) {
             "Competitor already has a readout."
         }
         val competitor = projectFile.raceData.competitorData[competitorIndex].competitorCategory.competitor
@@ -2616,7 +2621,9 @@ object EventProjectEditor {
 
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
-                competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
+                competitorData = if (projectFile.raceData.competitorData[competitorIndex].readoutData != null) {
+                    projectFile.raceData.competitorData + projectFile.raceData.competitorData[competitorIndex].copy(readoutData = assignedReadoutData)
+                } else projectFile.raceData.competitorData.mapIndexed { index, data ->
                     if (index == competitorIndex) data.copy(readoutData = assignedReadoutData) else data
                 },
                 unmatchedReadoutData = projectFile.raceData.unmatchedReadoutData.filterNot {
@@ -3102,7 +3109,7 @@ object EventProjectEditor {
             require(index >= 0) {
                 "Competitor was not found: $requestedCompetitorId"
             }
-            require(projectFile.raceData.competitorData[index].readoutData == null) {
+            require(projectFile.raceData.race.raceLevel == RaceLevel.PRACTICE || projectFile.raceData.competitorData[index].readoutData == null) {
                 "Competitor already has a readout."
             }
             index
@@ -3176,7 +3183,9 @@ object EventProjectEditor {
         return if (matchedCompetitorIndex != null) {
             projectFile.copy(
                 raceData = projectFile.raceData.copy(
-                    competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
+                    competitorData = if (matchedCompetitorData?.readoutData != null) {
+                        projectFile.raceData.competitorData + matchedCompetitorData.copy(readoutData = readoutData)
+                    } else projectFile.raceData.competitorData.mapIndexed { index, data ->
                         if (index == matchedCompetitorIndex) data.copy(readoutData = readoutData) else data
                     }
                 )
@@ -3224,18 +3233,13 @@ object EventProjectEditor {
         }
 
         val createNewReadout = hasDuplicateSiNumber && effectiveDuplicatePolicy == EventReadoutDuplicatePolicy.CreateNew
-        val shouldCreatePracticeDuplicateCompetitor = createNewReadout &&
-            workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE
-        val existingMatchedCompetitorIndex = if (createNewReadout) {
-            null
-        } else {
-            workingProjectFile.raceData.competitorData.indexOfFirst { competitorData ->
-                competitorData.competitorCategory.competitor.siNumber == readout.siNumber
+        val isPractice = workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE
+        val existingMatchedCompetitorIndex = if (createNewReadout && !isPractice) null else {
+            workingProjectFile.raceData.competitorData.indexOfFirst {
+                it.competitorCategory.competitor.siNumber == readout.siNumber
             }.takeIf { it >= 0 }
         }
-        val shouldCreatePracticeCompetitor = existingMatchedCompetitorIndex == null &&
-            !createNewReadout &&
-            workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE
+        val shouldCreatePracticeCompetitor = existingMatchedCompetitorIndex == null && isPractice
         val shouldAssignPracticeCategory = existingMatchedCompetitorIndex != null &&
             workingProjectFile.raceData.race.raceLevel == RaceLevel.PRACTICE &&
             workingProjectFile.raceData.competitorData[existingMatchedCompetitorIndex]
@@ -3251,22 +3255,15 @@ object EventProjectEditor {
                     competitorId = uniquePracticeCompetitorId(workingProjectFile, resultId),
                     readout = readout
                 )
-            shouldCreatePracticeDuplicateCompetitor ->
-                workingProjectFile.withPracticeDuplicateCompetitorForDownloadedReadout(
-                    competitorId = uniquePracticeCompetitorId(workingProjectFile, resultId),
-                    readout = readout
-                )
             else -> workingProjectFile
         }
         val matchedCompetitorIndex = existingMatchedCompetitorIndex ?: if (shouldCreatePracticeCompetitor) {
-            matchedProjectFile.raceData.competitorData.lastIndex
-        } else if (shouldCreatePracticeDuplicateCompetitor) {
             matchedProjectFile.raceData.competitorData.lastIndex
         } else {
             null
         }
         matchedCompetitorIndex?.let { index ->
-            require(matchedProjectFile.raceData.competitorData[index].readoutData == null) {
+            require(isPractice || matchedProjectFile.raceData.competitorData[index].readoutData == null) {
                 "Competitor already has a readout."
             }
         }
@@ -3345,7 +3342,9 @@ object EventProjectEditor {
         return if (matchedCompetitorIndex != null) {
             matchedProjectFile.copy(
                 raceData = matchedProjectFile.raceData.copy(
-                    competitorData = matchedProjectFile.raceData.competitorData.mapIndexed { index, data ->
+                    competitorData = if (matchedCompetitorData?.readoutData != null) {
+                        matchedProjectFile.raceData.competitorData + matchedCompetitorData.copy(readoutData = readoutData)
+                    } else matchedProjectFile.raceData.competitorData.mapIndexed { index, data ->
                         if (index == matchedCompetitorIndex) data.copy(readoutData = readoutData) else data
                     }
                 )
@@ -3684,7 +3683,7 @@ object EventProjectEditor {
         return copy(
             raceData = raceData.copy(
                 competitorData = raceData.competitorData.mapIndexed { index, data ->
-                    if (index != competitorIndex) {
+                    if (data.competitorCategory.competitor.id != raceData.competitorData[competitorIndex].competitorCategory.competitor.id) {
                         data
                     } else {
                         data.copy(
@@ -3702,27 +3701,10 @@ object EventProjectEditor {
         )
     }
 
-    private fun EventProjectFile.withPracticeDuplicateCompetitorForDownloadedReadout(
-        competitorId: String,
-        readout: SportIdentCardReadout
-    ): EventProjectFile {
-        val competitor = PracticeReadoutPolicy.repeatCompetitor(raceData, readout.siNumber, competitorId)
-            ?: return withPracticeCompetitorForDownloadedReadout(competitorId, readout)
-        val category = raceData.categories.firstOrNull { it.category.id == competitor.categoryId }?.category
-        return copy(
-            raceData = raceData.copy(
-                competitorData = raceData.competitorData + EventCompetitorData(
-                    competitorCategory = EventCompetitorCategory(competitor, category),
-                    readoutData = null
-                )
-            )
-        )
-    }
-
     private fun EventProjectFile.withResultPlaces(): EventProjectFile =
         copy(
             raceData = raceData.copy(
-                competitorData = EventResultPlacement.assignPlacesByCategory(raceData.competitorData)
+                competitorData = EventResultPlacement.assignPlacesByCategory(raceData.competitorData.normalizedAssociations())
             )
         )
 

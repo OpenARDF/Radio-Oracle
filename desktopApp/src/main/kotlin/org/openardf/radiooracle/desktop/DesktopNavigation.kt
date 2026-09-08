@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.registrations
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -187,7 +188,7 @@ data class DesktopNavigationReadiness(
         fun from(projectFile: EventProjectFile?): DesktopNavigationReadiness {
             val raceData = projectFile?.raceData ?: return DesktopNavigationReadiness()
             val categoryIds = raceData.categories.map { it.category.id }.toSet()
-            val competitors = raceData.competitorData.map { it.competitorCategory.competitor }
+            val competitors = raceData.competitorData.registrations().map { it.competitorCategory.competitor }
             val hasCompetitors = competitors.isNotEmpty()
             val unassignedCompetitorCount = competitors.count { competitor ->
                 competitor.categoryId == null || !categoryIds.contains(competitor.categoryId)
@@ -203,7 +204,7 @@ data class DesktopNavigationReadiness(
                 hasCompetitors = hasCompetitors,
                 hasAssignedCompetitors = hasAssignedCompetitors,
                 hasStartList = hasCompetitors && unscheduledCompetitorCount == 0,
-                hasRaceOpsData = raceData.competitorData.any { it.readoutData != null } ||
+                hasRaceOpsData = raceData.competitorData.registrations().any { it.readoutData != null } ||
                     raceData.unmatchedReadoutData.isNotEmpty(),
                 hasSeriesContext = projectFile.seriesLink != null,
                 raceType = raceData.race.raceType,

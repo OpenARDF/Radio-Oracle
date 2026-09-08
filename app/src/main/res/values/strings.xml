@@ -395,7 +395,7 @@
     <string name="preferences_sounds_enable_error_sounds">Sound effects</string>
     <string name="preferences_sounds_enable_sounds_hint">Play sounds for readout errors and unmatched cards</string>
     <string name="preferences_readout_duplicate_actions">Duplicate SI Card Actions</string>
-    <string name="preferences_readout_duplicate_actions_hint">Select what happens when a card is read twice. Practice races always create numbered downloads for changed times or controls and ignore unchanged downloads.</string>
+    <string name="preferences_readout_duplicate_actions_hint">Select what happens when a card is read twice. Practice races create numbered downloads for changed times or controls and report unchanged downloads as duplicates.</string>
     <string name="preferences_readout_duplicate_ignore">Ignore</string>
     <string name="preferences_readout_duplicate_replace">Replace</string>
     <string name="preferences_readout_duplicate_new">Create New Readout</string>
@@ -800,4 +800,10 @@
     <string name="diagnostic_logs_save">Save ZIP</string>
     <string name="diagnostic_logs_saved">Diagnostic ZIP saved. Attach it to your support message.</string>
     <string name="diagnostic_logs_error">Could not save or share logs. Check storage or try Save ZIP and attach it to your message.</string>
+    <string name="race_new_from_existing">New Race from Existing...</string>
+    <string name="race_copy_default_name">%1$s copy</string>
+    <string name="race_copy_competitors">Include competitors</string>
+    <string name="race_copy_help">Creates a standalone race with the same settings, categories, courses and controls. Results and drawn starts are cleared. You can add it to a series later.</string>
+    <string name="race_copy_created">Created race: %1$s</string>
+    <string name="race_copy_failed">Could not create race</string>
 </resources>

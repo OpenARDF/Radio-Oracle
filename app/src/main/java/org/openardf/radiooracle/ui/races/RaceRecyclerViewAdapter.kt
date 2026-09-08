@@ -128,10 +128,12 @@ class RaceRecyclerViewAdapter(
                     true
                 }
 
-                else -> {
+                R.id.menu_item_new_race_from_existing -> {
                     onMoreClicked(4, position, item.race)
                     true
                 }
+
+                else -> false
             }
         }
         popupMenu.show()

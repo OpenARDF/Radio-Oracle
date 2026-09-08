@@ -171,8 +171,8 @@ class ReadoutDetailFragment : Fragment() {
             resultData.result.resultStatus == ResultStatus.OK
         ) {
             runBlocking {
-                val place = ResultsProcessor.getCompetitorPlace(
-                    resultData.competitorCategory!!.competitor.id,
+                val place = ResultsProcessor.getResultPlace(
+                    resultData.result.id,
                     resultData.result.raceId,
                     DataProcessor.get()
                 )

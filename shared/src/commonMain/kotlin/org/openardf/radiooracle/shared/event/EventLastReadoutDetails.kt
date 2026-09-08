@@ -43,7 +43,7 @@ data class EventLastReadoutDetails(
 ) {
     companion object {
         fun from(raceData: EventRaceData): EventLastReadoutDetails {
-            val matched = raceData.competitorData.mapNotNull { competitorData ->
+            val matched = raceData.resultCompetitorData().mapNotNull { competitorData ->
                 val readoutData = competitorData.readoutData ?: return@mapNotNull null
                 LastReadoutCandidate(
                     readoutData = readoutData,

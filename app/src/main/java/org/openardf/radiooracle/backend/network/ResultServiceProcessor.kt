@@ -152,12 +152,12 @@ object ResultServiceProcessor {
     fun filterCompetitorDataBySent(
         results: List<CompetitorData>
     ): ArrayList<CompetitorData> {
-        val unsentCompetitorIds = EventResultSending.unsentCompetitorIds(
+        val unsentResultIds = EventResultSending.unsentResultIds(
             results.map { it.toEventCompetitorData() }
         )
         return results
             .filter { competitorData ->
-                unsentCompetitorIds.contains(competitorData.competitorCategory.competitor.id.toString())
+                unsentResultIds.contains(competitorData.readoutData?.result?.id?.toString())
             }
             .toCollection(ArrayList())
     }

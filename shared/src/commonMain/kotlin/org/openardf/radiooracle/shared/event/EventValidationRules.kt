@@ -351,7 +351,7 @@ object EventValidationRules {
             ?: emptyList()
 
     private fun validateCompetitors(raceData: EventRaceData): List<EventValidationIssue> {
-        val competitors = raceData.competitorData
+        val competitors = raceData.competitorData.registrations()
         val eventCompetitors = competitors.map { it.competitorCategory.competitor }
         return buildList {
             duplicateSiNumbersForValidation(raceData).takeIf { it.isNotEmpty() }?.let {
@@ -390,7 +390,7 @@ object EventValidationRules {
     }
 
     private fun duplicateSiNumbersForValidation(raceData: EventRaceData): Set<Int> {
-        val competitorsBySiNumber = raceData.competitorData
+        val competitorsBySiNumber = raceData.competitorData.registrations()
             .mapNotNull { data ->
                 data.competitorCategory.competitor.siNumber?.let { siNumber -> siNumber to data }
             }

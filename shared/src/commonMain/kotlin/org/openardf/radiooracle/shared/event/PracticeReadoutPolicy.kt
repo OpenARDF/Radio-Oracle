@@ -24,9 +24,13 @@ object PracticeReadoutPolicy {
     }
 
     /** Compare recorded data, ignoring download time, identity text and calculated scoring. */
-    fun containsIdenticalReadout(raceData: EventRaceData, readout: SportIdentCardReadout): Boolean {
+    fun containsIdenticalReadout(raceData: EventRaceData, readout: SportIdentCardReadout): Boolean =
+        identicalReadout(raceData, readout) != null
+
+    /** Returns the existing download so callers can recover an unmatched registration without duplicating it. */
+    fun identicalReadout(raceData: EventRaceData, readout: SportIdentCardReadout): EventReadoutData? {
         val readouts = raceData.competitorData.mapNotNull { it.readoutData } + raceData.unmatchedReadoutData
-        return readouts.any { stored ->
+        return readouts.firstOrNull { stored ->
             val result = stored.result
             // SI5 times are corrected from their twelve-hour clock during Android evaluation.
             fun normalized(seconds: Long?): Long? =
@@ -47,28 +51,7 @@ object PracticeReadoutPolicy {
         }
     }
 
-    /** Preserve the registered identity and category, with the attempt suffix after the full name. */
-    fun repeatCompetitor(raceData: EventRaceData, siNumber: Int, competitorId: String): EventCompetitor? {
-        val matching = raceData.competitorData.map { it.competitorCategory.competitor }
-            .filter { it.siNumber == siNumber }
-        val base = matching.minByOrNull { attemptNumber(it) } ?: return null
-        val ordinal = maxOf(matching.size, matching.maxOf { attemptNumber(it) }) + 1
-        return base.copy(
-            id = competitorId,
-            firstName = "${base.firstName.replace(attemptSuffix, "").trimEnd()} ($ordinal)",
-            index = "",
-            startNumber = null,
-            drawnStartTimeSeconds = null,
-            preferredStartGroup = null,
-            bibNumber = "",
-            callSign = "SWL"
-        )
-    }
 
-    private val attemptSuffix = Regex(" \\((\\d+)\\)$")
-
-    private fun attemptNumber(competitor: EventCompetitor): Int =
-        attemptSuffix.find(competitor.firstName)?.groupValues?.get(1)?.toIntOrNull() ?: 1
 }
 
 internal fun raceStartSecondsOfDay(startDateTimeIso: String): Long? {

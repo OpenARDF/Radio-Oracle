@@ -2608,6 +2608,7 @@ class EventProjectEditorTest {
     @Test
     fun rejectsUnmatchedReadoutAssignmentToCompetitorWithReadout() {
         val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
             competitors = listOf(
                 competitorData("comp-1", "Alice", "Runner", readoutData = readout("existing", "comp-1", 1111))
             ),
@@ -3946,7 +3947,7 @@ class EventProjectEditorTest {
     }
 
     @Test
-    fun createsNewDuplicatePracticeReadoutAsNumberedCompetitorResult() {
+    fun createsNewPracticeResultForSameRegisteredCompetitor() {
         val original = projectFile(
             raceLevel = RaceLevel.PRACTICE,
             competitors = listOf(
@@ -3971,12 +3972,15 @@ class EventProjectEditorTest {
         )
 
         val competitors = updated.raceData.competitorData.map { it.competitorCategory.competitor }
-        assertEquals(listOf("comp-1", "practice-competitor-new-duplicate"), competitors.map { it.id })
-        assertEquals(listOf("RUNNER Alice", "RUNNER Alice (2)"), competitors.map { it.fullName() })
+        assertEquals(listOf("comp-1", "comp-1"), competitors.map { it.id })
+        assertEquals(listOf("RUNNER Alice", "RUNNER Alice"), competitors.map { it.fullName() })
+        assertEquals(1, EventCompetitorDetails.from(updated.raceData).size)
+        assertEquals(listOf("RUNNER Alice", "RUNNER Alice (2)"),
+            updated.raceData.resultCompetitorData().map { it.competitorCategory.competitor.fullName() })
         assertEquals(listOf(2005010, 2005010), competitors.map { it.siNumber })
         assertEquals(listOf("existing", "new-duplicate"), updated.raceData.competitorData.map { it.readoutData!!.result.id })
         assertEquals(
-            listOf("comp-1", "practice-competitor-new-duplicate"),
+            listOf("comp-1", "comp-1"),
             updated.raceData.competitorData.map { it.readoutData!!.result.competitorId }
         )
         assertEquals(emptyList(), updated.raceData.unmatchedReadoutData)
@@ -4004,7 +4008,10 @@ class EventProjectEditorTest {
                 val competitors = project.raceData.competitorData
                 assertEquals(index + 1, competitors.size)
                 val name = if (index == 0) "RUNNER Alice" else "RUNNER Alice (${index + 1})"
-                assertEquals(name, competitors.last().competitorCategory.competitor.fullName())
+                assertEquals("RUNNER Alice", competitors.last().competitorCategory.competitor.fullName())
+                assertEquals(name, project.raceData.resultCompetitorData().last().competitorCategory.competitor.fullName())
+                assertEquals(1, EventProjectSummary.from(project).competitorCount)
+                assertEquals(setOf("comp-1"), competitors.map { it.readoutData!!.result.competitorId }.toSet())
                 assertEquals(2005010, competitors.last().readoutData!!.result.siNumber)
                 assertEquals("run-0", competitors.first().readoutData!!.result.id)
                 // The policy must survive saving and reopening a Race File.
@@ -4021,12 +4028,133 @@ class EventProjectEditorTest {
     }
 
     @Test
+    fun practiceNumbersBelongToTheCompetitorRatherThanABorrowedCard() {
+        val download = sportIdentReadout(siNumber = 2005010,
+            cardHolder = SportIdentCardHolder("Alice", "Runner"))
+        val first = appendPracticeDownload(projectFile(competitors = listOf(
+            competitorData("comp-1", "Alice", "Runner", siNumber = 2005010)
+        )), download, "run-1")
+        val previous = first.raceData.competitorData.single()
+        val reassigned = first.copy(raceData = first.raceData.copy(competitorData = listOf(
+            previous.copy(competitorCategory = previous.competitorCategory.copy(
+                competitor = previous.competitorCategory.competitor.copy(siNumber = 9995010)
+            ))
+        )))
+        val second = appendPracticeDownload(reassigned, download.copy(finishTime = SportIdentTime(1801L)), "run-2")
+        val third = appendPracticeDownload(second, download.copy(finishTime = SportIdentTime(1802L)), "run-3")
+
+        assertEquals(listOf("RUNNER Alice", "RUNNER Alice", "RUNNER Alice (2)"),
+            third.raceData.resultCompetitorData().map { it.competitorCategory.competitor.fullName() })
+        assertEquals(listOf(2005010, 2005010, 2005010),
+            third.raceData.competitorData.map { it.readoutData!!.result.siNumber })
+        assertEquals(9995010, third.raceData.competitorData.first().competitorCategory.competitor.siNumber)
+
+        assertEquals(2, third.raceData.competitorData.registrations().size)
+        assertEquals(third.raceData.competitorData[1].readoutData!!.result.competitorId,
+            third.raceData.competitorData[2].readoutData!!.result.competitorId)
+
+    }
+
+    @Test
+    fun practiceResultsShareOneRegistrationAcrossEditingSavingAndRemoval() {
+        var project = projectFile(competitors = listOf(
+            competitorData("comp-1", "Alice", "Runner", siNumber = 2005010)
+        ))
+        (1..3).forEach { attempt ->
+            project = appendPracticeDownload(project, sportIdentReadout(
+                siNumber = 2005010, finishSeconds = 1800L + attempt
+            ), "attempt-$attempt")
+        }
+        project = EventProjectEditor.renameCompetitor(project, "comp-1", "Nadia", "Scharlau")
+        project = EventProjectEditor.updateCompetitorNumbers(project, "comp-1", "", "2005011")
+        project = EventProjectFileJson.decode(EventProjectFileJson.encode(project))
+        assertEquals(1, EventProjectSummary.from(project).competitorCount)
+        assertEquals(3, EventProjectSummary.from(project).resultCount)
+        assertEquals(listOf("SCHARLAU Nadia"), EventCompetitorDetails.from(project.raceData).map { it.fullName })
+        assertEquals(listOf("SCHARLAU Nadia", "SCHARLAU Nadia (2)", "SCHARLAU Nadia (3)"),
+            project.raceData.resultCompetitorData().map { it.competitorCategory.competitor.fullName() })
+        assertTrue(project.raceData.competitorData.all {
+            it.competitorCategory.competitor.siNumber == 2005011 && it.readoutData!!.result.siNumber == 2005010
+        })
+        assertEquals(setOf("attempt-1", "attempt-2", "attempt-3"),
+            EventResultDetails.from(project.raceData).map { it.id }.toSet())
+        project = EventProjectEditor.removeReadout(project, "attempt-2")
+        assertEquals(setOf("attempt-1", "attempt-3"), project.raceData.competitorData.map { it.readoutData!!.result.id }.toSet())
+        project = EventProjectEditor.addManualReadout(project, "manual", "comp-1", "", "600", "1200", "31,32",
+            ResultStatus.OK, "2026-09-08T13:00:00") { index, type -> "manual-$index-$type" }
+        assertEquals(1, EventCompetitorDetails.from(project.raceData).size)
+        assertEquals(3, EventProjectSummary.from(project).resultCount)
+        val detached = EventProjectEditor.removeCompetitor(project, "comp-1", deleteReadout = false)
+        assertTrue(detached.raceData.competitorData.isEmpty())
+        assertEquals(setOf("attempt-1", "attempt-3", "manual"), detached.raceData.unmatchedReadoutData.map { it.result.id }.toSet())
+        assertTrue(detached.raceData.unmatchedReadoutData.all { it.result.competitorId == null })
+    }
+
+    @Test
     fun automaticPracticeRepeatsDoNotApplyToOtherRaceLevels() {
         RaceLevel.entries.filter { it != RaceLevel.PRACTICE }.forEach { level ->
             val first = appendPracticeDownload(projectFile(raceLevel = level), sportIdentReadout(), "first")
             assertFailsWith<IllegalArgumentException> {
                 appendPracticeDownload(first, sportIdentReadout(finishSeconds = 2000), "second")
             }
+        }
+    }
+
+    @Test
+    fun allNonPracticeLevelsPreserveDuplicatePoliciesMatchingAndSavedResults() {
+        val category = categoryData("category", "M21", controlSiCodes = listOf(31, 32))
+        val registration = competitorData("comp-1", "Alice", "Runner", siNumber = 2005010, category = category.category)
+        for (level in RaceLevel.entries.filter { it != RaceLevel.PRACTICE }) {
+            for (policy in EventReadoutDuplicatePolicy.entries) for (registered in listOf(true, false)) for (changed in listOf(false, true)) {
+                val label = "$level $policy registered=$registered changed=$changed"
+                val original = projectFile(raceLevel = level, categories = listOf(category),
+                    competitors = if (registered) listOf(registration) else emptyList())
+                val card = sportIdentReadout(siNumber = 2005010, cardHolder = SportIdentCardHolder("Alice", "Runner"))
+                val first = appendPracticeDownload(original, card, "first")
+                val reread = if (changed) card.copy(finishTime = SportIdentTime(1801L)) else card
+                val updated = if (policy == EventReadoutDuplicatePolicy.Reject) {
+                    assertFailsWith<IllegalArgumentException>(label) { appendPracticeDownload(first, reread, "second", policy) }
+                    first
+                } else appendPracticeDownload(first, reread, "second", policy)
+                val saved = EventProjectFileJson.decode(EventProjectFileJson.encode(updated))
+                val rows = saved.raceData.competitorData.mapNotNull { it.readoutData } + saved.raceData.unmatchedReadoutData
+                val expectedIds = when (policy) {
+                    EventReadoutDuplicatePolicy.Reject -> setOf("first")
+                    EventReadoutDuplicatePolicy.Replace -> setOf("second")
+                    EventReadoutDuplicatePolicy.CreateNew -> setOf("first", "second")
+                }
+                assertEquals(expectedIds, rows.map { it.result.id }.toSet(), label)
+                assertEquals(if (registered) 1 else 0, EventProjectSummary.from(saved).competitorCount, label)
+                assertEquals(if (registered) listOf("comp-1") else emptyList(), rows.mapNotNull { it.result.competitorId }, label)
+                assertEquals(saved.raceData.competitorData, saved.raceData.resultCompetitorData(), label)
+                assertEquals(if (registered) listOf("RUNNER Alice") else emptyList(),
+                    EventResultDetails.from(saved.raceData).map { it.competitorName }, label)
+                assertTrue(rows.all { it.result.siNumber == 2005010 }, label)
+                if (policy == EventReadoutDuplicatePolicy.CreateNew) {
+                    assertEquals(first.raceData.competitorData.mapNotNull { it.readoutData } + first.raceData.unmatchedReadoutData,
+                        rows.filter { it.result.id == "first" }, label)
+                    assertEquals(null, rows.single { it.result.id == "second" }.result.competitorId, label)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun everyNonPracticeLevelRejectsSecondManualOrReassignedResultForACompetitor() {
+        for (level in RaceLevel.entries.filter { it != RaceLevel.PRACTICE }) {
+            val existing = projectFile(raceLevel = level, competitors = listOf(
+                competitorData("comp-1", "Alice", "Runner", siNumber = 2005010,
+                    readoutData = readout("first", "comp-1", 2005010))
+            ), unmatchedReadouts = listOf(readout("unmatched", null, 2005011)))
+            assertFailsWith<IllegalArgumentException>(level.name) {
+                EventProjectEditor.addManualReadout(existing, "second", "comp-1", "", "600", "1200", "31,32",
+                    ResultStatus.OK, "2026-09-08T13:00:00") { index, type -> "$index-$type" }
+            }
+            assertFailsWith<IllegalArgumentException>(level.name) {
+                EventProjectEditor.assignUnmatchedReadout(existing, "unmatched", "comp-1")
+            }
+            assertEquals("first", existing.raceData.competitorData.single().readoutData!!.result.id)
+            assertEquals("unmatched", existing.raceData.unmatchedReadoutData.single().result.id)
         }
     }
 
@@ -4059,6 +4187,7 @@ class EventProjectEditorTest {
     @Test
     fun rejectsInvalidManualReadoutInputs() {
         val original = projectFile(
+            raceLevel = RaceLevel.REGIONAL,
             competitors = listOf(
                 competitorData("comp-1", "Alice", "Runner", readoutData = readout("existing", "comp-1", 123456))
             )

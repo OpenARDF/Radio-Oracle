@@ -57,7 +57,7 @@ data class EventReadoutDetails(
                 keySelector = { it.siCode },
                 valueTransform = { it.publicLabel?.takeIf(String::isNotBlank) ?: it.label }
             )
-            val matched = raceData.competitorData.mapNotNull { competitorData ->
+            val matched = raceData.resultCompetitorData().mapNotNull { competitorData ->
                 val readoutData = competitorData.readoutData ?: return@mapNotNull null
                 fromReadout(
                     readoutData = readoutData,

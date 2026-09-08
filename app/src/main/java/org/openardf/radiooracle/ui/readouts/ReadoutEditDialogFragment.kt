@@ -202,7 +202,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
 
             if (result.competitorId != null) {
                 competitor = selectedRaceViewModel.getCompetitor(result.competitorId!!)?.copy()
-                competitorPicker.setText(competitor?.getNameWithStartNumber())
+                competitorPicker.setText(competitor?.let { competitorLabel(it) })
             } else {
                 competitorPicker.setText(getString(R.string.readout_unknown_competitor), false)
             }
@@ -230,7 +230,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
 
         // Competitor setup
         for (comp in competitors) {
-            competitorArr.add("${comp.getFullName()} (${comp.startNumber})")
+            competitorArr.add(competitorLabel(comp))
         }
         competitorArr.add(
             0,
@@ -424,7 +424,8 @@ class ReadoutEditDialogFragment : DialogFragment() {
         }
 
         //Check competitor
-        if (result.competitorId != null
+        if (selectedRaceViewModel.race.value?.raceLevel != org.openardf.radiooracle.shared.domain.RaceLevel.PRACTICE
+            && result.competitorId != null
             && origResult?.competitorId != result.competitorId
             && selectedRaceViewModel.getResultByCompetitor(result.competitorId!!) != null
         ) {
@@ -501,6 +502,11 @@ class ReadoutEditDialogFragment : DialogFragment() {
             startTime = startTime?.let(::SITime),
             finishTime = finishTime?.let(::SITime)
         ).also { it.place = place }
+
+    private fun competitorLabel(value: Competitor): String =
+        if (competitors.count { it.getFullName() == value.getFullName() } > 1) {
+            "${value.getFullName()} — SI ${value.siNumber ?: "?"}"
+        } else value.getFullName()
 
     private fun getCompetitorFromPicker(): Competitor? {
         val compText = competitorPicker.text.toString()

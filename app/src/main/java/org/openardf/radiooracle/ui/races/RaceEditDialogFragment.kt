@@ -173,6 +173,16 @@ class RaceEditDialogFragment : DialogFragment() {
                     Duration.ofMinutes(120)
                 )
             }
+            RaceEditActions.COPY -> {
+                val source = requireNotNull(args.race)
+                race = source.copy(id = UUID.randomUUID(), name = getString(R.string.race_copy_default_name, source.name),
+                    startDateTime = LocalDateTime.now().with(source.startDateTime.toLocalTime()), apiKey = "",
+                    importSourceId = null, importFingerprint = null, publicResultsUrl = null, publicResultsPublishedAtIso = null)
+                dialog?.setTitle(R.string.race_new_from_existing)
+                nameEditText.setText(race.name)
+                requireView().findViewById<View>(R.id.race_copy_help).visibility = View.VISIBLE
+                requireView().findViewById<View>(R.id.race_copy_competitors).visibility = View.VISIBLE
+            }
             RaceEditActions.EDIT -> {
                 race = args.race!!.copy()
                 dialog?.setTitle(R.string.race_edit)
@@ -230,6 +240,11 @@ class RaceEditDialogFragment : DialogFragment() {
                     Bundle().apply {
                         putSerializable(BUNDLE_KEY_ACTIONS, args.action)
                         putSerializable(BUNDLE_KEY_RACE, race)
+                        if (args.action == RaceEditActions.COPY) {
+                            putString(BUNDLE_KEY_SOURCE_RACE, requireNotNull(args.race).id.toString())
+                            putBoolean(BUNDLE_KEY_COPY_COMPETITORS,
+                                requireView().findViewById<com.google.android.material.checkbox.MaterialCheckBox>(R.id.race_copy_competitors).isChecked)
+                        }
                     }
                 )
                 //End the dialog
@@ -286,10 +301,13 @@ class RaceEditDialogFragment : DialogFragment() {
         const val BUNDLE_KEY_ACTIONS = "BUNDLE_KEY_ACTIONS"
         const val BUNDLE_KEY_RACE = "BUNDLE_KEY_RACE"
         const val BUNDLE_KEY_POSITION = "BUNDLE_KEY_POSITION"
+        const val BUNDLE_KEY_SOURCE_RACE = "BUNDLE_KEY_SOURCE_RACE"
+        const val BUNDLE_KEY_COPY_COMPETITORS = "BUNDLE_KEY_COPY_COMPETITORS"
     }
 
     enum class RaceEditActions {
         CREATE,
+        COPY,
         EDIT,
         IMPORT
     }

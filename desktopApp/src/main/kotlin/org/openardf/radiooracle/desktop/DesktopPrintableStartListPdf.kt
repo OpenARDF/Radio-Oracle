@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.registrations
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -81,7 +82,7 @@ object DesktopPrintableStartListPdf {
 
     private fun printableRows(raceData: EventRaceData): List<PrintableStartListRow> {
         val categoryNamesById = raceData.categories.associate { it.category.id to it.category.name }
-        val sortedRows = raceData.competitorData
+        val sortedRows = raceData.competitorData.registrations()
             .sortedWith(
                 compareBy<EventCompetitorData>(
                     { it.competitorCategory.competitor.drawnStartTimeSeconds == null },

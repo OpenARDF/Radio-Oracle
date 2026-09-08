@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
+import org.openardf.radiooracle.shared.event.resultCompetitorData
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
@@ -52,7 +53,7 @@ object TextResultExports {
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
         routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): String {
-        val placedByCategory = raceData.competitorData
+        val placedByCategory = raceData.resultCompetitorData()
             .groupBy { it.resultCategoryId() }
             .mapValues { (_, categoryCompetitors) -> EventResultPlacement.sortByPlace(categoryCompetitors) }
         val awards = EventAwardDetails.from(raceData, awardDisplayMode)
@@ -65,7 +66,7 @@ object TextResultExports {
             appendLine("Date/time: ${raceData.race.startDateTimeIso}")
             appendLine("Level: ${raceData.race.raceLevel.name}")
             awards.publicationNotice?.let { appendLine(it) }
-            if (routeLengths.isNotEmpty()) appendLine(ResultRouteLength.coverage(routeLengths.size, raceData.competitorData.count { it.readoutData != null }))
+            if (routeLengths.isNotEmpty()) appendLine(ResultRouteLength.coverage(routeLengths.size, raceData.resultCompetitorData().count { it.readoutData != null }))
             appendLine()
             appendLine("Place\tName\tPerson ID\tRun time\tPoints\tControls")
             appendLine(RULE)

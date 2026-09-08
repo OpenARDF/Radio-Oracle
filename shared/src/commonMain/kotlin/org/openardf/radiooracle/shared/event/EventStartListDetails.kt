@@ -51,7 +51,7 @@ data class EventStartListDetails(
             val quality = EventStartListQuality.evaluate(raceData, settings)
             val rowQualityByCompetitorId = quality.rowFindings.groupBy { it.competitorId }
             val categoryNamesById = raceData.categories.associate { it.category.id to it.category.name }
-            val rowsWithStart = raceData.competitorData.map { competitorData ->
+            val rowsWithStart = raceData.competitorData.registrations().map { competitorData ->
                 val competitorCategory = competitorData.competitorCategory
                 val competitor = competitorCategory.competitor
                 val categoryName = competitorCategory.category?.name
@@ -152,7 +152,7 @@ data class EventStartListQuality(
          */
         fun evaluate(raceData: EventRaceData, settings: StartDrawSettings): EventStartListQuality {
             val categoryById = raceData.categories.associateBy { it.category.id }
-            val scheduled = raceData.competitorData
+            val scheduled = raceData.competitorData.registrations()
                 .mapNotNull { data ->
                     val competitor = data.competitorCategory.competitor
                     val startSeconds = competitor.drawnStartTimeSeconds ?: return@mapNotNull null

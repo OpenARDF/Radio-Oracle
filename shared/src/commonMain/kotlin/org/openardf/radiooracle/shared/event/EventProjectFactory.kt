@@ -30,26 +30,37 @@ import org.openardf.radiooracle.shared.domain.RaceType
 
 /** Creates shared project-file aggregates for new desktop and future non-Android projects. */
 object EventProjectFactory {
-    /** New race identity and clean recording/publication state; preserve the chosen design and registrations. */
-    fun copyForCourseRedesign(source: EventProjectFile, raceId: String, raceName: String, startDateTimeIso: String): EventProjectFile {
-        require(raceId != source.raceData.race.id) { "The revised race needs a new identity." }
+    /** Start a new race from the applied setup, with independent recording and publication state. */
+    fun copyForNewRace(
+        source: EventProjectFile,
+        raceId: String,
+        raceName: String,
+        startDateTimeIso: String,
+        includeCompetitors: Boolean = false
+    ): EventProjectFile {
+        require(raceId != source.raceData.race.id) { "The new race needs a new identity." }
         val empty = createEmptyProject(raceId, raceName, startDateTimeIso)
-        val design = EventCourseDrafts.candidate(source).raceData
+        val design = source.raceData
         fun competitor(value: EventCompetitor) = value.copy(raceId = raceId, drawnStartTimeSeconds = null, startNumber = null)
         fun category(value: EventCategoryData) = value.copy(category = value.category.copy(raceId = raceId),
-            competitors = value.competitors.map(::competitor))
+            competitors = if (includeCompetitors) value.competitors.distinctBy { it.id }.map(::competitor) else emptyList())
         val categories = design.categories.map(::category)
         val byId = categories.associateBy { it.category.id }
-        val copied = empty.copy(raceData = design.copy(
+        return empty.copy(raceData = design.copy(
             race = design.race.copy(id = raceId, name = empty.raceData.race.name, startDateTimeIso = startDateTimeIso, apiKey = ""),
             categories = categories, courseMappings = design.courseMappings.map(::category),
             controls = design.controls.map { it.copy(raceId = raceId) }, aliases = design.aliases.map { it.copy(raceId = raceId) },
-            competitorData = design.competitorData.map { data ->
+            competitorData = if (includeCompetitors) design.competitorData.registrations().map { data ->
                 val person = competitor(data.competitorCategory.competitor)
                 EventCompetitorData(EventCompetitorCategory(person, byId[person.categoryId]?.category), null)
-            }, unmatchedReadoutData = emptyList(), startDrawSettings = null, courseDraft = null))
-        return EventCourseDrafts.start(copied)
+            } else emptyList(),
+            unmatchedReadoutData = emptyList(), startDrawSettings = null, courseDraft = null
+        ))
     }
+
+    /** Course redesign copies the candidate rather than the applied setup and opens a fresh draft. */
+    fun copyForCourseRedesign(source: EventProjectFile, raceId: String, raceName: String, startDateTimeIso: String): EventProjectFile =
+        EventCourseDrafts.start(copyForNewRace(EventCourseDrafts.candidate(source), raceId, raceName, startDateTimeIso, includeCompetitors = true))
 
     /**
      * Builds an empty Race File using the same conservative defaults as Android's new race model.
