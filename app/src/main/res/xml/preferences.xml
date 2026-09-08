@@ -161,8 +161,11 @@
         android:title="@string/preferences_cloudflare"
         app:iconSpaceReserved="false" />
 
-    <PreferenceCategory android:title="@string/diagnostic_logs_support">
+    <PreferenceCategory
+        android:title="@string/diagnostic_logs_support"
+        app:iconSpaceReserved="false">
         <Preference android:key="diagnostic_logs" android:title="@string/diagnostic_logs_title"
-            android:summary="@string/diagnostic_logs_summary" />
+            android:summary="@string/diagnostic_logs_summary"
+            app:iconSpaceReserved="false" />
     </PreferenceCategory>
 </PreferenceScreen>
