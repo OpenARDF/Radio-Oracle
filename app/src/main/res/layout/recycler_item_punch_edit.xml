@@ -25,7 +25,7 @@
 
             <TextView
                 android:id="@+id/punch_edit_item_number"
-                android:layout_width="32dp"
+                android:layout_width="24dp"
                 android:layout_height="wrap_content"
                 android:background="@color/event_toolbar_background"
                 android:gravity="center"
@@ -46,7 +46,9 @@
                 android:inputType="textNoSuggestions"
                 android:maxLength="32"
                 android:minWidth="64dp"
+                android:paddingStart="4dp"
                 android:paddingEnd="5dp"
+                android:textSize="16sp"
                 android:singleLine="true"
                 android:textColor="@color/black"
                 android:textColorHint="@color/grey" />
@@ -60,29 +62,12 @@
                 android:imeOptions="actionNext"
                 android:inputType="textNoSuggestions"
                 android:maxLength="8"
+                android:paddingStart="4dp"
                 android:paddingEnd="5dp"
+                android:textSize="16sp"
                 android:singleLine="true"
                 android:textColor="@color/black"
                 android:textColorHint="@color/grey" />
-
-            <Space
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-            <ImageButton
-                android:id="@+id/punch_edit_item_add_btn"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:src="@drawable/ic_add"
-                app:tint="@color/white" />
-
-            <ImageButton
-                android:id="@+id/punch_edit_item_delete_btn"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:src="@drawable/ic_delete"
-                app:tint="@color/white" />
         </LinearLayout>
 
         <LinearLayout
@@ -135,6 +120,25 @@
                 android:singleLine="true"
                 android:textColor="@color/black"
                 android:textColorHint="@color/grey" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <ImageButton
+                android:id="@+id/punch_edit_item_add_btn"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_add"
+                app:tint="@color/white" />
+
+            <ImageButton
+                android:id="@+id/punch_edit_item_delete_btn"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_delete"
+                app:tint="@color/white" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

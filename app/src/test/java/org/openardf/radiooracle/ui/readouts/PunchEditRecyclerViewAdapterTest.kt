@@ -20,6 +20,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -90,11 +91,57 @@ class PunchEditRecyclerViewAdapterTest {
         punch.time.onEditorAction(EditorInfo.IME_ACTION_NEXT)
         assertTrue(punch.code.hasFocus())
         assertEquals(3, adapter.itemCount)
-        assertEquals("101234", punch.time.text.toString())
+        assertEquals("10:12:34", punch.time.text.toString())
         punch.code.setText("fox2")
         assertEquals(42, adapter.values[1].punch.siCode)
         assertEquals(36754L, adapter.values[1].punch.siTime.getSeconds())
         assertTrue(adapter.isValid())
+    }
+
+    @Test
+    fun compactClockTypingAndPastingInsertColonsAndKeepDraftInSync() {
+        val field = holder(0).time
+        field.requestFocus()
+        field.setText("")
+        val input = field.onCreateInputConnection(EditorInfo())!!
+        "00000".forEach { input.commitText(it.toString(), 1) }
+        assertEquals("00000", field.text.toString())
+        input.commitText("0", 1)
+        assertEquals("00:00:00", field.text.toString())
+        assertEquals(8, field.selectionStart)
+        assertEquals("00:00:00", adapter.values[0].timeDraft)
+        assertEquals(0L, adapter.values[0].punch.siTime.getSeconds())
+        field.setText("")
+        input.commitText("235959", 1)
+        assertEquals("23:59:59", field.text.toString())
+        assertEquals(8, field.selectionStart)
+        assertEquals(86399L, adapter.values[0].punch.siTime.getSeconds())
+        field.setText("240000")
+        assertEquals("240000", field.text.toString())
+        assertFalse(adapter.values[0].isTimeValid)
+        field.setText("12:34:56")
+        field.setSelection(3, 5)
+        input.commitText("45", 1)
+        assertEquals("12:45:56", field.text.toString())
+        assertEquals(5, field.selectionStart)
+        input.deleteSurroundingText(1, 0)
+        assertEquals("12:4:56", field.text.toString())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun punchPromptsFitInsideANarrowDialogWithValidationIcons() {
+        addAfter(0)
+        val punch = holder(1)
+        val width = (288 * recycler.resources.displayMetrics.density).toInt()
+        punch.itemView.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        punch.itemView.layout(0, 0, width, punch.itemView.measuredHeight)
+        listOf(punch.code, punch.time).forEach { field ->
+            val available = field.width - field.compoundPaddingLeft - field.compoundPaddingRight
+            assertTrue("${field.hint}: needs ${field.paint.measureText(field.hint.toString())}, has $available",
+                field.paint.measureText(field.hint.toString()) <= available)
+        }
     }
 
     @Test

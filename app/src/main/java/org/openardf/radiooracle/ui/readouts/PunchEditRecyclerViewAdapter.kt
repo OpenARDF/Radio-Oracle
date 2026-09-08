@@ -35,6 +35,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.core.widget.doAfterTextChanged
 import androidx.core.widget.doOnTextChanged
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
@@ -311,8 +312,24 @@ class PunchEditRecyclerViewAdapter(
                 }
             }
 
-            timeTextWatcher = time.doOnTextChanged { cs: CharSequence?, _, _, _ ->
-                if (!timeWatcher(item, cs.toString())) {
+            timeTextWatcher = time.doAfterTextChanged { editable ->
+                val text = editable.toString()
+                // Wait for all six digits so four-digit hour/minute input can still be extended.
+                // Leave partial and invalid drafts untouched so they remain easy to correct.
+                if (text.length == 6 && text.all { it in '0'..'9' }) {
+                    val clock = runCatching { TimeProcessor.parseClockInput(text) }.getOrNull()
+                    if (clock != null) {
+                        val selectionStart = time.selectionStart
+                        val selectionEnd = time.selectionEnd
+                        editable?.replace(0, editable.length, TimeProcessor.formatLocalTime(clock))
+                        fun formattedPosition(position: Int): Int =
+                            (position + (if (position > 2) 1 else 0) + (if (position > 4) 1 else 0))
+                                .coerceIn(0, time.length())
+                        time.setSelection(formattedPosition(selectionStart), formattedPosition(selectionEnd))
+                        return@doAfterTextChanged
+                    }
+                }
+                if (!timeWatcher(item, text)) {
                     time.error = code.context.getString(R.string.general_invalid)
                 } else {
                     refreshValidationErrors()
