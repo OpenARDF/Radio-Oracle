@@ -5,11 +5,12 @@ import androidx.compose.runtime.remember
 import org.openardf.radiooracle.shared.event.EventCourseDrafts
 import org.openardf.radiooracle.shared.event.EventProjectFile
 
-/** The report, export actions and application actions must all use the current draft. */
+/** The report, export actions and application actions must all describe the current input design. */
 @Composable
 internal fun currentCourseAnalysisResult(
     project: EventProjectFile?,
-    completed: DesktopCourseAnalysisSummary?
+    completed: DesktopCourseAnalysisSummary?,
+    routeSource: DesktopCourseRouteSource = DesktopCourseRouteSource.forProject(project)
 ): DesktopCourseAnalysisSummary? {
     val currentHash = remember(project?.raceData) {
         project?.let {
@@ -20,5 +21,5 @@ internal fun currentCourseAnalysisResult(
         }
     }
     // Check on every completion too: a calculation started before an import may finish afterward.
-    return completed?.takeIf { currentHash != null && it.sourceSnapshotHash == currentHash }
+    return completed?.takeIf { currentHash != null && it.sourceSnapshotHash == currentHash && it.routeSource == routeSource }
 }

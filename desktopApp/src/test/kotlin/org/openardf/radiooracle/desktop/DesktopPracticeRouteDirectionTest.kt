@@ -81,12 +81,12 @@ class DesktopPracticeRouteDirectionTest {
         assertTrue("saved=${summary.providedIdealOrder}; calculated=${summary.calculatedIdealOrder}; missing=${summary.missingElements}; note=${summary.calculatedRouteSection?.explanation}", summary.idealOrderMatches == true)
         val calculated = requireNotNull(summary.calculatedRouteSection)
         assertFalse(calculated.summaryOnly)
-        assertTrue(calculated.explanation.contains("Practice saved-direction exception"))
+        assertTrue(calculated.explanation.contains("Practice direction exception"))
         assertTrue(summary.courseRecommendation.paragraph.contains("not the shortest route found"))
-        assertTrue(summary.summaryExplanation.contains("Practice saved-direction exception"))
+        assertTrue(summary.summaryExplanation.contains("Practice direction exception"))
         assertTrue(summary.goodnessMetrics.groups.flatMap { it.metrics }
             .filter { it.label.contains("shortest possible route") }.all { it.value.startsWith("No:") })
-        assertTrue(summary.metrics.single { it.label == "Saved route is shortest possible route" }.value.startsWith("No:"))
+        assertTrue(summary.metrics.single { it.label == "Applied route is shortest possible route" }.value.startsWith("No:"))
         for (map in summary.routeMaps) assertEquals(2, map.points.count { it.type == DesktopCourseRouteMapPointType.Waypoint })
         val exported = summary.kmlFolders.single { it.routeName == "Calculated route" }
         for (corner in listOf(corner1, corner2)) assertTrue(exported.routePoints.any { it.distanceMetersTo(corner) < 0.01 })
@@ -100,7 +100,7 @@ class DesktopPracticeRouteDirectionTest {
         val normal = analyze(project.copy(raceData = project.raceData.copy(race = project.raceData.race.copy(raceLevel = RaceLevel.NATIONAL))))
         assertFalse(normal.idealOrderMatches == true)
         assertTrue(normal.calculatedRouteSection!!.effectiveLengthMeters!! < calculated.effectiveLengthMeters!!)
-        assertFalse(normal.calculatedRouteSection!!.explanation.contains("Practice saved-direction exception"))
+        assertFalse(normal.calculatedRouteSection!!.explanation.contains("Practice direction exception"))
     }
 
     @Test fun resultsUseSameDirectionAndInvalidateReferencesWhenPolicyInputsChange() = runBlocking {

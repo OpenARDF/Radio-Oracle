@@ -1,13 +1,12 @@
 package org.openardf.radiooracle.desktop
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.*
 import org.openardf.radiooracle.shared.event.*
 
@@ -100,61 +99,73 @@ private fun DesktopCourseApplyReview(
         (row.categoryId to row.placementId) to (explicit ?: exact).orEmpty()
     }) }
     fun dismiss() { job?.cancel(); onDismiss() }
-    AlertDialog(onDismissRequest = ::dismiss, modifier = Modifier.width(720.dp).testTag("course-apply-review"),
-        title = { Text("Review and apply all race courses") },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Scope: this race, including inactive course mappings. Confirm the physical SI station for each placement. Accepted fox numbering will update Controls and every course together.")
-                if (EventCourseDrafts.hasRecordedActivity(applied.raceData)) {
-                    Text("This race has recorded activity. Export a new race copy without readouts, then open the copy to continue design.")
-                    TextButton(onClick = { runCatching(onCopy).onFailure { error = it.message } }) { Text("Export revised race copy…") }
-                }
-                (loadError ?: rows.exceptionOrNull()?.message ?: error)?.let { Text(it, color = MaterialTheme.colors.error) }
-                if (candidate == null || state == null) Text("Unlock or reload the current course draft to continue.")
-                if (prepared == null) {
-                    rows.getOrDefault(emptyList()).forEach { row ->
-                        val categoryName = (candidate?.raceData?.categories.orEmpty() + candidate?.raceData?.courseMappings.orEmpty())
-                            .singleOrNull { it.category.id == row.categoryId }?.category?.name.orEmpty()
-                        CourseStationPicker("$categoryName: ${row.label} at ${row.latitude}, ${row.longitude}", bindings[row.categoryId to row.placementId].orEmpty(),
-                            candidate?.raceData?.controls.orEmpty().filter { it.type == row.role }, !busy) { id ->
-                            bindings = bindings + ((row.categoryId to row.placementId) to id)
+    Dialog(onDismissRequest = ::dismiss) {
+        Surface(
+            modifier = Modifier.width(720.dp).heightIn(max = 720.dp).fillMaxHeight(0.9f)
+                .testTag("course-apply-review"),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Review and apply all race courses", style = MaterialTheme.typography.h6,
+                    modifier = Modifier.testTag("course-review-title"))
+                // The shared viewport owns scrolling; title and actions are outside its bounds.
+                DesktopWorkspaceScroll(Modifier.weight(1f).fillMaxWidth()) {
+                    Text("Scope: this race, including inactive course mappings. Confirm the physical SI station for each placement. Accepted fox numbering will update Controls and every course together.")
+                    if (EventCourseDrafts.hasRecordedActivity(applied.raceData)) {
+                        Text("This race has recorded activity. Export a new race copy without readouts, then open the copy to continue design.")
+                        TextButton(onClick = { runCatching(onCopy).onFailure { error = it.message } }) { Text("Export revised race copy…") }
+                    }
+                    (loadError ?: rows.exceptionOrNull()?.message ?: error)?.let { Text(it, color = MaterialTheme.colors.error) }
+                    if (candidate == null || state == null) Text("Unlock or reload the current course draft to continue.")
+                    if (prepared == null) {
+                        rows.getOrDefault(emptyList()).forEach { row ->
+                            val categoryName = (candidate?.raceData?.categories.orEmpty() + candidate?.raceData?.courseMappings.orEmpty())
+                                .singleOrNull { it.category.id == row.categoryId }?.category?.name.orEmpty()
+                            CourseStationPicker("$categoryName: ${row.label} at ${row.latitude}, ${row.longitude}", bindings[row.categoryId to row.placementId].orEmpty(),
+                                candidate?.raceData?.controls.orEmpty().filter { it.type == row.role }, !busy) { id ->
+                                bindings = bindings + ((row.categoryId to row.placementId) to id)
+                            }
                         }
-                    }
-                } else {
-                    Text("Prepared changes: labels and SI stations below, complete routes, assignments, and metrics for every listed course.")
-                    prepared!!.changes.groupBy { it.categoryName }.forEach { (category, changes) ->
-                        Text("$category: ${changes.joinToString { "${it.label} (SI ${it.siCode})" }}")
-                    }
-                }
-                if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Calculating and validating every course…") }
-            }
-        },
-        confirmButton = {
-            Button(enabled = !busy && candidate != null && state != null && loadError == null && rows.isSuccess &&
-                bindings.isNotEmpty() && bindings.values.none(String::isBlank) && !EventCourseDrafts.hasRecordedActivity(applied.raceData),
-                modifier = Modifier.testTag(if (prepared == null) "course-prepare-all" else "course-apply-all"), onClick = {
-                    val ready = prepared
-                    if (ready != null) {
-                        runCatching { onApply(ready) }.onFailure { error = it.message; prepared = null }
                     } else {
-                        busy = true
-                        job = scope.launch {
-                            try {
-                                prepared = withContext(Dispatchers.Default) {
-                                    val byCategory = bindings.entries.groupBy { it.key.first }.mapValues { (_, entries) -> entries.associate { it.key.second to it.value } }
-                                    val info = state!!.protectedCourseInfoByCategoryId.getValue(application.categoryId)
-                                    DesktopCourseAnalysisApplier.prepareAll(applied, DesktopCourseRouteSelection(info, application,
-                                        byCategory.getValue(application.categoryId)), byCategory, password,
-                                        elevationLookup = { DesktopVenueElevationCache.elevationMeters(it) }, checkCancelled = { ensureActive() })
-                                }
-                            } catch (failure: Exception) {
-                                if (failure is CancellationException) throw failure
-                                error = failure.message
-                            } finally { busy = false }
+                        Text("Prepared changes: labels and SI stations below, complete routes, assignments, and metrics for every listed course.")
+                        prepared!!.changes.groupBy { it.categoryName }.forEach { (category, changes) ->
+                            Text("$category: ${changes.joinToString { "${it.label} (SI ${it.siCode})" }}")
                         }
                     }
-                }) { Text(if (prepared == null) "Prepare all courses" else "Apply reviewed courses") }
-        }, dismissButton = { TextButton(onClick = ::dismiss) { Text("Cancel") } })
+                    if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Calculating and validating every course…") }
+                }
+                Row(Modifier.fillMaxWidth().testTag("course-review-actions"),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    TextButton(onClick = ::dismiss) { Text("Cancel") }
+                    Button(enabled = !busy && candidate != null && state != null && loadError == null && rows.isSuccess &&
+                        bindings.isNotEmpty() && bindings.values.none(String::isBlank) && !EventCourseDrafts.hasRecordedActivity(applied.raceData),
+                        modifier = Modifier.testTag(if (prepared == null) "course-prepare-all" else "course-apply-all"), onClick = {
+                            val ready = prepared
+                            if (ready != null) {
+                                runCatching { onApply(ready) }.onFailure { error = it.message; prepared = null }
+                            } else {
+                                busy = true
+                                job = scope.launch {
+                                    try {
+                                        prepared = withContext(Dispatchers.Default) {
+                                            val byCategory = bindings.entries.groupBy { it.key.first }.mapValues { (_, entries) -> entries.associate { it.key.second to it.value } }
+                                            val info = state!!.protectedCourseInfoByCategoryId.getValue(application.categoryId)
+                                            DesktopCourseAnalysisApplier.prepareAll(applied, DesktopCourseRouteSelection(info, application,
+                                                byCategory.getValue(application.categoryId)), byCategory, password,
+                                                elevationLookup = { DesktopVenueElevationCache.elevationMeters(it) }, checkCancelled = { ensureActive() })
+                                        }
+                                    } catch (failure: Exception) {
+                                        if (failure is CancellationException) throw failure
+                                        error = failure.message
+                                    } finally { busy = false }
+                                }
+                            }
+                        }) { Text(if (prepared == null) "Prepare all courses" else "Apply reviewed courses") }
+                }
+            }
+        }
+    }
 }
 
 private data class CourseBindingReviewRow(val categoryId: String, val placementId: String, val label: String,
@@ -163,7 +174,7 @@ private data class CourseBindingReviewRow(val categoryId: String, val placementI
 @Composable
 private fun CourseStationPicker(label: String, selectedId: String, controls: List<EventControl>, enabled: Boolean, onSelected: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Column {
+    Column(Modifier.testTag("course-station-picker")) {
         Text(label)
         Box {
             OutlinedButton(onClick = { expanded = true }, enabled = enabled) {

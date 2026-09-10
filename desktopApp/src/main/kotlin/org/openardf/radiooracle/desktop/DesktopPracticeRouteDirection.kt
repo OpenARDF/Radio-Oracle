@@ -37,10 +37,10 @@ internal data class DesktopPracticeRouteDirection(
         val selectedLength = effectiveLength(selectedIds)?.takeIf { it.isFinite() } ?: return null
         val savedLength = effectiveLength(savedControlIds)?.takeIf { it.isFinite() } ?: return null
         if (selectedLength >= savedLength) return null
-        return "Practice saved-direction exception: Start to finish beacon is below the existing " +
-            "${rule.startMinMeters} m separation requirement. The selected candidate exactly reverses the saved fox order " +
+        return "Practice direction exception: Start to finish beacon is below the existing " +
+            "${rule.startMinMeters} m separation requirement. The selected candidate exactly reverses the original fox order " +
             "and has a shorter effective length, including known mandatory detours. " +
-            "The calculated route retains the saved direction; it is not the shortest route found."
+            "The calculated route retains the original direction; it is not the shortest route found."
     }
 }
 

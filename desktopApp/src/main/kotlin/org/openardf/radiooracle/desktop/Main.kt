@@ -3336,6 +3336,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 }
                 projectStatusText = statusText
                 CourseAnalysisElevationPreparationResult(
+                    routeSource = DesktopCourseRouteSource.forProject(projectFile),
                     projectFile = resultProject,
                     protectedCourseInfoByCategoryId = withContext(Dispatchers.Default) { decryptedProtectedCourseState(resultProject, password.orEmpty()).protectedCourseInfoByCategoryId },
                     statusText = statusText
@@ -3455,6 +3456,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
             projectStatusText = statusText
             return CourseAnalysisElevationPreparationResult(
+                routeSource = DesktopCourseRouteSource.forProject(projectFile),
                 projectFile = latestProject,
                 protectedCourseInfoByCategoryId = latestCourseInfo,
                 statusText = statusText
@@ -11879,6 +11881,7 @@ internal fun courseAnalysisRouteCategories(
         .sortedWith(EventCategorySort.byDisplayName)
 
 private data class CourseAnalysisElevationPreparationResult(
+    val routeSource: DesktopCourseRouteSource,
     val projectFile: EventProjectFile,
     val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     val statusText: String
@@ -14094,12 +14097,14 @@ private fun SectionWorkspace(
         if (section == DesktopSection.CourseAnalysis && projectFile != null) {
             val design = LocalCourseDesign.current
             if (projectFile.raceData.courseDraft != null) {
-                Text("Course draft: results and downloads continue using the applied courses.")
+                Text("Pending course draft: Save Race preserves these edits without applying them. Results and downloads still use the applied courses.")
+                Text("Discard removes pending course edits for all categories and returns to the applied courses.")
                 TextButton(onClick = { design?.cancelDraft?.invoke() }) { Text("Discard course draft") }
             }
             if (projectFile.raceData.courseDraft != null && design?.project == null && isProtectedCourseOrderUnlocked) {
                 Text(design?.error ?: "Loading the course draft…")
             } else CourseAnalysisPanel(
+                routeSource = DesktopCourseRouteSource.forProject(projectFile),
                 projectFile = design?.project ?: projectFile,
                 eventFilePath = eventFilePath,
                 isUnlocked = isProtectedCourseOrderUnlocked,
@@ -21198,7 +21203,7 @@ private fun CourseAnalyzerGuidance() {
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             KmlImportInstruction("Optional KML/KMZ SS=#.## values in Start, fox, beacon, spectator, or LineString descriptions replace the race speed factor for the following leg; Finish SS values are ignored.")
-            KmlImportInstruction("Choose a category, then Analyze to compare the saved route with the calculated route candidate.")
+            KmlImportInstruction("Choose a category, then Analyze to compare its Draft route or Applied route with the calculated route candidate.")
             KmlImportInstruction("Export Analysis writes the displayed analysis plus route/control data for external review.")
             KmlImportInstruction("Review and Apply Courses confirms SI stations, then applies accepted numbering, assignments, geometry, and metrics to all courses in this race.")
             KmlImportInstruction("Save Draft Numbering stores a Section 1 numbering proposal in the draft; applied courses and results remain unchanged.")
@@ -21213,6 +21218,7 @@ private fun CourseAnalyzerGuidance() {
 
 @Composable
 private fun CourseAnalysisPanel(
+    routeSource: DesktopCourseRouteSource,
     projectFile: EventProjectFile,
     eventFilePath: Path?,
     isUnlocked: Boolean,
@@ -21321,6 +21327,7 @@ private fun CourseAnalysisPanel(
 
     suspend fun analyzeWithLocalCachePreparation(categoryId: String): DesktopCourseAnalysisSummary {
         return analyzeCourseWithLocalCachePreparation(
+            routeSource = routeSource,
             projectFile = projectFile,
             categoryId = categoryId,
             protectedCourseInfoByCategoryId = analysisCourseInfoByCategoryId,
@@ -21445,7 +21452,7 @@ private fun CourseAnalysisPanel(
         CourseAnalysisResultView(analysisResult)
     }
 
-    pendingMissingDataResult?.takeIf { currentCourseAnalysisResult(projectFile, it.summary) != null }?.let { prompt ->
+    pendingMissingDataResult?.takeIf { currentCourseAnalysisResult(projectFile, it.summary, routeSource) != null }?.let { prompt ->
         CourseAnalysisMissingDataDialog(
             prompt = prompt,
             onDismiss = { pendingMissingDataResult = null },
@@ -21469,7 +21476,7 @@ private fun CourseAnalysisPanel(
                             exportStatusText = preparation.statusText
                         }
                         analysisProgressMessage = "Re-running analysis with the latest available elevation data."
-                        val refreshedSummary = analyzeCourseCategory(
+                        val refreshedSummary = analyzeCourseCategory(preparation?.routeSource ?: routeSource,
                             projectFile = preparation?.projectFile ?: projectFile,
                             categoryId = prompt.categoryId,
                             protectedCourseInfoByCategoryId = preparation?.protectedCourseInfoByCategoryId
@@ -21510,6 +21517,7 @@ private fun courseAnalysisUnavailableReason(
     )
 
 private suspend fun analyzeCourseWithLocalCachePreparation(
+    routeSource: DesktopCourseRouteSource,
     projectFile: EventProjectFile,
     categoryId: String,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
@@ -21520,6 +21528,7 @@ private suspend fun analyzeCourseWithLocalCachePreparation(
     onStatusText: (String) -> Unit
 ): DesktopCourseAnalysisSummary {
     var summary = analyzeCourseCategory(
+        routeSource = routeSource,
         projectFile = projectFile,
         categoryId = categoryId,
         protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
@@ -21531,7 +21540,7 @@ private suspend fun analyzeCourseWithLocalCachePreparation(
         val preparation = onResolveCachedElevations(categoryId)
         if (preparation != null) {
             onStatusText(preparation.statusText)
-            summary = analyzeCourseCategory(
+            summary = analyzeCourseCategory(preparation.routeSource,
                 projectFile = preparation.projectFile,
                 categoryId = categoryId,
                 protectedCourseInfoByCategoryId = preparation.protectedCourseInfoByCategoryId,
@@ -21544,6 +21553,7 @@ private suspend fun analyzeCourseWithLocalCachePreparation(
 }
 
 private suspend fun analyzeCourseCategory(
+    routeSource: DesktopCourseRouteSource,
     projectFile: EventProjectFile,
     categoryId: String,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
@@ -21560,7 +21570,8 @@ private suspend fun analyzeCourseCategory(
             elevationLookup = DesktopVenueElevationCache::elevationMeters,
             elevationCacheNotes = DesktopVenueElevationCache::analysisSourceNotes,
             magneticDeclinationProvider = DesktopMagneticDeclination::result,
-            prepareApplication = true
+            prepareApplication = true,
+            routeSource = routeSource
         )
     }
 
@@ -21766,7 +21777,7 @@ private fun CourseAnalysisMissingDataDialog(
                         )
                     }
                     Text(
-                        text = "The saved route already has elevation data. Downloading uses internet elevation data to fill the local calculated-route cache before comparison.",
+                        text = "The input route already has elevation data. Downloading uses internet elevation data to fill the local calculated-route cache before comparison.",
                         color = DesktopPalette.Disconnected,
                         fontSize = 12.sp
                     )
@@ -21879,12 +21890,13 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
                 color = DesktopPalette.Black,
                 fontSize = 13.sp
             )
-            val importedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Saved" }
+            val importedSummaryGroup = result.summaryGroups.firstOrNull { it.title == result.routeSource.label }
             val calculatedSummaryGroup = result.summaryGroups.firstOrNull { it.title == "Calculated" }
-            val importedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Saved" }
+            val importedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == result.routeSource.label }
             val calculatedMetricGroup = result.goodnessMetrics.groups.firstOrNull { it.title == "Calculated" }
             result.providedRouteSection?.let { section ->
                 CourseAnalysisSectionView(
+                    routeSource = result.routeSource,
                     section = section,
                     includeRenumbering = true,
                     summaryGroup = importedSummaryGroup,
@@ -21893,6 +21905,7 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
             }
             result.calculatedRouteSection?.let { section ->
                 CourseAnalysisSectionView(
+                    routeSource = result.routeSource,
                     section = section,
                     includeRenumbering = false,
                     summaryGroup = calculatedSummaryGroup,
@@ -21913,6 +21926,7 @@ private fun CourseAnalysisResultView(result: DesktopCourseAnalysisSummary?) {
 
 @Composable
 private fun CourseAnalysisSectionView(
+    routeSource: DesktopCourseRouteSource,
     section: DesktopCourseAnalysisSection,
     includeRenumbering: Boolean,
     summaryGroup: DesktopCourseAnalysisSummaryGroup?,
@@ -21949,7 +21963,7 @@ private fun CourseAnalysisSectionView(
         CourseAnalysisTimingBreakdown(section.legRows, section.estimatedIdealSeconds)
         CourseAnalysisLegRows("Leg analysis", section.legRows)
         if (section.includeWaitAnalysis && includeRenumbering) {
-            CourseAnalysisProvidedRouteWaitAnalysis(section.waitRows, section.waitRenumbering)
+            CourseAnalysisProvidedRouteWaitAnalysis(routeSource, section.waitRows, section.waitRenumbering)
         } else if (section.includeWaitAnalysis) {
             CourseAnalysisWaitRows("Optimized wait times", section.waitRows)
         }
@@ -21974,24 +21988,25 @@ private fun CourseAnalysisTimingBreakdown(legs: List<DesktopCourseLegRow>, estim
 
 @Composable
 private fun CourseAnalysisProvidedRouteWaitAnalysis(
+    routeSource: DesktopCourseRouteSource,
     waitRows: List<DesktopCourseWaitRow>,
     renumbering: DesktopCourseWaitRenumbering?
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = "Saved-route wait-time analysis",
+            text = routeSource.waitAnalysisHeading,
             color = DesktopPalette.Black,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "This subsection estimates Classic fox arrival phases on the saved route and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. If the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability and accumulated fatigue are not fully modeled, barriers, slow terrain, fatigue, and competitor profile can shift real arrival times and change wait-time outcomes.",
+            text = "This subsection estimates Classic fox arrival phases on the ${routeSource.lowerRouteLabel} and checks whether assigning different fox numbers to the same locations could reduce waiting. If a competitor reaches a fox while it is off the air, timing waits for that fox to transmit, then adds 30 seconds to find and punch before departure. If the fox is already transmitting at arrival, timing assumes the competitor runs straight to it and punches without extra delay. It uses the same elite baseline speed and effective-length movement estimates as the route analysis. Because map passability and accumulated fatigue are not fully modeled, barriers, slow terrain, fatigue, and competitor profile can shift real arrival times and change wait-time outcomes.",
             color = DesktopPalette.Black,
             fontSize = 13.sp
         )
         CourseAnalysisWaitRows("Current wait times", waitRows)
         if (renumbering != null) {
-            CourseAnalysisWaitRenumbering(renumbering)
+            CourseAnalysisWaitRenumbering(routeSource, renumbering)
         }
     }
 }
@@ -22055,7 +22070,8 @@ private fun CourseAnalysisSectionSummaryRows(group: DesktopCourseAnalysisSummary
 }
 
 private val courseAnalysisSectionDuplicateSummaryLabels = setOf(
-    "Saved route",
+    "Draft route",
+    "Applied route",
     "Calculated route",
     "Ideal route",
     "Result",
@@ -22094,11 +22110,11 @@ private fun CourseAnalysisDetailRows(result: DesktopCourseAnalysisSummary) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         CourseAnalysisRow("Routes compared", result.calculatedRouteCount.toString())
         if (result.idealOrderMatches == true) {
-            CourseAnalysisRow("Saved route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+            CourseAnalysisRow(result.routeSource.routeLabel, result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
             CourseAnalysisRow("Order comparison", "Saved and calculated routes match")
         } else {
             CourseAnalysisRow("Calculated ideal route (calculated fox numbering)", result.calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
-            CourseAnalysisRow("Saved route", result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
+            CourseAnalysisRow(result.routeSource.routeLabel, result.providedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" })
             CourseAnalysisRow(
                 "Order comparison",
                 when (result.idealOrderMatches) {
@@ -22609,7 +22625,7 @@ private fun CourseAnalysisWaitRows(title: String, waitRows: List<DesktopCourseWa
 }
 
 @Composable
-private fun CourseAnalysisWaitRenumbering(renumbering: DesktopCourseWaitRenumbering?) {
+private fun CourseAnalysisWaitRenumbering(routeSource: DesktopCourseRouteSource, renumbering: DesktopCourseWaitRenumbering?) {
     if (renumbering == null) {
         return
     }
@@ -22632,7 +22648,7 @@ private fun CourseAnalysisWaitRenumbering(renumbering: DesktopCourseWaitRenumber
         )
         Text(
             text = if (renumbering.improvesWait) {
-                "Renumbering the fox transmit slots is likely to reduce wait time by ${secondsText(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)} on this saved route."
+                "Renumbering the fox transmit slots is likely to reduce wait time by ${secondsText(renumbering.currentTotalWaitSeconds - renumbering.bestTotalWaitSeconds)} on this ${routeSource.lowerRouteLabel}."
             } else {
                 "Current fox numbering is already best for ideal-route wait time."
             },

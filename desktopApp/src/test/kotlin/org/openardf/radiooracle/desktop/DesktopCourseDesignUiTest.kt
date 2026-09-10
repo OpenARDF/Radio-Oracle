@@ -18,7 +18,7 @@ class DesktopCourseDesignUiTest {
 
     @Test fun importingMandatoryCornersInvalidatesDisplayedAnalysisAndLateCompletions() {
         val applied = EventCourseDrafts.candidate(draft())
-        val oldSummary = analyze(applied)
+        val oldSummary = analyze(applied, DesktopCourseRouteSource.Applied)
         val path = Files.createTempFile("course-ui-corners-", ".kml")
         Files.writeString(path, courseWorkflowKml().replace(
             "<LineString><coordinates>-75.0,40.0,100 ",
@@ -78,10 +78,36 @@ class DesktopCourseDesignUiTest {
         rule.onNodeWithText(refreshed.sourceSnapshotHash!!).assertExists()
     }
 
-    private fun analyze(project: EventProjectFile): DesktopCourseAnalysisSummary {
+    @Test fun identicalGeometryDoesNotKeepAReportLabeledWithThePreviousDraftState() {
+        val applied = EventCourseDrafts.candidate(draft())
+        val pending = EventCourseDrafts.start(applied)
+        val appliedSummary = analyze(applied, DesktopCourseRouteSource.Applied)
+        val draftSummary = analyze(EventCourseDrafts.candidate(pending), DesktopCourseRouteSource.Draft)
+        assertEquals(appliedSummary.sourceSnapshotHash, draftSummary.sourceSnapshotHash)
+        for (summary in listOf(appliedSummary, draftSummary)) {
+            assertEquals("Section 1: ${summary.routeSource.routeLabel} analysis", summary.providedRouteSection!!.title)
+            val report = DesktopCourseAnalysisExports.reportText(summary)
+            assertTrue(report.contains(summary.routeSource.routeLabel))
+            assertFalse(report.contains("Saved route"))
+            assertTrue(summary.kmlFolders.any { it.routeName == summary.routeSource.routeLabel })
+            assertTrue(summary.routeMaps.any { it.title == summary.routeSource.routeLabel })
+        }
+        var current by mutableStateOf(applied)
+        var completed by mutableStateOf(appliedSummary)
+        rule.setContent { Text(currentCourseAnalysisResult(current, completed)?.routeSource?.routeLabel ?: "Analyze again") }
+        rule.onNodeWithText("Applied route").assertExists()
+        rule.runOnIdle { current = pending }
+        rule.onNodeWithText("Analyze again").assertExists()
+        rule.runOnIdle { completed = draftSummary }
+        rule.onNodeWithText("Draft route").assertExists()
+        rule.runOnIdle { current = EventCourseDrafts.cancel(pending) }
+        rule.onNodeWithText("Analyze again").assertExists()
+    }
+
+    private fun analyze(project: EventProjectFile, routeSource: DesktopCourseRouteSource = DesktopCourseRouteSource.Draft): DesktopCourseAnalysisSummary {
         val category = project.raceData.categories.single().category
         val info = category.courseInfo!!
-        return DesktopCourseAnalyzer.analyze(project, category.id, info, info.idealOrder, elevationLookup = { 100.0 })
+        return DesktopCourseAnalyzer.analyze(project, category.id, info, info.idealOrder, elevationLookup = { 100.0 }, routeSource = routeSource)
     }
 
     private fun draft(): EventProjectFile {
@@ -118,6 +144,36 @@ class DesktopCourseDesignUiTest {
         val path = Files.createTempDirectory("course-ui-save-").resolve("race.json")
         session.saveAs(path)
         assertEquals(applied.raceData, DesktopProjectFiles.read(path).raceData)
+    }
+
+    @Test fun reviewScrollKeepsTitleAndActionsVisibleAtTheLastStation() {
+        val draft = draft()
+        val candidate = EventCourseDrafts.candidate(draft)
+        val info = candidate.raceData.categories.single().category.courseInfo!!
+        val session = DesktopProjectSession(DesktopProjectFiles).apply { newProject(draft) }
+        val ui = DesktopCourseDesignUi().apply {
+            pendingApplication = DesktopCourseAnalyzer.analyze(candidate, "m21", info, info.idealOrder,
+                prepareApplication = true, routeSource = DesktopCourseRouteSource.Draft).calculatedRouteApplication
+        }
+        rule.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(2f, 1.2f)
+            ) {
+                MaterialTheme { DesktopCourseDesignHost(draft, null, session, ui, onChanged = { _, _ -> }) { Text("Fixture") } }
+            }
+        }
+        rule.waitUntil(20_000) { ui.project != null }
+        rule.onNodeWithTag("course-review-title").assertIsDisplayed()
+        rule.onNodeWithTag("course-prepare-all").assertIsDisplayed()
+        val initialTitle = rule.onNodeWithTag("course-review-title").fetchSemanticsNode().boundsInRoot
+        val initialActions = rule.onNodeWithTag("course-review-actions").fetchSemanticsNode().boundsInRoot
+        rule.onAllNodesWithTag("course-station-picker").onLast().performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("workspace-scrollbar").assertIsDisplayed()
+        assertEquals(initialTitle, rule.onNodeWithTag("course-review-title").fetchSemanticsNode().boundsInRoot)
+        assertEquals(initialActions, rule.onNodeWithTag("course-review-actions").fetchSemanticsNode().boundsInRoot)
+        rule.onNodeWithTag("course-prepare-all").assertIsDisplayed()
+        rule.onNodeWithText("Cancel").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertNull(ui.pendingApplication); assertEquals(draft, session.currentProject) }
     }
 
     @Test fun cancelingTheActualApplyDialogPreservesTheDraftAndAppliedRace() {
