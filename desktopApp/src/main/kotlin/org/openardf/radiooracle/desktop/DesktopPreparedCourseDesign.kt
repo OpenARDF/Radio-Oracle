@@ -47,13 +47,16 @@ internal fun prepareAllCourseDesigns(
         }
         // Analyzer's route optimizer minimizes geometry/effective length. Numbering affects its wait report,
         // so suppress further numbering proposals and carry the accepted labels into the complete change set.
-        val application = requireNotNull(DesktopCourseAnalyzer.analyze(source, category.category.id, info, info.idealOrder,
+        val application = requireNotNull(DesktopCourseAnalyzer.analyze(source, category.category.id, info,
+            category.category.storedIdealOrder(password) ?: info.idealOrder,
             elevationLookup = elevationLookup, allowFoxRenumbering = false, prepareApplication = true, routeSource = DesktopCourseRouteSource.Draft).calculatedRouteApplication) {
             "A complete route could not be calculated for ${category.category.name}."
         }
         DesktopCourseRouteSelection(info, application.copy(foxAssignments = application.foxAssignments.map { assignment ->
             val id = requireNotNull(reviewed[assignment.controlId]) { "Review the station binding for ${assignment.originalLabel}." }
-            assignment.copy(calculatedLabel = acceptedLabels[id] ?: source.raceData.controls.single { it.id == id }.let { it.publicLabel ?: it.label })
+            // Foxes absent from the selected category still use this course's draft numbering.
+            // Analyzer already resolves those labels without renumbering; the catalog can predate the draft.
+            assignment.copy(calculatedLabel = acceptedLabels[id] ?: assignment.calculatedLabel)
         }), reviewed)
     }
     checkCancelled()
@@ -85,10 +88,20 @@ internal fun prepareCourseDesign(project: EventProjectFile, selections: List<Des
     val proposedLabels = selections.flatMap { selection -> selection.application.foxAssignments.map { assignment ->
         requireNotNull(selection.controlIdsByPlacementId[assignment.controlId]) { "Review the station binding for ${assignment.originalLabel}." } to assignment.calculatedLabel
     } }.groupBy({ it.first }, { it.second })
-    require(proposedLabels.values.all { it.distinct().size == 1 }) { "Selected courses propose conflicting fox numbering for the same station." }
+    val conflictingStations = proposedLabels.filterValues { it.distinct().size > 1 }
+    require(conflictingStations.isEmpty()) {
+        "Courses propose conflicting fox numbering: " + conflictingStations.entries.joinToString { (id, labels) ->
+            "SI ${source.raceData.controls.single { it.id == id }.siCode}: ${labels.distinct().joinToString(" / ")}" }
+    }
     val controls = source.raceData.controls.map { control -> proposedLabels[control.id]?.firstOrNull()?.let { label ->
         control.copy(label = label, publicLabel = label, latitude = null, longitude = null)
     } ?: control }
+    val duplicateLabels = controls.groupBy { it.label.trim() }.filterValues { it.size > 1 }
+    require(duplicateLabels.isEmpty()) {
+        "Conflicting control labels: " + duplicateLabels.entries.joinToString { (label, stations) ->
+            "\"$label\" is assigned to ${stations.joinToString { "SI ${it.siCode}" }}" } +
+            ". Resolve the numbering or station assignments before applying."
+    }
     var candidate = EventProjectEditor.replaceControlCatalog(source, controls)
     val byCode = candidate.raceData.controls.groupBy { it.siCode }
     candidate = candidate.copy(raceData = candidate.raceData.copy(aliases = candidate.raceData.aliases.map { alias ->
@@ -105,7 +118,7 @@ internal fun prepareCourseDesign(project: EventProjectFile, selections: List<Des
             controlPoints = selection.courseInfo.controlPoints.filter { it.controlId in app.orderedPlacementIds },
             courseObjects = app.courseObjects.ifEmpty { selection.courseInfo.courseObjects }.filter { it.id in app.orderedPlacementIds })
         val byPlacement = selection.controlIdsByPlacementId.mapValues { (_, id) -> candidate.raceData.controls.single { it.id == id } }
-        val renamed = sourceInfo.copy(sourceName = "Course Analyzer applied design", sourceSha256 = "",
+        val renamed = sourceInfo.copy(sourceName = if (sourceInfo.hasAcceptedFoxNumbering()) "Course Analyzer applied design (accepted fox numbering)" else "Course Analyzer applied design", sourceSha256 = "",
             idealOrder = app.idealOrderText, lengthMeters = app.routeLengthMeters, climbMeters = app.climbMeters,
             route = app.routePoints.map { ProtectedCourseRoutePoint(it.latitude, it.longitude, it.elevationMeters) }, sampledPointCount = app.routePoints.size,
             controlPoints = sourceInfo.controlPoints.map { point -> point.copy(label = byPlacement[point.controlId]?.let { it.publicLabel ?: it.label } ?: point.label) },

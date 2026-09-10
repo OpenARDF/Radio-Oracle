@@ -1,5 +1,6 @@
 package org.openardf.radiooracle.desktop
 
+import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.getValue
@@ -22,7 +23,7 @@ class DesktopCourseDesignUiTest {
         val path = Files.createTempFile("course-ui-corners-", ".kml")
         Files.writeString(path, courseWorkflowKml().replace(
             "<LineString><coordinates>-75.0,40.0,100 ",
-            "<LineString><coordinates>-75.0,40.0,100 -74.999,40.001,100 "
+            "<LineString><coordinates>-75.0,40.0,100 -74.998,40.001,100 "
         ))
         val imported = EventCourseDrafts.edit(applied) {
             DesktopCourseKmlImporter.importProtectedCourseInfo(path, it, null, elevationProvider = { 100.0 }).first
@@ -114,13 +115,14 @@ class DesktopCourseDesignUiTest {
         val folder = Files.createTempDirectory("course-ui-")
         DesktopDebugLog.initialize(folder.resolve("logs"))
         val kml = folder.resolve("course.kml")
-        Files.writeString(kml, courseWorkflowKml())
+        Files.writeString(kml, courseWorkflowKml().replace("<LineString><coordinates>-75.0,40.0,100 ",
+            "<LineString><coordinates>-75.0,40.0,100 -74.999,40.001,100 "))
         val empty = EventProjectFactory.createEmptyProject("race", "UI fixture", "2026-09-06T09:00")
         val source = EventProjectEditor.addCategory(empty.copy(raceData = empty.raceData.copy(controls = EventControlCatalog.classicPreset("race"))), "m21", "M21")
         return EventCourseDrafts.edit(source) { DesktopCourseKmlImporter.importProtectedCourseInfo(kml, it, null, elevationProvider = { 100.0 }).first }
     }
 
-    @Test fun reviewedUiApplyCommitsAndPersistsTheWholeDesign() {
+    @Test fun oneApplyActionCommitsAndPersistsWithoutASecondConfirmation() {
         val draft = draft()
         val candidate = EventCourseDrafts.candidate(draft)
         val info = candidate.raceData.categories.single().category.courseInfo!!
@@ -133,11 +135,8 @@ class DesktopCourseDesignUiTest {
             DesktopCourseDesignHost(current, null, session, ui, onChanged = { value, _ -> current = value }) { Text("Fixture") }
         } }
         rule.waitUntil(20_000) { ui.project != null }
-        rule.onNodeWithTag("course-prepare-all").assertIsEnabled().performClick()
-        rule.waitUntil(30_000) { rule.onAllNodesWithTag("course-apply-all").fetchSemanticsNodes().isNotEmpty() }
-        assertEquals(draft, session.currentProject)
-        rule.onNodeWithTag("course-apply-all").performClick()
-        rule.waitUntil(10_000) { session.currentProject?.raceData?.courseDraft == null }
+        rule.waitUntil(30_000) { session.currentProject?.raceData?.courseDraft == null }
+        rule.onNodeWithTag("course-apply-flow").assertDoesNotExist()
         val applied = session.currentProject!!
         assertEquals("passed", CourseWorkflowAudit.audit(applied.raceData).status)
         assertNotNull(applied.raceData.categories.single().category.courseInfo!!.appliedBindings)
@@ -147,7 +146,7 @@ class DesktopCourseDesignUiTest {
     }
 
     @Test fun reviewScrollKeepsTitleAndActionsVisibleAtTheLastStation() {
-        val draft = draft()
+        val draft = unresolvedDraft()
         val candidate = EventCourseDrafts.candidate(draft)
         val info = candidate.raceData.categories.single().category.courseInfo!!
         val session = DesktopProjectSession(DesktopProjectFiles).apply { newProject(draft) }
@@ -164,20 +163,20 @@ class DesktopCourseDesignUiTest {
         }
         rule.waitUntil(20_000) { ui.project != null }
         rule.onNodeWithTag("course-review-title").assertIsDisplayed()
-        rule.onNodeWithTag("course-prepare-all").assertIsDisplayed()
+        rule.onNodeWithTag("course-apply-all").assertIsDisplayed()
         val initialTitle = rule.onNodeWithTag("course-review-title").fetchSemanticsNode().boundsInRoot
         val initialActions = rule.onNodeWithTag("course-review-actions").fetchSemanticsNode().boundsInRoot
         rule.onAllNodesWithTag("course-station-picker").onLast().performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("workspace-scrollbar").assertIsDisplayed()
         assertEquals(initialTitle, rule.onNodeWithTag("course-review-title").fetchSemanticsNode().boundsInRoot)
         assertEquals(initialActions, rule.onNodeWithTag("course-review-actions").fetchSemanticsNode().boundsInRoot)
-        rule.onNodeWithTag("course-prepare-all").assertIsDisplayed()
+        rule.onNodeWithTag("course-apply-all").assertIsDisplayed()
         rule.onNodeWithText("Cancel").assertIsDisplayed().performClick()
         rule.runOnIdle { assertNull(ui.pendingApplication); assertEquals(draft, session.currentProject) }
     }
 
     @Test fun cancelingTheActualApplyDialogPreservesTheDraftAndAppliedRace() {
-        val draft = draft()
+        val draft = unresolvedDraft()
         val candidate = EventCourseDrafts.candidate(draft)
         val info = candidate.raceData.categories.single().category.courseInfo!!
         val session = DesktopProjectSession(DesktopProjectFiles)
@@ -186,8 +185,96 @@ class DesktopCourseDesignUiTest {
             pendingApplication = DesktopCourseAnalyzer.analyze(candidate, "m21", info, info.idealOrder, prepareApplication = true).calculatedRouteApplication
         }
         rule.setContent { MaterialTheme { DesktopCourseDesignHost(draft, null, session, ui, onChanged = { _, _ -> }) { Text("Fixture") } } }
-        rule.onNodeWithTag("course-apply-review").assertExists()
+        rule.waitUntil(20_000) { ui.project != null }
+        rule.onNodeWithTag("course-apply-flow").assertExists()
         rule.onNodeWithText("Cancel").performClick()
         rule.runOnIdle { assertNull(ui.pendingApplication); assertEquals(draft, session.currentProject) }
     }
+    private fun unresolvedDraft(): EventProjectFile = EventCourseDrafts.edit(draft()) { candidate ->
+        val info = candidate.raceData.categories.single().category.courseInfo!!
+        candidate.withStoredCourseInfo("m21", info.copy(
+            controlPoints = info.controlPoints.map { it.copy(controlId = "placement-${it.controlId}") },
+            courseObjects = info.courseObjects.map { if (it.type.controlRole() != null) it.copy(id = "placement-${it.id}") else it }
+        ), null)
+    }
+
+    @Test fun onlyMissingStationsAreShownAndTheDiagramAndKmlShareLocations() {
+        val original = draft()
+        val draft = EventCourseDrafts.edit(original) { candidate ->
+            val info = candidate.raceData.categories.single().category.courseInfo!!
+            val pointId = info.controlPoints.first().controlId
+            candidate.withStoredCourseInfo("m21", info.copy(
+                controlPoints = info.controlPoints.map { if (it.controlId == pointId) it.copy(controlId = "unknown-location") else it },
+                courseObjects = info.courseObjects.map { if (it.id == pointId) it.copy(id = "unknown-location") else it }
+            ), null)
+        }
+        val candidate = EventCourseDrafts.candidate(draft)
+        val info = candidate.raceData.categories.single().category.courseInfo!!
+        val app = analyze(candidate).calculatedRouteApplication!!
+        val choices = courseStationChoices(candidate, mapOf("m21" to info))
+        val allBindings = choices.associate { it.placementId to (it.controlId ?: EventCourseDrafts.candidate(original).raceData.categories.single().category.courseInfo!!.controlPoints.first().controlId) }
+        DesktopCourseAnalysisApplier.prepareAll(draft, DesktopCourseRouteSelection(info, app, allBindings), mapOf("m21" to allBindings), null)
+        val session = DesktopProjectSession(DesktopProjectFiles).apply { newProject(draft) }
+        val ui = DesktopCourseDesignUi().apply { pendingApplication = app }
+        rule.setContent { MaterialTheme { DesktopCourseDesignHost(draft, null, session, ui, onChanged = { _, _ -> }) { Text("Fixture") } } }
+        rule.waitUntil(20_000) { ui.project != null }
+        rule.onAllNodesWithTag("course-station-picker").assertCountEquals(1)
+        rule.onNodeWithText("Export locations to KML…").assertExists()
+        val screenshot = org.jetbrains.skia.Image.makeFromBitmap(rule.onNodeWithTag("course-apply-flow").captureToImage().asSkiaBitmap())
+        val screenshotPath = java.nio.file.Path.of("build/reports/course-station-resolution.png")
+        Files.createDirectories(screenshotPath.parent)
+        Files.write(screenshotPath, screenshot.encodeToData()!!.bytes)
+        rule.onNodeWithTag("course-apply-all").assertIsNotEnabled()
+        assertEquals(draft, session.currentProject)
+        val folder = courseStationPreviewFolders(candidate, mapOf("m21" to info), choices.associate { it.key to it.controlId.orEmpty() }, app).single()
+        val map = courseStationPreviewMap(folder)
+        assertEquals(folder.courseObjects.filterNot { it.type == DesktopCourseKmlExportPointType.WAYPOINT }.map { it.label }, map.points.map { it.label })
+        val path = Files.createTempFile("station-preview-", ".kml")
+        DesktopCourseAnalysisExports.exportKmlFolders(path, listOf(folder))
+        val exported = DesktopCourseFileReader.read(path)
+        assertEquals(folder.courseObjects.map { it.label to it.point }, exported.controls.map { it.name to it.point })
+        assertEquals(folder.routePoints.size, exported.routes.single().points.size)
+        folder.routePoints.zip(exported.routes.single().points).forEach { (expected, actual) ->
+            assertEquals(expected.latitude, actual.latitude, 0.00000001)
+            assertEquals(expected.longitude, actual.longitude, 0.00000001)
+        }
+        val station = candidate.raceData.controls.single { it.id == allBindings.getValue("unknown-location") }
+        rule.onNodeWithText("Choose SI station").performScrollTo().performClick()
+        rule.onNodeWithText("${station.publicLabel ?: station.label} — SI ${station.siCode}").performClick()
+        rule.onNodeWithTag("course-apply-all").assertIsEnabled().performClick()
+        rule.waitUntil(30_000) { ui.pendingApplication == null }
+        assertNull(session.currentProject!!.raceData.courseDraft)
+        assertEquals("passed", CourseWorkflowAudit.audit(session.currentProject!!.raceData).status)
+    }
+
+    @Test fun staleAnalysisStopsAutomaticApplicationAndKeepsTheDraft() {
+        val original = draft()
+        val app = analyze(EventCourseDrafts.candidate(original)).calculatedRouteApplication!!
+        val newer = EventCourseDrafts.edit(original) { EventProjectEditor.updateCategoryPhysicalStats(it, "m21", "999", "99") }
+        val session = DesktopProjectSession(DesktopProjectFiles).apply { newProject(newer) }
+        val ui = DesktopCourseDesignUi().apply { pendingApplication = app }
+        rule.setContent { MaterialTheme { DesktopCourseDesignHost(newer, null, session, ui, onChanged = { _, _ -> }) { Text("Fixture") } } }
+        rule.waitUntil(20_000) { rule.onAllNodesWithText("Course changes could not be applied").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Course data changed after this calculation. Analyze the current draft before applying it.").assertExists()
+        assertEquals(newer, session.currentProject)
+        rule.onNodeWithText("Cancel").performClick()
+        rule.runOnIdle { assertNull(ui.pendingApplication) }
+    }
+
+    @Test fun recordedReadoutsExplainTheBlockWithoutRequestingStationReview() {
+        val pending = draft()
+        val readout = EventReadoutData(EventResult("readout", "race", null, 123456, 0, null, 0, 1200,
+            "2026-09-10T10:00", true, org.openardf.radiooracle.shared.domain.ResultStatus.OK, 1, 1200, false, false), emptyList())
+        val recorded = pending.copy(raceData = pending.raceData.copy(unmatchedReadoutData = listOf(readout)))
+        val session = DesktopProjectSession(DesktopProjectFiles).apply { newProject(recorded) }
+        val ui = DesktopCourseDesignUi().apply { pendingApplication = analyze(EventCourseDrafts.candidate(recorded)).calculatedRouteApplication }
+        rule.setContent { MaterialTheme { DesktopCourseDesignHost(recorded, null, session, ui, onChanged = { _, _ -> }) { Text("Fixture") } } }
+        rule.waitUntil(20_000) { ui.project != null }
+        rule.onNodeWithText("Course changes blocked by readouts").assertIsDisplayed()
+        rule.onNodeWithText("Create revised race copy…").assertExists()
+        rule.onAllNodesWithTag("course-station-picker").assertCountEquals(0)
+        rule.onNodeWithTag("course-apply-all").assertDoesNotExist()
+        assertEquals(recorded, session.currentProject)
+    }
+
 }

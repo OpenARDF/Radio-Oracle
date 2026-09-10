@@ -58,6 +58,11 @@ object DesktopCourseAnalysisExports {
         Files.writeString(path, kmlText(result, kmlFileStem(path)), StandardCharsets.UTF_8)
     }
 
+    internal fun exportKmlFolders(path: Path, folders: List<DesktopCourseKmlExportFolder>) {
+        path.parent?.let { Files.createDirectories(it) }
+        Files.writeString(path, kmlText(folders, DesktopCourseRouteSource.Draft, kmlFileStem(path)), StandardCharsets.UTF_8)
+    }
+
     fun reportText(result: DesktopCourseAnalysisSummary): String =
         buildString {
             val routeSource = result.routeSource
@@ -258,6 +263,9 @@ object DesktopCourseAnalysisExports {
             "Imported KML/KMZ SS=#.## speed specifiers replace the race factor for the following leg only."
 
     private fun kmlText(result: DesktopCourseAnalysisSummary, kmlFileStem: String): String =
+        kmlText(result.kmlFolders, result.routeSource, kmlFileStem)
+
+    private fun kmlText(folders: List<DesktopCourseKmlExportFolder>, routeSource: DesktopCourseRouteSource, kmlFileStem: String): String =
         buildString {
             appendLine("""<?xml version="1.0" encoding="UTF-8"?>""")
             appendLine("""<kml xmlns="http://www.opengis.net/kml/2.2">""")
@@ -266,8 +274,8 @@ object DesktopCourseAnalysisExports {
             appendLine("    <Style id=\"storedRouteStyle\"><LineStyle><color>ff0057b8</color><width>4</width></LineStyle></Style>")
             appendLine("    <Style id=\"calculatedRouteStyle\"><LineStyle><color>ff00a676</color><width>4</width></LineStyle></Style>")
             append(DesktopCourseKmlStyle.pointStyleDefinitions(includeWaypoint = true))
-            result.kmlFolders.forEach { folder ->
-                val routeStyleId = if (folder.routeName == result.routeSource.routeLabel) {
+            folders.forEach { folder ->
+                val routeStyleId = if (folder.routeName == routeSource.routeLabel) {
                     "storedRouteStyle"
                 } else {
                     "calculatedRouteStyle"

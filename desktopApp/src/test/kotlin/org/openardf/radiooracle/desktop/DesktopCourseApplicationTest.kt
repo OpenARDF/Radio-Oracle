@@ -113,6 +113,62 @@ class DesktopCourseApplicationTest {
         assertEquals("passed", CourseWorkflowAudit.audit(applied.raceData).status)
     }
 
+    @Test fun applyingFromAShortCourseKeepsDraftNumberingForFoxesOnlyOnTheFullCourse() {
+        val imported = imported()
+        val original = imported.copy(raceData = imported.raceData.copy(controls = imported.raceData.controls.map {
+            if (it.siCode in 31..35) it.copy(publicLabel = (it.siCode - 30).toString()) else it
+        }))
+        val full = original.raceData.categories.single()
+        val labelsByCode = mapOf(31 to "4", 32 to "3", 33 to "5", 34 to "2", 35 to "1")
+        val labels = original.raceData.controls.filter { it.siCode in labelsByCode }
+            .associate { it.id to labelsByCode.getValue(it.siCode) }
+        val shortIds = original.raceData.controls.filter { it.siCode in setOf(31, 32, 35, 99) }.map { it.id }.toSet()
+        fun info(short: Boolean): ProtectedCourseInfo {
+            val source = full.category.courseInfo!!
+            val points = source.controlPoints.filter { !short || it.controlId in shortIds }
+                .map { it.copy(label = labels[it.controlId] ?: it.label) }
+            return source.copy(sourceName = "Course Analyzer fox renumbering",
+                controlPoints = points,
+                courseObjects = source.courseObjects.filter { !short || it.type.controlRole() == null || it.id in shortIds }
+                    .map { it.copy(label = labels[it.id] ?: it.label) },
+                idealOrder = if (short) "1 5 2 M" else "1 5 4 3 2 M")
+        }
+        fun order(info: ProtectedCourseInfo) = info.controlPoints.joinToString(" ") { ProtectedIdealOrderRules.quoteToken(it.label) }
+        val short = full.copy(category = full.category.copy(id = "short", name = "Short", courseInfo = info(true), idealOrder = order(info(true))),
+            controlPoints = full.controlPoints.filter { it.controlId in shortIds }.map { it.copy(id = "short-${it.id}", categoryId = "short") })
+        // Include an inactive mapping as well: applying from either category must produce the same catalog.
+        val draft = EventCourseDrafts.edit(original) { it.copy(raceData = it.raceData.copy(
+            categories = listOf(short), courseMappings = listOf(full.copy(category = full.category.copy(
+                name = "Full", courseInfo = info(false), idealOrder = order(info(false))))))) }
+        val source = EventCourseDrafts.candidate(draft)
+        val categories = source.raceData.categories + source.raceData.courseMappings
+        val mappings = categories.associate { category -> category.category.id to
+            category.category.courseInfo!!.controlPoints.associate { it.controlId to it.controlId } }
+        val before = EventProjectFileJson.encode(draft)
+        for (category in categories) {
+            val course = category.category.courseInfo!!
+            val analysis = DesktopCourseAnalyzer.analyze(source, category.category.id, course, category.category.storedIdealOrder(null),
+                prepareApplication = true)
+            assertNull("Accepted numbering must not be proposed again", analysis.waitRenumbering)
+            val application = analysis.calculatedRouteApplication!!
+            val prepared = DesktopCourseAnalysisApplier.prepareAll(draft,
+                DesktopCourseRouteSelection(course, application, mappings.getValue(category.category.id)), mappings, null,
+                elevationLookup = { 100.0 })
+            val applied = DesktopCourseAnalysisApplier.commit(draft, prepared)
+            assertEquals(labelsByCode, applied.raceData.controls.filter { it.siCode in labelsByCode }.associate { it.siCode to it.label })
+            assertEquals(original.raceData.controls.associate { it.id to it.siCode }, applied.raceData.controls.associate { it.id to it.siCode })
+            (applied.raceData.categories + applied.raceData.courseMappings).forEach { output ->
+                assertEquals(mappings.getValue(output.category.id).values.toSet(),
+                    output.category.courseInfo!!.appliedBindings!!.controls.map { it.controlId }.toSet())
+                output.category.courseInfo!!.appliedBindings!!.controls.filter { it.siCode in labelsByCode }.forEach {
+                    assertEquals(labelsByCode.getValue(it.siCode), it.label)
+                }
+            }
+            assertEquals("passed", CourseWorkflowAudit.audit(applied.raceData).status)
+        }
+        assertEquals(before, EventProjectFileJson.encode(draft))
+    }
+
     @Test fun movedDraftRemainsAnalyzableAndDoesNotChangeAppliedOutputs() {
         val source = imported()
         val prepared = DesktopCourseAnalysisApplier.prepare(source, listOf(selection(source)), null)

@@ -1287,8 +1287,8 @@ class DesktopCourseAnalyzerTest {
         )
         assertTrue(summary.summaryExplanation.contains("may reduce applied-route wait time"))
         assertTrue(summary.summaryExplanation.contains("see Section 1 for the assignment details"))
-        assertEquals("Review and Apply Courses", summary.courseRecommendation.actionLabel)
-        assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Review and Apply Courses"))
+        assertEquals("Apply changes to all race courses", summary.courseRecommendation.actionLabel)
+        assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Apply changes to all race courses"))
         assertTrue(DesktopCourseAnalysisExports.reportText(summary).contains("Renumbered wait times"))
         val metricLabels = summary.metrics.map { it.label }
         assertEquals(
@@ -1363,7 +1363,7 @@ class DesktopCourseAnalyzerTest {
             importedGoodnessMetrics.map(::routeMetricPairingLabel),
             calculatedGoodnessMetrics.map(::routeMetricPairingLabel)
         )
-        assertEquals("Review and Apply Courses", summary.courseRecommendation.actionLabel)
+        assertEquals("Apply changes to all race courses", summary.courseRecommendation.actionLabel)
         assertTrue(summary.courseRecommendation.paragraph.contains("The applied route is"))
         assertTrue(summary.courseRecommendation.paragraph.contains("longer than the ideal route"))
         assertTrue(summary.courseRecommendation.paragraph.contains("should therefore be used as the course's effective length for M21"))
@@ -1674,7 +1674,9 @@ class DesktopCourseAnalyzerTest {
         )
         val encryptedProject = projectFile.copy(
             raceData = projectFile.raceData.copy(
-                categories = listOf(primaryCategoryData, secondCategoryData)
+                categories = listOf(primaryCategoryData, secondCategoryData),
+                courseMappings = listOf(secondCategoryData.copy(category = secondCategoryData.category.copy(id = "inactive", name = "M50"),
+                    controlPoints = secondCategoryData.controlPoints.map { it.copy(id = "inactive-${it.id}", categoryId = "inactive") }))
             )
         )
 
@@ -1691,7 +1693,7 @@ class DesktopCourseAnalyzerTest {
         val originalAliasesBySiCode = encryptedProject.raceData.aliases.associate { it.siCode to it.name }
         val originalPunch = encryptedProject.raceData.unmatchedReadoutData.single().punches.single()
         assertEquals(changedLabelsByControlId.size, result.changedControlCount)
-        assertEquals(2, result.affectedCategoryCount)
+        assertEquals(3, result.affectedCategoryCount)
         val updatedPublicLabelsByControlId = result.projectFile.raceData.controls.associate { it.id to it.publicLabel }
         assertEquals(originalPublicLabelsByControlId, updatedPublicLabelsByControlId)
         assertEquals(originalAliasesBySiCode, result.projectFile.raceData.aliases.associate { it.siCode to it.name })
@@ -1703,7 +1705,7 @@ class DesktopCourseAnalyzerTest {
             storedIdealOrderText,
             projectFile.raceData.controls
         )
-        result.projectFile.raceData.categories.forEach { categoryData ->
+        protectedCourseStateCategories(result.projectFile.raceData).forEach { categoryData ->
             val decryptedIdealOrder = DesktopProtectedCourseOrder.decrypt(
                 requireNotNull(categoryData.category.encryptedIdealOrder),
                 password
@@ -1721,6 +1723,10 @@ class DesktopCourseAnalyzerTest {
                 requireNotNull(categoryData.category.encryptedCourseInfo),
                 password
             )
+            assertEquals(decryptedIdealOrder, decryptedCourseInfo.idealOrder)
+            assertTrue(decryptedCourseInfo.hasAcceptedFoxNumbering())
+            assertNull(DesktopCourseAnalyzer.analyze(result.projectFile, categoryData.category.id,
+                decryptedCourseInfo, decryptedIdealOrder).waitRenumbering)
             changedLabelsByControlId.forEach { (controlId, expectedLabel) ->
                 assertEquals(expectedLabel, decryptedCourseInfo.controlPoints.single { it.controlId == controlId }.label)
                 assertEquals(expectedLabel, decryptedCourseInfo.courseObjects.single { it.id == controlId }.label)

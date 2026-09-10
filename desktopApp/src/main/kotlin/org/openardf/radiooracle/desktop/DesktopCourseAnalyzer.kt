@@ -780,7 +780,7 @@ object DesktopCourseAnalyzer {
                     missing += "Transmit slot could not be determined for control ${control.publicDisplayLabel()}."
                 }
         }
-        val waitRenumbering = (if (includeWaitAnalysis && allowFoxRenumbering) {
+        val waitRenumbering = (if (includeWaitAnalysis && allowFoxRenumbering && !courseInfo.hasAcceptedFoxNumbering()) {
             waitRenumbering(providedControls) { slotOverrides ->
                 routeGeometryTiming(
                     route = route,
@@ -808,7 +808,7 @@ object DesktopCourseAnalyzer {
         } else {
             null
         }
-        val calculatedWaitRenumbering = if (includeWaitAnalysis && allowFoxRenumbering) {
+        val calculatedWaitRenumbering = if (includeWaitAnalysis && allowFoxRenumbering && !courseInfo.hasAcceptedFoxNumbering()) {
             calculatedRoute?.let { routeCandidate ->
                 waitRenumbering(routeCandidate.controls.map { it.control }) { slotOverrides ->
                     straightLineTiming(
@@ -1340,7 +1340,12 @@ object DesktopCourseAnalyzer {
                     ?: protectedControl.toEventControl(projectFile.raceData.race.id)
             }
             .zip(courseInfo.controlPoints)
-            .map { (control, protectedControl) ->
+            .map { (resolvedControl, protectedControl) ->
+                // A draft location can still need a station assignment. Keep its placement identity
+                // in the application; matching a display label must not silently choose its station.
+                val control = if (controlIdentityMode == DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING) {
+                    resolvedControl.copy(id = protectedControl.controlId)
+                } else resolvedControl
                 if (
                     controlIdentityMode == DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING &&
                     courseInfo.usesAnalyzerSavedNumbering() &&
@@ -1857,7 +1862,7 @@ object DesktopCourseAnalyzer {
                 val routeOrderText = calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }
                 "The ${routeSource.lowerRouteLabel} is ${summaryLengthText(shorterByMeters)}$percentText longer than the ideal route. The calculated ideal route effective length (${summaryLengthText(calculatedLength)}) should therefore be used as the course's effective length for $categoryName, and the ideal route order is $routeOrderText with calculated fox numbering as shown in the 2D route depiction graphic below."
             } else {
-                "The calculated solution differs from the ${routeSource.lowerRouteLabel} under the current model, so Review and Apply Courses can make the calculated candidate active for the race."
+                "The calculated solution differs from the ${routeSource.lowerRouteLabel} under the current model, so Apply changes to all race courses can make the calculated candidate active for the race."
             }
             val caveats = recommendationCaveats(
                 calculatedRouteApplication = calculatedRouteApplication,
@@ -1868,8 +1873,8 @@ object DesktopCourseAnalyzer {
                 waitRenumbering = waitRenumbering
             )
             return DesktopCourseRecommendation(
-                actionLabel = "Review and Apply Courses",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Review and Apply Courses. $reason$caveats"
+                actionLabel = "Apply changes to all race courses",
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply changes to all race courses. $reason$caveats"
             )
         }
         val renumbering = waitRenumbering?.takeIf { it.improvesWait }
@@ -1886,7 +1891,7 @@ object DesktopCourseAnalyzer {
             )
             return DesktopCourseRecommendation(
                 actionLabel = "Save Draft Numbering",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Save Draft Numbering. The calculated route matches the ${routeSource.lowerRouteLabel}, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}. This saves a draft proposal only; analyze it, then Review and Apply Courses when ready.$caveats"
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Save Draft Numbering. The calculated route matches the ${routeSource.lowerRouteLabel}, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}. This saves a draft proposal only; analyze it, then Apply changes to all race courses when ready.$caveats"
             )
         }
         val caveats = recommendationCaveats(

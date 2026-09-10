@@ -64,7 +64,7 @@ object DesktopCourseAnalysisApplier {
 
         val updatedInfoByCategoryId = mutableMapOf<String, ProtectedCourseInfo>()
         val updatedIdealOrderByCategoryId = mutableMapOf<String, String>()
-        projectFile.raceData.categories.forEach { categoryData ->
+        protectedCourseStateCategories(projectFile.raceData).forEach { categoryData ->
             categoryData.category
                 .takeIf { it.encryptedIdealOrder?.isNotBlank() == true || it.idealOrder != null }
                 ?.storedIdealOrder(storagePassword)
@@ -91,17 +91,19 @@ object DesktopCourseAnalysisApplier {
 
             categoryData.category.storedCourseInfo(storagePassword)?.let { courseInfo ->
                 val referencesChangedControl =
-                    courseInfo.controlPoints.any { it.controlId in labelByControlId.keys } ||
-                        courseInfo.courseObjects.any { it.id in labelByControlId.keys }
+                    courseInfo.controlPoints.any { point -> renumbering.assignments.any { it.controlId == point.controlId } } ||
+                        courseInfo.courseObjects.any { point -> renumbering.assignments.any { it.controlId == point.id } }
                 if (referencesChangedControl) {
-                    val updatedInfo = courseInfo.withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true, projectFile.raceData.controls)
+                    val updatedInfo = courseInfo.withUpdatedProtectedLabels(labelByControlId, markAnalyzerSavedNumbering = true, projectFile.raceData.controls).let { updated ->
+                        updated.copy(idealOrder = updatedIdealOrderByCategoryId[categoryData.category.id] ?: updated.idealOrder)
+                    }
                     updatedInfoByCategoryId[categoryData.category.id] = updatedInfo
                 }
             }
         }
 
         var updatedProject = projectFile.copy(raceData = projectFile.raceData.copy(controls = updatedControls))
-        projectFile.raceData.categories.forEach { categoryData ->
+        protectedCourseStateCategories(projectFile.raceData).forEach { categoryData ->
             val categoryId = categoryData.category.id
             updatedIdealOrderByCategoryId[categoryId]?.let { updatedIdealOrder ->
                 updatedProject = updatedProject.withStoredIdealOrder(
@@ -137,7 +139,7 @@ private fun ProtectedCourseInfo.withUpdatedProtectedLabels(
         descriptionByControlNumber[label.courseDescriptionIdentityKey()] ?: currentDescription
 
     return withResultControlLabels(resultControls).copy(
-        sourceName = if (markAnalyzerSavedNumbering && !sourceName.startsWith("Course Analyzer", ignoreCase = true)) {
+        sourceName = if (markAnalyzerSavedNumbering) {
             "Course Analyzer fox renumbering"
         } else {
             sourceName
@@ -174,3 +176,8 @@ data class DesktopCourseFoxRenumberingApplyResult(
     val changedControlCount: Int,
     val affectedCategoryCount: Int
 )
+
+/** Recognizes existing saved drafts without changing the persisted draft fingerprint/schema. */
+internal fun ProtectedCourseInfo?.hasAcceptedFoxNumbering(): Boolean =
+    this?.sourceName.equals("Course Analyzer fox renumbering", ignoreCase = true) ||
+        this?.sourceName.equals("Course Analyzer applied design (accepted fox numbering)", ignoreCase = true)

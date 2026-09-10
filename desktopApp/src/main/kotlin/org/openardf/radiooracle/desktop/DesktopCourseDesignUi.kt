@@ -53,7 +53,7 @@ internal fun DesktopCourseDesignHost(
     CompositionLocalProvider(LocalCourseDesign provides ui, content = content)
     val application = ui.pendingApplication
     if (project != null && application != null) {
-        DesktopCourseApplyReview(project, ui.project, ui.courseState, ui.error, application, password,
+        DesktopCourseApplyFlow(project, ui.project, ui.courseState, ui.error, application, password,
             onDismiss = { ui.pendingApplication = null },
             onCopy = {
                 val name = "${project.raceData.race.name} revised"
@@ -68,108 +68,132 @@ internal fun DesktopCourseDesignHost(
             onApply = { prepared ->
                 val updated = session.updateCurrentProject { DesktopCourseAnalysisApplier.commit(it, prepared) }
                 ui.pendingApplication = null
-                onChanged(updated, "Applied the reviewed design to all ${prepared.changes.map { it.categoryName }.distinct().size} courses in this race. Save Race to write it to disk.")
+                onChanged(updated, "Applied course changes to all ${prepared.changes.map { it.categoryName }.distinct().size} courses in this race. Save Race to write it to disk.")
             })
     }
 }
 
 @Composable
-private fun DesktopCourseApplyReview(
+private fun DesktopCourseApplyFlow(
     applied: EventProjectFile, candidate: EventProjectFile?, state: DesktopProtectedCourseState?, loadError: String?,
     application: DesktopCourseCalculatedRouteApplication, password: String?,
     onDismiss: () -> Unit, onCopy: () -> Unit, onApply: (DesktopPreparedCourseDesign) -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    var prepared by remember(candidate, application) { mutableStateOf<DesktopPreparedCourseDesign?>(null) }
-    var error by remember(candidate, application) { mutableStateOf<String?>(null) }
-    var busy by remember(candidate, application) { mutableStateOf(false) }
-    var job by remember(candidate, application) { mutableStateOf<Job?>(null) }
-    DisposableEffect(candidate, application) { onDispose { job?.cancel() } }
-    val rows = remember(candidate, state) { runCatching {
-        state?.protectedCourseInfoByCategoryId.orEmpty().flatMap { (categoryId, info) ->
-            info.validatedPlacements().values.mapNotNull { point ->
-                point.type.controlRole()?.let { role -> CourseBindingReviewRow(categoryId, point.id, point.label, role, point.latitude, point.longitude) }
-            }
-        }
+    val choices = remember(candidate, state) { runCatching {
+        courseStationChoices(candidate, state?.protectedCourseInfoByCategoryId.orEmpty())
     } }
-    var bindings by remember(candidate, state) { mutableStateOf(rows.getOrDefault(emptyList()).associate { row ->
-        val info = state!!.protectedCourseInfoByCategoryId.getValue(row.categoryId)
-        val explicit = info.appliedBindings?.controls?.singleOrNull { it.placementId == row.placementId }?.controlId
-        val exact = candidate?.raceData?.controls?.singleOrNull { it.id == row.placementId && it.type == row.role }?.id
-        (row.categoryId to row.placementId) to (explicit ?: exact).orEmpty()
-    }) }
-    fun dismiss() { job?.cancel(); onDismiss() }
-    Dialog(onDismissRequest = ::dismiss) {
-        Surface(
-            modifier = Modifier.width(720.dp).heightIn(max = 720.dp).fillMaxHeight(0.9f)
-                .testTag("course-apply-review"),
-            shape = MaterialTheme.shapes.medium
-        ) {
+    val rows = choices.getOrDefault(emptyList())
+    var bindings by remember(candidate, state) { mutableStateOf(rows.associate { it.key to it.controlId.orEmpty() }) }
+    val unresolved = remember(candidate, state) { rows.filter { it.controlId == null }.map { it.key }.toSet() }
+    var error by remember(candidate, application) { mutableStateOf<String?>(null) }
+    var notice by remember(candidate, application) { mutableStateOf<String?>(null) }
+    var busy by remember(candidate, application) { mutableStateOf(false) }
+    var editBindings by remember(candidate, application) { mutableStateOf(false) }
+    var attempt by remember(candidate, application) { mutableStateOf(0) }
+    val recorded = EventCourseDrafts.hasRecordedActivity(applied.raceData)
+    val ready = candidate != null && state != null && loadError == null && choices.isSuccess && !recorded &&
+        bindings.isNotEmpty() && bindings.values.none(String::isBlank)
+
+    // The Apply action is authorization. Known bindings require no further review or confirmation.
+    // Cancel/disposal cancels preparation; a late completion cannot commit after cancellation.
+    LaunchedEffect(candidate, state, application, attempt) {
+        if (!ready) return@LaunchedEffect
+        busy = true
+        error = null
+        try {
+            val prepared = withContext(Dispatchers.Default) {
+                val byCategory = bindings.entries.groupBy { it.key.first }
+                    .mapValues { (_, entries) -> entries.associate { it.key.second to it.value } }
+                DesktopCourseAnalysisApplier.prepareAll(applied,
+                    DesktopCourseRouteSelection(state!!.protectedCourseInfoByCategoryId.getValue(application.categoryId),
+                        application, byCategory.getValue(application.categoryId)), byCategory, password,
+                    elevationLookup = DesktopVenueElevationCache::elevationMeters, checkCancelled = { ensureActive() })
+            }
+            ensureActive()
+            onApply(prepared)
+        } catch (failure: Exception) {
+            if (failure is CancellationException) throw failure
+            error = failure.message ?: "Course changes could not be applied. Analyze the current draft again."
+        } finally { busy = false }
+    }
+    val problem = loadError ?: choices.exceptionOrNull()?.message ?: error ?:
+        "No course stations are available. Import the complete course and analyze it again."
+            .takeIf { candidate != null && state != null && rows.isEmpty() }
+    val visibleRows = rows.filter { editBindings || it.key in unresolved }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(Modifier.width(720.dp).heightIn(max = if (!recorded && !busy && visibleRows.isNotEmpty()) 720.dp else 300.dp)
+            .fillMaxHeight(0.9f).testTag("course-apply-flow"),
+            shape = MaterialTheme.shapes.medium) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Review and apply all race courses", style = MaterialTheme.typography.h6,
-                    modifier = Modifier.testTag("course-review-title"))
-                // The shared viewport owns scrolling; title and actions are outside its bounds.
+                Text(when {
+                    recorded -> "Course changes blocked by readouts"
+                    busy -> "Applying course changes"
+                    visibleRows.isNotEmpty() -> "Assign stations to course locations"
+                    problem != null -> "Course changes could not be applied"
+                    else -> "Checking course changes"
+                }, style = MaterialTheme.typography.h6, modifier = Modifier.testTag("course-review-title"))
                 DesktopWorkspaceScroll(Modifier.weight(1f).fillMaxWidth()) {
-                    Text("Scope: this race, including inactive course mappings. Confirm the physical SI station for each placement. Accepted fox numbering will update Controls and every course together.")
-                    if (EventCourseDrafts.hasRecordedActivity(applied.raceData)) {
-                        Text("This race has recorded activity. Export a new race copy without readouts, then open the copy to continue design.")
-                        TextButton(onClick = { runCatching(onCopy).onFailure { error = it.message } }) { Text("Export revised race copy…") }
+                    if (recorded) {
+                        Text("This race contains SI-card readouts. Changing its courses would change the meaning of those results. Create a revised race copy without readouts, then open that copy to apply your draft.")
+                        TextButton(onClick = { runCatching(onCopy).onFailure { error = it.message } }) { Text("Create revised race copy…") }
+                    } else if (busy) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text("Validating stations, routes and distances for all race courses. Your accepted numbering is retained.")
+                    } else if (candidate == null || state == null) {
+                        Text(if (loadError == null) "Loading the course draft…" else "Unlock or reload the current course draft to continue.")
                     }
-                    (loadError ?: rows.exceptionOrNull()?.message ?: error)?.let { Text(it, color = MaterialTheme.colors.error) }
-                    if (candidate == null || state == null) Text("Unlock or reload the current course draft to continue.")
-                    if (prepared == null) {
-                        rows.getOrDefault(emptyList()).forEach { row ->
-                            val categoryName = (candidate?.raceData?.categories.orEmpty() + candidate?.raceData?.courseMappings.orEmpty())
-                                .singleOrNull { it.category.id == row.categoryId }?.category?.name.orEmpty()
-                            CourseStationPicker("$categoryName: ${row.label} at ${row.latitude}, ${row.longitude}", bindings[row.categoryId to row.placementId].orEmpty(),
-                                candidate?.raceData?.controls.orEmpty().filter { it.type == row.role }, !busy) { id ->
-                                bindings = bindings + ((row.categoryId to row.placementId) to id)
+                    problem?.let { Text(it, color = MaterialTheme.colors.error) }
+                    notice?.let { Text(it) }
+                    if (!recorded && !busy && candidate != null && state != null) {
+                        if (visibleRows.isNotEmpty()) {
+                            Text("Choose the physical SI station for each listed fox. Use the diagram below or export these labeled locations to KML for a map viewer.")
+                            if (candidate.hasEncryptedCategoryData()) Text("The exported KML contains unencrypted course locations.")
+                            TextButton(onClick = {
+                                runCatching {
+                                    val path = DesktopFileDialogs.chooseExportCreateCourseKml("Course station locations.kml")
+                                    if (path != null) {
+                                        DesktopCourseAnalysisExports.exportKmlFolders(path,
+                                            courseStationPreviewFolders(candidate, state.protectedCourseInfoByCategoryId, bindings, application))
+                                        notice = "Exported course locations to ${path.fileName}."
+                                    }
+                                }.onFailure { notice = "Location export failed: ${it.message}" }
+                            }) { Text("Export locations to KML…") }
+                            visibleRows.groupBy { it.categoryId }.forEach { (categoryId, categoryRows) ->
+                                categoryRows.forEach { row ->
+                                    CourseStationPicker("${row.categoryName} — ${row.label}", bindings[row.key].orEmpty(),
+                                        candidate.raceData.controls.filter { it.type == row.role }, true) { id ->
+                                        bindings = bindings + (row.key to id)
+                                    }
+                                }
+                                val preview = courseStationPreviewFolders(candidate,
+                                    state.protectedCourseInfoByCategoryId.filterKeys { it == categoryId }, bindings, application).single()
+                                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                                    val map = remember(preview) { runCatching { courseStationPreviewMap(preview) }.getOrNull() }
+                                    if (map != null) CourseAnalysisRouteMap(map, mapWidth = maxWidth,
+                                        mapHeight = 220.dp, showWaypointLabels = false)
+                                    else Text("Use the KML export to view this location on a map.")
+                                }
+
                             }
                         }
-                    } else {
-                        Text("Prepared changes: labels and SI stations below, complete routes, assignments, and metrics for every listed course.")
-                        prepared!!.changes.groupBy { it.categoryName }.forEach { (category, changes) ->
-                            Text("$category: ${changes.joinToString { "${it.label} (SI ${it.siCode})" }}")
+                        if (problem != null && rows.isNotEmpty() && !editBindings) {
+                            TextButton(onClick = { editBindings = true }) { Text("Edit station assignments") }
                         }
                     }
-                    if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Calculating and validating every course…") }
                 }
                 Row(Modifier.fillMaxWidth().testTag("course-review-actions"),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    TextButton(onClick = ::dismiss) { Text("Cancel") }
-                    Button(enabled = !busy && candidate != null && state != null && loadError == null && rows.isSuccess &&
-                        bindings.isNotEmpty() && bindings.values.none(String::isBlank) && !EventCourseDrafts.hasRecordedActivity(applied.raceData),
-                        modifier = Modifier.testTag(if (prepared == null) "course-prepare-all" else "course-apply-all"), onClick = {
-                            val ready = prepared
-                            if (ready != null) {
-                                runCatching { onApply(ready) }.onFailure { error = it.message; prepared = null }
-                            } else {
-                                busy = true
-                                job = scope.launch {
-                                    try {
-                                        prepared = withContext(Dispatchers.Default) {
-                                            val byCategory = bindings.entries.groupBy { it.key.first }.mapValues { (_, entries) -> entries.associate { it.key.second to it.value } }
-                                            val info = state!!.protectedCourseInfoByCategoryId.getValue(application.categoryId)
-                                            DesktopCourseAnalysisApplier.prepareAll(applied, DesktopCourseRouteSelection(info, application,
-                                                byCategory.getValue(application.categoryId)), byCategory, password,
-                                                elevationLookup = { DesktopVenueElevationCache.elevationMeters(it) }, checkCancelled = { ensureActive() })
-                                        }
-                                    } catch (failure: Exception) {
-                                        if (failure is CancellationException) throw failure
-                                        error = failure.message
-                                    } finally { busy = false }
-                                }
-                            }
-                        }) { Text(if (prepared == null) "Prepare all courses" else "Apply reviewed courses") }
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End)) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    if (!recorded && !busy && (visibleRows.isNotEmpty() || problem != null)) {
+                        Button(onClick = { attempt++ }, enabled = ready, modifier = Modifier.testTag("course-apply-all")) {
+                            Text("Apply changes to all race courses")
+                        }
+                    }
                 }
             }
         }
     }
 }
-
-private data class CourseBindingReviewRow(val categoryId: String, val placementId: String, val label: String,
-                                         val role: org.openardf.radiooracle.shared.domain.ControlPointType, val latitude: Double, val longitude: Double)
 
 @Composable
 private fun CourseStationPicker(label: String, selectedId: String, controls: List<EventControl>, enabled: Boolean, onSelected: (String) -> Unit) {

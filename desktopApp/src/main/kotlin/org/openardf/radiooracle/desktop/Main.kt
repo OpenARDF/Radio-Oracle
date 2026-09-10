@@ -3150,7 +3150,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     candidate.withStoredIdealOrder(categoryId, trimmedIdealOrder, storagePassword)
                 }
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = "Draft course order updated. Analyze and Apply reviewed courses before using it for the race."
+                projectStatusText = "Draft course order updated. Analyze and Apply changes to all race courses before using it for the race."
             }.onFailure { error ->
                 projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
             }
@@ -3194,7 +3194,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun useCalculatedCourseAnalysisRoute(application: DesktopCourseCalculatedRouteApplication): String {
             courseDesignUi.pendingApplication = application
-            return "Review station bindings and the complete change set before applying all race courses."
+            return "Applying course changes to all race courses…"
         }
 
         fun applyCourseAnalysisFoxRenumberingOnly(renumbering: DesktopCourseWaitRenumbering): String {
@@ -3212,7 +3212,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 projectFile = projectSession.updateCourseDraft(currentProject) { result.projectFile }
                 syncProtectedCourseState(requireNotNull(projectFile), protectedCoursePassword)
                 projectStatusText =
-                    "Saved draft fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Analyze the draft and Apply reviewed courses when the design is ready. Save Race preserves the draft."
+                    "Saved draft fox renumbering to ${result.changedControlCount} controls across ${result.affectedCategoryCount} categories. Analyze the draft and Apply changes to all race courses when the design is ready. Save Race preserves the draft."
                 projectStatusText
             }.getOrElse { error ->
                 projectStatusText = "Save fox renumbering failed: ${error.message ?: error::class.simpleName}"
@@ -3251,7 +3251,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 projectFile = projectSession.updateCourseDraft(currentProject) { result.projectFile }
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 projectStatusText = if (result.affectedCategoryCount > 0) {
-                    "Updated draft ${result.controlLabel} location in ${result.affectedCategoryCount} course(s). Analyze and Apply reviewed courses to replace the applied design. Unsaved changes."
+                    "Updated draft ${result.controlLabel} location in ${result.affectedCategoryCount} course(s). Analyze and Apply changes to all race courses to replace the applied design. Unsaved changes."
                 } else {
                     "Updated ${result.controlLabel} location. No stored courses referenced it. Unsaved changes."
                 }
@@ -3806,7 +3806,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 syncProtectedCourseState(requireNotNull(projectFile), review.password)
                 pendingCourseKmlKmzImportReview = null
                 recordActivity("Saved draft controls/route $formatLabel import ${review.sourceName}.")
-                projectStatusText = "Course draft updated. Analyze and Apply reviewed courses when ready. Save Race preserves the draft."
+                projectStatusText = "Course draft updated. Analyze and Apply changes to all race courses when ready. Save Race preserves the draft."
                 val retainedImportedSiConflictCount = selectedSummary.controlSiConflictCount
                     .takeIf { !overwriteImportedSiNumbers }
                     ?: 0
@@ -11793,22 +11793,7 @@ private data class CourseAnalysisMissingDataPrompt(
     val summary: DesktopCourseAnalysisSummary
 )
 
-private enum class CourseAnalysisSaveAction(
-    val buttonLabel: String,
-    val title: String,
-    val message: String
-) {
-    CalculatedRoute(
-        buttonLabel = "Review and Apply Courses",
-        title = "Review calculated route?",
-        message = "Review the physical SI station bindings, accepted numbering, and complete courses before applying this design to the race. Save Race writes the accepted design to disk."
-    ),
-    FoxRenumberingOnly(
-        buttonLabel = "Save Draft Numbering",
-        title = "Save fox renumbering?",
-        message = "Save the Section 1 numbering proposal in the course draft while retaining its current route geometry. Results continue using the applied courses. Analyze the draft and use Review and Apply Courses when ready."
-    )
-}
+private enum class CourseAnalysisSaveAction { CalculatedRoute, FoxRenumberingOnly }
 
 internal data class RetainedCourseAnalysisCourseInfo(
     val encryptedCourseInfo: String,
@@ -12363,7 +12348,6 @@ private fun RadioOManagerDesktopApp(
             isSiReaderConnected = siReaderState.severity == DesktopSiReaderSeverity.CONNECTED,
             siReaderStatusText = siReaderState.statusText
         )
-        var pendingCourseAnalysisSaveAction by remember { mutableStateOf<CourseAnalysisSaveAction?>(null) }
 
         LaunchedEffect(
             practiceSiReadoutContextKey,
@@ -12482,7 +12466,6 @@ private fun RadioOManagerDesktopApp(
                     CourseAnalysisSaveAction.CalculatedRoute -> {
                         val application = courseAnalysisResult?.calculatedRouteApplication ?: return
                         courseAnalysisApplyStatusText = onUseCalculatedCourseAnalysisRoute(application)
-                        completedCourseAnalysisResult = null
                     }
                     CourseAnalysisSaveAction.FoxRenumberingOnly -> {
                         val renumbering = courseAnalysisResult?.waitRenumbering?.takeIf { it.improvesWait }
@@ -12491,21 +12474,6 @@ private fun RadioOManagerDesktopApp(
                         completedCourseAnalysisResult = null
                     }
                 }
-            }
-            pendingCourseAnalysisSaveAction?.let { action ->
-                if (action == CourseAnalysisSaveAction.CalculatedRoute) {
-                    LaunchedEffect(action) {
-                        pendingCourseAnalysisSaveAction = null
-                        saveCourseAnalysisAction(action)
-                    }
-                } else CourseAnalysisSaveActionDialog(
-                    action = action,
-                    onConfirm = {
-                        pendingCourseAnalysisSaveAction = null
-                        saveCourseAnalysisAction(action)
-                    },
-                    onCancel = { pendingCourseAnalysisSaveAction = null }
-                )
             }
             Surface(modifier = Modifier.fillMaxSize(), color = DesktopPalette.White) {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -12532,10 +12500,10 @@ private fun RadioOManagerDesktopApp(
                             },
                             isCourseAnalysisBusy = false,
                             onApplyCalculatedRoute = {
-                                pendingCourseAnalysisSaveAction = CourseAnalysisSaveAction.CalculatedRoute
+                                saveCourseAnalysisAction(CourseAnalysisSaveAction.CalculatedRoute)
                             },
                             onApplyFoxRenumberingOnly = {
-                                pendingCourseAnalysisSaveAction = CourseAnalysisSaveAction.FoxRenumberingOnly
+                                saveCourseAnalysisAction(CourseAnalysisSaveAction.FoxRenumberingOnly)
                             },
                             onBack = { requestNavigation(DesktopPendingNavigation.Back) },
                             onSaveEvent = { onNavAction(DesktopNavAction.SaveEventFile) },
@@ -12826,35 +12794,6 @@ private fun DesktopNavigationGuardDialogs(
             onCancel = onCancelDirtySubmenu
         )
     }
-}
-
-@Composable
-private fun CourseAnalysisSaveActionDialog(
-    action: CourseAnalysisSaveAction,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(action.title) },
-        text = {
-            Text(
-                text = action.message,
-                color = DesktopPalette.Black,
-                fontSize = 14.sp
-            )
-        },
-        confirmButton = {
-            Button(onClick = onConfirm) {
-                ButtonLabel(action.buttonLabel)
-            }
-        },
-        dismissButton = {
-            Button(onClick = onCancel) {
-                ButtonLabel("Cancel")
-            }
-        }
-    )
 }
 
 /** Renders the Android-style app bar used at the top of the desktop window. */
@@ -13683,7 +13622,7 @@ private fun CourseAnalysisNavigationActions(
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
-                text = "Review and Apply Courses",
+                text = "Apply changes to all race courses",
                 fontSize = 13.sp,
                 lineHeight = 15.sp,
                 maxLines = 2,
@@ -14478,7 +14417,7 @@ private fun SetupSectionWorkspaceContent(
         if (isProtectedCourseOrderUnlocked && candidate == null) {
             Text(design?.error ?: "Loading course draft…")
         } else {
-            Text("Course design edits are saved as a draft. Analyze and Apply reviewed courses when ready.")
+            Text("Course design edits are saved as a draft. Analyze and Apply changes to all race courses when ready.")
             ProtectedCourseOrderPanel(
                 projectFile = candidate ?: projectFile,
                 isUnlocked = isProtectedCourseOrderUnlocked,
@@ -21205,7 +21144,7 @@ private fun CourseAnalyzerGuidance() {
             KmlImportInstruction("Optional KML/KMZ SS=#.## values in Start, fox, beacon, spectator, or LineString descriptions replace the race speed factor for the following leg; Finish SS values are ignored.")
             KmlImportInstruction("Choose a category, then Analyze to compare its Draft route or Applied route with the calculated route candidate.")
             KmlImportInstruction("Export Analysis writes the displayed analysis plus route/control data for external review.")
-            KmlImportInstruction("Review and Apply Courses confirms SI stations, then applies accepted numbering, assignments, geometry, and metrics to all courses in this race.")
+            KmlImportInstruction("Apply changes to all race courses validates and applies accepted numbering, assignments, routes and distances. You are asked only about unresolved problems.")
             KmlImportInstruction("Save Draft Numbering stores a Section 1 numbering proposal in the draft; applied courses and results remain unchanged.")
         }
         Text(
@@ -22325,7 +22264,7 @@ private fun CourseAnalysisRouteMaps(routeMaps: List<DesktopCourseRouteMap>) {
 }
 
 @Composable
-private fun CourseAnalysisRouteMap(
+internal fun CourseAnalysisRouteMap(
     routeMap: DesktopCourseRouteMap,
     mapWidth: Dp = 300.dp,
     mapHeight: Dp = 190.dp,
