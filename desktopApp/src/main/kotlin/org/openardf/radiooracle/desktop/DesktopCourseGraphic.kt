@@ -72,9 +72,13 @@ private data class ImageRenderStyle(
     val markerScale: Double,
     val labelFontSize: Int,
     val labelFontStyle: Int,
-    val pointLabelGap: Double
+    val pointLabelGap: Double,
+    val showWaypointMarkers: Boolean = true
 ) {
     val markerRadius: Int = (14.0 * markerScale).toInt()
+
+    fun visiblePoints(routeMap: DesktopCourseRouteMap): List<DesktopCourseRouteMapPoint> =
+        routeMap.points.filter { showWaypointMarkers || it.type != DesktopCourseRouteMapPointType.Waypoint }
 }
 
 private enum class GraphicLabelKind {
@@ -262,11 +266,13 @@ object DesktopCourseGraphic {
     internal fun writeWebPng(
         path: Path,
         routeMap: DesktopCourseRouteMap,
-        simplifyRouteToStops: Boolean = false
+        simplifyRouteToStops: Boolean = false,
+        showWaypointMarkers: Boolean = true
     ) {
         path.parent?.let(Files::createDirectories)
         ImageIO.write(
-            renderImage(webRouteMap(routeMap, simplifyRouteToStops), "png", WebImageStyle),
+            renderImage(webRouteMap(routeMap, simplifyRouteToStops), "png",
+                WebImageStyle.copy(showWaypointMarkers = showWaypointMarkers)),
             "png",
             path.toFile()
         )
@@ -349,7 +355,7 @@ object DesktopCourseGraphic {
         routeMap: DesktopCourseRouteMap,
         imageStyle: ImageRenderStyle
     ) {
-        routeMap.points.forEach { point ->
+        imageStyle.visiblePoints(routeMap).forEach { point ->
             drawImageMarkerIcon(graphics, point.type, imageX(point), imageY(point), imageStyle.markerScale)
         }
     }
@@ -443,7 +449,7 @@ object DesktopCourseGraphic {
         val metrics = graphics.fontMetrics
         val labelHeight = metrics.height.toDouble()
         val requests = buildList {
-            routeMap.points.filter { it.label.isNotEmpty() }.forEach { point ->
+            imageStyle.visiblePoints(routeMap).filter { it.label.isNotEmpty() }.forEach { point ->
                 add(
                     GraphicLabelRequest(
                         label = point.label,
@@ -501,7 +507,7 @@ object DesktopCourseGraphic {
             occupied = listOf(
                 Rectangle(ImageMapLeft + ImageMapWidth - 106, ImageMapTop + 10, 96, 126),
                 Rectangle(ImageMapLeft, ImageHeight - 72, 220, 66)
-            ) + routeMap.imagePointMarkerBounds(imageStyle.markerRadius)
+            ) + imageStyle.visiblePoints(routeMap).imagePointMarkerBounds(imageStyle.markerRadius)
         )
     }
 
@@ -922,8 +928,7 @@ object DesktopCourseGraphic {
                 DesktopCourseRouteMapLine(
                     label = "",
                     points = stopPoints,
-                    dashed = false,
-                    smooth = false
+                    dashed = false
                 )
             )
         )
@@ -991,117 +996,17 @@ object DesktopCourseGraphic {
         return null
     }
 
-    private fun DesktopCourseRouteMapLine.imagePath(): Path2D.Double =
-        if (smooth) {
-            smoothPath(
-                x = { point -> imageX(point).toDouble() },
-                y = { point -> imageY(point).toDouble() }
-            )
-        } else {
-            straightPath(
-                x = { point -> imageX(point).toDouble() },
-                y = { point -> imageY(point).toDouble() }
-            )
-        }
-
-    private fun DesktopCourseRouteMapLine.straightPath(
-        x: (DesktopCourseRouteMapLinePoint) -> Double,
-        y: (DesktopCourseRouteMapLinePoint) -> Double
-    ): Path2D.Double {
-        val path = Path2D.Double()
-        val first = points.firstOrNull() ?: return path
-        path.moveTo(x(first), y(first))
-        points.drop(1).forEach { point -> path.lineTo(x(point), y(point)) }
-        return path
-    }
-
-    private fun DesktopCourseRouteMapLine.smoothPath(
-        x: (DesktopCourseRouteMapLinePoint) -> Double,
-        y: (DesktopCourseRouteMapLinePoint) -> Double
-    ): Path2D.Double {
-        val path = Path2D.Double()
-        val first = points.firstOrNull() ?: return path
-        path.moveTo(x(first), y(first))
-        if (points.size < 2) {
-            return path
-        }
-        if (points.size == 2) {
-            val end = points[1]
-            path.lineTo(x(end), y(end))
-            return path
-        }
-        for (index in 1 until points.size - 2) {
-            val control = points[index]
-            val next = points[index + 1]
-            path.quadTo(
-                x(control),
-                y(control),
-                (x(control) + x(next)) / 2.0,
-                (y(control) + y(next)) / 2.0
-            )
-        }
-        val control = points[points.lastIndex - 1]
-        val end = points.last()
-        path.quadTo(x(control), y(control), x(end), y(end))
-        return path
-    }
-
-    private fun StringBuilder.appendPdfSmoothLine(line: DesktopCourseRouteMapLine) {
-        val first = line.points.firstOrNull() ?: return
-        var currentX = pdfX(first)
-        var currentY = pdfY(first)
-        appendLine("${pdfNumber(currentX)} ${pdfNumber(currentY)} m")
-        if (line.points.size < 2) {
-            return
-        }
-        if (line.points.size == 2) {
-            val end = line.points[1]
-            appendLine("${pdfPoint(end)} l S")
-            return
-        }
-        for (index in 1 until line.points.size - 2) {
-            val control = line.points[index]
-            val next = line.points[index + 1]
-            val endX = (pdfX(control) + pdfX(next)) / 2.0
-            val endY = (pdfY(control) + pdfY(next)) / 2.0
-            appendPdfQuadratic(currentX, currentY, pdfX(control), pdfY(control), endX, endY)
-            currentX = endX
-            currentY = endY
-        }
-        val control = line.points[line.points.lastIndex - 1]
-        val end = line.points.last()
-        appendPdfQuadratic(currentX, currentY, pdfX(control), pdfY(control), pdfX(end), pdfY(end))
-        appendLine("S")
+    private fun DesktopCourseRouteMapLine.imagePath(): Path2D.Double = Path2D.Double().apply {
+        val first = points.firstOrNull() ?: return@apply
+        moveTo(imageX(first).toDouble(), imageY(first).toDouble())
+        points.drop(1).forEach { lineTo(imageX(it).toDouble(), imageY(it).toDouble()) }
     }
 
     private fun StringBuilder.appendPdfLine(line: DesktopCourseRouteMapLine) {
-        if (line.smooth) {
-            appendPdfSmoothLine(line)
-            return
-        }
         val first = line.points.firstOrNull() ?: return
         appendLine("${pdfPoint(first)} m")
         line.points.drop(1).forEach { point -> appendLine("${pdfPoint(point)} l") }
         appendLine("S")
-    }
-
-    private fun StringBuilder.appendPdfQuadratic(
-        startX: Double,
-        startY: Double,
-        controlX: Double,
-        controlY: Double,
-        endX: Double,
-        endY: Double
-    ) {
-        val firstControlX = startX + (controlX - startX) * 2.0 / 3.0
-        val firstControlY = startY + (controlY - startY) * 2.0 / 3.0
-        val secondControlX = endX + (controlX - endX) * 2.0 / 3.0
-        val secondControlY = endY + (controlY - endY) * 2.0 / 3.0
-        appendLine(
-            "${pdfNumber(firstControlX)} ${pdfNumber(firstControlY)} " +
-                "${pdfNumber(secondControlX)} ${pdfNumber(secondControlY)} " +
-                "${pdfNumber(endX)} ${pdfNumber(endY)} c"
-        )
     }
 
     private fun DesktopCourseRouteMapPolygon.labelPoint(): DesktopCourseRouteMapLinePoint? {
@@ -1146,8 +1051,8 @@ object DesktopCourseGraphic {
     private fun DesktopCourseRouteMapLine.isBlackStroke(): Boolean =
         strokeColorArgb?.let { (it and 0x00FFFFFFL) == 0L } == true
 
-    private fun DesktopCourseRouteMap.imagePointMarkerBounds(markerRadius: Int): List<Rectangle> =
-        points.map { point ->
+    private fun List<DesktopCourseRouteMapPoint>.imagePointMarkerBounds(markerRadius: Int): List<Rectangle> =
+        map { point ->
             Rectangle(
                 imageX(point) - markerRadius,
                 imageY(point) - markerRadius,

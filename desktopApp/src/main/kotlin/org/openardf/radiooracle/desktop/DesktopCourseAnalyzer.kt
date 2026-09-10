@@ -96,7 +96,9 @@ data class DesktopCourseAnalysisSummary(
     val calculatedLegRows: List<DesktopCourseLegRow>,
     val waitRows: List<DesktopCourseWaitRow>,
     val waitRenumbering: DesktopCourseWaitRenumbering?,
-    val metrics: List<DesktopCourseGoodnessMetric>
+    val metrics: List<DesktopCourseGoodnessMetric>,
+    /** Identifies the course design used for this report, including any resolved elevations. */
+    val sourceSnapshotHash: String? = null
 )
 
 data class DesktopCourseAnalysisSummaryGroup(
@@ -186,13 +188,13 @@ data class DesktopCourseRouteMapPoint(
     val type: DesktopCourseRouteMapPointType
 )
 
+/** Exact route vertices. Renderers must connect them in order without curve smoothing. */
 data class DesktopCourseRouteMapLine(
     val label: String,
     val points: List<DesktopCourseRouteMapLinePoint>,
     val strokeColorArgb: Long? = null,
     val strokeWidthPixels: Float? = null,
-    val dashed: Boolean = true,
-    val smooth: Boolean = true
+    val dashed: Boolean = true
 )
 
 data class DesktopCourseRouteMapLinePoint(
@@ -1171,6 +1173,7 @@ object DesktopCourseAnalyzer {
         )
 
         return DesktopCourseAnalysisSummary(
+            sourceSnapshotHash = org.openardf.radiooracle.shared.event.EventCourseDrafts.snapshotHash(projectFile),
             eventName = projectFile.raceData.race.name,
             eventFileName = eventFileName,
             eventFormatLabel = projectFile.raceData.race.raceType.toDisplayLabel(),
@@ -3421,8 +3424,7 @@ object DesktopCourseAnalyzer {
                 DesktopCourseRouteMapLine(
                     label = "",
                     points = points,
-                    dashed = false,
-                    smooth = waypoints.isEmpty()
+                    dashed = false
                 )
             }
         return DesktopCourseRouteMap(

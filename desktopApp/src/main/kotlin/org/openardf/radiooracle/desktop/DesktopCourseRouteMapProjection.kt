@@ -39,8 +39,7 @@ internal fun DesktopCourseRouteMap.routeLinesForDrawing(): List<DesktopCourseRou
     return listOf(DesktopCourseRouteMapLine(
         label = "",
         points = stops.map { DesktopCourseRouteMapLinePoint(it.xFraction, it.yFraction) },
-        dashed = false,
-        smooth = false
+        dashed = false
     ))
 }
 

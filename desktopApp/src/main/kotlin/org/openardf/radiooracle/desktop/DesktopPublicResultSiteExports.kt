@@ -423,7 +423,8 @@ object DesktopPublicResultSiteExports {
                 DesktopCourseGraphic.writeWebPng(
                     path = path,
                     routeMap = routeMap.copy(title = "$categoryName course"),
-                    simplifyRouteToStops = race.projectFile.raceData.race.raceType == RaceType.FOXORING
+                    simplifyRouteToStops = race.projectFile.raceData.race.raceType == RaceType.FOXORING,
+                    showWaypointMarkers = false
                 )
                 DesktopDebugLog.info(
                     "PublicResults",

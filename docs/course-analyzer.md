@@ -15,6 +15,12 @@ The Course Analyzer evaluates protected radio-orienteering course data after con
 
 The analyzer report displays length values in kilometers to hundredths (`x.xx km`). Climb is displayed in meters with no decimal places. Analyzer time values omit a zero hours field, so `00:58:50` is displayed as `58:50`.
 
+After importing or editing a course draft, choose `Analyze` again. The app hides reports from an older course snapshot and disables their export and application actions until a current analysis is available. This also applies to an older calculation that finishes after the draft changes. Elevation preparation can update the draft during analysis; the refreshed report is checked against the updated snapshot.
+
+All 2D route drawings connect the actual route vertices in order without curve smoothing. This applies to on-screen diagrams, standalone PNG/JPEG/PDF graphics, analysis PDFs, and public-results graphics including Cloudflare exports. Foxes and applicable mandatory points lie on the route rather than acting as curve-control handles. KML/KMZ/GPX exports retain the underlying coordinates.
+
+Results images hide mandatory-point symbols and labels: only the route bends reveal their effect. Course Analyzer and course-review graphics retain those markers for editing and inspection. Hiding a marker never removes its route vertex or changes calculated lengths.
+
 Before entering Course Analyzer, Radio-Oracle requires the Race File model to be clean. If other Race File edits are pending, the user must cancel entry, save and continue, or dump the pending edits by reloading the Race File from disk before analyzer imports or calculated-route saves can be made active.
 
 ## Mandatory Route Points and Incomplete Leg Constraints

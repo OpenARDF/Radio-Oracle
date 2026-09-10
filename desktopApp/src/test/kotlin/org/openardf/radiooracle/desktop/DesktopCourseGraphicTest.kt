@@ -35,6 +35,81 @@ import javax.imageio.ImageIO
 
 class DesktopCourseGraphicTest {
     @Test
+    fun sparseRouteGraphicActuallyPaintsEveryVisitedCorner() {
+        // No markers: a fox/waypoint symbol must not conceal a gap in the drawn route.
+        val map = DesktopCourseRouteMap("Sparse route geometry", points = emptyList(), routeLabels = emptyList(),
+            lineStrings = listOf(DesktopCourseRouteMapLine("", listOf(
+                DesktopCourseRouteMapLinePoint(0.1, 0.85),
+                DesktopCourseRouteMapLinePoint(0.5, 0.15),
+                DesktopCourseRouteMapLinePoint(0.85, 0.8)
+            ), dashed = false)))
+        val path = java.nio.file.Path.of("build/reports/sparse-route-geometry.png")
+        DesktopCourseGraphic.writePng(path, map)
+        val rendered = ImageIO.read(path.toFile())
+        val cornerX = 70 + (1260 * 0.5).toInt()
+        val cornerY = 130 + (800 * 0.15).toInt()
+        assertEquals("The route itself must reach the corner", DesktopCourseRouteMapStyle.lineAwtColor().rgb,
+            rendered.getRGB(cornerX, cornerY))
+        val webPath = path.resolveSibling("sparse-route-web.png")
+        DesktopCourseGraphic.writeWebPng(webPath, map)
+        val web = ImageIO.read(webPath.toFile())
+        val webCorner = DesktopCourseGraphic.webRouteMap(map).lineStrings.single().points[1]
+        assertEquals("Public-results PNG must reach the same corner", DesktopCourseRouteMapStyle.lineAwtColor().rgb,
+            web.getRGB((70 + 1260 * webCorner.xFraction).toInt(), (130 + 800 * webCorner.yFraction).toInt()))
+    }
+
+    @Test
+    fun resultsHideWaypointMarkersAndLabelsWithoutShortcuttingTheRoute() {
+        val stops = listOf(
+            DesktopCourseRouteMapPoint("S", 0.1, 0.85, DesktopCourseRouteMapPointType.Start),
+            DesktopCourseRouteMapPoint("Mandatory corner", 0.5, 0.15, DesktopCourseRouteMapPointType.Waypoint),
+            DesktopCourseRouteMapPoint("F", 0.85, 0.8, DesktopCourseRouteMapPointType.Finish)
+        )
+        val map = DesktopCourseRouteMap("Results", stops, routeLabels = listOf("S", "F"), routePointIndexes = listOf(0, 1, 2),
+            lineStrings = listOf(DesktopCourseRouteMapLine("", stops.map {
+                DesktopCourseRouteMapLinePoint(it.xFraction, it.yFraction)
+            }, dashed = false)))
+        val directory = Files.createTempDirectory("hidden-result-waypoints")
+        val expected = directory.resolve("expected.png")
+        DesktopCourseGraphic.writeWebPng(expected, map.copy(points = listOf(stops[0], stops[2]), routePointIndexes = listOf(0, 1)))
+        for (simplify in listOf(false, true)) {
+            val path = directory.resolve("results-$simplify.png")
+            DesktopCourseGraphic.writeWebPng(path, map, simplifyRouteToStops = simplify, showWaypointMarkers = false)
+            org.junit.Assert.assertArrayEquals(Files.readAllBytes(expected), Files.readAllBytes(path))
+        }
+        val review = directory.resolve("review.png")
+        DesktopCourseGraphic.writeWebPng(review, map)
+        assertFalse("Review graphics still show the mandatory point", Files.readAllBytes(expected).contentEquals(Files.readAllBytes(review)))
+    }
+
+    @Test
+    fun standalonePngJpegAndPdfRetainOriginalKmlCorners() {
+        val path = Files.createTempDirectory("route-corner-exports").resolve("corners.kml")
+        Files.writeString(path, """<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+            <Style id="route"><LineStyle><color>ff000000</color><width>10</width></LineStyle></Style>
+            <Placemark><name>Start</name><Point><coordinates>-75.002,40.0,100</coordinates></Point></Placemark>
+            <Placemark><name>Route</name><styleUrl>#route</styleUrl><LineString><coordinates>
+            -75.002,40.0,100 -75.0,40.003,100 -74.998,40.0,100
+            </coordinates></LineString></Placemark></Document></kml>""")
+        val result = DesktopCourseGraphic.generate(path)
+        val vertices = result.routeMap.lineStrings.single().points
+        assertEquals(3, vertices.size)
+        val corner = vertices[1]
+        val x = (70 + 1260 * corner.xFraction).toInt()
+        val y = (130 + 800 * corner.yFraction).toInt()
+        for (imagePath in listOf(result.outputPaths.pngPath, result.outputPaths.jpgPath)) {
+            val color = Color(ImageIO.read(imagePath.toFile()).getRGB(x, y))
+            assertTrue("${imagePath.fileName} must paint the original corner", color.red < 40 && color.green < 40 && color.blue < 40)
+        }
+        val pdf = Files.readString(result.outputPaths.pdfPath, StandardCharsets.ISO_8859_1)
+        vertices.forEachIndexed { index, vertex ->
+            val command = String.format(java.util.Locale.ROOT, "%.2f %.2f %s",
+                54 + 684 * vertex.xFraction, 54 + 450 * (1 - vertex.yFraction), if (index == 0) "m" else "l")
+            assertTrue("PDF must draw vertex $index: $command", pdf.contains(command))
+        }
+    }
+
+    @Test
     fun buildsMagneticNorthGraphicFromVisibleKmlObjects() {
         val path = Files.createTempDirectory("radio-oracle-graphic").resolve("Sprint Layout.kml")
         Files.writeString(path, sampleKml())
@@ -152,7 +227,6 @@ class DesktopCourseGraphicTest {
             },
             simplified.lineStrings.single().points
         )
-        assertFalse(simplified.lineStrings.single().smooth)
     }
 
     @Test

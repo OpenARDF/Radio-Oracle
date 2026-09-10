@@ -87,11 +87,10 @@ class DesktopMandatoryCoursePresentationTest {
         DesktopCourseAnalysisExports.exportPdfAndKml(folder.resolve("course-analysis.pdf"), summary)
         val map = summary.routeMaps.first()
         assertEquals(3, map.points.count { it.type == DesktopCourseRouteMapPointType.Waypoint })
-        assertTrue("Drawing curves must not cut across mandatory corners", map.lineStrings.none { it.smooth })
         // The Foxoring web path must preserve the full ordered polyline too.
         assertEquals(DesktopCourseGraphic.webRouteMap(map), DesktopCourseGraphic.webRouteMap(map, simplifyRouteToStops = true))
         val expectedPng = folder.resolve("expected-course.png")
-        DesktopCourseGraphic.writeWebPng(expectedPng, map.copy(title = "M21 course"))
+        DesktopCourseGraphic.writeWebPng(expectedPng, map.copy(title = "M21 course"), showWaypointMarkers = false)
         assertArrayEquals(Files.readAllBytes(expectedPng), Files.readAllBytes(png))
         val race = project.raceData
         for (text in listOf(EventCsvExports.results(race, routeLengths = lengths),
@@ -133,7 +132,7 @@ class DesktopMandatoryCoursePresentationTest {
             DesktopCourseRouteMapLinePoint(0.1, 0.9), DesktopCourseRouteMapLinePoint(0.5, 0.2),
             DesktopCourseRouteMapLinePoint(0.2, 0.4), DesktopCourseRouteMapLinePoint(0.5, 0.2),
             DesktopCourseRouteMapLinePoint(0.9, 0.1)
-        ), dashed = false, smooth = false)))
+        ), dashed = false)))
         assertEquals(5, map.routeLinesForDrawing().single().points.size)
         assertEquals(3, map.copy(lineStrings = emptyList()).routeLinesForDrawing().single().points.size)
         val path = Files.createTempFile("mandatory-pdf-geometry", ".pdf")
@@ -145,7 +144,7 @@ class DesktopMandatoryCoursePresentationTest {
         } finally { Files.deleteIfExists(path) }
     }
 
-    @Test fun sharedPublicDiagramKeepsCornersInPolylineAndWaypointMarkers() {
+    @Test fun sharedPublicDiagramKeepsCornersButHidesWaypointMarkersAndLabels() {
         val project = fixture()
         val info = info(project)
         val rendered = PublicResultsSiteRenderer.renderRace(PublicResultsRaceRenderRequest(project,
@@ -153,12 +152,13 @@ class DesktopMandatoryCoursePresentationTest {
         val svg = rendered.files.getValue(rendered.courseGraphics.single()).decodeToString()
         val polyline = Regex("<polyline points=\"([^\"]+)\"").find(svg)!!.groupValues[1].split(" ")
         assertEquals(info.route.size, polyline.size)
-        // The first corner is simultaneously a route vertex and a green waypoint marker.
-        val coordinates = polyline[1].split(",").map(String::toDouble)
-        val rect = Regex("<rect x=\"([^\"]+)\" y=\"([^\"]+)\" width=\"28\"").findAll(svg).first()
-        assertEquals(coordinates[0], rect.groupValues[1].toDouble() + 14, 0.011)
-        assertEquals(coordinates[1], rect.groupValues[2].toDouble() + 14, 0.011)
-        assertTrue(svg.contains("Mandatory point A"))
+        // Results hide waypoint symbols and labels, while retaining exactly the same route bends.
+        val reviewSvg = CourseDiagramSvg.render("Review", info)
+        val reviewPolyline = Regex("<polyline points=\"([^\"]+)\"").find(reviewSvg)!!.groupValues[1]
+        assertEquals(reviewPolyline, polyline.joinToString(" "))
+        assertTrue(reviewSvg.contains("Mandatory point A"))
+        assertFalse(svg.contains("Mandatory point"))
+        assertFalse(svg.contains("width=\"28\""))
         val directory = Path.of("build/reports/mandatory-course-presentation")
         Files.createDirectories(directory)
         Files.writeString(directory.resolve("shared-public-course.svg"), svg)

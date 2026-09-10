@@ -1008,6 +1008,21 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
+    fun calculatedRouteDrawsThroughFoxesEvenWithoutMandatoryWaypoints() {
+        val info = protectedInfo(foxCount = 3)
+        val summary = DesktopCourseAnalyzer.analyze(projectFile(foxCount = 3), CATEGORY_ID, info, info.idealOrder)
+        val map = summary.routeMaps.last()
+        assertTrue(map.points.none { it.type == DesktopCourseRouteMapPointType.Waypoint })
+        val line = map.routeLinesForDrawing().single()
+        map.routePointIndexes.map { map.points[it] }.forEach { stop ->
+            assertTrue("Route must pass through ${stop.label}", line.points.any {
+                kotlin.math.abs(it.xFraction - stop.xFraction) < 1e-9 &&
+                    kotlin.math.abs(it.yFraction - stop.yFraction) < 1e-9
+            })
+        }
+    }
+
+    @Test
     fun savedRouteMapIncludesTheFullImportedRouteLineString() {
         val protectedInfo = protectedInfo(foxCount = 3).withIntermediateRoutePoints()
 

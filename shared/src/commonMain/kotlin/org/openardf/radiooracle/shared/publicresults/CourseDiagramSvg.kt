@@ -38,7 +38,7 @@ object CourseDiagramSvg {
     private const val RIGHT = 150.0
     private const val BOTTOM = 70.0
 
-    fun render(title: String, courseInfo: ProtectedCourseInfo): String {
+    fun render(title: String, courseInfo: ProtectedCourseInfo, showWaypointMarkers: Boolean = true): String {
         val geoPoints = buildList {
             courseInfo.route.forEach { add(GeoPoint(it.latitude, it.longitude)) }
             courseInfo.controlPoints.forEach { add(GeoPoint(it.latitude, it.longitude)) }
@@ -97,6 +97,7 @@ object CourseDiagramSvg {
             }
 
             courseInfo.courseObjects.forEach { courseObject ->
+                if (!showWaypointMarkers && courseObject.type == ProtectedCourseObjectType.WAYPOINT) return@forEach
                 val objectPoint = point(courseObject.latitude, courseObject.longitude)
                 when (courseObject.type) {
                     ProtectedCourseObjectType.START -> appendStart(objectPoint)

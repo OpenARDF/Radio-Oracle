@@ -281,7 +281,7 @@ object PublicResultsSiteRenderer {
                 RenderedCourseGraphic(
                     fileName = "course-${PublicResultsSiteCatalog.safePathSegment(categories.first().categoryId, "course")}.svg",
                     title = title,
-                    svg = CourseDiagramSvg.render(title, courseInfo)
+                    svg = CourseDiagramSvg.render(title, courseInfo, showWaypointMarkers = false)
                 )
             }
     }

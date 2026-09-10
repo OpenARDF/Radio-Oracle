@@ -12332,9 +12332,13 @@ private fun RadioOManagerDesktopApp(
         var pendingCourseAnalysisEntryNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var pendingCourseAnalysisExitNavigation by remember { mutableStateOf<DesktopPendingNavigation?>(null) }
         var bypassedDisabledNavigation by remember { mutableStateOf<BypassedDisabledNavigation?>(null) }
-        var courseAnalysisResult by remember(projectFile?.raceData?.race?.id, protectedCourseInfoByCategoryId) {
+        var completedCourseAnalysisResult by remember(projectFile?.raceData?.race?.id, isProtectedCourseOrderUnlocked) {
             mutableStateOf<DesktopCourseAnalysisSummary?>(null)
         }
+        val courseAnalysisResult = currentCourseAnalysisResult(projectFile, completedCourseAnalysisResult)
+        val courseAnalysisRefreshMessage = if (completedCourseAnalysisResult != null && courseAnalysisResult == null) {
+            "Course data changed. Choose Analyze to refresh the routes, metrics, and exports."
+        } else null
         var courseAnalysisApplyStatusText by remember(projectFile?.raceData?.race?.id) {
             mutableStateOf<String?>(null)
         }
@@ -12475,13 +12479,13 @@ private fun RadioOManagerDesktopApp(
                     CourseAnalysisSaveAction.CalculatedRoute -> {
                         val application = courseAnalysisResult?.calculatedRouteApplication ?: return
                         courseAnalysisApplyStatusText = onUseCalculatedCourseAnalysisRoute(application)
-                        courseAnalysisResult = null
+                        completedCourseAnalysisResult = null
                     }
                     CourseAnalysisSaveAction.FoxRenumberingOnly -> {
                         val renumbering = courseAnalysisResult?.waitRenumbering?.takeIf { it.improvesWait }
                             ?: return
                         courseAnalysisApplyStatusText = onApplyCourseAnalysisFoxRenumberingOnly(renumbering)
-                        courseAnalysisResult = null
+                        completedCourseAnalysisResult = null
                     }
                 }
             }
@@ -12629,8 +12633,8 @@ private fun RadioOManagerDesktopApp(
                                     protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                                     protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                                     courseAnalysisResult = courseAnalysisResult,
-                                    onCourseAnalysisResultChange = { courseAnalysisResult = it },
-                                    courseAnalysisApplyStatusText = courseAnalysisApplyStatusText,
+                                    onCourseAnalysisResultChange = { completedCourseAnalysisResult = it },
+                                    courseAnalysisApplyStatusText = courseAnalysisRefreshMessage ?: courseAnalysisApplyStatusText,
                                     onCourseAnalysisApplyStatusTextChange = { courseAnalysisApplyStatusText = it },
                                     recentImportReport = recentImportReport,
                                     recentImportCheckpoint = recentImportCheckpoint,
@@ -12734,7 +12738,7 @@ private fun RadioOManagerDesktopApp(
             onDiscardCourseAnalysisEntry = { navigation ->
                 if (onDiscardEventFileChangesForNavigation()) {
                     pendingCourseAnalysisEntryNavigation = null
-                    courseAnalysisResult = null
+                    completedCourseAnalysisResult = null
                     courseAnalysisApplyStatusText = null
                     applyNavigation(navigation)
                 }
@@ -12742,7 +12746,7 @@ private fun RadioOManagerDesktopApp(
             onDiscardCourseAnalysisExit = { navigation ->
                 if (onDiscardEventFileChangesForNavigation()) {
                     pendingCourseAnalysisExitNavigation = null
-                    courseAnalysisResult = null
+                    completedCourseAnalysisResult = null
                     courseAnalysisApplyStatusText = null
                     applyNavigation(navigation)
                 }
@@ -21441,7 +21445,7 @@ private fun CourseAnalysisPanel(
         CourseAnalysisResultView(analysisResult)
     }
 
-    pendingMissingDataResult?.let { prompt ->
+    pendingMissingDataResult?.takeIf { currentCourseAnalysisResult(projectFile, it.summary) != null }?.let { prompt ->
         CourseAnalysisMissingDataDialog(
             prompt = prompt,
             onDismiss = { pendingMissingDataResult = null },
@@ -22378,7 +22382,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapLineStr
 ) {
     routeMap.routeLinesForDrawing().forEach { line ->
         drawPath(
-            path = line.smoothPath(x, y),
+            path = line.routePath(x, y),
             color = line.strokeColorArgb
                 ?.let(DesktopCourseRouteMapStyle::composeColor)
                 ?: DesktopCourseRouteMapStyle.lineComposeColor(),
@@ -22390,39 +22394,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapLineStr
     }
 }
 
-private fun DesktopCourseRouteMapLine.smoothPath(
+private fun DesktopCourseRouteMapLine.routePath(
     x: (DesktopCourseRouteMapLinePoint) -> Float,
     y: (DesktopCourseRouteMapLinePoint) -> Float
-): ComposePath {
-    val path = ComposePath()
-    val first = points.firstOrNull() ?: return path
-    path.moveTo(x(first), y(first))
-    if (points.size < 2) {
-        return path
-    }
-    if (!smooth) {
-        points.drop(1).forEach { point -> path.lineTo(x(point), y(point)) }
-        return path
-    }
-    if (points.size == 2) {
-        val end = points[1]
-        path.lineTo(x(end), y(end))
-        return path
-    }
-    for (index in 1 until points.size - 2) {
-        val control = points[index]
-        val next = points[index + 1]
-        path.quadraticTo(
-            x(control),
-            y(control),
-            (x(control) + x(next)) / 2f,
-            (y(control) + y(next)) / 2f
-        )
-    }
-    val control = points[points.lastIndex - 1]
-    val end = points.last()
-    path.quadraticTo(x(control), y(control), x(end), y(end))
-    return path
+): ComposePath = ComposePath().apply {
+    val first = points.firstOrNull() ?: return@apply
+    moveTo(x(first), y(first))
+    points.drop(1).forEach { lineTo(x(it), y(it)) }
 }
 
 private fun DesktopCourseRouteMapLine.dashPathEffect(): PathEffect? =

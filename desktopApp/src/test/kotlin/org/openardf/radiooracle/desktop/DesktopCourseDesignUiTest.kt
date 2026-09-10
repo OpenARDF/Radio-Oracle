@@ -16,6 +16,74 @@ import java.nio.file.Files
 class DesktopCourseDesignUiTest {
     @get:Rule val rule = createComposeRule()
 
+    @Test fun importingMandatoryCornersInvalidatesDisplayedAnalysisAndLateCompletions() {
+        val applied = EventCourseDrafts.candidate(draft())
+        val oldSummary = analyze(applied)
+        val path = Files.createTempFile("course-ui-corners-", ".kml")
+        Files.writeString(path, courseWorkflowKml().replace(
+            "<LineString><coordinates>-75.0,40.0,100 ",
+            "<LineString><coordinates>-75.0,40.0,100 -74.999,40.001,100 "
+        ))
+        val imported = EventCourseDrafts.edit(applied) {
+            DesktopCourseKmlImporter.importProtectedCourseInfo(path, it, null, elevationProvider = { 100.0 }).first
+        }
+        assertEquals(applied.raceData.categories, imported.raceData.categories)
+        val candidate = EventCourseDrafts.candidate(imported)
+        val refreshed = analyze(candidate)
+        assertTrue(refreshed.routeMaps.first().points.any { it.type == DesktopCourseRouteMapPointType.Waypoint })
+        assertNotEquals(oldSummary.sourceSnapshotHash, refreshed.sourceSnapshotHash)
+
+        var current by mutableStateOf(applied)
+        var completed by mutableStateOf(oldSummary)
+        val session = DesktopProjectSession(DesktopProjectFiles).apply { newProject(applied) }
+        val ui = DesktopCourseDesignUi()
+        rule.setContent { MaterialTheme {
+            DesktopCourseDesignHost(current, null, session, ui, onChanged = { value, _ -> current = value }) {
+                Text(currentCourseAnalysisResult(current, completed)?.sourceSnapshotHash ?: "Analyze again")
+            }
+        } }
+        rule.onNodeWithText(oldSummary.sourceSnapshotHash!!).assertExists()
+        rule.runOnIdle { current = imported }
+        rule.onNodeWithText("Analyze again").assertExists()
+        rule.waitUntil(20_000) { ui.project == candidate }
+        rule.onNodeWithText("Analyze again").assertExists()
+        // An old calculation can complete after the imported draft has loaded.
+        rule.runOnIdle { completed = oldSummary.copy(analysisPerformedAtText = "Later completion") }
+        rule.onNodeWithText("Analyze again").assertExists()
+        rule.runOnIdle { completed = refreshed }
+        rule.onNodeWithText(refreshed.sourceSnapshotHash!!).assertExists()
+        Files.deleteIfExists(path)
+    }
+
+    @Test fun refreshedElevationAnalysisMatchesTheUpdatedDraftRatherThanTheStartingSnapshot() {
+        val initial = draft()
+        var current by mutableStateOf(initial)
+        var completed by mutableStateOf(analyze(EventCourseDrafts.candidate(initial)))
+        rule.setContent { Text(currentCourseAnalysisResult(current, completed)?.sourceSnapshotHash ?: "Analyze again") }
+        val updated = EventCourseDrafts.edit(initial) { candidate ->
+            candidate.copy(raceData = candidate.raceData.copy(categories = candidate.raceData.categories.map { category ->
+                val info = category.category.courseInfo!!
+                category.copy(category = category.category.copy(courseInfo = info.copy(
+                    route = info.route.mapIndexed { index, point -> point.copy(elevationMeters = 100.0 + index) }
+                )))
+            }))
+        }
+        rule.runOnIdle { current = updated }
+        rule.onNodeWithText("Analyze again").assertExists()
+        val refreshed = analyze(EventCourseDrafts.candidate(updated))
+        rule.runOnIdle { completed = refreshed }
+        rule.onNodeWithText(refreshed.sourceSnapshotHash!!).assertExists()
+        // Saving the draft does not change its identity or make the refreshed report stale.
+        rule.runOnIdle { current = EventProjectFileJson.decode(EventProjectFileJson.encode(updated)) }
+        rule.onNodeWithText(refreshed.sourceSnapshotHash!!).assertExists()
+    }
+
+    private fun analyze(project: EventProjectFile): DesktopCourseAnalysisSummary {
+        val category = project.raceData.categories.single().category
+        val info = category.courseInfo!!
+        return DesktopCourseAnalyzer.analyze(project, category.id, info, info.idealOrder, elevationLookup = { 100.0 })
+    }
+
     private fun draft(): EventProjectFile {
         val folder = Files.createTempDirectory("course-ui-")
         DesktopDebugLog.initialize(folder.resolve("logs"))
