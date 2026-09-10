@@ -19,7 +19,7 @@ internal class DesktopFrozenElevationSurface(
 /** All calculation inputs are detached. Callers must revalidate before merging returned metadata. */
 internal object DesktopClassicRouteAnalysis {
     // Identity resolution is part of calculation provenance. Old numbers must not survive this change.
-    const val METHOD = "classic-straight-25m-median50-prominence2-rounded-components-applied-bindings-v3"
+    const val METHOD = "classic-mandatory-legs-25m-median50-prominence2-rounded-components-applied-bindings-v4"
     const val PUNCH_POLICY = "ignore-unresolved-v1"
     private val json = Json { encodeDefaults = true }
 
@@ -216,7 +216,9 @@ internal object DesktopClassicRouteAnalysis {
                     }
                     require(kept.all { it.first.siTimeSeconds in start..finish }) { "Control punches outside Start/Finish need review." }
                     require(kept.zipWithNext().all { (a, b) -> a.first.siTimeSeconds <= b.first.siTimeSeconds }) { "Control punch times run backwards; review readout order." }
-                    val stops = listOf(course.start) + kept.map { it.third } + course.finish
+                    val stops = DesktopMandatoryCourseLegs.expand(
+                        listOf(course.start) + kept.map { it.third } + course.finish, course.waypoints
+                    ).map { it.copy(elevationMeters = null) }
                     val route = cacheState.routeMetrics.getOrPut(stops) { metrics(stops, strictElevation, cache) }
                     val ids = kept.map { it.second.id }
                     val comparison = when {
@@ -244,12 +246,12 @@ internal object DesktopClassicRouteAnalysis {
         return StoredClassicRouteAnalysis(contexts = contexts.filterKeys { key -> retained.values.any { it.contextId == key } }, results = retained)
     }
 
-    internal data class PreparedCourse(val start: CourseGeoPoint, val finish: CourseGeoPoint, val idealIds: List<String>, val idealStops: List<CourseGeoPoint>, val permutedCount: Int)
+    internal data class PreparedCourse(val start: CourseGeoPoint, val finish: CourseGeoPoint, val idealIds: List<String>, val idealStops: List<CourseGeoPoint>, val permutedCount: Int, val waypoints: List<MandatoryRouteWaypoint>)
 
     private fun prepare(project: EventProjectFile, categoryId: String, infos: Map<String, ProtectedCourseInfo>, lookup: (CourseGeoPoint) -> Double?, checkCancelled: () -> Unit, sharedCourses: MutableMap<String, PreparedCourse>): PreparedCourse {
         val category = requireNotNull(project.raceData.categories.firstOrNull { it.category.id == categoryId }) { "No result category." }
         val info = requireNotNull(infos[categoryId]) { "Course geometry is unavailable; unlock or import course data." }
-        require(info.courseObjects.none { it.type == ProtectedCourseObjectType.WAYPOINT }) { "Courses with mandatory waypoints require route review." }
+        val waypoints = DesktopMandatoryCourseLegs.from(info)
         fun endpoint(type: ProtectedCourseObjectType): CourseGeoPoint {
             val point = info.courseObjects.filter { it.type == type }.distinctBy { it.latitude to it.longitude }.singleOrNull()
             return point?.let { geo(it.latitude, it.longitude) }
@@ -268,11 +270,13 @@ internal object DesktopClassicRouteAnalysis {
         require(permuted.isNotEmpty() && permuted.all { it.type == ControlPointType.CONTROL || it.type == ControlPointType.SEPARATOR }) { "Unsupported Classic control roles." }
         val points = assigned.associate { it.id to resolve(it, info, infos.values.toList()) }
         require(points.values.distinct().size == assigned.size) { "Assigned controls do not have unique field locations." }
-        val geometryKey = "$start|$finish|" + assigned.joinToString("|") { "${it.id}:${it.type}:${points.getValue(it.id)}" }
+        val geometryKey = "$start|$finish|$waypoints|" + assigned.joinToString("|") { "${it.id}:${it.type}:${points.getValue(it.id)}" }
         sharedCourses[geometryKey]?.let { return it }
         val idealIds = DesktopCourseAnalyzer.classicIdealOrder(start, finish, permuted.map { it to points.getValue(it.id) },
-            beacons.single().let { it to points.getValue(it.id) }, lookup, checkCancelled)
-        return PreparedCourse(start, finish, idealIds, listOf(start) + idealIds.map(points::getValue) + finish, permuted.size)
+            beacons.single().let { it to points.getValue(it.id) }, lookup, checkCancelled, waypoints)
+        val idealStops = DesktopMandatoryCourseLegs.expand(listOf(start) + idealIds.map(points::getValue) + finish, waypoints)
+            .map { it.copy(elevationMeters = null) }
+        return PreparedCourse(start, finish, idealIds, idealStops, permuted.size, waypoints)
             .also { sharedCourses[geometryKey] = it }
     }
 

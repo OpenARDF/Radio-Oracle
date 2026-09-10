@@ -720,15 +720,16 @@ object DesktopCourseAnalysisExports {
         fun y(point: DesktopCourseRouteMapPoint): Double = bottom + (1.0 - point.yFraction.coerceIn(0.0, 1.0)) * height
         appendLine("0.25 0.25 0.25 RG")
         appendLine("${pdfNumber(left)} ${pdfNumber(bottom)} ${pdfNumber(width)} ${pdfNumber(height)} re S")
-        val byLabel = routeMap.points.associateBy { it.label }
-        val routeLinePoints = routeMap.routePointIndexes
-            .mapNotNull { routeMap.points.getOrNull(it) }
-            .takeIf { it.size >= 2 }
-            ?: routeMap.routeLabels.mapNotNull { byLabel[it] }
         appendLine("0.00 0.35 0.72 RG")
         appendLine("2 w")
-        routeLinePoints.zipWithNext().forEach { (from, to) ->
-            appendLine("${pdfNumber(x(from))} ${pdfNumber(y(from))} m ${pdfNumber(x(to))} ${pdfNumber(y(to))} l S")
+        routeMap.routeLinesForDrawing().forEach { line ->
+            line.points.zipWithNext().forEach { (from, to) ->
+                val fromX = left + from.xFraction.coerceIn(0.0, 1.0) * width
+                val fromY = bottom + (1.0 - from.yFraction.coerceIn(0.0, 1.0)) * height
+                val toX = left + to.xFraction.coerceIn(0.0, 1.0) * width
+                val toY = bottom + (1.0 - to.yFraction.coerceIn(0.0, 1.0)) * height
+                appendLine("${pdfNumber(fromX)} ${pdfNumber(fromY)} m ${pdfNumber(toX)} ${pdfNumber(toY)} l S")
+            }
         }
         routeMap.points.forEach { point ->
             val (red, green, blue) = routeMapPointRgb(point.type)

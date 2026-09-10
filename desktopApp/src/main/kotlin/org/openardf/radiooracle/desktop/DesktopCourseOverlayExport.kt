@@ -171,12 +171,16 @@ object DesktopCourseOverlayExporter {
                 }
             }
         }
+        data.waypoints.forEach { waypoint ->
+            add(OverlayObject.point(OomSymbol.Waypoint, waypoint.mapPoint))
+            add(OverlayObject.text(waypoint.mapPoint.labelPoint(), waypoint.label))
+        }
         data.finish?.let { add(OverlayObject.point(OomSymbol.Finish, it.mapPoint)) }
-        if (includeFinishCorridor && data.beacon != null && data.finish != null) {
+        if (includeFinishCorridor) data.finishCorridors.forEach { corridor ->
             add(
                 OverlayObject.line(
                     OomSymbol.MarkedRoute,
-                    listOf(data.beacon.mapPoint, data.finish.mapPoint),
+                    corridor,
                     OverlayObjectKind.FinishCorridor
                 )
             )
@@ -209,7 +213,8 @@ object DesktopCourseOverlayExporter {
             controlNumber = symbolStart + 2,
             markedRoute = symbolStart + 3,
             finish = symbolStart + 4,
-            exclusionCircle = symbolStart + 5
+            exclusionCircle = symbolStart + 5,
+            waypoint = symbolStart + 6
         )
         val overlayPart = buildString {
             appendLine("""<part name="${xml(partName)}"><objects count="${objects.size}">""")
@@ -217,7 +222,7 @@ object DesktopCourseOverlayExporter {
             appendLine("</objects></part>")
         }
         return baseMapXml
-            .replaceFirstCountAttribute("symbols", increment = 6)
+            .replaceFirstCountAttribute("symbols", increment = 7)
             .replaceFirst("</symbols>", courseDesignSymbolsXml(symbols, colors) + "\n</symbols>")
             .replaceFirstPartsCountAndCurrent(increment = 1)
             .replaceFirst("</parts>", overlayPart + "</parts>")
@@ -284,10 +289,12 @@ private data class CourseOverlayData(
     val finish: OverlayPoint?,
     val beacon: OverlayPoint?,
     val spectator: OverlayPoint?,
-    val foxes: List<OverlayPoint>
+    val foxes: List<OverlayPoint>,
+    val waypoints: List<OverlayPoint>,
+    val finishCorridors: List<List<OomMapPoint>>
 ) {
-    val hasAnyPoint: Boolean = start != null || finish != null || beacon != null || spectator != null || foxes.isNotEmpty()
-    val pointCount: Int = listOfNotNull(start, finish, beacon, spectator).size + foxes.size
+    val hasAnyPoint: Boolean = start != null || finish != null || beacon != null || spectator != null || foxes.isNotEmpty() || waypoints.isNotEmpty()
+    val pointCount: Int = listOfNotNull(start, finish, beacon, spectator).size + foxes.size + waypoints.size
 
     companion object {
         fun from(
@@ -323,7 +330,20 @@ private data class CourseOverlayData(
                     ?: controlPoints.firstOrNull { it.type == ControlPointType.BEACON }?.toOverlayPoint(baseMap, controlsById),
                 spectator = objectPoint(ProtectedCourseObjectType.SPECTATOR)
                     ?: controlPoints.firstOrNull { it.type == ControlPointType.SEPARATOR }?.toOverlayPoint(baseMap, controlsById),
-                foxes = foxes
+                foxes = foxes,
+                waypoints = courseObjects.filter { it.type == ProtectedCourseObjectType.WAYPOINT }
+                    .map { it.toOverlayPoint(baseMap, emptyMap()) },
+                finishCorridors = courseInfos.mapNotNull { info ->
+                    val beacon = info.courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.BEACON }
+                        ?.let { CourseGeoPoint(it.latitude, it.longitude) }
+                        ?: info.controlPoints.firstOrNull { it.type == ControlPointType.BEACON }
+                            ?.let { CourseGeoPoint(it.latitude, it.longitude) }
+                    val finish = info.courseObjects.firstOrNull { it.type == ProtectedCourseObjectType.FINISH }
+                        ?.let { CourseGeoPoint(it.latitude, it.longitude) }
+                    if (beacon == null || finish == null) null else
+                        DesktopMandatoryCourseLegs.expand(listOf(beacon, finish), DesktopMandatoryCourseLegs.from(info))
+                            .map { baseMap.mapPoint(it.latitude, it.longitude) }
+                }.distinct()
             )
         }
 
@@ -521,7 +541,8 @@ private enum class OomSymbol {
     ControlNumber,
     MarkedRoute,
     Finish,
-    ExclusionCircle
+    ExclusionCircle,
+    Waypoint
 }
 
 private data class CourseOverlaySymbolIds(
@@ -530,7 +551,8 @@ private data class CourseOverlaySymbolIds(
     val controlNumber: Int,
     val markedRoute: Int,
     val finish: Int,
-    val exclusionCircle: Int
+    val exclusionCircle: Int,
+    val waypoint: Int
 ) {
     fun idFor(symbol: OomSymbol): Int =
         when (symbol) {
@@ -540,6 +562,7 @@ private data class CourseOverlaySymbolIds(
             OomSymbol.MarkedRoute -> markedRoute
             OomSymbol.Finish -> finish
             OomSymbol.ExclusionCircle -> exclusionCircle
+            OomSymbol.Waypoint -> waypoint
         }
 }
 
@@ -616,5 +639,6 @@ private fun courseDesignSymbolsXml(symbols: CourseOverlaySymbolIds, colors: Cour
     <symbol type="8" id="${symbols.controlNumber}" code="703" name="Radio-Oracle Control number"><description>The number or name of the control is placed close to the control point circle in such a way that it does not obscure important detail.</description><text_symbol icon_text="5"><font family="Arial" size="5500"/><text color="${colors.purple}" line_spacing="1" paragraph_spacing="0" character_spacing="0" kerning="true"/><framing color="${colors.whiteAboveFraming}" mode="1" line_half_width="100" shadow_x_offset="200" shadow_y_offset="200"/></text_symbol></symbol>
     <symbol type="2" id="${symbols.markedRoute}" code="705" name="Radio-Oracle Marked route"><description>A marked route is shown on the map with a dashed line.</description><line_symbol color="${colors.purple}" line_width="350" minimum_length="0" join_style="1" cap_style="0" start_offset="0" end_offset="0" dashed="true" segment_length="4000" end_length="0" show_at_least_one_symbol="true" minimum_mid_symbol_count="0" minimum_mid_symbol_count_when_closed="0" dash_length="2000" break_length="500" dashes_in_group="1" in_group_break_length="500" mid_symbols_per_spot="1" mid_symbol_distance="0"/></symbol>
     <symbol type="1" id="${symbols.finish}" code="706" name="Radio-Oracle Finish"><description>The finish is shown by two concentric circles.</description><point_symbol inner_radius="2325" inner_color="-1" outer_width="350" outer_color="${colors.purple}" elements="1"><element><symbol type="1" code=""><point_symbol inner_radius="3325" inner_color="-1" outer_width="350" outer_color="${colors.purple}" elements="0"/></symbol><object type="0"><coords count="1">0 0;</coords></object></element></point_symbol></symbol>
+    <symbol type="1" id="${symbols.waypoint}" code="RO.2" name="Radio-Oracle Mandatory point"><description>A required non-punched point on the associated course leg.</description><point_symbol inner_radius="700" inner_color="${colors.purple}" outer_width="0" outer_color="-1" elements="0"/></symbol>
     <symbol type="2" id="${symbols.exclusionCircle}" code="RO.1" name="Radio-Oracle ARDF exclusion circle"><description>Radio-Oracle ARDF exclusion-zone circle using the ISOM course-object purple and official course-symbol line width.</description><line_symbol color="${colors.purple}" line_width="350" minimum_length="0" join_style="1" cap_style="0" start_offset="0" end_offset="0" segment_length="4000" end_length="0" show_at_least_one_symbol="true" minimum_mid_symbol_count="0" minimum_mid_symbol_count_when_closed="0" dash_length="4000" break_length="1000" dashes_in_group="1" in_group_break_length="500" mid_symbols_per_spot="1" mid_symbol_distance="0"/></symbol>
     """.trimIndent()

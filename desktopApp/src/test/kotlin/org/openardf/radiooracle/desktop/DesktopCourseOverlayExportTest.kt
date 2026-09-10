@@ -46,6 +46,32 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 class DesktopCourseOverlayExportTest {
     @Test
+    fun finishCorridorIncludesMandatoryCorners() {
+        val directory = Files.createTempDirectory("mandatory-overlay")
+        val baseMap = directory.resolve("base.xmap")
+        Files.writeString(baseMap, sampleBaseMap())
+        val original = sampleCourseInfo()
+        val corner = ProtectedCourseObjectPoint("corner", "Mandatory point A", ProtectedCourseObjectType.WAYPOINT,
+            48.2529, 11.6525, 503.0)
+        val info = original.copy(courseObjects = original.courseObjects.dropLast(1) + corner + original.courseObjects.last())
+        val project = EventProjectEditor.updateCategoryCourseInfo(sampleProject("course-key"), "cat-m21", info)
+        val exported = DesktopCourseOverlayExporter.exportOverlays(
+            DesktopCourseOverlayExportTarget(baseMap, directory, 750, 400), project, password = null)
+        for (path in listOf(exported.editableCompetitorPath, exported.editableMasterPath, exported.editableCustodianPath)) {
+            val xml = Files.readString(path)
+            assertEquals(1, xml.objectCountForSymbol(8))
+            assertTrue(xml.contains("Mandatory point A"))
+            assertWellFormedXml(path)
+        }
+        for (path in listOf(exported.editableCompetitorPath, exported.editableMasterPath)) {
+            val xml = Files.readString(path)
+            val corridor = Regex("""<object\b[^>]*\bsymbol="5"[^>]*><coords count="3">([^<]+)</coords>""").find(xml)
+            assertTrue("The marked finish corridor must have Beacon, corner and Finish coordinates", corridor != null)
+            assertEquals(3, corridor!!.groupValues[1].split(';').filter { it.isNotBlank() }.size)
+        }
+    }
+
+    @Test
     fun exportsPlaintextCourseOverlaysWithoutPassword() {
         val outputDirectory = Files.createTempDirectory("radio-oracle-plaintext-course-overlays")
         val baseMap = Files.createTempFile("radio-oracle-plaintext-base-map", ".xmap")

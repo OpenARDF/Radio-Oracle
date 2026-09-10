@@ -22340,7 +22340,6 @@ private fun CourseAnalysisRouteMap(
 @Composable
 private fun CourseRouteMapCanvas(routeMap: DesktopCourseRouteMap) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val byLabel = routeMap.points.associateBy { it.label }
         fun xPoint(point: DesktopCourseRouteMapPoint): Float =
             (point.xFraction.coerceIn(0.0, 1.0) * size.width).toFloat()
         fun yPoint(point: DesktopCourseRouteMapPoint): Float =
@@ -22360,13 +22359,6 @@ private fun CourseRouteMapCanvas(routeMap: DesktopCourseRouteMap) {
             drawPath(path, DesktopCourseRouteMapStyle.polygonComposeColor())
         }
         drawRouteMapLineStrings(routeMap, ::xLine, ::yLine)
-        val routeLinePoints = routeMap.routePointIndexes
-            .mapNotNull { routeMap.points.getOrNull(it) }
-            .takeIf { it.size >= 2 }
-            ?: routeMap.routeLabels.mapNotNull { byLabel[it] }
-        routeLinePoints.zipWithNext().forEach { (from, to) ->
-            drawLine(DesktopPalette.Primary, Offset(xPoint(from), yPoint(from)), Offset(xPoint(to), yPoint(to)), strokeWidth = 2f)
-        }
         routeMap.points.forEach { point ->
             if (routeMap.routeLabels.isEmpty()) {
                 drawCourseGraphicMarker(point.type, Offset(xPoint(point), yPoint(point)))
@@ -22384,7 +22376,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRouteMapLineStr
     x: (DesktopCourseRouteMapLinePoint) -> Float,
     y: (DesktopCourseRouteMapLinePoint) -> Float
 ) {
-    routeMap.lineStrings.forEach { line ->
+    routeMap.routeLinesForDrawing().forEach { line ->
         drawPath(
             path = line.smoothPath(x, y),
             color = line.strokeColorArgb
@@ -22406,6 +22398,10 @@ private fun DesktopCourseRouteMapLine.smoothPath(
     val first = points.firstOrNull() ?: return path
     path.moveTo(x(first), y(first))
     if (points.size < 2) {
+        return path
+    }
+    if (!smooth) {
+        points.drop(1).forEach { point -> path.lineTo(x(point), y(point)) }
         return path
     }
     if (points.size == 2) {

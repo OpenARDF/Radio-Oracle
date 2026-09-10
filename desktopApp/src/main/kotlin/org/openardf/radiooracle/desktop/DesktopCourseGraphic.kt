@@ -328,7 +328,7 @@ object DesktopCourseGraphic {
     }
 
     private fun drawImageLineStrings(graphics: java.awt.Graphics2D, routeMap: DesktopCourseRouteMap) {
-        routeMap.lineStrings.forEach { line ->
+        routeMap.routeLinesForDrawing().forEach { line ->
             graphics.color = line.strokeColorArgb
                 ?.let(DesktopCourseRouteMapStyle::awtColor)
                 ?: DesktopCourseRouteMapStyle.lineAwtColor()
@@ -548,7 +548,7 @@ object DesktopCourseGraphic {
     }
 
     private fun StringBuilder.appendPdfLineStrings(routeMap: DesktopCourseRouteMap) {
-        routeMap.lineStrings.forEach { line ->
+        routeMap.routeLinesForDrawing().forEach { line ->
             appendPdfDashPattern(line)
             val (red, green, blue) = line.strokeColorArgb
                 ?.let(DesktopCourseRouteMapStyle::pdfRgb)
@@ -877,6 +877,9 @@ object DesktopCourseGraphic {
     }
 
     private fun DesktopCourseRouteMap.withRouteLineThroughStops(): DesktopCourseRouteMap {
+        // Stored geometry carries the waypoint visit order, including repeated locations.
+        // Sorting markers by their nearest route sample can shortcut mandatory corners.
+        if (points.any { it.type == DesktopCourseRouteMapPointType.Waypoint }) return this
         val rawRoutePoints = lineStrings
             .firstOrNull { line -> line.points.size >= 2 }
             ?.points

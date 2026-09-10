@@ -68,6 +68,6 @@ data class ResultRouteLength(
             return (if (meters < 0 && hundredths != 0L) "-" else "") + "${hundredths / 100}.${(hundredths % 100).toString().padStart(2, '0')}"
         }
         fun coverage(ready: Int, total: Int): String =
-            "Estimated effective route lengths: $ready/$total available. Blank is not zero. Analysis ideal: verified straight-line terrain reference."
+            "Estimated effective route lengths: $ready/$total available. Blank is not zero. Analysis ideal: terrain reference with known leg constraints. Other legs may require unmodeled detours."
     }
 }

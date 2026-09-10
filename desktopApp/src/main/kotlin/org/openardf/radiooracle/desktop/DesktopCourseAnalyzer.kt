@@ -401,6 +401,8 @@ object DesktopCourseAnalyzer {
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and wait timing differ from this estimate."
     private const val MAP_KNOWLEDGE_NO_WAIT_LIMITATION_NOTE =
         "The analyzer does not currently know map passability, so out-of-bounds areas, dense vegetation, water, uncrossable features, and other impediments can make the true on-foot route and timing differ from this estimate."
+    private const val MANDATORY_LEG_LIMITATION_NOTE =
+        "Mandatory points constrain only legs with the same endpoint pair as the imported route, including reverse traversal. Other legs may need the same detour in practice, but the analyzer cannot infer that requirement. Those alternatives can therefore appear too short and change the calculated ideal order, effective length, and timing. The calculated ideal route is conditional on the known leg constraints, not a guarantee of the best feasible on-foot route. Map-aware routing using suitable vector map data is future work; the app does not currently analyze that data."
     private const val SPEED_MODEL_NOTE =
         "Estimated times use an elite-competitor baseline pace by race format, then apply a category age/gender multiplier and the race-wide Course Analyzer speed factor. Imported KML/KMZ SS=#.## speed specifiers on route objects replace the race-wide factor for the following leg only. When elevation is available, movement time uses effective length for each leg: horizontal length plus ten times positive climb. If elevation is incomplete, movement time falls back to horizontal distance. Fatigue is not part of ideal-route selection; it can affect ideal time, but this estimate does not apply a separate accumulated-fatigue adjustment."
     private const val CLASSIC_WAIT_TIMING_NOTE =
@@ -649,7 +651,7 @@ object DesktopCourseAnalyzer {
             .firstOrNull { it.control.type == ControlPointType.SEPARATOR && it.point != null }
         val beacon = controlsWithPoints
             .firstOrNull { it.control.type == ControlPointType.BEACON && it.point != null }
-        val mandatoryWaypoints = mandatoryRouteWaypoints(courseObjectPoints)
+        val mandatoryWaypoints = DesktopMandatoryCourseLegs.from(courseObjectPoints)
         val calculatedRoute = calculatedRouteCandidate(
             raceType = raceType,
             start = start,
@@ -658,10 +660,11 @@ object DesktopCourseAnalyzer {
             spectator = spectator,
             beacon = beacon,
             elevationLookup = elevationLookup,
+            waypoints = mandatoryWaypoints,
             missing = missing
         )
         val calculatedRouteStops = calculatedRoute
-            ?.let { routeCandidate -> calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints) }
+            ?.let { routeCandidate -> calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints, start = start, finish = finish) }
             .orEmpty()
         val routeMapMagneticDeclination = routeMapReferencePoint(
             route = route,
@@ -735,7 +738,7 @@ object DesktopCourseAnalyzer {
         val hasMissingCalculatedRouteElevationData = calculatedRouteElevationSamplePoints.size >= 2 &&
             calculatedRouteMissingElevationPointCount > 0
         if (hasMissingCalculatedRouteElevationData) {
-            missing += "Calculated route elevation samples are missing from the local elevation cache; calculated route climb, effective length, timing, and comparison may use endpoint interpolation or horizontal straight-line distance instead of downloaded elevations along the route."
+            missing += "Calculated route elevation samples are missing from the local elevation cache; calculated route climb, effective length, timing, and comparison may use endpoint interpolation or horizontal route distance instead of downloaded elevations along the route."
         }
 
         val providedRoutePoints = buildList {
@@ -799,7 +802,7 @@ object DesktopCourseAnalyzer {
                 waitRenumbering(routeCandidate.controls.map { it.control }) { slotOverrides ->
                     straightLineTiming(
                         start = start,
-                        stops = calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints),
+                        stops = calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints, start = start, finish = finish),
                         finish = finish,
                         raceType = raceType,
                         speedModel = speedModel,
@@ -819,7 +822,7 @@ object DesktopCourseAnalyzer {
             ?.let { routeCandidate -> calculatedLabelOverrides(routeCandidate.controls, calculatedWaitRenumbering) }
             .orEmpty()
         val labeledCalculatedRouteStops = calculatedRoute
-            ?.let { routeCandidate -> calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints, calculatedLabelOverrides) }
+            ?.let { routeCandidate -> calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints, calculatedLabelOverrides, start, finish) }
             .orEmpty()
         val calculatedIdealOrder = calculatedRoute
             ?.let { routeCandidate -> calculatedRouteLabels(routeCandidate.controls, calculatedLabelOverrides, includeFinish = true) }
@@ -948,7 +951,7 @@ object DesktopCourseAnalyzer {
                         controls = displayControlsWithPoints,
                         routeControls = routeCandidate.controls,
                         labelOverrides = calculatedLabelOverrides,
-                        waypoints = mandatoryWaypoints.mapIndexed { index, waypoint ->
+                        waypoints = labeledCalculatedRouteStops.filter { it.type == DesktopCourseKmlExportPointType.WAYPOINT }.mapIndexed { index, waypoint ->
                             ProtectedCourseObjectPoint(
                                 id = "calculated-waypoint-${index + 1}",
                                 label = waypoint.label,
@@ -1603,7 +1606,8 @@ object DesktopCourseAnalyzer {
     }
 
     private fun mapKnowledgeLimitationNote(includeWaitAnalysis: Boolean): String =
-        if (includeWaitAnalysis) MAP_KNOWLEDGE_LIMITATION_NOTE else MAP_KNOWLEDGE_NO_WAIT_LIMITATION_NOTE
+        (if (includeWaitAnalysis) MAP_KNOWLEDGE_LIMITATION_NOTE else MAP_KNOWLEDGE_NO_WAIT_LIMITATION_NOTE) +
+            " $MANDATORY_LEG_LIMITATION_NOTE"
 
     private fun calculatedRouteMatchesStoredExplanation(includeWaitAnalysis: Boolean): String {
         val omittedDetails = if (includeWaitAnalysis) {
@@ -1611,7 +1615,7 @@ object DesktopCourseAnalyzer {
         } else {
             "leg, elevation-profile, or map analysis"
         }
-        return "The analyzer determined the ideal route from the start, finish, controls, beacon, and spectator if assigned. The calculated ideal route matches the saved route, so no separate calculated-route $omittedDetails is repeated in this section. Section 3 still summarizes the route comparison."
+        return "The analyzer determined the ideal route under its known leg constraints. The calculated ideal route matches the saved route, so no separate calculated-route $omittedDetails is repeated in this section. Section 3 still summarizes the route comparison. $MANDATORY_LEG_LIMITATION_NOTE"
     }
 
     private fun calculatedSectionExplanation(
@@ -1624,9 +1628,9 @@ object DesktopCourseAnalyzer {
     ): String {
         val measurement = analysis?.measurementLabel?.lowercase() ?: "the available distance metric"
         val elevationText = if (analysis?.effectiveLengthMeters != null) {
-            "Complete Elevation Cache samples were available along the calculated straight-line legs, so effective length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
+            "Complete Elevation Cache samples were available along the calculated route legs, so effective length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         } else {
-            "Elevation data was incomplete along the calculated straight-line legs, so horizontal length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
+            "Elevation data was incomplete along the calculated route legs, so horizontal length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         }
         val assignmentText = if (includeWaitAnalysis) {
             " " + assignmentDifferenceText(providedAssignments, calculatedAssignments)
@@ -1647,11 +1651,11 @@ object DesktopCourseAnalyzer {
         }
         val routeDefinitionText = when {
             routeCalculationNote == null ->
-                "The route with the shortest $measurement is by definition the ideal route for the course; a saved route that is longer is not ideal."
+                "The route with the shortest $measurement is ideal within the modeled leg constraints. Missing constraints on alternative legs can change the real-world optimum."
             isNonExhaustiveSearch ->
                 "Because this search is non-exhaustive, the calculated route is advisory rather than a definitive ideal route."
             else ->
-                "Within the stated format-specific route model, the route with the shortest $measurement is the ideal route; a saved route that is longer is not ideal."
+                "Within the stated format-specific route model and known leg constraints, the route with the shortest $measurement is the calculated ideal route."
         }
         return "$opening $routeDefinitionText$routeCalculationText $elevationText $SPEED_MODEL_NOTE$waitTimingText ${mapKnowledgeLimitationNote(includeWaitAnalysis)}$assignmentText"
     }
@@ -1881,7 +1885,12 @@ object DesktopCourseAnalyzer {
                 providedSection = providedSection,
                 calculatedSection = calculatedSection,
                 waitRenumbering = waitRenumbering
-            )
+            ),
+            MANDATORY_LEG_LIMITATION_NOTE.takeIf {
+                calculatedRouteApplication?.courseObjects.orEmpty().any { it.type == ProtectedCourseObjectType.WAYPOINT } ||
+                    listOfNotNull(providedSection?.routeMap, calculatedSection?.routeMap)
+                        .any { map -> map.points.any { it.type == DesktopCourseRouteMapPointType.Waypoint } }
+            }
         )
             .takeIf { it.isNotEmpty() }
             ?.joinToString(separator = " ", prefix = " ")
@@ -2133,18 +2142,19 @@ object DesktopCourseAnalyzer {
         spectator: ControlAnalysisPoint?,
         beacon: ControlAnalysisPoint?,
         elevationLookup: (CourseGeoPoint) -> Double?,
-        missing: MutableList<String>
+        missing: MutableList<String>,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): CalculatedRoute? {
         if (start == null || finish == null || foxes.isEmpty()) {
             return null
         }
         return when (raceType) {
-            RaceType.SPRINT -> sprintCalculatedRoute(start, finish, foxes, spectator, beacon, elevationLookup, missing)
-            RaceType.FOXORING -> foxoringCalculatedRoute(start, finish, foxes, beacon, elevationLookup)
+            RaceType.SPRINT -> sprintCalculatedRoute(start, finish, foxes, spectator, beacon, elevationLookup, missing, waypoints = waypoints)
+            RaceType.FOXORING -> foxoringCalculatedRoute(start, finish, foxes, beacon, elevationLookup, waypoints = waypoints)
             else -> {
                 val controlsToPermute = foxes + listOfNotNull(spectator)
                 if (controlsToPermute.size <= MAX_PERMUTATION_CONTROLS) {
-                    shortestPermutation(start, finish, controlsToPermute, beacon, elevationLookup)
+                    shortestPermutation(start, finish, controlsToPermute, beacon, elevationLookup, waypoints = waypoints)
                 } else {
                     missing += "Too many course controls for exhaustive route calculation: ${controlsToPermute.size}."
                     null
@@ -2160,7 +2170,8 @@ object DesktopCourseAnalyzer {
         spectator: ControlAnalysisPoint?,
         beacon: ControlAnalysisPoint?,
         elevationLookup: (CourseGeoPoint) -> Double?,
-        missing: MutableList<String>
+        missing: MutableList<String>,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): CalculatedRoute? {
         if (beacon == null || beacon.point == null) {
             missing += "Sprint loop route calculation requires a beacon control; a spectator cannot replace the beacon."
@@ -2179,7 +2190,8 @@ object DesktopCourseAnalyzer {
             finish = transitionPoint,
             controls = slowFoxes,
             elevationLookup = elevationLookup,
-            note = "Sprint first loop"
+            note = "Sprint first loop",
+            waypoints = waypoints
         )
         val secondLoop = boundedLoopRoute(
             start = transitionPoint,
@@ -2187,10 +2199,11 @@ object DesktopCourseAnalyzer {
             controls = fastFoxes,
             beacon = beacon,
             elevationLookup = elevationLookup,
-            note = "Sprint fast loop"
+            note = "Sprint fast loop",
+            waypoints = waypoints
         )
         val controls = firstLoop.controls + transitionControl + secondLoop.controls
-        val routePoints = listOf(start) + controls.mapNotNull { it.point } + finish
+        val routePoints = calculatedRoutePoints(start, controls, finish, waypoints)
         val transitionText = if (spectator != null) {
             "the assigned spectator"
         } else {
@@ -2209,10 +2222,11 @@ object DesktopCourseAnalyzer {
         finish: CourseGeoPoint,
         foxes: List<ControlAnalysisPoint>,
         beacon: ControlAnalysisPoint?,
-        elevationLookup: (CourseGeoPoint) -> Double?
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): CalculatedRoute {
         return if (foxes.size <= FOXORING_EXHAUSTIVE_CONTROLS) {
-            shortestPermutation(start, finish, foxes, beacon, elevationLookup)
+            shortestPermutation(start, finish, foxes, beacon, elevationLookup, waypoints = waypoints)
         } else {
             /*
              * Larger Foxoring courses cannot be exhaustively searched: 10 foxes would require
@@ -2235,20 +2249,22 @@ object DesktopCourseAnalyzer {
                 controlsToPermute = foxes,
                 beacon = beacon,
                 elevationLookup = elevationLookup,
-                calculationNote = null
+                calculationNote = null,
+                waypoints = waypoints
             )
             val rollingWindowCandidate = rollingWindowFoxoringRoute(
                 start = start,
                 finish = finish,
                 controlsToPermute = foxes,
                 beacon = beacon,
-                elevationLookup = elevationLookup
+                elevationLookup = elevationLookup,
+                waypoints = waypoints
             )
             // Compare the two full candidates by effective length when every sampled point has
             // elevation; otherwise compare horizontal length. This keeps Foxoring behavior aligned
             // with Classic and Sprint route selection.
             val best = listOf(nearestNeighborCandidate, rollingWindowCandidate)
-                .minBy { calculatedRouteComparisonLength(start, finish, it, elevationLookup) }
+                .minBy { calculatedRouteComparisonLength(start, finish, it, elevationLookup, waypoints = waypoints) }
             best.copy(
                 routeCount = nearestNeighborCandidate.routeCount + rollingWindowCandidate.routeCount,
                 calculationNote = "Foxoring route uses a non-exhaustive hybrid search because more than $FOXORING_EXHAUSTIVE_CONTROLS foxes are assigned: nearest-neighbor plus 2-opt is compared with a rolling $FOXORING_ROLLING_WINDOW_CONTROLS-control exhaustive-window route followed by full-route 2-opt."
@@ -2262,16 +2278,17 @@ object DesktopCourseAnalyzer {
         controls: List<ControlAnalysisPoint>,
         beacon: ControlAnalysisPoint? = null,
         elevationLookup: (CourseGeoPoint) -> Double?,
-        note: String
+        note: String,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): CalculatedRoute {
         val exactCount = factorial(controls.size)
         // Sprint loops are optimized separately to keep the search bounded. Above the permutation
         // cap, fall back to the same effective-length-aware heuristic used for larger foxoring
         // control sets.
         return if (exactCount <= MAX_SPRINT_LOOP_PERMUTATIONS) {
-            shortestPermutation(start, finish, controls, beacon, elevationLookup).copy(calculationNote = "$note exact")
+            shortestPermutation(start, finish, controls, beacon, elevationLookup, waypoints = waypoints).copy(calculationNote = "$note exact")
         } else {
-            heuristicRoute(start, finish, controls, beacon, elevationLookup, "$note non-exhaustive fallback")
+            heuristicRoute(start, finish, controls, beacon, elevationLookup, "$note non-exhaustive fallback", waypoints = waypoints)
         }
     }
 
@@ -2282,12 +2299,13 @@ object DesktopCourseAnalyzer {
         controls: List<Pair<EventControl, CourseGeoPoint>>,
         beacon: Pair<EventControl, CourseGeoPoint>?,
         elevationLookup: (CourseGeoPoint) -> Double?,
-        checkCancelled: () -> Unit = {}
+        checkCancelled: () -> Unit = {},
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): List<String> {
         require(controls.size <= MAX_PERMUTATION_CONTROLS) { "Too many controls for exhaustive Classic analysis." }
         return shortestPermutation(
             start, finish, controls.map { ControlAnalysisPoint(it.first, it.second) },
-            beacon?.let { ControlAnalysisPoint(it.first, it.second) }, elevationLookup, checkCancelled
+            beacon?.let { ControlAnalysisPoint(it.first, it.second) }, elevationLookup, checkCancelled, waypoints
         ).controls.map { it.control.id }
     }
 
@@ -2297,7 +2315,8 @@ object DesktopCourseAnalyzer {
         controlsToPermute: List<ControlAnalysisPoint>,
         beacon: ControlAnalysisPoint?,
         elevationLookup: (CourseGeoPoint) -> Double?,
-        checkCancelled: () -> Unit = {}
+        checkCancelled: () -> Unit = {},
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): CalculatedRoute {
         var bestControls = emptyList<ControlAnalysisPoint>()
         var bestComparisonLength = Double.POSITIVE_INFINITY
@@ -2308,14 +2327,15 @@ object DesktopCourseAnalyzer {
             checkCancelled()
             routeCount++
             val controls = if (beacon != null) permutation + beacon else permutation
-            val points = listOf(start) + controls.mapNotNull { it.point } + finish
+            val points = calculatedRoutePoints(start, controls, finish, waypoints)
             val horizontalDistance = points.straightLineMeters()
             val sampledPoints = sampledCalculatedRoutePoints(
                 start = start,
                 controls = controls,
                 finish = finish,
                 elevationLookup = elevationLookup,
-                legSampleCache = legSampleCache
+                legSampleCache = legSampleCache,
+                waypoints = waypoints
             )
             // Effective length decides the winner only when every sampled point has elevation.
             // Otherwise the calculated-route search intentionally falls back to horizontal length.
@@ -2335,14 +2355,15 @@ object DesktopCourseAnalyzer {
         controlsToPermute: List<ControlAnalysisPoint>,
         beacon: ControlAnalysisPoint?,
         elevationLookup: (CourseGeoPoint) -> Double?,
-        calculationNote: String?
+        calculationNote: String?,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): CalculatedRoute {
         // The nearest-neighbor seed is fast, and 2-opt then removes obvious crossing/ordering
         // mistakes using the same effective-length comparison as the exhaustive search.
         val ordered = nearestNeighborOrder(start, controlsToPermute)
-        val improved = twoOptOrder(start, finish, ordered, beacon, elevationLookup)
+        val improved = twoOptOrder(start, finish, ordered, beacon, elevationLookup, waypoints = waypoints)
         val controls = if (beacon != null) improved + beacon else improved
-        val points = listOf(start) + controls.mapNotNull { it.point } + finish
+        val points = calculatedRoutePoints(start, controls, finish, waypoints)
         return CalculatedRoute(
             controls = controls,
             distanceMeters = points.straightLineMeters(),
@@ -2366,10 +2387,11 @@ object DesktopCourseAnalyzer {
         finish: CourseGeoPoint,
         controlsToPermute: List<ControlAnalysisPoint>,
         beacon: ControlAnalysisPoint?,
-        elevationLookup: (CourseGeoPoint) -> Double?
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): CalculatedRoute {
         if (controlsToPermute.size <= FOXORING_ROLLING_WINDOW_CONTROLS) {
-            return shortestPermutation(start, finish, controlsToPermute, beacon, elevationLookup)
+            return shortestPermutation(start, finish, controlsToPermute, beacon, elevationLookup, waypoints = waypoints)
         }
         // Use the beacon as the planning target when it exists because the final route must pass
         // through it before finish. If there is no beacon data, fall back to finish so the heuristic
@@ -2382,7 +2404,7 @@ object DesktopCourseAnalyzer {
         var routeCount = 0
         var anchor = start
         val lockedControls = mutableListOf<ControlAnalysisPoint>()
-        var optimizedWindow = optimizedControlWindow(anchor, terminalPoint, window, elevationLookup).also {
+        var optimizedWindow = optimizedControlWindow(anchor, terminalPoint, window, elevationLookup, waypoints = waypoints).also {
             routeCount += it.routeCount
         }.controls
 
@@ -2402,7 +2424,7 @@ object DesktopCourseAnalyzer {
             }
             remaining -= next
             window = optimizedWindow.drop(1) + next
-            optimizedWindow = optimizedControlWindow(anchor, terminalPoint, window, elevationLookup).also {
+            optimizedWindow = optimizedControlWindow(anchor, terminalPoint, window, elevationLookup, waypoints = waypoints).also {
                 routeCount += it.routeCount
             }.controls
         }
@@ -2411,9 +2433,9 @@ object DesktopCourseAnalyzer {
         // The rolling windows optimize local neighborhoods. A final 2-opt pass over the entire
         // route lets the candidate remove larger backtracking/crossing patterns introduced by
         // earlier window locks.
-        val improved = twoOptOrder(start, finish, rollingControls.distinctBy { it.control.id }, beacon, elevationLookup)
+        val improved = twoOptOrder(start, finish, rollingControls.distinctBy { it.control.id }, beacon, elevationLookup, waypoints = waypoints)
         val controls = if (beacon != null) improved + beacon else improved
-        val points = listOf(start) + controls.mapNotNull { it.point } + finish
+        val points = calculatedRoutePoints(start, controls, finish, waypoints)
         return CalculatedRoute(
             controls = controls,
             distanceMeters = points.straightLineMeters(),
@@ -2449,7 +2471,8 @@ object DesktopCourseAnalyzer {
         start: CourseGeoPoint,
         finish: CourseGeoPoint,
         controls: List<ControlAnalysisPoint>,
-        elevationLookup: (CourseGeoPoint) -> Double?
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): CalculatedRoute {
         var bestControls = controls
         var bestComparisonLength = Double.POSITIVE_INFINITY
@@ -2459,13 +2482,13 @@ object DesktopCourseAnalyzer {
         // anchor for this window, normally the beacon location.
         controls.permutations().forEach { permutation ->
             routeCount++
-            val comparisonLength = routeComparisonLength(start, finish, permutation, null, elevationLookup)
+            val comparisonLength = routeComparisonLength(start, finish, permutation, null, elevationLookup, waypoints = waypoints)
             if (comparisonLength < bestComparisonLength) {
                 bestComparisonLength = comparisonLength
                 bestControls = permutation
             }
         }
-        val points = listOf(start) + bestControls.mapNotNull { it.point } + finish
+        val points = calculatedRoutePoints(start, bestControls, finish, waypoints)
         return CalculatedRoute(
             controls = bestControls,
             distanceMeters = points.straightLineMeters(),
@@ -2492,7 +2515,8 @@ object DesktopCourseAnalyzer {
         finish: CourseGeoPoint,
         controls: List<ControlAnalysisPoint>,
         beacon: ControlAnalysisPoint?,
-        elevationLookup: (CourseGeoPoint) -> Double?
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): List<ControlAnalysisPoint> {
         if (controls.size < 4) {
             return controls
@@ -2504,7 +2528,7 @@ object DesktopCourseAnalyzer {
             for (i in 0 until best.lastIndex) {
                 for (k in i + 1..best.lastIndex) {
                     val candidate = best.take(i) + best.subList(i, k + 1).asReversed() + best.drop(k + 1)
-                    if (routeComparisonLength(start, finish, candidate, beacon, elevationLookup) < routeComparisonLength(start, finish, best, beacon, elevationLookup)) {
+                    if (routeComparisonLength(start, finish, candidate, beacon, elevationLookup, waypoints = waypoints) < routeComparisonLength(start, finish, best, beacon, elevationLookup, waypoints = waypoints)) {
                         best = candidate
                         improved = true
                     }
@@ -2519,21 +2543,23 @@ object DesktopCourseAnalyzer {
         finish: CourseGeoPoint,
         controls: List<ControlAnalysisPoint>,
         beacon: ControlAnalysisPoint?,
-        elevationLookup: (CourseGeoPoint) -> Double?
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): Double {
         val allControls = if (beacon != null) controls + beacon else controls
-        val sampled = sampledCalculatedRoutePoints(start, allControls, finish, elevationLookup)
-        return effectiveLengthMetersOrNull(sampled) ?: (listOf(start) + allControls.mapNotNull { it.point } + finish).straightLineMeters()
+        val sampled = sampledCalculatedRoutePoints(start, allControls, finish, elevationLookup, waypoints = waypoints)
+        return effectiveLengthMetersOrNull(sampled) ?: sampled.straightLineMeters()
     }
 
     private fun calculatedRouteComparisonLength(
         start: CourseGeoPoint,
         finish: CourseGeoPoint,
         route: CalculatedRoute,
-        elevationLookup: (CourseGeoPoint) -> Double?
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): Double {
-        val sampled = sampledCalculatedRoutePoints(start, route.controls, finish, elevationLookup)
-        return effectiveLengthMetersOrNull(sampled) ?: (listOf(start) + route.controls.mapNotNull { it.point } + finish).straightLineMeters()
+        val sampled = sampledCalculatedRoutePoints(start, route.controls, finish, elevationLookup, waypoints = waypoints)
+        return effectiveLengthMetersOrNull(sampled) ?: sampled.straightLineMeters()
     }
 
     private fun routeGeometryTiming(
@@ -2720,8 +2746,8 @@ object DesktopCourseAnalyzer {
     }
 
     /**
-     * The calculated route has no imported track geometry, so the analyzer samples each straight
-     * leg at a fixed spacing and applies the local Elevation Data cache to those samples. Endpoint
+     * The calculated route retains mandatory vertices on matching imported legs, then samples each
+     * resulting segment at fixed spacing using the local Elevation Data cache. Endpoint
      * elevation interpolation is retained as a fallback when cache data is absent.
      */
     private fun sampledCalculatedRoutePoints(
@@ -2729,15 +2755,24 @@ object DesktopCourseAnalyzer {
         controls: List<ControlAnalysisPoint>,
         finish: CourseGeoPoint,
         elevationLookup: (CourseGeoPoint) -> Double?,
-        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>? = null
+        legSampleCache: MutableMap<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>? = null,
+        waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): List<CourseGeoPoint> =
         sampledCalculatedRouteStopPoints(
             start = start,
-            stops = calculatedRouteStops(controls, emptyList()),
+            stops = calculatedRouteStops(controls, waypoints, start = start, finish = finish),
             finish = finish,
             elevationLookup = elevationLookup,
             legSampleCache = legSampleCache
         )
+
+    private fun calculatedRoutePoints(
+        start: CourseGeoPoint,
+        controls: List<ControlAnalysisPoint>,
+        finish: CourseGeoPoint,
+        waypoints: List<MandatoryRouteWaypoint>
+    ): List<CourseGeoPoint> =
+        listOf(start) + calculatedRouteStops(controls, waypoints, start = start, finish = finish).map { it.point } + finish
 
     private fun sampledCalculatedRouteStopPoints(
         start: CourseGeoPoint,
@@ -2876,7 +2911,8 @@ object DesktopCourseAnalyzer {
 
     private fun ProtectedCourseInfo.effectiveCourseObjectPoints(): List<ProtectedCourseObjectPoint> =
         buildList {
-            addAll(courseObjects)
+            val visitOrder = appliedBindings?.orderedPlacementIds?.withIndex()?.associate { it.value to it.index }
+            addAll(if (visitOrder == null) courseObjects else courseObjects.sortedBy { visitOrder[it.id] ?: Int.MAX_VALUE })
             val existingIds = courseObjects.mapTo(mutableSetOf()) { it.id }
             controlPoints.forEach { controlPoint ->
                 if (controlPoint.controlId in existingIds) {
@@ -3385,7 +3421,8 @@ object DesktopCourseAnalyzer {
                 DesktopCourseRouteMapLine(
                     label = "",
                     points = points,
-                    dashed = false
+                    dashed = false,
+                    smooth = waypoints.isEmpty()
                 )
             }
         return DesktopCourseRouteMap(
@@ -3455,39 +3492,14 @@ object DesktopCourseAnalyzer {
         }
     }
 
-    private fun mandatoryRouteWaypoints(courseObjects: List<ProtectedCourseObjectPoint>): List<MandatoryRouteWaypoint> {
-        val courseControlTypes = setOf(
-            ProtectedCourseObjectType.CONTROL,
-            ProtectedCourseObjectType.BEACON,
-            ProtectedCourseObjectType.SPECTATOR
-        )
-        return courseObjects.mapIndexedNotNull { index, courseObject ->
-            if (courseObject.type != ProtectedCourseObjectType.WAYPOINT) {
-                return@mapIndexedNotNull null
-            }
-            val previousControlId = courseObjects
-                .subList(0, index)
-                .lastOrNull { it.type in courseControlTypes }
-                ?.id
-            val nextControlId = courseObjects
-                .drop(index + 1)
-                .firstOrNull { it.type in courseControlTypes }
-                ?.id
-            MandatoryRouteWaypoint(
-                label = courseObject.label,
-                point = courseObject.toGeoPoint(),
-                previousControlId = previousControlId,
-                nextControlId = nextControlId
-            )
-        }
-    }
-
     private fun calculatedRouteStops(
         controls: List<ControlAnalysisPoint>,
         waypoints: List<MandatoryRouteWaypoint>,
-        labelOverrides: Map<String, String> = emptyMap()
+        labelOverrides: Map<String, String> = emptyMap(),
+        start: CourseGeoPoint? = null,
+        finish: CourseGeoPoint? = null
     ): List<CalculatedRouteStop> {
-        val stops = controls.mapNotNull { controlPoint ->
+        val controlsStops = controls.mapNotNull { controlPoint ->
             val point = controlPoint.point ?: return@mapNotNull null
             CalculatedRouteStop(
                 label = labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel(),
@@ -3495,27 +3507,19 @@ object DesktopCourseAnalyzer {
                 control = controlPoint.control,
                 type = controlPoint.control.kmlExportPointType()
             )
-        }.toMutableList()
-        waypoints.forEach { waypoint ->
-            val stop = CalculatedRouteStop(
-                label = waypoint.label,
-                point = waypoint.point,
-                control = null,
-                type = DesktopCourseKmlExportPointType.WAYPOINT
-            )
-            val previousIndex = waypoint.previousControlId?.let { id -> stops.indexOfFirst { it.control?.id == id } }
-                ?.takeUnless { it < 0 }
-            val nextIndex = waypoint.nextControlId?.let { id -> stops.indexOfFirst { it.control?.id == id } }
-                ?.takeUnless { it < 0 }
-            val insertIndex = when {
-                previousIndex != null -> previousIndex + 1
-                waypoint.previousControlId == null -> 0
-                nextIndex != null -> nextIndex
-                else -> stops.size
-            }.coerceIn(0, stops.size)
-            stops.add(insertIndex, stop)
         }
-        return stops
+        if (waypoints.isEmpty() || start == null || finish == null) return controlsStops
+        val endpoints = listOf(CalculatedRouteStop("S", start, null, DesktopCourseKmlExportPointType.START)) +
+            controlsStops + CalculatedRouteStop("F", finish, null, DesktopCourseKmlExportPointType.FINISH)
+        return buildList {
+            endpoints.zipWithNext().forEachIndexed { index, (from, to) ->
+                val legWaypoints = DesktopMandatoryCourseLegs.between(from.point, to.point, waypoints)
+                legWaypoints.forEach { waypoint ->
+                    add(CalculatedRouteStop(waypoint.label, waypoint.point, null, DesktopCourseKmlExportPointType.WAYPOINT))
+                }
+                if (index < endpoints.size - 2) add(to)
+            }
+        }
     }
 
     private fun segmentSeconds(
@@ -4397,13 +4401,6 @@ private data class ProtectedCoordinateCandidate(
 private data class ControlAnalysisPoint(
     val control: EventControl,
     val point: CourseGeoPoint?
-)
-
-private data class MandatoryRouteWaypoint(
-    val label: String,
-    val point: CourseGeoPoint,
-    val previousControlId: String?,
-    val nextControlId: String?
 )
 
 private data class CalculatedRouteStop(

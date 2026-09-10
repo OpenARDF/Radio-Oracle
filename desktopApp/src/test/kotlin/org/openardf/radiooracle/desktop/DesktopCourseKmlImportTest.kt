@@ -252,7 +252,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(summary.sourceSha256, protectedCourseInfo.sourceSha256)
         assertEquals(64, protectedCourseInfo.sourceSha256.length)
         assertTrue(protectedCourseInfo.route.isNotEmpty())
-        assertEquals(listOf("Start", "31", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals(listOf("Start", "31", "Mandatory point B", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters != null })
         assertTrue(updated.raceData.controls.all { it.latitude == null && it.longitude == null })
     }
@@ -1635,7 +1635,7 @@ class DesktopCourseKmlImportTest {
         assertEquals("1 S F1 Beacon", protectedCourseInfo.idealOrder)
         assertEquals("S", protectedCourseInfo.controlPoints.single { it.type == ControlPointType.SEPARATOR }.label)
         assertEquals(-94.9960, spectator.longitude, 0.000001)
-        assertEquals(listOf("End Corridor_Strt", "End Corridor_S"), waypoints)
+        assertEquals(listOf("End Corridor_Strt", "End Corridor_S", "Mandatory point E"), waypoints)
         assertEquals(-94.99575, protectedCourseInfo.courseObjects.single { it.label == "End Corridor_S" }.longitude, 0.000001)
     }
 
@@ -2617,7 +2617,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(0, summary.duplicateCategoryCount)
         assertEquals(false, summary.isDuplicateOnly)
         assertEquals(2, protectedCourseInfo.controlPoints.size)
-        assertEquals(listOf("Start", "31", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals(listOf("Start", "31", "Mandatory point B", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertEquals(elevatedCourseInfo.route.size, protectedCourseInfo.route.size)
         assertTrue(protectedCourseInfo.route.all { it.elevationMeters == 100.0 })
     }
@@ -2737,7 +2737,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(elevationResult.sampledPointCount, elevationResult.resolvedPointCount)
         assertTrue(protectedCourseInfo.route.all { it.elevationMeters != null })
         assertTrue(protectedCourseInfo.controlPoints.all { it.elevationMeters != null })
-        assertEquals(listOf("Start", "31", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
+        assertEquals(listOf("Start", "31", "Mandatory point B", "32", "Finish"), protectedCourseInfo.courseObjects.map { it.label })
         assertTrue(protectedCourseInfo.courseObjects.all { it.elevationMeters != null })
         assertTrue(protectedCourseInfo.climbMeters!! >= 12)
         assertEquals(protectedCourseInfo.lengthMeters, category.lengthMeters)

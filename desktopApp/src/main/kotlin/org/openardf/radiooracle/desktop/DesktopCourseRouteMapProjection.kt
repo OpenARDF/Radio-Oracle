@@ -28,6 +28,22 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 
+/** Screen, raster and PDF renderers share one geometry source, retaining repeated visits. */
+internal fun DesktopCourseRouteMap.routeLinesForDrawing(): List<DesktopCourseRouteMapLine> {
+    val storedLines = lineStrings.filter { it.points.size >= 2 }
+    if (storedLines.isNotEmpty()) return storedLines
+    val byLabel = points.associateBy { it.label }
+    val stops = routePointIndexes.mapNotNull { points.getOrNull(it) }.takeIf { it.size >= 2 }
+        ?: routeLabels.mapNotNull { byLabel[it] }
+    if (stops.size < 2) return emptyList()
+    return listOf(DesktopCourseRouteMapLine(
+        label = "",
+        points = stops.map { DesktopCourseRouteMapLinePoint(it.xFraction, it.yFraction) },
+        dashed = false,
+        smooth = false
+    ))
+}
+
 internal data class DesktopCourseRouteMapSourcePoint(
     val label: String,
     val point: CourseGeoPoint,

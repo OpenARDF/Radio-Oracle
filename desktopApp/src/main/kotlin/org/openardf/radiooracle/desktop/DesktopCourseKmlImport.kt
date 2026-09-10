@@ -2236,11 +2236,16 @@ object DesktopCourseKmlImporter {
             oriented + finish.copy(elevationMeters = null)
         }
         val beacon = matchedControls.firstOrNull { it.type == ControlPointType.BEACON }?.point
-        val finalObjectPoint = routeEndingAtFinish.dropLast(1).lastOrNull()
+        val finalControl = matchedControls.mapNotNull { control ->
+            routeEndingAtFinish.dropLast(1).withIndex().toList().asReversed()
+                .minByOrNull { it.value.distanceMetersTo(control.point) }
+                ?.takeIf { it.value.distanceMetersTo(control.point) <= CONTROL_ROUTE_TOLERANCE_METERS }
+                ?.let { it.index to control }
+        }.maxByOrNull { it.first }?.second
         if (
             beacon == null ||
             routeEndingAtFinish.last().sameRoutePoint(beacon) ||
-            finalObjectPoint?.sameRoutePoint(beacon) == true
+            finalControl?.type == ControlPointType.BEACON
         ) {
             return routeEndingAtFinish
         }
@@ -2346,8 +2351,8 @@ object DesktopCourseKmlImporter {
         route: List<CourseGeoPoint>,
         importedPoints: List<CourseControlPoint>,
         matchedControls: List<CourseMatchedControl>
-    ): List<CourseRouteWaypoint> =
-        importedPoints
+    ): List<CourseRouteWaypoint> {
+        val namedWaypoints = importedPoints
             .asSequence()
             .filterNot { it.name.isCourseEndpointName() }
             // A named point that looks like a fox, beacon, spectator, or SI-coded control should
@@ -2382,6 +2387,34 @@ object DesktopCourseKmlImporter {
             .sortedBy { it.alongDistanceMeters }
             .distinctBy { "${it.label.normalizedCourseName()}|${it.point.locationKey()}" }
             .toList()
+        // Only original file vertices participate here, before elevation sampling. Associate
+        // each placemark with its nearest vertex; other vertices remain mandatory even when a
+        // corner happens to be close to a fox. Unmatched control placemarks stay in control review.
+        val associatedLocations = (importedPoints.map { it.point } + matchedControls.map { it.point })
+            .mapNotNull { point ->
+                route.minByOrNull { it.distanceMetersTo(point) }
+                    ?.takeIf { it.distanceMetersTo(point) <= CONTROL_ROUTE_TOLERANCE_METERS }
+                    ?.locationKey()
+            }.toSet() + listOfNotNull(route.firstOrNull()?.locationKey(), route.lastOrNull()?.locationKey())
+        var distance = 0.0
+        val unnamedWaypoints = route.mapIndexedNotNull { index, point ->
+            if (index > 0) distance += route[index - 1].distanceMetersTo(point)
+            if (point.locationKey() in associatedLocations) null else CourseRouteWaypoint(
+                label = mandatoryWaypointLabel(index),
+                point = point,
+                alongDistanceMeters = distance
+            )
+        }
+        return (namedWaypoints + unnamedWaypoints).sortedBy { it.alongDistanceMeters }
+    }
+
+    private fun mandatoryWaypointLabel(vertexIndex: Int): String {
+        // Letter labels cannot be mistaken for fox numbers or SI codes on re-import.
+        val letters = generateSequence(vertexIndex + 1) { ((it - 1) / 26).takeIf { next -> next > 0 } }
+            .map { ('A'.code + (it - 1) % 26).toChar() }
+            .toList().asReversed().joinToString("")
+        return "Mandatory point $letters"
+    }
 
     private fun courseObjectsForRoute(
         route: List<CourseGeoPoint>,
@@ -2421,13 +2454,17 @@ object DesktopCourseKmlImporter {
             routeObjects
                 .map { courseObject ->
                     val point = CourseGeoPoint(courseObject.latitude, courseObject.longitude, courseObject.elevationMeters)
-                    (distanceAlongRouteOrNull(route, point, CONTROL_ROUTE_TOLERANCE_METERS) ?: Double.MAX_VALUE) to courseObject
+                    val distance = if (courseObject.type == ProtectedCourseObjectType.BEACON) {
+                        // A Sprint can visit the beacon twice; its terminal occurrence anchors
+                        // the final leg, which may contain mandatory corners before Finish.
+                        val index = route.indices.reversed().minByOrNull { route[it].distanceMetersTo(point) }
+                        index?.let { route.take(it + 1).zipWithNext().sumOf { (from, to) -> from.distanceMetersTo(to) } }
+                    } else {
+                        distanceAlongRouteOrNull(route, point, CONTROL_ROUTE_TOLERANCE_METERS)
+                    }
+                    (distance ?: Double.MAX_VALUE) to courseObject
                 }
-                .sortedWith(
-                    compareBy<Pair<Double, ProtectedCourseObjectPoint>> {
-                        if (it.second.type == ProtectedCourseObjectType.BEACON) 1 else 0
-                    }.thenBy { it.first }
-                )
+                .sortedBy { it.first }
                 .map { it.second }
                 .forEach(::add)
             route.lastOrNull()?.let { finish ->

@@ -35,10 +35,13 @@ internal object DesktopClassicRouteHeading {
             require(controls.size in 1..8 && controls.all { it.type == ControlPointType.CONTROL || it.type == ControlPointType.SEPARATOR })
             val points = assigned.associate { it.id to DesktopClassicRouteAnalysis.resolve(it, info, all) }
             require(points.values.distinct().size == assigned.size) { "Co-located controls do not identify a unique labeled order." }
+            val waypoints = DesktopMandatoryCourseLegs.from(info)
             // The reference fingerprint includes Start, terminal Beacon and Finish. Headings show the variable fox order.
             fun find(prefix: List<EventControl>, remaining: List<EventControl>): String? {
                 if (remaining.isEmpty()) {
-                    val stops = listOf(start) + prefix.map { points.getValue(it.id) } + points.getValue(beacon.id) + finish
+                    val stops = DesktopMandatoryCourseLegs.expand(
+                        listOf(start) + prefix.map { points.getValue(it.id) } + points.getValue(beacon.id) + finish, waypoints
+                    ).map { it.copy(elevationMeters = null) }
                     if (DesktopClassicRouteAnalysis.sha256(DesktopClassicRouteAnalysis.METHOD + stops.toString()) != reference.idealOrderFingerprint) return null
                     return prefix.joinToString("-") { it.publicLabel?.takeIf(String::isNotBlank) ?: it.label }
                 }
