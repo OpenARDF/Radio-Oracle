@@ -135,9 +135,7 @@ object DesktopCourseFileReader {
         val controls = mutableListOf<CourseControlPoint>()
         document.documentElement.namedDescendants("wpt").forEach { waypoint ->
             waypoint.toGpxPoint()?.let { point ->
-                waypoint.childText("name")?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
-                    controls += CourseControlPoint(name = name, point = point)
-                }
+                waypoint.toNamedGpxControl(point)?.let(controls::add)
             }
         }
 
@@ -148,9 +146,7 @@ object DesktopCourseFileReader {
             val routeDescription = route.childText("desc")
             val points = route.namedDescendants("rtept").mapNotNull { routePoint ->
                 routePoint.toGpxPoint()?.also { point ->
-                    routePoint.childText("name")?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
-                        controls += CourseControlPoint(name = name, point = point)
-                    }
+                    routePoint.toNamedGpxControl(point)?.let(controls::add)
                 }
             }
             if (points.size >= 2) {
@@ -163,9 +159,7 @@ object DesktopCourseFileReader {
             val trackDescription = track.childText("desc")
             val points = track.namedDescendants("trkpt").mapNotNull { trackPoint ->
                 trackPoint.toGpxPoint()?.also { point ->
-                    trackPoint.childText("name")?.trim()?.takeIf { it.isNotBlank() }?.let { name ->
-                        controls += CourseControlPoint(name = name, point = point)
-                    }
+                    trackPoint.toNamedGpxControl(point)?.let(controls::add)
                 }
             }
             if (points.size >= 2) {
@@ -180,6 +174,13 @@ object DesktopCourseFileReader {
             "GPX file did not contain named control waypoints."
         }
         return DesktopCourseKmlData(controls = distinctControls, routes = routes)
+    }
+
+    private fun org.w3c.dom.Node.toNamedGpxControl(point: CourseGeoPoint): CourseControlPoint? {
+        val name = childText("name")?.trim()?.takeIf(String::isNotBlank) ?: return null
+        val description = childText("desc")
+        return CourseControlPoint(name = name, point = point, description = description,
+            siCodeHint = description.courseDescriptionSiCodeHint())
     }
 
     private fun readKmlFromKmz(path: Path): String {

@@ -31,6 +31,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.openardf.radiooracle.shared.event.withAppliedSiCode
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.PunchStatus
@@ -1443,8 +1444,9 @@ class DesktopCourseAnalyzerTest {
         application.foxAssignments.forEach { assignment ->
             val expectedDescription = descriptionByIdentity.getValue(assignment.calculatedLabel.courseDescriptionIdentityKey())
             val exportPoint = calculatedFolder.courseObjects.single { it.label == assignment.calculatedLabel }
-            assertEquals(expectedDescription, exportPoint.description)
-            assertEquals(expectedDescription.courseDescriptionSiCodeHint(), exportPoint.siCode)
+            val configuredCode = projectFile.raceData.controls.single { it.publicLabel == assignment.calculatedLabel }.siCode
+            assertEquals(expectedDescription.withAppliedSiCode(configuredCode), exportPoint.description)
+            assertEquals(configuredCode, exportPoint.siCode)
         }
         val encryptedCourseInfo = DesktopProtectedCourseOrder.encryptCourseInfo(protectedInfo, "test-password")
         val encryptedIdealOrder = DesktopProtectedCourseOrder.encrypt(protectedInfo.idealOrder, "test-password")

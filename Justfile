@@ -188,6 +188,10 @@ course-publication-verify url inventory:
 course-apply-preview input design:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-apply-preview "{{input}}" "{{design}}"'
 
+# Recover fixed fox/SI pairs from a known pre-renumbering catalog into a new Race File.
+course-station-repair input reference output:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-station-repair "{{input}}" "{{reference}}" "{{output}}"'
+
 course-export-verify input output:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopAutomation --args='course-export-verify "{{input}}" "{{output}}"'
 

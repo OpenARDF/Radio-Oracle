@@ -56,6 +56,23 @@ internal object DesktopCourseDesignCommands {
         }
     }
 
+    fun repairStations(args: List<String>, out: PrintStream, err: PrintStream): Int {
+        if (args.size != 3) { err.println("course-station-repair requires an affected Race File, a pre-renumbering reference Race File, and a new output file."); return 2 }
+        return try {
+            val source = DesktopProjectFiles.read(Path.of(args[0]))
+            plaintextCourses(source)
+            val reference = DesktopProjectFiles.read(Path.of(args[1]))
+            val repaired = repairCourseStationPairs(source, reference.raceData.controls, null)
+            // CREATE_NEW prevents accidental replacement of either source or an earlier recovery.
+            Files.writeString(Path.of(args[2]), EventProjectFileJson.encode(repaired), java.nio.file.StandardOpenOption.CREATE_NEW)
+            out.println("Repaired course station pairs using the reference catalog. Route geometry and metrics were retained; source files were not changed.")
+            0
+        } catch (error: Exception) {
+            err.println("Course station repair failed: ${error.message ?: error::class.simpleName}")
+            1
+        }
+    }
+
     fun exportVerify(args: List<String>, out: PrintStream, err: PrintStream): Int {
         if (args.size != 2) { err.println("course-export-verify requires a Race File/series and a new output directory."); return 2 }
         return try {
@@ -69,11 +86,20 @@ internal object DesktopCourseDesignCommands {
                 for ((extension, format) in listOf("kml" to DesktopControlsRouteKmlKmzExportFormat.Kml, "gpx" to DesktopControlsRouteKmlKmzExportFormat.Gpx)) {
                     val path = folder.resolve("courses.$extension")
                     DesktopControlsRouteKmlKmzExporter.exportPlainFile(DesktopControlsRouteKmlKmzExportTarget(path, format), project)
-                    val points = DesktopCourseFileReader.read(path).controls
-                    infos.values.flatMap { it.validatedPlacements().values }.forEach { expected ->
-                        require(points.any { point -> point.name == expected.label &&
-                            abs(point.point.latitude - expected.latitude) < 0.000001 &&
-                            abs(point.point.longitude - expected.longitude) < 0.000001 }) { "An exported placement is missing or moved." }
+                    val exported = DesktopCourseFileReader.read(path)
+                    infos.values.forEach { info ->
+                        info.validatedPlacements().values.filter { it.type.controlRole() != null }.forEach { expected ->
+                            val station = info.appliedBindings?.controls?.single { it.placementId == expected.id }
+                            require(exported.controls.any { point -> point.name == expected.label && (station == null || point.description.courseDescriptionSiCodeHint() == station.siCode) &&
+                                abs(point.point.latitude - expected.latitude) < 0.000001 &&
+                                abs(point.point.longitude - expected.longitude) < 0.000001 }) { "An exported station is missing, moved or misnumbered." }
+                        }
+                        // Shared endpoint/corner symbols may be deduplicated between categories.
+                        // Each complete route must still retain its own endpoints and every bend.
+                        require(info.route.isEmpty() || exported.routes.any { route -> route.points.size == info.route.size &&
+                            route.points.zip(info.route).all { (point, expected) ->
+                                abs(point.latitude - expected.latitude) < 0.000001 && abs(point.longitude - expected.longitude) < 0.000001
+                            } }) { "An exported course route is missing or changed." }
                     }
                 }
                 val xml = IofXmlExports.courseData(project.raceData, protectedCourseInfoByCategoryId = infos)

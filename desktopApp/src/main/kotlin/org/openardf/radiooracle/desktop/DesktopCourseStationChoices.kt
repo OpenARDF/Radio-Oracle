@@ -34,8 +34,12 @@ internal fun courseStationPreviewFolders(
     return infos.map { (id, info) ->
         val name = categories.getValue(id).category.name
         val points = info.validatedPlacements().values.map { point ->
-            val control = bindings[id to point.id]?.let(controls::get)
-            val proposedLabel = acceptedLabels[control?.id] ?: point.label
+            val reviewed = bindings[id to point.id]?.let(controls::get)
+            val proposedLabel = acceptedLabels[reviewed?.id] ?: point.label
+            val control = if (point.type == ProtectedCourseObjectType.CONTROL) {
+                runCatching { CourseStationAssignments.foxForLabel(project.raceData.controls, proposedLabel) }.getOrNull()
+                    ?: reviewed.takeIf { proposedLabel == point.label && !info.hasAcceptedFoxNumbering() }
+            } else reviewed
             val label = if (proposedLabel == point.label) point.label else "${point.label} → $proposedLabel"
             DesktopCourseKmlExportPoint(
                 label = if (point.type.controlRole() == null) label else "$label (${control?.let { "SI ${it.siCode}" } ?: "station unassigned"})",

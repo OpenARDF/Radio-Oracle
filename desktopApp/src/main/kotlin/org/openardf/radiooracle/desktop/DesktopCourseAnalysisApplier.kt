@@ -25,6 +25,8 @@
 package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.withResultControlLabels
+import org.openardf.radiooracle.shared.event.CourseStationAssignments
+import org.openardf.radiooracle.shared.event.withAppliedSiCode
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
@@ -135,10 +137,13 @@ private fun ProtectedCourseInfo.withUpdatedProtectedLabels(
         courseObjects.map { it.label to it.description })
         .unambiguousCourseDescriptionsByIdentity()
 
-    fun movedDescription(label: String, currentDescription: String?): String? =
-        descriptionByControlNumber[label.courseDescriptionIdentityKey()] ?: currentDescription
+    fun movedDescription(label: String, currentDescription: String?): String? {
+        val description = descriptionByControlNumber[label.courseDescriptionIdentityKey()] ?: currentDescription
+        return CourseStationAssignments.foxForLabel(resultControls, label)?.let { description.withAppliedSiCode(it.siCode) } ?: description
+    }
 
     return withResultControlLabels(resultControls).copy(
+        appliedBindings = null,
         sourceName = if (markAnalyzerSavedNumbering) {
             "Course Analyzer fox renumbering"
         } else {

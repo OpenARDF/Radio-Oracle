@@ -195,6 +195,7 @@ object DesktopAutomationCli {
             "course-publication-manifest" -> DesktopCourseWorkflowCommands.publicationManifest(commandArgs, out, err)
             "course-publication-verify" -> DesktopCourseWorkflowCommands.publicationVerify(commandArgs, out, err)
             "course-apply-preview" -> DesktopCourseDesignCommands.preview(commandArgs, out, err)
+            "course-station-repair" -> DesktopCourseDesignCommands.repairStations(commandArgs, out, err)
             "course-export-verify" -> DesktopCourseDesignCommands.exportVerify(commandArgs, out, err)
             "course-audit" -> DesktopCourseWorkflowCommands.audit(commandArgs, out, err)
             "course-workflow-report" -> DesktopCourseWorkflowCommands.verifyReports(commandArgs, out, err)

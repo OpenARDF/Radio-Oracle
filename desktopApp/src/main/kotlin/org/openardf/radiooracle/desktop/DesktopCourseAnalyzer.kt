@@ -24,7 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
-import org.openardf.radiooracle.shared.event.courseDescriptionSiCodeHint
+import org.openardf.radiooracle.shared.event.CourseStationAssignments
+import org.openardf.radiooracle.shared.event.withAppliedSiCode
 
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.domain.ControlPointType
@@ -1124,6 +1125,7 @@ object DesktopCourseAnalyzer {
                                 stops = labeledCalculatedRouteStops,
                                 finish = finish,
                                 renumbering = calculatedWaitRenumbering,
+                                configuredControls = projectFile.raceData.controls,
                                 courseObjectPoints = courseObjectPoints
                             )
                         )
@@ -1351,15 +1353,12 @@ object DesktopCourseAnalyzer {
                     courseInfo.usesAnalyzerSavedNumbering() &&
                     raceType != RaceType.FOXORING
                 ) {
-                    // Course Analyzer renumbering is intentionally stored in protected course data,
-                    // not in Setup > Controls. Use the protected label for analyzer route labels and
-                    // wait-slot calculations while preserving the control ID/SI-code source of truth.
-                    // Foxoring's paired labels (1/1F through 5/5F) identify different controls, so
-                    // their current catalog labels remain authoritative even for analyzer-saved data.
+                    // Keep placement identity for geometry, but obtain the station from the
+                    // configured fox pair when draft numbering differs from the applied design.
                     control.copy(
                         label = protectedControl.label,
                         publicLabel = protectedControl.label,
-                        siCode = protectedControl.description.courseDescriptionSiCodeHint() ?: control.siCode
+                        siCode = (if (control.type == ControlPointType.CONTROL) CourseStationAssignments.foxForLabel(projectControls, protectedControl.label) else null)?.siCode ?: control.siCode
                     )
                 } else {
                     control
@@ -3184,7 +3183,7 @@ object DesktopCourseAnalyzer {
                         point = point,
                         type = control.kmlExportPointType(),
                         siCode = control.siCode,
-                        description = descriptionsById[control.id]
+                        description = descriptionsById[control.id].withAppliedSiCode(control.siCode)
                     )
                 }
                 .forEach(::add)
@@ -3269,6 +3268,7 @@ object DesktopCourseAnalyzer {
         stops: List<CalculatedRouteStop>,
         finish: CourseGeoPoint,
         renumbering: DesktopCourseWaitRenumbering?,
+        configuredControls: List<EventControl>,
         courseObjectPoints: List<ProtectedCourseObjectPoint>
     ): List<DesktopCourseKmlExportPoint> {
         val assignmentsByControlLabel = renumbering
@@ -3303,13 +3303,17 @@ object DesktopCourseAnalyzer {
                     val calculatedLabel = suggestedLabel ?: originalLabel
                     val description = descriptionsByControlNumber[calculatedLabel.courseDescriptionIdentityKey()]
                         ?: control?.id?.let(descriptionsById::get)
+                    val station = if (control?.type == ControlPointType.CONTROL) {
+                        CourseStationAssignments.foxForLabel(configuredControls, calculatedLabel)
+                            ?: control.takeIf { suggestedLabel == null || suggestedLabel == originalLabel }
+                    } else control
                     DesktopCourseKmlExportPoint(
                         label = calculatedLabel,
                         originalLabel = originalLabel.takeIf { suggestedLabel != null && suggestedLabel != originalLabel },
                         point = stop.point,
                         type = type,
-                        siCode = description.courseDescriptionSiCodeHint() ?: control?.siCode,
-                        description = description
+                        siCode = station?.siCode,
+                        description = station?.let { description.withAppliedSiCode(it.siCode) } ?: description
                     )
                 }
                 .forEach(::add)

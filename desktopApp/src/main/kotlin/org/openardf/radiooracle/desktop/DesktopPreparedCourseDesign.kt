@@ -93,22 +93,10 @@ internal fun prepareCourseDesign(project: EventProjectFile, selections: List<Des
         "Courses propose conflicting fox numbering: " + conflictingStations.entries.joinToString { (id, labels) ->
             "SI ${source.raceData.controls.single { it.id == id }.siCode}: ${labels.distinct().joinToString(" / ")}" }
     }
-    val controls = source.raceData.controls.map { control -> proposedLabels[control.id]?.firstOrNull()?.let { label ->
-        control.copy(label = label, publicLabel = label, latitude = null, longitude = null)
-    } ?: control }
-    val duplicateLabels = controls.groupBy { it.label.trim() }.filterValues { it.size > 1 }
-    require(duplicateLabels.isEmpty()) {
-        "Conflicting control labels: " + duplicateLabels.entries.joinToString { (label, stations) ->
-            "\"$label\" is assigned to ${stations.joinToString { "SI ${it.siCode}" }}" } +
-            ". Resolve the numbering or station assignments before applying."
-    }
+    // The reviewed binding identifies the old placement, not the station after renumbering.
+    // Preserve the configured catalog and move each accepted fox/station pair to that placement.
+    val controls = source.raceData.controls.map { it.copy(latitude = null, longitude = null) }
     var candidate = EventProjectEditor.replaceControlCatalog(source, controls)
-    val byCode = candidate.raceData.controls.groupBy { it.siCode }
-    candidate = candidate.copy(raceData = candidate.raceData.copy(aliases = candidate.raceData.aliases.map { alias ->
-        val matches = byCode[alias.siCode].orEmpty()
-        require(matches.map { it.publicLabel ?: it.label }.distinct().size <= 1) { "SI ${alias.siCode} has conflicting control labels." }
-        matches.singleOrNull()?.let { alias.copy(name = it.publicLabel ?: it.label) } ?: alias
-    }))
     val preparedInfos = selections.associate { selection ->
         val app = selection.application
         require(app.routePoints.size >= 2 && app.routeLengthMeters != null && app.climbMeters != null) {
@@ -117,14 +105,23 @@ internal fun prepareCourseDesign(project: EventProjectFile, selections: List<Des
         val sourceInfo = selection.courseInfo.copy(
             controlPoints = selection.courseInfo.controlPoints.filter { it.controlId in app.orderedPlacementIds },
             courseObjects = app.courseObjects.ifEmpty { selection.courseInfo.courseObjects }.filter { it.id in app.orderedPlacementIds })
-        val byPlacement = selection.controlIdsByPlacementId.mapValues { (_, id) -> candidate.raceData.controls.single { it.id == id } }
+        val bindings = selection.controlIdsByPlacementId.toMutableMap()
+        app.foxAssignments.forEach { assignment ->
+            val reviewed = controls.single { it.id == bindings.getValue(assignment.controlId) }
+            require(reviewed.type == org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL) { "${assignment.originalLabel} requires a fox station." }
+            val station = CourseStationAssignments.foxForLabel(controls, assignment.calculatedLabel)
+                ?: reviewed.takeIf { assignment.calculatedLabel == assignment.originalLabel && !sourceInfo.hasAcceptedFoxNumbering() }
+            requireNotNull(station) { "No configured station matches \"${assignment.calculatedLabel}\". Assign its public label in Controls before applying." }
+            bindings[assignment.controlId] = station.id
+        }
+        val byPlacement = bindings.mapValues { (_, id) -> controls.single { it.id == id } }
         val renamed = sourceInfo.copy(sourceName = if (sourceInfo.hasAcceptedFoxNumbering()) "Course Analyzer applied design (accepted fox numbering)" else "Course Analyzer applied design", sourceSha256 = "",
             idealOrder = app.idealOrderText, lengthMeters = app.routeLengthMeters, climbMeters = app.climbMeters,
             route = app.routePoints.map { ProtectedCourseRoutePoint(it.latitude, it.longitude, it.elevationMeters) }, sampledPointCount = app.routePoints.size,
             controlPoints = sourceInfo.controlPoints.map { point -> point.copy(label = byPlacement[point.controlId]?.let { it.publicLabel ?: it.label } ?: point.label) },
             courseObjects = sourceInfo.courseObjects.map { point -> point.copy(label = byPlacement[point.id]?.let { it.publicLabel ?: it.label } ?: point.label) },
             resultControlLabelsById = emptyMap(), appliedBindings = null)
-        app.categoryId to CourseDesignBindings.prepare(renamed, candidate.raceData.controls, selection.controlIdsByPlacementId.filterKeys { it in app.orderedPlacementIds }, app.orderedPlacementIds, "pending")
+        app.categoryId to CourseDesignBindings.prepare(renamed, candidate.raceData.controls, bindings.filterKeys { it in app.orderedPlacementIds }, app.orderedPlacementIds, "pending")
     }
     preparedInfos.values.flatMap { it.appliedBindings!!.controls }.map { it.controlId }.distinct().forEach { id ->
         val control = candidate.raceData.controls.single { it.id == id }
