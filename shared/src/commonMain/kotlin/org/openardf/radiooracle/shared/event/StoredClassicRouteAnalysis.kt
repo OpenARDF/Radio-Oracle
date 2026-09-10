@@ -29,7 +29,8 @@ data class ClassicRouteReference(
     val effectiveMeters: Int,
     val calculatedAt: String,
     val permutations: Int,
-    val previousEffectiveMeters: Int? = null
+    val previousEffectiveMeters: Int? = null,
+    val practiceSavedDirection: Boolean = false
 )
 
 @Serializable
@@ -54,13 +55,16 @@ data class ResultRouteLength(
     val idealEffectiveMeters: Int,
     val comparison: String,
     @kotlinx.serialization.Transient val idealRoute: String? = null,
-    @kotlinx.serialization.Transient val missingAssignedPunches: Boolean = false
+    @kotlinx.serialization.Transient val missingAssignedPunches: Boolean = false,
+    val practiceSavedDirection: Boolean = false
 ) {
     val text: String get() = "${kilometers(effectiveMeters.toLong())} km (" +
         if (missingAssignedPunches) "missing punches)"
+        else if (practiceSavedDirection && comparison == "Practice saved direction") "Practice saved direction)"
         else if (comparison == "Ideal order") "ideal order)"
-        else "difference from ideal order: ${kilometers(effectiveMeters.toLong() - idealEffectiveMeters)} km)"
-    val categoryHeadingSuffix: String get() = " - Ideal route${idealRoute?.let { ": $it" }.orEmpty()} (EL: ${kilometers(idealEffectiveMeters.toLong())} km)"
+        else "difference from ${if (practiceSavedDirection) "Practice reference" else "ideal order"}: ${kilometers(effectiveMeters.toLong() - idealEffectiveMeters)} km)"
+    val categoryHeadingSuffix: String get() = " - ${if (practiceSavedDirection) "Practice reference route" else "Ideal route"}" +
+        "${idealRoute?.let { ": $it" }.orEmpty()} (EL: ${kilometers(idealEffectiveMeters.toLong())} km)"
     companion object {
         const val LABEL = "Estimated effective route length"
         fun kilometers(meters: Long): String {

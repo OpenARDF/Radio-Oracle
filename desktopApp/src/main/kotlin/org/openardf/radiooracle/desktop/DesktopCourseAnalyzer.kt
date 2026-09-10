@@ -654,6 +654,24 @@ object DesktopCourseAnalyzer {
         val beacon = controlsWithPoints
             .firstOrNull { it.control.type == ControlPointType.BEACON && it.point != null }
         val mandatoryWaypoints = DesktopMandatoryCourseLegs.from(courseObjectPoints)
+        val providedControlsFromOrder = idealOrderText
+            ?.let { idealOrder ->
+                runCatching {
+                    val ids = resolveProtectedIdealOrderControlIds(
+                        idealOrder,
+                        assignedControls,
+                        courseInfo,
+                        raceType,
+                        controlIdentityMode
+                    )
+                    ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
+                }.getOrElse { error ->
+                    missing += "Saved route order could not be resolved: ${error.message ?: error::class.simpleName}."
+                    emptyList()
+                }
+            }
+            .orEmpty()
+        val providedControls = providedControlsFromOrder.withTerminalBeacon(terminalBeaconControl)
         val calculatedRoute = calculatedRouteCandidate(
             raceType = raceType,
             start = start,
@@ -664,7 +682,14 @@ object DesktopCourseAnalyzer {
             elevationLookup = elevationLookup,
             waypoints = mandatoryWaypoints,
             missing = missing
-        )
+        )?.let { candidate ->
+            preservePracticeRouteDirection(
+                candidate, start, finish, beacon, elevationLookup, mandatoryWaypoints,
+                DesktopPracticeRouteDirection(projectFile.raceData.race.raceLevel, raceType, category.name,
+                    providedControls.map { it.id })
+            )
+        }
+        val practiceDirectionNote = calculatedRoute?.practiceDirectionNote
         val calculatedRouteStops = calculatedRoute
             ?.let { routeCandidate -> calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints, start = start, finish = finish) }
             .orEmpty()
@@ -689,24 +714,6 @@ object DesktopCourseAnalyzer {
         val routeMapMagneticDeclinationUsesExpiredModel =
             routeMapMagneticDeclination?.usesExpiredCoefficients == true
 
-        val providedControlsFromOrder = idealOrderText
-            ?.let { idealOrder ->
-                runCatching {
-                    val ids = resolveProtectedIdealOrderControlIds(
-                        idealOrder,
-                        assignedControls,
-                        courseInfo,
-                        raceType,
-                        controlIdentityMode
-                    )
-                    ids.mapNotNull { id -> assignedControls.firstOrNull { it.id == id } }
-                }.getOrElse { error ->
-                    missing += "Saved route order could not be resolved: ${error.message ?: error::class.simpleName}."
-                    emptyList()
-                }
-            }
-            .orEmpty()
-        val providedControls = providedControlsFromOrder.withTerminalBeacon(terminalBeaconControl)
         val providedFoxIds = providedControls
             .filter { it.type == ControlPointType.CONTROL }
             .map { it.id }
@@ -718,7 +725,7 @@ object DesktopCourseAnalyzer {
         val idealOrderMatches = calculatedRoute?.let {
             providedFoxIds.isNotEmpty() && providedFoxIds == calculatedFoxIds
         }
-        val calculatedRouteMatchesStored = idealOrderMatches == true && !prepareApplication
+        val calculatedRouteMatchesStored = idealOrderMatches == true && !prepareApplication && practiceDirectionNote == null
         val calculatedRouteElevationSamplePoints = if (
             start != null &&
             finish != null &&
@@ -918,11 +925,13 @@ object DesktopCourseAnalyzer {
                 )
             } else {
                 DesktopCourseAnalysisSection(
-                    title = "Section 2: Calculated ideal route",
+                    title = if (practiceDirectionNote != null) "Section 2: Calculated route (Practice saved direction)"
+                        else "Section 2: Calculated ideal route",
                     explanation = calculatedSectionExplanation(
                         analysis = calculatedRouteAnalysis,
                         routeCount = routeCandidate.routeCount,
                         routeCalculationNote = routeCandidate.calculationNote,
+                        practiceDirectionNote = practiceDirectionNote,
                         providedAssignments = waitRenumbering?.assignments.orEmpty(),
                         calculatedAssignments = optimizedAssignments,
                         includeWaitAnalysis = includeWaitAnalysis
@@ -1022,7 +1031,8 @@ object DesktopCourseAnalyzer {
             estimatedIdealSeconds = estimatedIdealSeconds,
             waitRows = waitRows,
             waitRenumbering = waitRenumbering,
-            idealOrderMatches = idealOrderMatches
+            idealOrderMatches = idealOrderMatches,
+            practiceDirectionNote = practiceDirectionNote
         ) + (providedRuleChecks + calculatedRuleChecks)
             .distinctBy { "${it.label}:${it.value}" }
         val profileComparison = buildList {
@@ -1154,7 +1164,11 @@ object DesktopCourseAnalyzer {
             idealOrderMatches = idealOrderMatches,
             waitRenumbering = waitRenumbering
         )
-        val courseRecommendation = courseRecommendation(
+        val courseRecommendation = if (practiceDirectionNote != null) {
+            DesktopCourseRecommendation("Keep saved route direction", practiceDirectionNote +
+                " Known mandatory points remain on matching legs in calculations, diagrams, and exports. " +
+                MANDATORY_LEG_LIMITATION_NOTE)
+        } else courseRecommendation(
             calculatedRouteApplication = calculatedRouteApplication,
             providedSection = providedSection,
             calculatedSection = calculatedSection,
@@ -1169,7 +1183,8 @@ object DesktopCourseAnalyzer {
             providedSection = providedSection,
             calculatedSection = calculatedSection,
             raceType = raceType,
-            categoryName = category.name
+            categoryName = category.name,
+            practiceDirectionNote = practiceDirectionNote
         )
 
         return DesktopCourseAnalysisSummary(
@@ -1187,7 +1202,9 @@ object DesktopCourseAnalyzer {
             categorySpeedFactors = CATEGORY_SPEED_FACTOR_TABLE.categoryFactors,
             providedRouteSection = providedSection,
             calculatedRouteSection = calculatedSection,
-            summaryExplanation = summaryExplanation(providedSection, calculatedSection, waitRenumbering, speedModel, includeWaitAnalysis),
+            summaryExplanation = listOfNotNull(practiceDirectionNote,
+                summaryExplanation(providedSection, calculatedSection, waitRenumbering, speedModel, includeWaitAnalysis)
+            ).joinToString(" "),
             summaryGroups = summaryGroups,
             courseRecommendation = courseRecommendation,
             goodnessMetrics = goodnessMetrics,
@@ -1360,7 +1377,7 @@ object DesktopCourseAnalyzer {
             ?: protectedControls
     }
 
-    private fun resolveProtectedIdealOrderControlIds(
+    internal fun resolveProtectedIdealOrderControlIds(
         idealOrderText: String,
         controls: List<EventControl>,
         courseInfo: ProtectedCourseInfo?,
@@ -1625,6 +1642,7 @@ object DesktopCourseAnalyzer {
         analysis: RouteAnalysis?,
         routeCount: Int,
         routeCalculationNote: String?,
+        practiceDirectionNote: String?,
         providedAssignments: List<DesktopCourseWaitRenumberingAssignment>,
         calculatedAssignments: List<DesktopCourseWaitRenumberingAssignment>,
         includeWaitAnalysis: Boolean
@@ -1647,6 +1665,10 @@ object DesktopCourseAnalyzer {
         }
         val routeCalculationText = routeCalculationNote?.let { " $it" }.orEmpty()
         val isNonExhaustiveSearch = routeCalculationNote?.contains("non-exhaustive", ignoreCase = true) == true
+        if (practiceDirectionNote != null) {
+            return "$practiceDirectionNote $routeCount route candidate order(s) were evaluated or generated. " +
+                "$elevationText $SPEED_MODEL_NOTE$waitTimingText ${mapKnowledgeLimitationNote(includeWaitAnalysis)}$assignmentText"
+        }
         val opening = if (routeCalculationNote == null) {
             "This section determines the ideal route by comparing all $routeCount possible orders of the foxes and any spectator point, with the beacon last before the finish."
         } else {
@@ -1955,7 +1977,8 @@ object DesktopCourseAnalyzer {
         providedSection: DesktopCourseAnalysisSection?,
         calculatedSection: DesktopCourseAnalysisSection?,
         raceType: RaceType,
-        categoryName: String
+        categoryName: String,
+        practiceDirectionNote: String? = null
     ): DesktopCourseGoodnessMetrics {
         val sharedMetrics = metrics.filter { it.isSharedGoodnessMetric() }
         val comparisonSection = calculatedSection
@@ -1971,7 +1994,8 @@ object DesktopCourseAnalyzer {
                     label = "Saved route is shortest possible route",
                     routeLabel = "imported",
                     routeComparisonLengthMeters = section.comparisonLengthMeters,
-                    shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters
+                    shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters,
+                    practiceDirectionNote = practiceDirectionNote
                 ),
                 targetSeconds = targetSeconds,
                 appliesClimbLimit = appliesClimbLimit,
@@ -1989,7 +2013,8 @@ object DesktopCourseAnalyzer {
                     label = "Calculated route is shortest possible route",
                     routeLabel = "calculated",
                     routeComparisonLengthMeters = section.comparisonLengthMeters,
-                    shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters
+                    shortestComparisonLengthMeters = comparisonSection?.comparisonLengthMeters,
+                    practiceDirectionNote = practiceDirectionNote
                 ),
                 targetSeconds = targetSeconds,
                 appliesClimbLimit = appliesClimbLimit,
@@ -2295,21 +2320,51 @@ object DesktopCourseAnalyzer {
         }
     }
 
-    /** Uses the analyzer's existing exhaustive Classic objective without timing or renumbering. */
-    internal fun classicIdealOrder(
+    private fun preservePracticeRouteDirection(
+        candidate: CalculatedRoute,
+        start: CourseGeoPoint?,
+        finish: CourseGeoPoint?,
+        beacon: ControlAnalysisPoint?,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        waypoints: List<MandatoryRouteWaypoint>,
+        direction: DesktopPracticeRouteDirection?
+    ): CalculatedRoute {
+        if (direction == null || start == null || finish == null) return candidate
+        val controlsById = candidate.controls.associateBy { it.control.id }
+        val legSampleCache = mutableMapOf<Pair<CourseGeoPoint, CourseGeoPoint>, List<CourseGeoPoint>>()
+        val note = direction.retentionNote(start, beacon?.point, candidate.controls.map { it.control }) { ids ->
+            effectiveLengthMetersOrNull(sampledCalculatedRoutePoints(
+                start, ids.map(controlsById::getValue), finish, elevationLookup, legSampleCache, waypoints
+            ))
+        } ?: return candidate
+        val savedControls = direction.savedControlIds.map(controlsById::getValue)
+        return candidate.copy(
+            controls = savedControls,
+            distanceMeters = calculatedRoutePoints(start, savedControls, finish, waypoints).straightLineMeters(),
+            practiceDirectionNote = note
+        )
+    }
+
+    /** Reuses Classic route search and the Practice direction policy without timing or renumbering. */
+    internal fun classicRouteSelection(
         start: CourseGeoPoint,
         finish: CourseGeoPoint,
         controls: List<Pair<EventControl, CourseGeoPoint>>,
         beacon: Pair<EventControl, CourseGeoPoint>?,
         elevationLookup: (CourseGeoPoint) -> Double?,
         checkCancelled: () -> Unit = {},
-        waypoints: List<MandatoryRouteWaypoint> = emptyList()
-    ): List<String> {
+        waypoints: List<MandatoryRouteWaypoint> = emptyList(),
+        practiceDirection: DesktopPracticeRouteDirection? = null
+    ): DesktopCourseOrderSelection {
         require(controls.size <= MAX_PERMUTATION_CONTROLS) { "Too many controls for exhaustive Classic analysis." }
-        return shortestPermutation(
+        val candidate = shortestPermutation(
             start, finish, controls.map { ControlAnalysisPoint(it.first, it.second) },
             beacon?.let { ControlAnalysisPoint(it.first, it.second) }, elevationLookup, checkCancelled, waypoints
-        ).controls.map { it.control.id }
+        )
+        val selected = preservePracticeRouteDirection(candidate, start, finish,
+            beacon?.let { ControlAnalysisPoint(it.first, it.second) }, elevationLookup, waypoints, practiceDirection
+        )
+        return DesktopCourseOrderSelection(selected.controls.map { it.control.id }, selected.practiceDirectionNote != null)
     }
 
     private fun shortestPermutation(
@@ -3921,7 +3976,8 @@ object DesktopCourseAnalyzer {
         estimatedIdealSeconds: Int?,
         waitRows: List<DesktopCourseWaitRow>,
         waitRenumbering: DesktopCourseWaitRenumbering?,
-        idealOrderMatches: Boolean?
+        idealOrderMatches: Boolean?,
+        practiceDirectionNote: String? = null
     ): List<DesktopCourseGoodnessMetric> {
         val targetSeconds = when (raceType) {
             RaceType.SPRINT -> SPRINT_TARGET_SECONDS
@@ -3947,7 +4003,8 @@ object DesktopCourseAnalyzer {
                     label = "Saved route is shortest possible route",
                     routeLabel = "imported",
                     routeComparisonLengthMeters = importedComparisonLengthMeters,
-                    shortestComparisonLengthMeters = calculatedComparisonLengthMeters
+                    shortestComparisonLengthMeters = calculatedComparisonLengthMeters,
+                    practiceDirectionNote = practiceDirectionNote
                 )
             )
             val calculatedClimbPercent = if (
@@ -4092,9 +4149,14 @@ object DesktopCourseAnalyzer {
         label: String,
         routeLabel: String,
         routeComparisonLengthMeters: Int?,
-        shortestComparisonLengthMeters: Int?
+        shortestComparisonLengthMeters: Int?,
+        practiceDirectionNote: String? = null
     ): DesktopCourseGoodnessMetric =
         when {
+            practiceDirectionNote != null -> DesktopCourseGoodnessMetric(
+                label, "No: saved direction retained by the Practice exception; a shorter reversed route was found.",
+                DesktopCourseMetricStatus.Warning
+            )
             routeComparisonLengthMeters == null || shortestComparisonLengthMeters == null ->
                 DesktopCourseGoodnessMetric(
                     label,
@@ -4495,7 +4557,8 @@ private data class CalculatedRoute(
     val controls: List<ControlAnalysisPoint>,
     val distanceMeters: Double,
     val routeCount: Int,
-    val calculationNote: String? = null
+    val calculationNote: String? = null,
+    val practiceDirectionNote: String? = null
 )
 
 private data class LabeledCoursePoint(

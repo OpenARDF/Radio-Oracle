@@ -18,8 +18,8 @@ internal class DesktopFrozenElevationSurface(
 
 /** All calculation inputs are detached. Callers must revalidate before merging returned metadata. */
 internal object DesktopClassicRouteAnalysis {
-    // Identity resolution is part of calculation provenance. Old numbers must not survive this change.
-    const val METHOD = "classic-mandatory-legs-25m-median50-prominence2-rounded-components-applied-bindings-v4"
+    // Identity resolution and the Practice direction policy are part of calculation provenance.
+    const val METHOD = "classic-mandatory-legs-25m-median50-prominence2-rounded-components-practice-direction-v5"
     const val PUNCH_POLICY = "ignore-unresolved-v1"
     private val json = Json { encodeDefaults = true }
 
@@ -55,12 +55,13 @@ internal object DesktopClassicRouteAnalysis {
 
     fun courseFingerprint(project: EventProjectFile): String = sha256(buildString {
         append(project.raceData.race.id).append('|').append(project.raceData.race.raceType)
+        append('|').append(project.raceData.race.raceLevel)
         project.raceData.controls.sortedBy { it.id }.forEach {
             append(json.encodeToString(listOf(it.id, it.siCode.toString(), it.type.name, it.label, it.publicLabel.orEmpty())))
         }
         (project.raceData.categories + project.raceData.courseMappings).sortedBy { it.category.id }.forEach {
             val c = it.category
-            append(json.encodeToString(listOf(c.id, c.encryptedCourseInfo.orEmpty(), c.encryptedIdealOrder.orEmpty(), c.idealOrder.orEmpty())))
+            append(json.encodeToString(listOf(c.id, c.name, c.encryptedCourseInfo.orEmpty(), c.encryptedIdealOrder.orEmpty(), c.idealOrder.orEmpty())))
             append(c.courseInfo?.let { info -> json.encodeToString(info) }.orEmpty())
             append(json.encodeToString(it.controlPoints)).append(json.encodeToString(it.publicControlIds))
         }
@@ -108,7 +109,7 @@ internal object DesktopClassicRouteAnalysis {
                     context.effectiveMeters.toLong() == context.horizontalMeters.toLong() + 10L * context.climbMeters &&
                     it.horizontalMeters >= 0 && it.climbMeters >= 0 &&
                     it.effectiveMeters.toLong() == it.horizontalMeters.toLong() + 10L * it.climbMeters &&
-                    it.idealEffectiveMeters == context.effectiveMeters
+                    it.idealEffectiveMeters == context.effectiveMeters && it.practiceSavedDirection == context.practiceSavedDirection
             }?.let { id to it.copy(idealRoute = DesktopClassicRouteHeading.order(project, context),
                 missingAssignedPunches = missingAssignedPunches(project, data, snapshot)) }
         }.toMap()
@@ -196,7 +197,7 @@ internal object DesktopClassicRouteAnalysis {
                     contexts[contextId] = ClassicRouteReference(
                         category, fingerprint, METHOD, surface.sources, sha256(METHOD + course.idealStops.toString()),
                         ideal.first, ideal.second, effective(ideal), at, factorial(course.permutedCount),
-                        courseInfo[category]?.effectiveLengthMeters()
+                        courseInfo[category]?.effectiveLengthMeters(), practiceSavedDirection = course.practiceSavedDirection
                     )
                     val readout = requireNotNull(data.readoutData)
                     val start = requireNotNull(readout.result.startTimeSeconds) { "No Start time." }
@@ -222,6 +223,7 @@ internal object DesktopClassicRouteAnalysis {
                     val route = cacheState.routeMetrics.getOrPut(stops) { metrics(stops, strictElevation, cache) }
                     val ids = kept.map { it.second.id }
                     val comparison = when {
+                        ids == course.idealIds && course.practiceSavedDirection -> "Practice saved direction"
                         ids == course.idealIds -> "Ideal order"
                         ids.sorted() != course.idealIds.sorted() -> "Different control set"
                         ids.lastOrNull() != course.idealIds.lastOrNull() -> "Beacon not terminal"
@@ -229,7 +231,8 @@ internal object DesktopClassicRouteAnalysis {
                         else -> "Alternative order"
                     }
                     ClassicRouteSnapshot(category, input, contextId, at,
-                        ResultRouteLength(route.first, route.second, effective(route), effective(ideal), comparison),
+                        ResultRouteLength(route.first, route.second, effective(route), effective(ideal), comparison,
+                            practiceSavedDirection = course.practiceSavedDirection),
                         punchPolicy = PUNCH_POLICY, ignoredControlPunchIndexes = ignored)
                 } catch (e: CancellationException) { throw e }
                 catch (e: IllegalArgumentException) {
@@ -246,7 +249,7 @@ internal object DesktopClassicRouteAnalysis {
         return StoredClassicRouteAnalysis(contexts = contexts.filterKeys { key -> retained.values.any { it.contextId == key } }, results = retained)
     }
 
-    internal data class PreparedCourse(val start: CourseGeoPoint, val finish: CourseGeoPoint, val idealIds: List<String>, val idealStops: List<CourseGeoPoint>, val permutedCount: Int, val waypoints: List<MandatoryRouteWaypoint>)
+    internal data class PreparedCourse(val start: CourseGeoPoint, val finish: CourseGeoPoint, val idealIds: List<String>, val idealStops: List<CourseGeoPoint>, val permutedCount: Int, val waypoints: List<MandatoryRouteWaypoint>, val practiceSavedDirection: Boolean)
 
     private fun prepare(project: EventProjectFile, categoryId: String, infos: Map<String, ProtectedCourseInfo>, lookup: (CourseGeoPoint) -> Double?, checkCancelled: () -> Unit, sharedCourses: MutableMap<String, PreparedCourse>): PreparedCourse {
         val category = requireNotNull(project.raceData.categories.firstOrNull { it.category.id == categoryId }) { "No result category." }
@@ -270,13 +273,23 @@ internal object DesktopClassicRouteAnalysis {
         require(permuted.isNotEmpty() && permuted.all { it.type == ControlPointType.CONTROL || it.type == ControlPointType.SEPARATOR }) { "Unsupported Classic control roles." }
         val points = assigned.associate { it.id to resolve(it, info, infos.values.toList()) }
         require(points.values.distinct().size == assigned.size) { "Assigned controls do not have unique field locations." }
-        val geometryKey = "$start|$finish|$waypoints|" + assigned.joinToString("|") { "${it.id}:${it.type}:${points.getValue(it.id)}" }
+        val savedIds = info.appliedBindings?.orderedControlIds ?: runCatching {
+            DesktopCourseAnalyzer.resolveProtectedIdealOrderControlIds(
+                info.idealOrder?.takeIf { it.isNotBlank() } ?: category.category.idealOrder.orEmpty(),
+                assigned, info, project.raceData.race.raceType, DesktopCourseControlIdentityMode.RESULT_CONTROLS
+            )
+        }.getOrDefault(emptyList())
+        val savedWithBeacon = savedIds.filter { it != beacons.single().id } + beacons.single().id
+        val direction = DesktopPracticeRouteDirection(project.raceData.race.raceLevel,
+            project.raceData.race.raceType, category.category.name, savedWithBeacon)
+        val geometryKey = "$start|$finish|$waypoints|$direction|" + assigned.joinToString("|") { "${it.id}:${it.type}:${points.getValue(it.id)}" }
         sharedCourses[geometryKey]?.let { return it }
-        val idealIds = DesktopCourseAnalyzer.classicIdealOrder(start, finish, permuted.map { it to points.getValue(it.id) },
-            beacons.single().let { it to points.getValue(it.id) }, lookup, checkCancelled, waypoints)
+        val selection = DesktopCourseAnalyzer.classicRouteSelection(start, finish, permuted.map { it to points.getValue(it.id) },
+            beacons.single().let { it to points.getValue(it.id) }, lookup, checkCancelled, waypoints, direction)
+        val idealIds = selection.controlIds
         val idealStops = DesktopMandatoryCourseLegs.expand(listOf(start) + idealIds.map(points::getValue) + finish, waypoints)
             .map { it.copy(elevationMeters = null) }
-        return PreparedCourse(start, finish, idealIds, idealStops, permuted.size, waypoints)
+        return PreparedCourse(start, finish, idealIds, idealStops, permuted.size, waypoints, selection.practiceSavedDirection)
             .also { sharedCourses[geometryKey] = it }
     }
 

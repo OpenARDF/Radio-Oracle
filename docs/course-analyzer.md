@@ -7,7 +7,7 @@ The Course Analyzer evaluates protected radio-orienteering course data after con
 - Saved route: the route/order currently available to Analyzer in the candidate design. When a draft exists, this is draft data; race downloads and result exports continue to use the applied course.
 - Imported data: route/control data read from a KML/KMZ or GPX file into a persisted course draft. Choosing `Analyze Imported Data` makes it available to Analyzer. `Save Race` preserves the draft and the applied courses separately; it does not apply the draft.
 - Ideal route: the property of a course defined by the route from start to finish, through each required control point, that has the shortest effective length. It is determined by the start, finish, control locations, and elevation contours between those points; it is not a matter of course-setter preference.
-- Calculated ideal route: Radio-Oracle's shortest route under the format rules, available elevations, and known leg constraints. Even an exhaustive comparison is conditional on that model: missing detours on alternative legs can change the true ideal order and effective length. The app does not guarantee the best feasible on-foot route.
+- Calculated ideal route: Radio-Oracle's shortest route under the format rules, available elevations, and known leg constraints, except when the documented Practice saved-direction exception applies. Even an exhaustive comparison is conditional on that model: missing detours on alternative legs can change the true ideal order and effective length. The app does not guarantee the best feasible on-foot route.
 - Horizontal distance: straight-line distance between route points, without elevation penalty.
 - Route length: the saved route geometry length when a saved route exists; for calculated routes, the distance through the calculated point order and mandatory points on matching legs.
 - Climb: positive elevation gain along the route after elevation-profile smoothing and small-noise filtering.
@@ -56,6 +56,18 @@ Relevant USGS references:
 - 3DEP products and services: https://www.usgs.gov/3d-elevation-program/about-3dep-products-services
 - USGS DEM resolution FAQ: https://www.usgs.gov/faqs/what-projection-horizontal-datum-vertical-datum-and-resolution-a-usgs-digital-elevation-model
 - USGS 3DEP dynamic elevation service: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer
+
+## Practice saved-direction exception
+
+For Practice events only, the analyzer retains the saved route direction when all of these conditions hold:
+
+- Start to finish beacon is below the existing category/format minimum separation: 750 m for adult Classic/Short, 500 m for youth Classic/Short, or 250 m for Foxoring. Sprint has no such beacon exclusion and Orienteering has no applicable spacing rule, so neither triggers this exception.
+- The selected candidate's **fox order** is the exact reverse of the saved fox order. Beacon, spectator, Start, Finish, and mandatory points are excluded from this comparison. Resolved control identities are compared, so fox renumbering does not change the test. Both orders must contain the same complete, nonduplicated set of required controls.
+- The reversed candidate has a strictly shorter **effective length**, including known mandatory detours on matching endpoint pairs. Both orders use the same route sampler, elevation treatment, and effective-length calculation as the route search. Horizontal distance alone cannot trigger the exception; if effective length is unavailable for either order, normal route selection continues.
+
+When triggered, the saved control order is used before constructing calculated geometry, timing, diagrams, exports, or course-application data. Classic result-route analysis uses the same selection policy and identifies a retained route as a Practice reference in results and exports. The analyzer explains the exception and reports that the retained route is not the shortest route found. All separation violations remain visible; this exception does not make a Practice course rules-compliant.
+
+This is a narrow accommodation for artificial Practice layouts. It does not infer whether mandatory detours also constrain other endpoint pairs. That limitation still requires map interpretation, and a general solution would require vector map data and route analysis that the app does not yet support.
 
 ## Speed Model
 
