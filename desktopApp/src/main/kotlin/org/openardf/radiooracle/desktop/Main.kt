@@ -11076,6 +11076,7 @@ private fun updateCheckStatusText(
 
 private sealed interface DesktopPendingNavigation {
     data object Back : DesktopPendingNavigation
+    data class Ancestor(val index: Int) : DesktopPendingNavigation
     data class Workflow(val workflow: DesktopWorkflow, val bypassedDisabled: Boolean = false) : DesktopPendingNavigation
     data class Item(val itemId: String, val bypassedDisabled: Boolean = false) : DesktopPendingNavigation
 }
@@ -11106,6 +11107,7 @@ private fun DesktopPendingNavigation.updatedBypassedDisabledNavigation(
         }
         val nextWorkflow = when (this) {
             DesktopPendingNavigation.Back,
+            is DesktopPendingNavigation.Ancestor,
             is DesktopPendingNavigation.Item -> retainedWorkflow
             is DesktopPendingNavigation.Workflow -> if (
                 bypassedDisabled &&
@@ -11122,6 +11124,7 @@ private fun DesktopPendingNavigation.updatedBypassedDisabledNavigation(
                     ?.let { item -> !DesktopNavigation.isItemEnabled(item, readiness) } == true
             }
             DesktopPendingNavigation.Back,
+            is DesktopPendingNavigation.Ancestor,
             is DesktopPendingNavigation.Workflow -> null
         }
         if (nextWorkflow == null && nextItemId == null) {
@@ -12378,6 +12381,7 @@ private fun RadioOManagerDesktopApp(
         fun selectionFor(intent: DesktopPendingNavigation): Pair<DesktopNavState, DesktopNavAction?> =
             when (intent) {
                 DesktopPendingNavigation.Back -> navState.back() to null
+                is DesktopPendingNavigation.Ancestor -> (DesktopNavigation.breadcrumbStates(navState).getOrNull(intent.index)?.second ?: navState) to null
                 is DesktopPendingNavigation.Workflow -> navState.switchWorkflow(intent.workflow) to null
                 is DesktopPendingNavigation.Item -> DesktopNavigation.currentItems(navState, navigationReadiness)
                     .firstOrNull { it.id == intent.itemId }
@@ -12543,7 +12547,8 @@ private fun RadioOManagerDesktopApp(
                                     workflow = navState.workflow,
                                     section = navState.selectedSection,
                                     title = DesktopNavigation.selectedLabel(navState),
-                                    breadcrumb = DesktopNavigation.breadcrumb(navState),
+                                    breadcrumb = DesktopNavigation.breadcrumbStates(navState).map { it.first },
+                                    onBreadcrumbClick = { requestNavigation(DesktopPendingNavigation.Ancestor(it)) },
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
                 projectFile = projectFile,
                 eventFilePath = eventFilePath,
@@ -13871,7 +13876,8 @@ private fun SectionWorkspace(
     workflow: DesktopWorkflow,
     section: DesktopSection,
     title: String,
-    breadcrumb: String,
+    breadcrumb: List<String>,
+    onBreadcrumbClick: (Int) -> Unit,
     menuDescription: String,
     projectFile: EventProjectFile?,
     eventFilePath: Path?,
@@ -14000,15 +14006,10 @@ private fun SectionWorkspace(
     onRestoreRecentImportCheckpoint: () -> Unit,
     onNavAction: (DesktopNavAction) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
+    DesktopWorkspaceScroll(Modifier.fillMaxSize().padding(24.dp)) {
         SectionWorkspaceHeader(
             breadcrumb = breadcrumb,
+            onBreadcrumbClick = onBreadcrumbClick,
             title = title,
             menuDescription = menuDescription
         )
@@ -14328,16 +14329,19 @@ private fun SectionWorkspace(
 
 @Composable
 private fun SectionWorkspaceHeader(
-    breadcrumb: String,
+    breadcrumb: List<String>,
+    onBreadcrumbClick: (Int) -> Unit,
     title: String,
     menuDescription: String
 ) {
-    Text(
-        text = breadcrumb,
-        color = DesktopPalette.Disconnected,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Bold
-    )
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
+        breadcrumb.forEachIndexed { index, label ->
+            if (index > 0) Text(" > ", color = DesktopPalette.Disconnected)
+            TextButton(onClick = { onBreadcrumbClick(index) }, enabled = index < breadcrumb.lastIndex) {
+                Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
     Text(
         text = title,
         fontSize = 24.sp,

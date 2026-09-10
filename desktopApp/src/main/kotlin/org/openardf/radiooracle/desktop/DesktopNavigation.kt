@@ -1259,6 +1259,22 @@ object DesktopNavigation {
         currentState.submenuStack.contains("setup.categories") &&
             !nextState.submenuStack.contains("setup.categories")
 
+    /** Ancestor destinations are navigation states only; breadcrumbs never replay actions. */
+    fun breadcrumbStates(state: DesktopNavState): List<Pair<String, DesktopNavState>> {
+        val entries = mutableListOf(state.workflow.label to state.switchWorkflow(state.workflow))
+        var ancestor = state.switchWorkflow(state.workflow)
+        state.submenuStack.forEach { id ->
+            val item = menuItemsForStack(state.workflow, ancestor.submenuStack).firstOrNull { it.id == id }
+                ?: return entries
+            ancestor = ancestor.enter(item)
+            entries += item.label to ancestor
+        }
+        if (state.selectedItemId != entries.last().second.selectedItemId) {
+            itemById(state.workflow, state.selectedItemId)?.let { entries += it.label to state }
+        }
+        return entries
+    }
+
     fun breadcrumb(state: DesktopNavState): String {
         val labels = mutableListOf(state.workflow.label)
         var items = roots.getValue(state.workflow)
