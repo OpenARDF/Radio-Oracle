@@ -62,6 +62,7 @@ object DesktopCourseFileReader {
         val controls = mutableListOf<CourseControlPoint>()
         val routes = mutableListOf<CourseRoute>()
         val polygons = mutableListOf<CoursePolygon>()
+        val settingPoints = mutableListOf<DesktopCourseSettingPoint>()
         repeat(placemarks.length) { index ->
             val placemark = placemarks.item(index)
             val name = placemark.childText("name")?.trim().orEmpty()
@@ -76,13 +77,14 @@ object DesktopCourseFileReader {
                 ?.let(::parseCoordinates)
                 ?.firstOrNull()
             if (pointCoordinates != null) {
-                controls += CourseControlPoint(
-                    name = name,
+                val metadata = DesktopCourseSettingPoint.fromKml(placemark)
+                val control = CourseControlPoint(
+                    name = metadata?.endpointName ?: name,
                     point = pointCoordinates,
                     description = description,
                     displayLabel = displayLabel,
                     isVisible = isVisible,
-                    siCodeHint = description.courseDescriptionSiCodeHint(),
+                    siCodeHint = metadata?.siCode ?: description.courseDescriptionSiCodeHint(),
                     speedFactorHint = if (DesktopCoursePointLabelClassifier.isEndpointFinishName(name)) {
                         null
                     } else {
@@ -90,6 +92,8 @@ object DesktopCourseFileReader {
                     },
                     symbol = placemark.pointSymbol(pointSymbolsByUrl)
                 )
+                controls += control
+                metadata?.let { settingPoints += it.copy(control = control) }
                 return@repeat
             }
             val lineCoordinates = placemark
@@ -125,6 +129,8 @@ object DesktopCourseFileReader {
         require(controls.isNotEmpty()) {
             "KML/KMZ file did not contain named control point placemarks."
         }
+        // Condes stores numbered course points alongside a map overlay rather than a LineString.
+        if (routes.isEmpty()) routes += DesktopCourseSettingPoint.routes(settingPoints)
         return DesktopCourseKmlData(controls = controls, routes = routes, polygons = polygons)
     }
 
@@ -179,8 +185,14 @@ object DesktopCourseFileReader {
     private fun org.w3c.dom.Node.toNamedGpxControl(point: CourseGeoPoint): CourseControlPoint? {
         val name = childText("name")?.trim()?.takeIf(String::isNotBlank) ?: return null
         val description = childText("desc")
-        return CourseControlPoint(name = name, point = point, description = description,
-            siCodeHint = description.courseDescriptionSiCodeHint())
+        val type = childText("type")?.trim()
+        return CourseControlPoint(
+            name = DesktopCourseSettingPoint.endpointName(type) ?: name,
+            point = point, description = description, displayLabel = name,
+            siCodeHint = if (type == "Control") {
+                DesktopCourseSettingPoint.numberedControlCode(name) ?: description.courseDescriptionSiCodeHint()
+            } else description.courseDescriptionSiCodeHint()
+        )
     }
 
     private fun readKmlFromKmz(path: Path): String {

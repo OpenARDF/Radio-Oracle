@@ -1,0 +1,43 @@
+<?xml version="1.0" standalone="no" ?>
+<gpx
+	xmlns="http://www.topografix.com/GPX/1/1"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.topografix.com/GPX/1/1"
+	createTime="2026-09-10T16:25:35" 	creator="Condes version 10.8.17" >
+	<metadata>
+		<extensions>
+			<eventname>Condes regression course</eventname>
+		</extensions>
+	</metadata>
+	<rte>
+		<name>2m 4k</name>
+		<rtept lon="-75" lat="40" >
+			<name>Start</name>
+			<type>StartPoint</type>
+		</rtept>
+		<rtept lon="-74.998" lat="40.001" >
+			<name>1 (71)</name>
+			<type>Control</type>
+		</rtept>
+		<rtept lon="-74.996" lat="40.003" >
+			<name>2 (73)</name>
+			<type>Control</type>
+		</rtept>
+		<rtept lon="-74.999" lat="40.004" >
+			<name>3 (75)</name>
+			<type>Control</type>
+		</rtept>
+		<rtept lon="-75.002" lat="40.002" >
+			<name>4 (74)</name>
+			<type>Control</type>
+		</rtept>
+		<rtept lon="-75.003" lat="40.005" >
+			<name>5 (79)</name>
+			<type>Control</type>
+		</rtept>
+		<rtept lon="-75.004" lat="40.006" >
+			<name>Finish</name>
+			<type>FinishPoint</type>
+		</rtept>
+	</rte>
+</gpx>

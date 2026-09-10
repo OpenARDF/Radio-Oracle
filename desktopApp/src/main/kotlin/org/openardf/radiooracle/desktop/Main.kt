@@ -4099,12 +4099,14 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 }.onFailure { error ->
                     pendingCourseKmlKmzCategoryMapping = null
                     val errorMessage = error.message ?: error::class.simpleName.orEmpty()
-                    if (error is DesktopCourseKmlMissingRouteException) {
-                        pendingCourseKmlKmzImportWarning = PendingCourseKmlKmzImportWarning(
-                            title = "Course route required",
-                            message = errorMessage
-                        )
-                    }
+                    DesktopDebugLog.error(
+                        "CourseKml",
+                        "Controls/route $formatLabel import failed for ${path.fileName}: $errorMessage\n${error.stackTraceToString()}"
+                    )
+                    pendingCourseKmlKmzImportWarning = PendingCourseKmlKmzImportWarning(
+                        title = if (error is DesktopCourseKmlMissingRouteException) "Course route required" else "$formatLabel import failed",
+                        message = errorMessage
+                    )
                     projectStatusText = "Controls/route $formatLabel import failed: $errorMessage"
                 }
                 isImportingCourseKmlKmz = false

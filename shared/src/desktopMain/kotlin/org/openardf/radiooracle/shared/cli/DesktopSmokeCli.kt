@@ -39,6 +39,8 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControlCatalog
+import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectFileJson
 import org.openardf.radiooracle.shared.event.EventRace
@@ -79,7 +81,8 @@ fun main() {
     val raceData = sampleRaceData()
     val projectFile = EventProjectFile(raceData = raceData)
     check(EventProjectFileJson.decode(EventProjectFileJson.encode(projectFile)) == projectFile)
-    check(EventValidationRules.validateRaceData(raceData).isEmpty())
+    val validationIssues = EventValidationRules.validateRaceData(raceData)
+    check(validationIssues.isEmpty()) { "Smoke fixture is invalid: $validationIssues" }
     check(
         EventResultPlacement.sortByPlace(raceData.competitorData)
             .single()
@@ -101,7 +104,7 @@ fun main() {
             competitor = raceData.competitorData.single().competitorCategory.competitor,
             categoryName = "M21",
             startTimeText = "10:00"
-        ) == "1;Runner;Test;M21;;10:00;;;;123456"
+        ) == "1;Runner;Test;M21;;10:00;;;;123456;"
     )
     check(
         ControlPointRules.formatDisplayTokens(
@@ -153,9 +156,14 @@ private fun sampleRaceData(): EventRaceData =
                     raceType = null,
                     raceBand = null,
                     timeLimitSeconds = null,
-                    controlPointsString = "31 32"
+                    controlPointsString = ""
                 ),
-                controlPoints = emptyList(),
+                controlPoints = EventControlCatalog.classicPreset("race").mapIndexed { index, control ->
+                    EventControlPoint(
+                        id = "point-$index", categoryId = "M21", siCode = control.siCode,
+                        type = control.type, order = index, controlId = control.id
+                    )
+                },
                 competitors = emptyList()
             )
         ),
@@ -202,5 +210,6 @@ private fun sampleRaceData(): EventRaceData =
                 )
             )
         ),
-        unmatchedReadoutData = emptyList()
+        unmatchedReadoutData = emptyList(),
+        controls = EventControlCatalog.classicPreset("race").map { it.copy(publicLabel = it.label) }
     )

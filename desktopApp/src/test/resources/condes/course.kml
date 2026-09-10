@@ -1,0 +1,129 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<kml xmlns="http://www.opengis.net/kml/2.2" createTime="2026-09-10T16:24:25" creator="Condes version 10.8.17" xmlns:cs="http://www.orienteering.org/schemas/course-setting">
+
+	<Folder>
+		<name>Condes regression course</name>
+
+		<Folder>
+			<name>Canvas 2  1:7,500</name>
+
+			<Folder>
+				<name>2m 4k</name>
+
+				<Folder>
+					<name>Coordinates</name>
+
+					<Placemark id="SA">
+						<name>(SA)</name>
+						<ExtendedData>
+							<Data name="cs:object-type">
+								<value>Start</value>
+							</Data>
+							<Data name="cs:control-code">
+								<value>SA</value>
+							</Data>
+						</ExtendedData>
+
+						<Point>
+							<coordinates>-75,40</coordinates>
+						</Point>
+					</Placemark>
+					<Placemark id="71">
+						<name>1 (71)</name>
+						<ExtendedData>
+							<Data name="cs:object-type">
+								<value>Control</value>
+							</Data>
+							<Data name="cs:control-code">
+								<value>71</value>
+							</Data>
+						</ExtendedData>
+
+						<Point>
+							<coordinates>-74.998,40.001</coordinates>
+						</Point>
+					</Placemark>
+					<Placemark id="73">
+						<name>2 (73)</name>
+						<ExtendedData>
+							<Data name="cs:object-type">
+								<value>Control</value>
+							</Data>
+							<Data name="cs:control-code">
+								<value>73</value>
+							</Data>
+						</ExtendedData>
+
+						<Point>
+							<coordinates>-74.996,40.003</coordinates>
+						</Point>
+					</Placemark>
+					<Placemark id="75">
+						<name>3 (75)</name>
+						<ExtendedData>
+							<Data name="cs:object-type">
+								<value>Control</value>
+							</Data>
+							<Data name="cs:control-code">
+								<value>75</value>
+							</Data>
+						</ExtendedData>
+
+						<Point>
+							<coordinates>-74.999,40.004</coordinates>
+						</Point>
+					</Placemark>
+					<Placemark id="74">
+						<name>4 (74)</name>
+						<ExtendedData>
+							<Data name="cs:object-type">
+								<value>Control</value>
+							</Data>
+							<Data name="cs:control-code">
+								<value>74</value>
+							</Data>
+						</ExtendedData>
+
+						<Point>
+							<coordinates>-75.002,40.002</coordinates>
+						</Point>
+					</Placemark>
+					<Placemark id="79">
+						<name>5 (79)</name>
+						<ExtendedData>
+							<Data name="cs:object-type">
+								<value>Control</value>
+							</Data>
+							<Data name="cs:control-code">
+								<value>79</value>
+							</Data>
+						</ExtendedData>
+
+						<Point>
+							<coordinates>-75.003,40.005</coordinates>
+						</Point>
+					</Placemark>
+					<Placemark id="F">
+						<name>(F)</name>
+						<ExtendedData>
+							<Data name="cs:object-type">
+								<value>Finish</value>
+							</Data>
+							<Data name="cs:control-code">
+								<value>F</value>
+							</Data>
+						</ExtendedData>
+
+						<Point>
+							<coordinates>-75.004,40.006</coordinates>
+						</Point>
+					</Placemark>
+				</Folder>
+
+				</Folder>
+
+		</Folder>
+
+	</Folder>
+
+</kml>
