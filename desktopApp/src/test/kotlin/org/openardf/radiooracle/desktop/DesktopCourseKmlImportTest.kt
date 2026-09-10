@@ -51,6 +51,124 @@ import kotlin.math.sin
 
 class DesktopCourseKmlImportTest {
     @Test
+    fun importsSavedRoutesIntoCustomCategoriesWithoutFallbackAssumptions() {
+        val kml = sampleKmlWithDuplicateM21Routes()
+            .replaceFirst(
+                "<name>M21</name>",
+                "<name>Classic - 3 Foxes - 2.51 km - Short</name>" +
+                    "<description>Route: Saved route\nCategories: Short</description>"
+            )
+            .replaceFirst(
+                "<name>M21</name>",
+                "<name>Classic - 5 Foxes - 4.13 km - Full</name>" +
+                    "<description>Route: Saved route\nCategories: Full</description>"
+            )
+        val (updated, summary) = importCustomCategoryKml(kml, listOf("Full", "Short", "M21"))
+
+        assertEquals(listOf("Short", "Full"), summary.matchedCategoryNames)
+        assertEquals(2, summary.importedCategoryCount)
+        assertTrue(summary.categoryAssumptions.isEmpty())
+        assertTrue(summary.missingCategoryNames.isEmpty())
+        assertTrue(updated.raceData.courseMappings.isEmpty())
+        val categories = updated.raceData.categories.associate { it.category.name to it.category }
+        assertEquals("31", categories.getValue("Short").courseInfo?.idealOrder)
+        assertEquals("32", categories.getValue("Full").courseInfo?.idealOrder)
+        assertNull(categories.getValue("M21").courseInfo)
+    }
+
+    @Test
+    fun matchesWholeCustomNamesInRouteSuffixesAndExplicitDescriptions() {
+        val variants = listOf(
+            "Classic - 3 Foxes - 2.51 km - Shorter" to "",
+            "Classic - 3 Foxes - 2.51 km - Junior - Short" to "",
+            "Classic - 3 Foxes - 2.51 km - Shorter, Junior - Short" to "",
+            "Course" to "Route: Saved route\nCategories: Shorter, Junior - Short\nClimb: 20m",
+            "Course" to "Matching Categories: Shorter, Junior - Short",
+            "Course" to "category: shorter",
+            "Course (Shorter)" to ""
+        )
+        variants.forEach { (name, description) ->
+            val kml = sampleKmlWithRouteName(name)
+                .replace("<name>$name</name>", "<name>$name</name><description>$description</description>")
+            val expected = when {
+                name.endsWith("- Shorter") || name == "Course (Shorter)" || description == "category: shorter" -> listOf("Shorter")
+                name.endsWith("- Junior - Short") && ',' !in name -> listOf("Junior - Short")
+                else -> listOf("Shorter", "Junior - Short")
+            }
+            val (_, summary) = importCustomCategoryKml(kml, listOf("Short", "Shorter", "Junior - Short", "M21"))
+            assertEquals("$name / $description", expected.toSet(), summary.matchedCategoryNames.toSet())
+            assertTrue("$name / $description", summary.categoryAssumptions.isEmpty())
+            assertTrue("$name / $description", summary.missingCategoryNames.isEmpty())
+        }
+    }
+
+    @Test
+    fun previewsAndCreatesMissingCustomMappingsFromExplicitCategoryDescriptions() {
+        val kml = sampleKmlWithRouteName("Course")
+            .replace("<name>Course</name>", "<name>Course</name><description>Categories: Short, Full</description>")
+        val (_, preview) = importCustomCategoryKml(kml, listOf("Full", "M21"))
+        assertEquals(listOf("Short"), preview.missingCategoryNames)
+        assertEquals(listOf("Full"), preview.matchedCategoryNames)
+        assertTrue(preview.categoryAssumptions.isEmpty())
+
+        val (updated, summary) = importCustomCategoryKml(kml, listOf("Full", "M21"), createMissing = true)
+        assertEquals(setOf("Short", "Full"), summary.matchedCategoryNames.toSet())
+        assertEquals(listOf("Short"), summary.createdCategoryNames)
+        assertEquals("Short", updated.raceData.courseMappings.single().category.name)
+        assertNotNull(updated.raceData.courseMappings.single().category.courseInfo)
+    }
+
+    @Test
+    fun explicitCustomCategoryMetadataTakesPrecedenceOverOtherRouteNameClues() {
+        val kml = sampleKmlWithRouteName("Classic - 3 Foxes - M21")
+            .replace("<name>Classic - 3 Foxes - M21</name>",
+                "<name>Classic - 3 Foxes - M21</name><description>Categories: Short, Full</description>")
+        val (_, summary) = importCustomCategoryKml(kml, listOf("M21", "Full"))
+        assertEquals(listOf("Full"), summary.matchedCategoryNames)
+        assertEquals(listOf("Short"), summary.missingCategoryNames)
+        assertTrue(summary.categoryAssumptions.isEmpty())
+    }
+
+    @Test
+    fun importsCustomCategoryNamesFromGpxDescription() {
+        val path = Files.createTempFile("custom-category-description", ".gpx")
+        try {
+            Files.writeString(path, sampleGpxTrackWithCategoryDescription().replace("M21, W35, M50", "Short, Full"))
+            val (_, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+                path, customCategoryProject(listOf("Full", "Short", "M21")), password = null,
+                elevationProvider = { null }
+            )
+            assertEquals(setOf("Short", "Full"), summary.matchedCategoryNames.toSet())
+            assertEquals(2, summary.importedCategoryCount)
+            assertTrue(summary.categoryAssumptions.isEmpty())
+        } finally {
+            Files.deleteIfExists(path)
+        }
+    }
+
+    private fun customCategoryProject(names: List<String>): EventProjectFile =
+        names.fold(classicPresetProject()) { project, name ->
+            EventProjectEditor.addCategory(project, categoryId = "cat-$name", name = name)
+        }
+
+    private fun importCustomCategoryKml(
+        kml: String,
+        names: List<String>,
+        createMissing: Boolean = false
+    ): Pair<EventProjectFile, DesktopCourseKmlImportSummary> {
+        val path = Files.createTempFile("saved-foxes-and-routes", ".kml")
+        return try {
+            Files.writeString(path, kml)
+            DesktopCourseKmlImporter.importProtectedCourseInfo(
+                path, customCategoryProject(names), password = null,
+                elevationProvider = { null }, createMissingCategories = createMissing
+            )
+        } finally {
+            Files.deleteIfExists(path)
+        }
+    }
+
+    @Test
     fun importsRouteAsPlaintextWhenRaceFileIsNotEncrypted() {
         val kmlPath = Files.createTempFile("radio-oracle-plaintext-course", ".kml")
         Files.writeString(kmlPath, sampleKml())

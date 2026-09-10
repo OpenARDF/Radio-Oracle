@@ -1148,6 +1148,10 @@ object DesktopCourseKmlImporter {
         route: CourseRoute,
         categories: List<EventCategoryData>
     ): List<EventCategoryData> {
+        // Explicit export metadata is authoritative, including names not present in the race
+        // yet. Do not replace an unknown declared category with a guess from descriptive text.
+        val declaredNames = route.description?.labeledCategoryNames().orEmpty()
+        if (declaredNames.isNotEmpty()) return categories.matchingListedNames(declaredNames)
         val nameMatches = route.name.matchedCategories(categories)
         if (nameMatches.isNotEmpty()) {
             return nameMatches
@@ -1161,15 +1165,35 @@ object DesktopCourseKmlImporter {
         val exactCategoryData = categories.firstOrNull { categoryData ->
             categoryData.category.name.matchesCategoryRouteName(this)
         }
-        return exactCategoryData?.let(::listOf)
-            ?: categories.filter { categoryData ->
-                containsEmbeddedCategoryName(categoryData.category.name)
+        if (exactCategoryData != null) return listOf(exactCategoryData)
+
+        val labeledNames = labeledCategoryNames()
+        if (labeledNames.isNotEmpty()) {
+            return categories.matchingListedNames(labeledNames)
+        }
+        // Analyzer exports end with " - <categories>". Prefer the most complete list,
+        // then the longest suffix, so "Junior - Short" does not also select "Short".
+        val suffixMatches = Regex("\\s+-\\s+").findAll(this)
+            .map { separator ->
+                categories.matchingListedNames(substring(separator.range.last + 1).splitCategoryNames())
             }
+            .maxByOrNull { it.size }
+        if (!suffixMatches.isNullOrEmpty()) return suffixMatches
+        return categories.filter { categoryData ->
+            containsEmbeddedCategoryName(categoryData.category.name)
+        }
     }
 
+    private fun List<EventCategoryData>.matchingListedNames(names: List<String>): List<EventCategoryData> =
+        filter { categoryData ->
+            names.any { name -> categoryData.category.name.matchesCategoryRouteName(name) }
+        }
+
     private fun CourseRoute.listedCategoryNames(): List<String> =
-        name.listedCategoryNames().ifEmpty {
-            description?.listedCategoryNames().orEmpty()
+        description?.labeledCategoryNames().orEmpty().ifEmpty {
+            name.listedCategoryNames().ifEmpty {
+                description?.listedCategoryNames().orEmpty()
+            }
         }
 
     private fun categoryAssumptionNames(
@@ -2748,6 +2772,7 @@ private fun String.matchesCategoryRouteName(importedRouteName: String): Boolean 
         compactCategoryMatchText() == importedRouteName.compactCategoryMatchText()
 
 private fun String.listedCategoryNames(): List<String> {
+    labeledCategoryNames().takeIf { it.isNotEmpty() }?.let { return it }
     ardfCategoryToken()?.let { return listOf(it.displayCategoryName()) }
     val parentheticalNames = parentheticalSegments()
         .flatMap { segment -> segment.split(',') }
@@ -2762,9 +2787,24 @@ private fun String.listedCategoryNames(): List<String> {
         .distinctBy { it.categoryMatchText() }
 }
 
+private fun String.splitCategoryNames(): List<String> =
+    split(',').map { it.trim() }.filter { it.isNotBlank() }
+
+private fun String.labeledCategoryNames(): List<String> =
+    lineSequence()
+        .mapNotNull { line ->
+            Regex("^\\s*(?:Matching\\s+)?Categor(?:y|ies)\\s*:\\s*(.+)$", RegexOption.IGNORE_CASE)
+                .matchEntire(line)?.groupValues?.get(1)
+        }
+        .flatMap { it.splitCategoryNames() }
+        .map { it.ardfCategoryToken()?.displayCategoryName() ?: it }
+        .distinctBy { it.categoryMatchText() }
+        .toList()
+
 private fun String.containsEmbeddedCategoryName(categoryName: String): Boolean {
     val categoryToken = categoryName.ardfCategoryToken() ?: return parentheticalSegments()
-        .any { segment -> segment.containsCategoryName(categoryName) }
+        .flatMap { it.splitCategoryNames() }
+        .any { name -> categoryName.matchesCategoryRouteName(name) }
     return categoryToken in ardfCategoryTokens()
 }
 
