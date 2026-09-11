@@ -6,125 +6,140 @@
     android:orientation="vertical"
     android:padding="8dp">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="8dp"
-        android:orientation="vertical">
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/readout_dialog_competitor_layout"
-            style="@style/dialog_dropdown"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="@string/general_competitor"
-            android:inputType="none">
-
-            <AutoCompleteTextView
-                android:id="@+id/readout_dialog_competitor"
-                style="@style/dialog_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:focusable="false" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/readout_dialog_category_layout"
-            style="@style/dialog_dropdown"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:hint="@string/general_category"
-            android:inputType="none">
-
-            <AutoCompleteTextView
-                android:id="@+id/readout_dialog_category"
-                style="@style/dialog_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-
-                android:focusable="false" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-
-        <com.google.android.material.textfield.TextInputLayout
-            style="@style/dialog_dropdown"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:hint="@string/readout_detail_status"
-            android:inputType="none"
-            android:textColor="@color/black">
-
-            <AutoCompleteTextView
-                android:id="@+id/readout_dialog_status"
-                style="@style/dialog_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:focusable="false" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <TextView
-            android:id="@+id/readout_dialog_si_number"
-            style="@style/readout_edit_dialog_si_number"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/readout_dialog_si_number_input_layout"
-            style="@style/dialog_textView"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:hint="@string/readout_si_number_title"
-            android:visibility="gone"
-            app:helperText="@string/readout_missing_si_number_hint">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/readout_dialog_si_number_input"
-                style="@style/dialog_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:singleLine="true" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <TextView
-            android:id="@+id/readout_dialog_issue_explanation"
-            style="@style/error_text"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:visibility="gone" />
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/readout_dialog_edit_switch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:text="@string/readout_edit_readout"
-            android:textColor="@color/black" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/readout_dialog_entry_help"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="8dp"
-        android:visibility="gone"
-        android:text="@string/readout_clock_entry_help" />
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/readout_dialog_punch_recycler_view"
+    <ScrollView
+        android:id="@+id/readout_dialog_scroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="8dp"
         android:layout_weight="1"
-        android:theme="@style/punch_record_recycler"
-        android:visibility="gone"
-        app:layoutManager="LinearLayoutManager" />
+        android:fillViewport="true"
+        android:fadeScrollbars="false"
+        android:scrollbars="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:orientation="vertical">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/readout_dialog_competitor_layout"
+                    style="@style/dialog_dropdown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/general_competitor"
+                    android:inputType="none">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/readout_dialog_competitor"
+                        style="@style/dialog_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:focusable="false" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/readout_dialog_category_layout"
+                    style="@style/dialog_dropdown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:hint="@string/general_category"
+                    android:inputType="none">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/readout_dialog_category"
+                        style="@style/dialog_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+
+                        android:focusable="false" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/dialog_dropdown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:hint="@string/readout_detail_status"
+                    android:inputType="none"
+                    android:textColor="@color/black">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/readout_dialog_status"
+                        style="@style/dialog_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:focusable="false" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/readout_dialog_si_number"
+                    style="@style/readout_edit_dialog_si_number"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/readout_dialog_si_number_input_layout"
+                    style="@style/dialog_textView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:hint="@string/readout_si_number_title"
+                    android:visibility="gone"
+                    app:helperText="@string/readout_missing_si_number_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/readout_dialog_si_number_input"
+                        style="@style/dialog_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/readout_dialog_issue_explanation"
+                    style="@style/error_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:visibility="gone" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/readout_dialog_edit_switch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:text="@string/readout_edit_readout"
+                    android:textColor="@color/black" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/readout_dialog_entry_help"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="8dp"
+                android:visibility="gone"
+                android:text="@string/readout_clock_entry_help" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/readout_dialog_punch_recycler_view"
+                android:nestedScrollingEnabled="false"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:theme="@style/punch_record_recycler"
+                android:visibility="gone"
+                app:layoutManager="LinearLayoutManager" />
+        </LinearLayout>
+    </ScrollView>
 
     <LinearLayout
         android:layout_width="wrap_content"

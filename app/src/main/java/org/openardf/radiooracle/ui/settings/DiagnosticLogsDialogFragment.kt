@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,7 +54,7 @@ class DiagnosticLogsDialogFragment : DialogFragment() {
             })
         }
         return MaterialAlertDialogBuilder(context).setTitle(R.string.diagnostic_logs_title)
-            .setView(content).setNegativeButton(android.R.string.cancel, null).create()
+            .setView(ScrollView(context).apply { isScrollbarFadingEnabled = false; addView(content) }).setNegativeButton(android.R.string.cancel, null).create()
     }
 
     private fun shareLogs() = runAction {

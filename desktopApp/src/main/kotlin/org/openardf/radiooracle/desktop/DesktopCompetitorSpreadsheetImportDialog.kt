@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
+import androidx.compose.foundation.rememberScrollState
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -35,8 +37,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.DropdownMenu
@@ -85,17 +85,15 @@ fun DesktopCompetitorSpreadsheetImportDialog(
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
-                FileSelectionRow(
-                    draft = draft,
-                    enabled = !isPreparingReview,
-                    onChooseDifferentFile = onChooseDifferentFile
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState()),
+                DesktopWorkspaceScroll(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    FileSelectionRow(
+                        draft = draft,
+                        enabled = !isPreparingReview,
+                        onChooseDifferentFile = onChooseDifferentFile
+                    )
                     WorkbookStructureSection(
                         draft = draft,
                         enabled = !isPreparingReview,

@@ -14,13 +14,14 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun DesktopWorkspaceScroll(
     modifier: Modifier = Modifier,
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(14.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     Box(modifier) {
         Column(
-            Modifier.fillMaxSize().padding(end = 16.dp)
+            Modifier.fillMaxWidth().padding(end = 16.dp)
                 .testTag("workspace-scroll")
                 // Page keys navigate the workspace even while a single-line editor has focus.
                 .onPreviewKeyEvent { event ->
@@ -51,12 +52,15 @@ internal fun DesktopWorkspaceScroll(
                 }
                 .focusable()
                 .verticalScroll(scroll),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = verticalArrangement,
             content = content
         )
-        VerticalScrollbar(
-            rememberScrollbarAdapter(scroll),
-            Modifier.align(Alignment.CenterEnd).fillMaxHeight().testTag("workspace-scrollbar")
-        )
+        // The scrollbar overlays the measured content instead of forcing short dialogs to full height.
+        Box(Modifier.matchParentSize()) {
+            VerticalScrollbar(
+                rememberScrollbarAdapter(scroll),
+                Modifier.align(Alignment.CenterEnd).fillMaxHeight().testTag("workspace-scrollbar")
+            )
+        }
     }
 }

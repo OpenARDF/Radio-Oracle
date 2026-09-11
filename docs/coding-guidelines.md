@@ -26,6 +26,22 @@ reports declarations over the guideline threshold. Use
 `node ./scripts/check-kotlin-function-size.mjs --strict` when a slice is expected
 to stay under the threshold.
 
+## Scrolling and dialogs
+
+- Use `DesktopAlertDialog` for desktop alerts. Its body scrolls inside a bounded
+  viewport while the title and actions remain visible.
+- Use `DesktopWorkspaceScroll` for desktop workspaces and custom dialog bodies.
+  Put variable-length filenames, warnings, and options inside the viewport.
+  Reserve space for fixed actions before measuring the body; avoid nested
+  vertical scroll areas when a panel already lives inside the workspace.
+- Custom Android dialog layouts must provide a bounded `ScrollView`. Keep
+  primary actions outside it when practical. A readout's bounded punch list can
+  participate in the form's scrolling; retain native recycling and scrolling
+  for unbounded race and competitor lists.
+- Extend the scrolling regression tests when adding a custom dialog. Verify
+  the final option at small window sizes and enlarged text, rather than just
+  checking that a scrollbar exists. See [the scrolling audit](ui-scrolling-audit.md).
+
 ## Comments
 
 Use comments for non-obvious invariants, platform constraints, or intentional

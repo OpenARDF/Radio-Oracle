@@ -44,7 +44,7 @@ internal fun DesktopDiagnosticLogsDialog(onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("Diagnostic Logs") },
         text = {

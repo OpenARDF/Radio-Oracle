@@ -26,7 +26,6 @@ package org.openardf.radiooracle.desktop
 
 import java.awt.FileDialog
 import java.awt.Frame
-import java.awt.Dimension
 import java.io.File
 import java.io.FilenameFilter
 import java.nio.file.Files
@@ -34,8 +33,6 @@ import java.nio.file.Path
 import java.util.prefs.Preferences
 import javax.swing.JFileChooser
 import javax.swing.JOptionPane
-import javax.swing.JScrollPane
-import javax.swing.JTextArea
 import javax.swing.filechooser.FileNameExtensionFilter
 import javax.swing.filechooser.FileFilter
 import org.openardf.radiooracle.shared.event.EVENT_SERIES_FILE_NAME
@@ -316,15 +313,7 @@ object DesktopFileDialogs {
                 append("${change.competitorName}: ${change.currentBibNumber} -> ${change.importedBibNumber}\n")
             }
         }
-        val textArea = JTextArea(details).apply {
-            isEditable = false
-            lineWrap = true
-            wrapStyleWord = true
-            caretPosition = 0
-        }
-        val scrollPane = JScrollPane(textArea).apply {
-            preferredSize = Dimension(620, (190 + changes.size * 18).coerceAtMost(420))
-        }
+        val scrollPane = desktopScrollableMessage(details, (190 + changes.size * 18).coerceAtMost(420))
         val options = arrayOf("Keep Current Bibs", "Use Imported Bibs", "Cancel")
         return when (
             JOptionPane.showOptionDialog(

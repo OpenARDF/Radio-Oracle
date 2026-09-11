@@ -60,8 +60,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Checkbox
@@ -6949,7 +6947,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             )
         }
         pendingCourseKmlKmzImportWarning?.let { warning ->
-            AlertDialog(
+            DesktopAlertDialog(
                 onDismissRequest = { pendingCourseKmlKmzImportWarning = null },
                 title = { Text(warning.title) },
                 text = { Text(warning.message) },
@@ -8249,7 +8247,7 @@ private fun ControlRoleWarningDialog(
     warning: String,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Check Control Role") },
         text = { Text(warning) },
@@ -8268,7 +8266,7 @@ private fun UnsavedChangesDialog(
     onDiscard: () -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Unsaved Changes") },
         text = {
@@ -8301,7 +8299,7 @@ private fun EventDefinitionSaveDialog(
     onOverwrite: () -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Race Definition Changed") },
         text = {
@@ -8345,7 +8343,7 @@ private fun UnsavedNewEventFileDialog(
     onDiscard: () -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Unsaved New Race File") },
         text = {
@@ -8451,7 +8449,7 @@ private fun CourseKmlKmzUnlockDialog(
         }
     }
 
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text(title) },
         text = {
@@ -8515,7 +8513,7 @@ private fun BulkCategoryActionDialog(
         BulkCategoryAction.DeleteAllCategories ->
             "This removes all category names, assigned controls, category length/climb data, and protected course/order data from the Race File. Competitors are kept but become uncategorized."
     }
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text(title) },
         text = {
@@ -8555,7 +8553,7 @@ private fun DeleteAllControlsDialog(
     onCancel: () -> Unit
 ) {
     val canSubmit = controlCount > 0 || affectedCategoryCount > 0
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Delete All Controls") },
         text = {
@@ -8604,7 +8602,7 @@ private fun DeleteAllCompetitorsDialog(
     onConfirm: () -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Delete All Competitors") },
         text = {
@@ -8765,7 +8763,7 @@ internal fun controlsOnlyImportWarningLines(
 }
 
 @Composable
-private fun CourseKmlKmzImportReviewDialog(
+internal fun CourseKmlKmzImportReviewDialog(
     review: PendingCourseKmlKmzImportReview,
     onKeep: (
         fetchElevations: Boolean,
@@ -8881,7 +8879,6 @@ private fun CourseKmlKmzImportReviewDialog(
     } else {
         selectedSummary.controlIdentityUpdateCount
     }
-    val scrollState = rememberScrollState()
     Dialog(
         onDismissRequest = onCancel,
     ) {
@@ -8905,57 +8902,56 @@ private fun CourseKmlKmzImportReviewDialog(
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Box(
+                Text(
+                    "Scroll for more options, or use Page Up / Page Down.",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+                DesktopWorkspaceScroll(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .fillMaxWidth()
-                        .clipToBounds()
+                        .clipToBounds(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(scrollState),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("File: ${review.sourceName}")
-                        CourseRouteImportWarnings(selectedSummary)
-                        CourseRouteDuplicateAssignments(
-                            summary = selectedSummary,
-                            selectedDuplicateRouteChoices = selectedDuplicateRouteChoices,
-                            onSelectedDuplicateRouteChoicesChange = { selectedDuplicateRouteChoices = it }
-                        )
-                        Text("Matched Categories: ${selectedSummary.matchedCategoryCount} Of ${selectedSummary.routeCount} Routes")
-                        Text("Categories: $categoriesText")
-                        CourseRouteImportMissingControlListChanges(
-                            formatLabel = formatLabel,
-                            summary = summary,
-                            importAllHasControlListChanges = importAllHasControlListChanges,
-                            selectedMissingCategoryNames = selectedMissingCategoryNames,
-                            createMissingControls = createMissingControls,
-                            onSelectedMissingCategoryNamesChange = { selectedMissingCategoryNames = it },
-                            onCreateMissingControlsChange = { createMissingControls = it }
-                        )
-                        CourseRouteImportSelectedChanges(
-                            summary = selectedSummary,
-                            formatLabel = formatLabel,
-                            selectedSiConflictCount = selectedSiConflictCount,
-                            selectedSiUpdateCount = selectedSiUpdateCount,
-                            applyCategoryAssignments = applyCategoryAssignments,
-                            overwriteImportedSiNumbers = overwriteImportedSiNumbers,
-                            keepStaleCourseMappings = keepStaleCourseMappings,
-                            canFetchElevations = canFetchElevations,
-                            missingStoredElevationPointCount = missingStoredElevationPointCount,
-                            fetchElevations = fetchElevations,
-                            onApplyCategoryAssignmentsChange = { applyCategoryAssignments = it },
-                            onOverwriteImportedSiNumbersChange = { overwriteImportedSiNumbers = it },
-                            onKeepStaleCourseMappingsChange = { keepStaleCourseMappings = it },
-                            onFetchElevationsChange = { fetchElevations = it }
-                        )
-                        CourseRouteImportFinalNotice(
-                            summary = selectedSummary,
-                            formatLabel = formatLabel
-                        )
-                    }
+                    Text("File: ${review.sourceName}")
+                    CourseRouteImportWarnings(selectedSummary)
+                    CourseRouteDuplicateAssignments(
+                        summary = selectedSummary,
+                        selectedDuplicateRouteChoices = selectedDuplicateRouteChoices,
+                        onSelectedDuplicateRouteChoicesChange = { selectedDuplicateRouteChoices = it }
+                    )
+                    Text("Matched Categories: ${selectedSummary.matchedCategoryCount} Of ${selectedSummary.routeCount} Routes")
+                    Text("Categories: $categoriesText")
+                    CourseRouteImportMissingControlListChanges(
+                        formatLabel = formatLabel,
+                        summary = summary,
+                        importAllHasControlListChanges = importAllHasControlListChanges,
+                        selectedMissingCategoryNames = selectedMissingCategoryNames,
+                        createMissingControls = createMissingControls,
+                        onSelectedMissingCategoryNamesChange = { selectedMissingCategoryNames = it },
+                        onCreateMissingControlsChange = { createMissingControls = it }
+                    )
+                    CourseRouteImportSelectedChanges(
+                        summary = selectedSummary,
+                        formatLabel = formatLabel,
+                        selectedSiConflictCount = selectedSiConflictCount,
+                        selectedSiUpdateCount = selectedSiUpdateCount,
+                        applyCategoryAssignments = applyCategoryAssignments,
+                        overwriteImportedSiNumbers = overwriteImportedSiNumbers,
+                        keepStaleCourseMappings = keepStaleCourseMappings,
+                        canFetchElevations = canFetchElevations,
+                        missingStoredElevationPointCount = missingStoredElevationPointCount,
+                        fetchElevations = fetchElevations,
+                        onApplyCategoryAssignmentsChange = { applyCategoryAssignments = it },
+                        onOverwriteImportedSiNumbersChange = { overwriteImportedSiNumbers = it },
+                        onKeepStaleCourseMappingsChange = { keepStaleCourseMappings = it },
+                        onFetchElevationsChange = { fetchElevations = it }
+                    )
+                    CourseRouteImportFinalNotice(
+                        summary = selectedSummary,
+                        formatLabel = formatLabel
+                    )
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -9366,14 +9362,11 @@ private fun CategoriesCsvImportReviewDialog(
     var selectedNewCourseMappingNames by remember(review.path, review.newCourseMappingNames) {
         mutableStateOf(review.newCourseMappingNames.filter(::defaultImportMissingCourseMapping).toSet())
     }
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review Categories CSV Import") },
         text = {
             Column(
-                modifier = Modifier
-                    .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("File: ${review.path.fileName}")
@@ -9459,14 +9452,11 @@ private fun IofStartListImportReviewDialog(
     onImport: () -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review IOF StartList Import") },
         text = {
             Column(
-                modifier = Modifier
-                    .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("File: ${review.path.fileName}")
@@ -9514,14 +9504,11 @@ private fun IofResultListImportReviewDialog(
     onImport: () -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review IOF ResultList Import") },
         text = {
             Column(
-                modifier = Modifier
-                    .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("File: ${review.path.fileName}")
@@ -9573,14 +9560,11 @@ private fun IofCourseDataImportReviewDialog(
     var selectedNewCourseMappingNames by remember(review.path, review.newCourseMappingNames) {
         mutableStateOf(review.newCourseMappingNames.filter(::defaultImportMissingCourseMapping).toSet())
     }
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review IOF CourseData Import") },
         text = {
             Column(
-                modifier = Modifier
-                    .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("File: ${review.path.fileName}")
@@ -9681,14 +9665,11 @@ private fun ControlsCsvImportReviewDialog(
 ) {
     val preview = review.preview
     var syncMissingControls by remember(review.path, preview.missingExistingCount) { mutableStateOf(false) }
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review Controls CSV Import") },
         text = {
             Column(
-                modifier = Modifier
-                    .heightIn(max = 360.dp)
-                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("File: ${review.path.fileName}")
@@ -9778,7 +9759,7 @@ private fun CourseKmlKmzCategoryMappingDialog(
     var selectedCategoryId by remember(mapping.sourceName, mapping.categoryOptions) {
         mutableStateOf(mapping.categoryOptions.firstOrNull()?.first)
     }
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Choose Route Category") },
         text = {
@@ -9830,7 +9811,7 @@ private fun IndeterminateProgressDialog(
     title: String,
     message: String
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = {},
         title = { Text(title) },
         text = {
@@ -9856,7 +9837,7 @@ private fun CourseKmlKmzElevationProgressDialog(
     val total = progress.totalPointCount.coerceAtLeast(1)
     val completed = progress.completedPointCount.coerceIn(0, total)
     val remaining = (total - completed).coerceAtLeast(0)
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = {},
         title = { Text("Retrieving Course Elevations") },
         text = {
@@ -9892,7 +9873,7 @@ private fun VenueElevationCacheProgressDialog(
     val remaining = (total - completed).coerceAtLeast(0)
     val fraction = completed.toFloat() / total.toFloat()
     val estimatedSizeText = progress.estimatedRawBytes?.let(::bytesText) ?: "calculating..."
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = {},
         title = { Text(if (progress.isLocalFileImport) "Importing elevation file" else "Creating elevation cache") },
         text = {
@@ -9935,7 +9916,7 @@ private fun DemFileImportReviewDialog(
     onCancel: () -> Unit
 ) {
     val hasImportableFiles = review.importableCount > 0
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Import DEM Files") },
         text = {
@@ -10024,7 +10005,7 @@ private fun DemFileImportReviewDialog(
 
 @Composable
 private fun VenueElevationCacheListingProgressDialog() {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = {},
         title = { Text("Loading Elevation Data") },
         text = {
@@ -10048,7 +10029,7 @@ private fun UnsavedSubmenuChangesDialog(
     onDontSave: () -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Unsaved Race Changes") },
         text = { Text("Save Race changes before leaving this menu?") },
@@ -10080,7 +10061,7 @@ private fun CourseAnalysisEntryDirtyEventDialog(
     onSaveAndContinue: () -> Unit,
     onDumpAndContinue: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Save Race Before Course Analyzer") },
         text = {
@@ -10131,7 +10112,7 @@ private fun UnsavedCourseAnalysisDataDialog(
     onReturnToAnalyzer: () -> Unit,
     onSaveAndExit: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onReturnToAnalyzer,
         title = { Text("Unsaved Analyzer Data") },
         text = { Text("Course changes will be lost when you exit the analyzer.") },
@@ -10197,7 +10178,7 @@ private fun AssignedControlsWarningDialog(
             "Sprint spectator controls are optional; when assigned they require a beacon, and when no spectator is assigned the finish beacon is also used as the slow-to-fast loop transition."
     }
 
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = if (canRestore) onRestore else onKeep,
         title = { Text("Assigned Controls Warning") },
         text = {
@@ -10225,7 +10206,7 @@ private fun NationalStartListDefaultsDialog(
     onReset: () -> Unit,
     onKeepCurrent: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onKeepCurrent,
         title = { Text("Reset Start List Settings?") },
         text = {
@@ -10259,7 +10240,7 @@ private fun EventRegImportDialog(
     onImport: () -> Unit,
     onCancel: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text(title) },
         text = {
@@ -10365,8 +10346,8 @@ private fun SpreadsheetCompetitorImportReviewPanel(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Review Competitor Import", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+        Text("Review Competitor Import", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+        val reviewContent: @Composable ColumnScope.() -> Unit = {
             Text("Source: ${review.plan.eventName}", fontSize = 13.sp, color = Color.DarkGray)
             Text(
                 "${selectedMappings.size} of ${review.plan.mappings.size} competitions selected. " +
@@ -10374,26 +10355,13 @@ private fun SpreadsheetCompetitorImportReviewPanel(
                 fontSize = 13.sp,
                 color = Color.DarkGray
             )
-        }
-        if (duplicateTargets.isNotEmpty()) {
-            Text(
-                "Select only one registration competition for each Race File: ${duplicateTargets.joinToString()}.",
-                fontSize = 13.sp,
-                color = Color(0xFF9A3412)
-            )
-        }
-        val reviewListModifier = if (scrollWeight) {
-            Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = false)
-                .verticalScroll(rememberScrollState())
-        } else {
-            Modifier.fillMaxWidth()
-        }
-        Column(
-            modifier = reviewListModifier,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+            if (duplicateTargets.isNotEmpty()) {
+                Text(
+                    "Select only one registration competition for each Race File: ${duplicateTargets.joinToString()}.",
+                    fontSize = 13.sp,
+                    color = Color(0xFF9A3412)
+                )
+            }
             review.plan.mappings.forEach { mapping ->
                 SpreadsheetCompetitorImportMappingReview(
                     review = review,
@@ -10408,6 +10376,16 @@ private fun SpreadsheetCompetitorImportReviewPanel(
                     onEmptyCourseCategorySelectionChange = onEmptyCourseCategorySelectionChange
                 )
             }
+        }
+        if (scrollWeight) {
+            DesktopWorkspaceScroll(
+                Modifier.fillMaxWidth().weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                content = reviewContent
+            )
+        } else {
+            // Embedded in the workspace's existing scroll viewport.
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp), content = reviewContent)
         }
         Divider()
         Row(
@@ -10735,7 +10713,7 @@ private fun EventFileTransferDialog(
 ) {
     var isAddressMenuExpanded by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text(if (state.isSeriesTransfer) "Send Series To Android" else "Send Race To Android") },
         text = {
@@ -10808,7 +10786,7 @@ private fun EventFileTransferResultDialog(
     state: DesktopEventFileTransferResultDialogState,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(state.title) },
         text = {
@@ -10841,7 +10819,7 @@ private fun AndroidFileReceiveResultDialog(
     state: DesktopAndroidFileReceiveResultDialogState,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(state.title) },
         text = {
@@ -10878,7 +10856,7 @@ private fun AndroidFileReceiveDialog(
 ) {
     var isAddressMenuExpanded by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Receive File From Android") },
         text = {
@@ -10948,7 +10926,7 @@ private fun AboutRadioOracleDialog(
     onDismiss: () -> Unit
 ) {
     val logoBitmap = rememberRadioOracleLogoBitmap()
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("About Radio-Oracle") },
         text = {
@@ -11036,7 +11014,7 @@ private fun RadioOracleUpdateDialog(
     onOpenUpdateLink: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Radio-Oracle Updates") },
         text = {
@@ -11264,7 +11242,7 @@ private data class DesktopImportCheckpoint(
     val protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
 )
 
-private data class PendingCourseKmlKmzImportReview(
+internal data class PendingCourseKmlKmzImportReview(
     val sourceName: String,
     val path: Path,
     val baseProject: EventProjectFile,
@@ -13229,7 +13207,7 @@ private fun DesktopReadoutSaveIssueNotice.show() {
     }
     javax.swing.JOptionPane.showMessageDialog(
         null,
-        message,
+        desktopScrollableMessage(message),
         title,
         javax.swing.JOptionPane.INFORMATION_MESSAGE
     )
@@ -13527,23 +13505,15 @@ private fun NavigationRail(
             .border(1.dp, DesktopPalette.LightGrey)
             .padding(8.dp)
     ) {
-        Column(
+        DesktopWorkspaceScroll(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             workflowNavigationItems.forEach { item ->
                 NavigationMenuButton(item)
             }
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
             CourseAnalysisNavigationActions(
                 result = courseAnalysisResult,
                 isBusy = isCourseAnalysisBusy,
@@ -13553,6 +13523,13 @@ private fun NavigationRail(
             detachedToolsItem?.let { item ->
                 NavigationMenuButton(item)
             }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             DisabledReasonTooltip(
                 reason = disabledNavActionReason(DesktopNavAction.SaveEventFile),
                 placement = DisabledReasonTooltipPlacement.RightOfCursor
@@ -15596,7 +15573,7 @@ private fun CloudflareApiTokenRevealDialog(
         }
     }
 
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Show Cloudflare API Token") },
         text = {
@@ -15824,7 +15801,7 @@ private fun CoursePasswordSettingsPanel(
             message = "Updating protected course and route data. This can take a while."
         )
     } else if (isRemoveConfirmationVisible) {
-        AlertDialog(
+        DesktopAlertDialog(
             onDismissRequest = { isRemoveConfirmationVisible = false },
             title = { Text("Remove Race Password Protection?") },
             text = {
@@ -17334,7 +17311,7 @@ private fun EventSeriesProtectionPanel(
             }
         )
     } else if (isEncryptionConfirmationVisible) {
-        AlertDialog(
+        DesktopAlertDialog(
             onDismissRequest = { isEncryptionConfirmationVisible = false },
             title = { Text(if (hasSeriesEncryption) "Remove Series Encryption?" else "Encrypt Race Series?") },
             text = {
@@ -17900,7 +17877,7 @@ private fun FinishTicketPreviewDialog(
     onPrint: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Finish Ticket Preview") },
         text = {
@@ -17938,7 +17915,7 @@ private fun ReadoutDeleteButton(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
+        DesktopAlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete Readout") },
             text = { Text("Delete readout for SI ${readout.siNumberText}?") },
@@ -18014,7 +17991,6 @@ private fun ReadoutEditDialog(
     var updateCompetitorCategory by remember(draft.resultId) { mutableStateOf(draft.updateCompetitorCategory) }
     var selectedControlId by remember(draft.resultId, controls) { mutableStateOf(controls.firstOrNull()?.id) }
     var punchTimeMode by remember(draft.resultId) { mutableStateOf(DesktopReadoutPunchTimeMode.ELAPSED) }
-    val dialogScrollState = rememberScrollState()
     val competitorCategoryChanged = draft.matched && categoryId != draft.originalCategoryId
     val sortedControls = remember(controls) {
         controls.sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
@@ -18098,62 +18074,53 @@ private fun ReadoutEditDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text("Edit Result", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Box(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .fillMaxWidth()
-                        .clipToBounds()
+                DesktopWorkspaceScroll(
+                    modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(dialogScrollState),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ReadoutEditHeader(
-                            competitorName = draft.competitorName,
-                            liveIssueExplanation = liveIssueExplanation
-                        )
-                        ReadoutEditTimeFields(
-                            isPractice = draft.isPractice,
-                            startSiTime = startSiTime,
-                            finishSiTime = finishSiTime,
-                            startSeconds = startSeconds,
-                            finishSeconds = finishSeconds,
-                            onStartSiTimeChange = { startSiTime = it },
-                            onFinishSiTimeChange = { finishSiTime = it },
-                            onStartSecondsChange = { startSeconds = it },
-                            onFinishSecondsChange = { finishSeconds = it },
-                            onCommit = ::saveDraft
-                        )
-                        ReadoutControlPunchesEditor(
-                            controlPunches = controlPunches,
-                            sortedControls = sortedControls,
-                            addableControls = addableControls,
-                            selectedControlId = selectedControlId,
-                            punchTimeMode = punchTimeMode,
-                            validationMessage = validationMessage,
-                            startSeconds = startSeconds,
-                            elapsedBaseSeconds = draft.elapsedBaseSeconds,
-                            onControlPunchesChange = { controlPunches = it },
-                            onSelectedControlIdChange = { selectedControlId = it },
-                            onPunchTimeModeChange = { punchTimeMode = it },
-                            onCommit = ::saveDraft
-                        )
-                        ReadoutEditStatusAndCategoryFields(
-                            resultStatus = resultStatus,
-                            categoryId = categoryId,
-                            categories = categories,
-                            competitorCategoryChanged = competitorCategoryChanged,
-                            updateCompetitorCategory = updateCompetitorCategory,
-                            onResultStatusChange = {
-                                resultStatus = it
-                                resultStatusEdited = true
-                            },
-                            onCategoryIdChange = { categoryId = it },
-                            onUpdateCompetitorCategoryChange = { updateCompetitorCategory = it }
-                        )
-                    }
+                    ReadoutEditHeader(
+                        competitorName = draft.competitorName,
+                        liveIssueExplanation = liveIssueExplanation
+                    )
+                    ReadoutEditTimeFields(
+                        isPractice = draft.isPractice,
+                        startSiTime = startSiTime,
+                        finishSiTime = finishSiTime,
+                        startSeconds = startSeconds,
+                        finishSeconds = finishSeconds,
+                        onStartSiTimeChange = { startSiTime = it },
+                        onFinishSiTimeChange = { finishSiTime = it },
+                        onStartSecondsChange = { startSeconds = it },
+                        onFinishSecondsChange = { finishSeconds = it },
+                        onCommit = ::saveDraft
+                    )
+                    ReadoutControlPunchesEditor(
+                        controlPunches = controlPunches,
+                        sortedControls = sortedControls,
+                        addableControls = addableControls,
+                        selectedControlId = selectedControlId,
+                        punchTimeMode = punchTimeMode,
+                        validationMessage = validationMessage,
+                        startSeconds = startSeconds,
+                        elapsedBaseSeconds = draft.elapsedBaseSeconds,
+                        onControlPunchesChange = { controlPunches = it },
+                        onSelectedControlIdChange = { selectedControlId = it },
+                        onPunchTimeModeChange = { punchTimeMode = it },
+                        onCommit = ::saveDraft
+                    )
+                    ReadoutEditStatusAndCategoryFields(
+                        resultStatus = resultStatus,
+                        categoryId = categoryId,
+                        categories = categories,
+                        competitorCategoryChanged = competitorCategoryChanged,
+                        updateCompetitorCategory = updateCompetitorCategory,
+                        onResultStatusChange = {
+                            resultStatus = it
+                            resultStatusEdited = true
+                        },
+                        onCategoryIdChange = { categoryId = it },
+                        onUpdateCompetitorCategoryChange = { updateCompetitorCategory = it }
+                    )
                 }
                 ReadoutEditDialogActions(
                     onCancel = onCancel,
@@ -19436,7 +19403,7 @@ private fun CompetitorDeleteButton(
         ButtonLabel("Delete")
     }
     if (showDeleteDialog) {
-        AlertDialog(
+        DesktopAlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete Competitor") },
             text = { Text("Delete ${competitor.fullName}? The readout can be kept as unmatched or deleted too.") },
@@ -20454,7 +20421,7 @@ private fun RouteGeneratorTypeChoiceDialog(
         .takeIf { it.isNotEmpty() }
         ?.joinToString(" or ") { DesktopCourseFormatDetector.run { it.displayName() } }
         ?: "unknown"
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Choose Route Type") },
         text = {
@@ -21685,7 +21652,7 @@ private fun CourseAnalysisMissingDataDialog(
     val summary = prompt.summary
     val canDownloadMissingElevationData = shouldOfferCalculatedRouteElevationDownload(summary)
     var downloadBeforeAnalyzing by remember(prompt) { mutableStateOf(canDownloadMissingElevationData) }
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Course Analysis Data Is Incomplete") },
         text = {
@@ -22895,7 +22862,7 @@ private fun ControlDeleteButton(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
+        DesktopAlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete Control") },
             text = { Text("Delete control $displayLabel (${control.siCodeText})?") },
@@ -23237,12 +23204,11 @@ private fun CategoryCompetitorSyncDialog(
     }
     val canApply = selectedMissingCategoryIds.isNotEmpty() || selectedEmptyCategoryIds.isNotEmpty()
 
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Sync Categories to Competitors") },
         text = {
             Column(
-                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (plan.missingCategories.isNotEmpty()) {
@@ -24012,7 +23978,7 @@ private fun CategoryDeleteButton(
     }
     if (showDeleteDialog) {
         val hasAssignedCompetitors = category.assignedCompetitorCount > 0
-        AlertDialog(
+        DesktopAlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete Category") },
             text = {
@@ -24521,7 +24487,7 @@ private fun DateTimePickerDialog(
         selectedDateTime?.let(onValueSelected)
     }
 
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -25512,7 +25478,7 @@ private fun SiStationModeWarningDialog(
     message: String,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(message) },

@@ -324,13 +324,13 @@ internal fun DesktopClassicRouteAnalysisHost(
     DisposableEffect(Unit) { onDispose { state.cancel() } }
     CompositionLocalProvider(LocalClassicRouteAnalysis provides state, content = content)
     if (state.exportChoice) {
-        AlertDialog(onDismissRequest = state::cancelExport, title = { Text("Route estimates are still processing") },
+        DesktopAlertDialog(onDismissRequest = state::cancelExport, title = { Text("Route estimates are still processing") },
             text = { Text("Export completed values now (missing estimates remain blank), or wait in the background for the results already present at this request. New downloads will not delay that export; corrections require a refreshed request.") },
             confirmButton = { TextButton(onClick = state::waitForExport) { Text("Wait for captured results") } },
             dismissButton = { Row { TextButton(onClick = state::exportAvailable) { Text("Export available now") }; TextButton(onClick = state::cancelExport) { Text("Cancel") } } })
     }
     state.notification?.let { message ->
-        AlertDialog(onDismissRequest = { state.notification = null }, title = { Text("Classic route analysis") },
+        DesktopAlertDialog(onDismissRequest = { state.notification = null }, title = { Text("Classic route analysis") },
             text = { Text(message) }, confirmButton = { TextButton(onClick = { state.notification = null }) { Text("OK") } })
     }
     if (state.showDialog && project != null) {
@@ -358,7 +358,7 @@ private fun ClassicRouteAnalysisStartDialog(
     }
     val protectedRaces = protection?.getOrNull()
     val needsPassword = !protectedRaces.isNullOrEmpty()
-    AlertDialog(
+    DesktopAlertDialog(
         onDismissRequest = { state.showDialog = false },
         title = { Text("Estimate effective route lengths") },
         text = {
