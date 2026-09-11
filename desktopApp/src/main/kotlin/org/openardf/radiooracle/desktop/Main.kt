@@ -11645,12 +11645,19 @@ internal fun effectiveCourseAnalysisCourseInfoByCategoryId(
     retainedCourseInfoByCategoryId: Map<String, RetainedCourseAnalysisCourseInfo>
 ): Map<String, ProtectedCourseInfo> =
     protectedCourseStateCategories(projectFile.raceData).mapNotNull { categoryData ->
-        val categoryId = categoryData.category.id
+        val category = categoryData.category
+        val categoryId = category.id
+        val encryptedCourseInfo = category.encryptedCourseInfo?.takeIf { it.isNotBlank() }
+        if (encryptedCourseInfo == null) {
+            // The applied plaintext payload is authoritative, including removal. Startup does not
+            // populate the unlock cache, and a previous cached course must not override this file.
+            return@mapNotNull category.storedCourseInfo(null)
+                ?.takeIf { it.hasCourseAnalysisGeometry() }
+                ?.let { categoryId to it }
+        }
         currentCourseInfoByCategoryId[categoryId]
             ?.takeIf { it.hasCourseAnalysisGeometry() }
             ?.let { return@mapNotNull categoryId to it }
-        val encryptedCourseInfo = categoryData.category.encryptedCourseInfo?.takeIf { it.isNotBlank() }
-            ?: return@mapNotNull null
         val retainedCourseInfo = retainedCourseInfoByCategoryId[categoryId]
             ?.takeIf { it.encryptedCourseInfo == encryptedCourseInfo }
             ?.courseInfo

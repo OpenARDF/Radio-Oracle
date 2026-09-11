@@ -131,6 +131,56 @@ class CourseAnalysisCourseInfoRetentionTest {
         assertFalse(CategoryId in pruned)
     }
 
+    @Test
+    fun reopeningAppliedCoursesOffersBothForAnalysisWithoutAnUnlockCache() {
+        val path = java.nio.file.Files.createTempFile("applied-analyzer-startup", ".kml")
+        try {
+            java.nio.file.Files.writeString(path, DesktopAuthoritativeCourseImportTest.kml())
+            val (imported, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
+                path, DesktopAuthoritativeCourseImportTest.project(), null, elevationProvider = { 100.0 })
+            val applied = DesktopAuthoritativeCourseImport.prepare(imported, summary.matchedCategoryIds.toSet(), null)
+            val reopened = org.openardf.radiooracle.shared.event.EventProjectFileJson.decode(
+                org.openardf.radiooracle.shared.event.EventProjectFileJson.encode(applied))
+            val effective = effectiveCourseAnalysisCourseInfoByCategoryId(reopened, emptyMap(), emptyMap())
+            val categories = courseAnalysisRouteCategories(reopened, effective)
+            assertEquals(setOf("Full", "Short"), categories.map { it.category.name }.toSet())
+            categories.forEach { data ->
+                val info = effective.getValue(data.category.id)
+                assertEquals(null, DesktopCourseAnalyzer.analysisUnavailableReason(reopened, data.category.id, info, null))
+                val analysis = DesktopCourseAnalyzer.analyze(reopened, data.category.id, info, null,
+                    controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS, allowFoxRenumbering = false)
+                assertTrue(analysis.providedRouteSection != null)
+                assertTrue(analysis.routeMaps.isNotEmpty())
+            }
+        } finally { java.nio.file.Files.deleteIfExists(path) }
+    }
+
+    @Test
+    fun plaintextCourseInRaceTakesPrecedenceOverStaleCachedGeometry() {
+        val stored = protectedCourseInfo("applied.kml")
+        val project = projectFile(null).withStoredCourseInfo(CategoryId, stored, null)
+        val stale = protectedCourseInfo("previous.kml")
+        val effective = effectiveCourseAnalysisCourseInfoByCategoryId(project, mapOf(CategoryId to stale), emptyMap())
+        assertEquals(stored, effective.getValue(CategoryId))
+    }
+
+    @Test
+    fun removingPlaintextCourseDoesNotResurrectItFromTheCache() {
+        val effective = effectiveCourseAnalysisCourseInfoByCategoryId(projectFile(null),
+            mapOf(CategoryId to protectedCourseInfo("removed.kml")), emptyMap())
+        assertTrue(effective.isEmpty())
+    }
+
+    @Test
+    fun encryptedCourseNeverFallsBackToAPlaintextFieldWithoutUnlocking() {
+        val info = protectedCourseInfo("protected.kml")
+        val original = projectFile(DesktopProtectedCourseOrder.encryptCourseInfo(info, "password"))
+        val project = original.copy(raceData = original.raceData.copy(categories = original.raceData.categories.map {
+            it.copy(category = it.category.copy(courseInfo = info))
+        }))
+        assertTrue(effectiveCourseAnalysisCourseInfoByCategoryId(project, emptyMap(), emptyMap()).isEmpty())
+    }
+
     private fun protectedCourseInfo(sourceName: String): ProtectedCourseInfo =
         ProtectedCourseInfo(
             idealOrder = "31",
