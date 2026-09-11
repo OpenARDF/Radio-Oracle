@@ -17,6 +17,38 @@ import java.nio.file.Files
 class DesktopCourseDesignUiTest {
     @get:Rule val rule = createComposeRule()
 
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    @Test fun applicationButtonsExplainTheirActionsAndDisableTheNumberingOnlyNoOp() {
+        val original = analyze(EventCourseDrafts.candidate(draft()), DesktopCourseRouteSource.Applied)
+        assertNotNull(original.calculatedRouteApplication)
+        val primary = CourseAnalysisApplyAction.CalculatedRoute
+        val without = CourseAnalysisApplyAction.CalculatedWithoutRenumbering
+        var summary by mutableStateOf(original.copy(calculatedGeometryMatchesSource = false))
+        var primaryClicks = 0
+        var withoutClicks = 0
+        rule.setContent { MaterialTheme {
+            androidx.compose.foundation.layout.Column {
+                CourseAnalysisNavigationActions(summary, false, { primaryClicks++ }, { withoutClicks++ })
+            }
+        } }
+        rule.onNodeWithText(primary.label).assertIsEnabled().performClick()
+        rule.onNodeWithText(without.label).assertIsEnabled().performClick()
+        rule.runOnIdle { assertEquals(1, primaryClicks); assertEquals(1, withoutClicks) }
+        for (action in listOf(primary, without)) {
+            rule.onNodeWithText(action.label).performMouseInput { enter(center) }
+            rule.mainClock.advanceTimeBy(1000)
+            rule.onNodeWithText(action.tooltip).assertExists()
+            rule.onNodeWithText(action.label).performMouseInput { exit() }
+        }
+        rule.runOnIdle { summary = summary.copy(calculatedGeometryMatchesSource = true) }
+        rule.onNodeWithText(primary.label).assertIsEnabled()
+        rule.onNodeWithText(without.label).assertIsNotEnabled()
+        rule.onNodeWithText(without.label).performMouseInput { enter(center) }
+        rule.mainClock.advanceTimeBy(1000)
+        rule.onNodeWithText(without.disabledReason(summary)!!).assertExists()
+        rule.onNodeWithText("Save Draft Numbering").assertDoesNotExist()
+    }
+
     @Test fun analyzerDefaultsToAppliedCourseEvenWithPendingDraft() {
         val applied = DesktopAuthoritativeCourseImportTest.project()
         val pending = EventCourseDrafts.edit(applied) { candidate ->

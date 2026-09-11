@@ -2543,20 +2543,8 @@ object DesktopCourseKmlImporter {
         return bestAlongDistance.takeIf { bestDistance <= toleranceMeters }
     }
 
-    private fun sampledRoute(points: List<CourseGeoPoint>, intervalMeters: Double): List<CourseGeoPoint> {
-        if (points.size < 2) {
-            return points
-        }
-        val sampled = mutableListOf(points.first())
-        points.zipWithNext().forEach { (start, end) ->
-            val distance = start.distanceMetersTo(end)
-            val steps = max(1, (distance / intervalMeters).roundToInt())
-            for (step in 1..steps) {
-                sampled += start.interpolate(end, step.toDouble() / steps)
-            }
-        }
-        return sampled
-    }
+    private fun sampledRoute(points: List<CourseGeoPoint>, intervalMeters: Double): List<CourseGeoPoint> =
+        DesktopCourseRouteSampler.sampledStraightRoutePoints(points, { null }, intervalMeters)
 
     private fun sampledRouteAtFixedSpacing(points: List<CourseGeoPoint>, intervalMeters: Double): List<CourseGeoPoint> {
         if (points.size < 2) {

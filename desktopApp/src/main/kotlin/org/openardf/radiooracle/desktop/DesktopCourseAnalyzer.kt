@@ -100,7 +100,8 @@ data class DesktopCourseAnalysisSummary(
     val metrics: List<DesktopCourseGoodnessMetric>,
     /** Identifies the course design used for this report, including any resolved elevations. */
     val sourceSnapshotHash: String? = null,
-    val routeSource: DesktopCourseRouteSource = DesktopCourseRouteSource.Applied
+    val routeSource: DesktopCourseRouteSource = DesktopCourseRouteSource.Applied,
+    val calculatedGeometryMatchesSource: Boolean = false
 )
 
 data class DesktopCourseAnalysisSummaryGroup(
@@ -254,7 +255,8 @@ data class DesktopCourseCalculatedRouteApplication(
     val foxAssignments: List<DesktopCourseCalculatedFoxAssignment>,
     val orderedPlacementIds: List<String> = emptyList(),
     val courseObjects: List<ProtectedCourseObjectPoint> = emptyList(),
-    val sourceSnapshotHash: String? = null
+    val sourceSnapshotHash: String? = null,
+    val idealOrderWithoutRenumbering: String = idealOrderText
 )
 
 data class DesktopCourseCalculatedFoxAssignment(
@@ -581,16 +583,20 @@ object DesktopCourseAnalyzer {
         }
         val courseObjectPoints = courseInfo?.effectiveCourseObjectPoints().orEmpty()
         val legSpeedFactors = courseInfo?.legSpeedFactors() ?: CourseLegSpeedFactors.Empty
-        val route = normalizedImportedRoute(
+        val storedRoute = normalizedImportedRoute(
             courseInfo?.route.orEmpty().map {
                 CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
             },
             courseObjectPoints
         )
+        val sampling = DesktopCourseAnalysisSampling(storedRoute, elevationLookup)
+        val analysisElevationLookup: (CourseGeoPoint) -> Double? = sampling::elevation
+        val route = sampling.appliedRoute(courseObjectPoints.map { it.toGeoPoint() })
         if (route.size < 2) {
             missing += "Route geometry with start and finish points is missing."
         }
-        val hasMissingRouteElevations = route.any { it.elevationMeters == null }
+        val hasMissingRouteElevations = route.any { it.elevationMeters == null } ||
+            storedRoute.any { it.elevationMeters == null && elevationLookup(it) == null }
         if (hasMissingRouteElevations) {
             missing += "Route elevation samples are missing or incomplete."
         }
@@ -683,12 +689,12 @@ object DesktopCourseAnalyzer {
             foxes = foxes,
             spectator = spectator,
             beacon = beacon,
-            elevationLookup = elevationLookup,
+            elevationLookup = analysisElevationLookup,
             waypoints = mandatoryWaypoints,
             missing = missing
         )?.let { candidate ->
             preservePracticeRouteDirection(
-                candidate, start, finish, beacon, elevationLookup, mandatoryWaypoints,
+                candidate, start, finish, beacon, analysisElevationLookup, mandatoryWaypoints,
                 DesktopPracticeRouteDirection(projectFile.raceData.race.raceLevel, raceType, category.name,
                     providedControls.map { it.id })
             )
@@ -729,18 +735,18 @@ object DesktopCourseAnalyzer {
         val idealOrderMatches = calculatedRoute?.let {
             providedFoxIds.isNotEmpty() && providedFoxIds == calculatedFoxIds
         }
-        val calculatedRouteMatchesStored = route.size >= 2 && idealOrderMatches == true && !prepareApplication && practiceDirectionNote == null
+        val calculatedGeometryMatchesStored = idealOrderMatches == true && start != null && finish != null &&
+            DesktopCourseAnalysisSampling.followsVertices(route, listOf(start) + calculatedRouteStops.map { it.point } + finish)
         val calculatedRouteElevationSamplePoints = if (
             start != null &&
             finish != null &&
-            calculatedRoute != null &&
-            !calculatedRouteMatchesStored
+            calculatedRoute != null
         ) {
             sampledCalculatedRouteStopPoints(
                 start = start,
                 stops = calculatedRouteStops,
                 finish = finish,
-                elevationLookup = elevationLookup
+                elevationLookup = analysisElevationLookup
             )
         } else {
             emptyList()
@@ -751,7 +757,7 @@ object DesktopCourseAnalyzer {
         val hasMissingCalculatedRouteElevationData = calculatedRouteElevationSamplePoints.size >= 2 &&
             calculatedRouteMissingElevationPointCount > 0
         if (hasMissingCalculatedRouteElevationData) {
-            missing += "Calculated route elevation samples are missing from the local elevation cache; calculated route climb, effective length, timing, and comparison may use endpoint interpolation or horizontal route distance instead of downloaded elevations along the route."
+            missing += "Calculated route elevation samples are missing from the local elevation cache; calculated route climb, effective length, timing, and comparison may use stored route elevations, endpoint interpolation, or horizontal route distance instead of downloaded elevations along the route."
         }
 
         val providedRoutePoints = buildList {
@@ -782,7 +788,7 @@ object DesktopCourseAnalyzer {
                     missing += "Transmit slot could not be determined for control ${control.publicDisplayLabel()}."
                 }
         }
-        val waitRenumbering = (if (includeWaitAnalysis && allowFoxRenumbering && !courseInfo.hasAcceptedFoxNumbering()) {
+        val waitRenumbering = (if (includeWaitAnalysis && allowFoxRenumbering) {
             waitRenumbering(providedControls) { slotOverrides ->
                 routeGeometryTiming(
                     route = route,
@@ -810,17 +816,16 @@ object DesktopCourseAnalyzer {
         } else {
             null
         }
-        val calculatedWaitRenumbering = if (includeWaitAnalysis && allowFoxRenumbering && !courseInfo.hasAcceptedFoxNumbering()) {
+        val calculatedWaitRenumbering = if (includeWaitAnalysis && allowFoxRenumbering) {
             calculatedRoute?.let { routeCandidate ->
                 waitRenumbering(routeCandidate.controls.map { it.control }) { slotOverrides ->
-                    straightLineTiming(
-                        start = start,
-                        stops = calculatedRouteStops(routeCandidate.controls, mandatoryWaypoints, start = start, finish = finish),
-                        finish = finish,
+                    routeGeometryTiming(
+                        route = calculatedRouteElevationSamplePoints,
+                        controls = routeCandidate.controls.map { it.control },
+                        controlsWithPoints = routeCandidate.controls,
                         raceType = raceType,
                         speedModel = speedModel,
                         slotOverrides = slotOverrides,
-                        elevationLookup = elevationLookup,
                         speedFactors = legSpeedFactors
                     )
                 }
@@ -841,14 +846,14 @@ object DesktopCourseAnalyzer {
             ?.let { routeCandidate -> calculatedRouteLabels(routeCandidate.controls, calculatedLabelOverrides, includeFinish = true) }
             .orEmpty()
         val calculatedTiming = calculatedRoute?.let { routeCandidate ->
-            straightLineTiming(
-                start = start,
-                stops = labeledCalculatedRouteStops,
-                finish = finish,
+            routeGeometryTiming(
+                route = calculatedRouteElevationSamplePoints,
+                controls = routeCandidate.controls.map { it.control },
+                controlsWithPoints = routeCandidate.controls,
                 raceType = raceType,
                 speedModel = speedModel,
                 slotOverrides = calculatedSlotOverrides,
-                elevationLookup = elevationLookup,
+                labelOverrides = calculatedLabelOverrides,
                 speedFactors = legSpeedFactors
             )
         } ?: RouteTimingAnalysis.Empty
@@ -861,9 +866,10 @@ object DesktopCourseAnalyzer {
                 calculatedRoute = routeCandidate,
                 stops = labeledCalculatedRouteStops,
                 timing = calculatedTiming,
-                elevationLookup = elevationLookup
+                elevationLookup = analysisElevationLookup
             )
         }
+        val calculatedRouteMatchesStored = calculatedGeometryMatchesStored && calculatedWaitRenumbering?.improvesWait != true
         val calculatedRouteAnalysisForChecks = if (calculatedRouteMatchesStored) {
             providedRouteAnalysis
         } else {
@@ -907,7 +913,7 @@ object DesktopCourseAnalyzer {
             if (calculatedRouteMatchesStored) {
                 DesktopCourseAnalysisSection(
                     title = "Section 2: Calculated ideal route",
-                    explanation = calculatedRouteMatchesStoredExplanation(routeSource, includeWaitAnalysis),
+                    explanation = calculatedRouteMatchesStoredExplanation(routeSource, includeWaitAnalysis, practiceDirectionNote),
                     routeOrder = listOf("Calculated ideal route matches ${routeSource.lowerRouteLabel}"),
                     routeOrderLabel = "Result",
                     summaryOnly = true,
@@ -1029,7 +1035,7 @@ object DesktopCourseAnalyzer {
                 start = start,
                 stops = labeledCalculatedRouteStops,
                 finish = finish,
-                elevationLookup = elevationLookup
+                elevationLookup = analysisElevationLookup
             ),
             importedComparisonLengthMeters = providedRouteAnalysis?.comparisonLengthMeters?.roundToInt(),
             calculatedComparisonLengthMeters = calculatedRouteAnalysisForChecks?.comparisonLengthMeters?.roundToInt(),
@@ -1113,7 +1119,7 @@ object DesktopCourseAnalyzer {
                                 start = start,
                                 stops = labeledCalculatedRouteStops,
                                 finish = finish,
-                                elevationLookup = elevationLookup
+                                elevationLookup = analysisElevationLookup
                             ),
                             routeStops = calculatedKmlRouteStops(
                                 start = start,
@@ -1134,7 +1140,7 @@ object DesktopCourseAnalyzer {
                 }
             }
         }
-        val calculatedRouteApplication = calculatedRoute?.takeUnless { calculatedRouteMatchesStored }?.let { routeCandidate ->
+        val calculatedRouteApplication = calculatedRoute?.takeIf { prepareApplication || !calculatedRouteMatchesStored }?.let { routeCandidate ->
             calculatedRouteApplication(
                 categoryId = categoryId,
                 controls = routeCandidate.controls,
@@ -1146,7 +1152,7 @@ object DesktopCourseAnalyzer {
                         start = start,
                         stops = labeledCalculatedRouteStops,
                         finish = finish,
-                        elevationLookup = elevationLookup
+                        elevationLookup = analysisElevationLookup
                     )
                 } else {
                     emptyList()
@@ -1172,13 +1178,13 @@ object DesktopCourseAnalyzer {
             idealOrderMatches = idealOrderMatches,
             waitRenumbering = waitRenumbering
         )
-        val courseRecommendation = if (practiceDirectionNote != null) {
+        val courseRecommendation = if (practiceDirectionNote != null && waitRenumbering?.improvesWait != true) {
             DesktopCourseRecommendation("Keep ${routeSource.lowerRouteLabel} direction", practiceDirectionNote +
                 " Known mandatory points remain on matching legs in calculations, diagrams, and exports. " +
                 MANDATORY_LEG_LIMITATION_NOTE)
         } else courseRecommendation(
             routeSource = routeSource,
-            calculatedRouteApplication = calculatedRouteApplication,
+            calculatedRouteApplication = calculatedRouteApplication.takeUnless { calculatedGeometryMatchesStored },
             providedSection = providedSection,
             calculatedSection = calculatedSection,
             lengthRequirement = routeLengthRequirement(category.name, raceType),
@@ -1198,6 +1204,7 @@ object DesktopCourseAnalyzer {
         )
 
         return DesktopCourseAnalysisSummary(
+            calculatedGeometryMatchesSource = calculatedGeometryMatchesStored,
             routeSource = routeSource,
             sourceSnapshotHash = org.openardf.radiooracle.shared.event.EventCourseDrafts.snapshotHash(projectFile),
             eventName = projectFile.raceData.race.name,
@@ -1644,13 +1651,15 @@ object DesktopCourseAnalyzer {
         (if (includeWaitAnalysis) MAP_KNOWLEDGE_LIMITATION_NOTE else MAP_KNOWLEDGE_NO_WAIT_LIMITATION_NOTE) +
             " $MANDATORY_LEG_LIMITATION_NOTE"
 
-    private fun calculatedRouteMatchesStoredExplanation(routeSource: DesktopCourseRouteSource, includeWaitAnalysis: Boolean): String {
+    private fun calculatedRouteMatchesStoredExplanation(routeSource: DesktopCourseRouteSource, includeWaitAnalysis: Boolean, practiceDirectionNote: String?): String {
         val omittedDetails = if (includeWaitAnalysis) {
             "leg, wait, elevation-profile, or map analysis"
         } else {
             "leg, elevation-profile, or map analysis"
         }
-        return "The analyzer determined the ideal route under its known leg constraints. The calculated ideal route matches the ${routeSource.lowerRouteLabel}, so no separate calculated-route $omittedDetails is repeated in this section. Section 3 still summarizes the route comparison. $MANDATORY_LEG_LIMITATION_NOTE"
+        return "The calculated route matches the ${routeSource.lowerRouteLabel} geometry, control order, and numbering. No separate calculated-route $omittedDetails is repeated. " +
+            (practiceDirectionNote?.let { "$it " } ?: "") +
+            "Section 3 still summarizes the route comparison. $MANDATORY_LEG_LIMITATION_NOTE"
     }
 
     private fun calculatedSectionExplanation(
@@ -1665,7 +1674,7 @@ object DesktopCourseAnalyzer {
     ): String {
         val measurement = analysis?.measurementLabel?.lowercase() ?: "the available distance metric"
         val elevationText = if (analysis?.effectiveLengthMeters != null) {
-            "Complete Elevation Cache samples were available along the calculated route legs, so effective length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
+            "Elevation samples were available along the calculated route legs, so effective length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         } else {
             "Elevation data was incomplete along the calculated route legs, so horizontal length was used. $ELEVATION_CACHE_RESOLUTION_NOTE"
         }
@@ -1864,7 +1873,7 @@ object DesktopCourseAnalyzer {
                 val routeOrderText = calculatedIdealOrder.joinToString(" -> ").ifBlank { "Unknown" }
                 "The ${routeSource.lowerRouteLabel} is ${summaryLengthText(shorterByMeters)}$percentText longer than the ideal route. The calculated ideal route effective length (${summaryLengthText(calculatedLength)}) should therefore be used as the course's effective length for $categoryName, and the ideal route order is $routeOrderText with calculated fox numbering as shown in the 2D route depiction graphic below."
             } else {
-                "The calculated solution differs from the ${routeSource.lowerRouteLabel} under the current model, so Apply changes to all race courses can make the calculated candidate active for the race."
+                "The calculated solution differs from the ${routeSource.lowerRouteLabel} under the current model, so Apply Calculated Course can make the calculated candidate active for the race."
             }
             val caveats = recommendationCaveats(
                 calculatedRouteApplication = calculatedRouteApplication,
@@ -1875,8 +1884,8 @@ object DesktopCourseAnalyzer {
                 waitRenumbering = waitRenumbering
             )
             return DesktopCourseRecommendation(
-                actionLabel = "Apply changes to all race courses",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply changes to all race courses. $reason$caveats"
+                actionLabel = "Apply Calculated Course",
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Calculated Course. $reason$caveats"
             )
         }
         val renumbering = waitRenumbering?.takeIf { it.improvesWait }
@@ -1892,8 +1901,8 @@ object DesktopCourseAnalyzer {
                 waitRenumbering = waitRenumbering
             )
             return DesktopCourseRecommendation(
-                actionLabel = "Save Draft Numbering",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Save Draft Numbering. The calculated route matches the ${routeSource.lowerRouteLabel}, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}. This saves a draft proposal only; analyze it, then Apply changes to all race courses when ready.$caveats"
+                actionLabel = "Apply Calculated Course",
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Calculated Course. The calculated route matches the ${routeSource.lowerRouteLabel}, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}. Applying the calculated course accepts its proposed fox numbering and updates affected courses.$caveats"
             )
         }
         val caveats = recommendationCaveats(
@@ -2648,7 +2657,8 @@ object DesktopCourseAnalyzer {
         raceType: RaceType,
         speedModel: DesktopCourseSpeedModel,
         slotOverrides: Map<String, RenumberingSlot> = emptyMap(),
-        speedFactors: CourseLegSpeedFactors = CourseLegSpeedFactors.Empty
+        speedFactors: CourseLegSpeedFactors = CourseLegSpeedFactors.Empty,
+        labelOverrides: Map<String, String> = emptyMap()
     ): RouteTimingAnalysis {
         if (route.size < 2) {
             return RouteTimingAnalysis.Empty
@@ -2658,7 +2668,7 @@ object DesktopCourseAnalyzer {
             controls.mapNotNull { control ->
                 val point = controlsWithPoints.firstOrNull { it.control.id == control.id }?.point ?: return@mapNotNull null
                 val nearestIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
-                RouteStop(control.analysisRouteLabel(), point, nearestIndex, control, speedFactors.forControl(control))
+                RouteStop(labelOverrides[control.id] ?: control.analysisRouteLabel(), point, nearestIndex, control, speedFactors.forControl(control))
             }
                 .forEach(::add)
             add(RouteStop("F", route.last(), route.lastIndex, null, null))
@@ -2685,7 +2695,7 @@ object DesktopCourseAnalyzer {
                 null
             }
             val service = to.control?.let { control ->
-                controlServiceTiming(control, arrivalSeconds, raceType, slotOverrides[control.id])
+                controlServiceTiming(control, arrivalSeconds, raceType, slotOverrides[control.id], labelOverrides[control.id])
             } ?: ControlServiceTiming.None
             // Service time is part of the course clock. If a Classic fox is off the air, waiting
             // and any post-wait find/punch allowance delay all later legs and may change later waits.
@@ -2714,96 +2724,6 @@ object DesktopCourseAnalyzer {
                 findPunchSeconds = service.findPunchSeconds,
                 speedFactorOverride = from.speedFactorOverride
             )
-        }
-        return RouteTimingAnalysis(
-            legRows = legRows,
-            waitRows = waitRows,
-            arrivalSecondsByControlId = arrivalSecondsByControlId,
-            totalSeconds = cumulativeSeconds
-        )
-    }
-
-    private fun straightLineTiming(
-        start: CourseGeoPoint?,
-        stops: List<CalculatedRouteStop>,
-        finish: CourseGeoPoint?,
-        raceType: RaceType,
-        speedModel: DesktopCourseSpeedModel,
-        slotOverrides: Map<String, RenumberingSlot> = emptyMap(),
-        elevationLookup: (CourseGeoPoint) -> Double? = { null },
-        speedFactors: CourseLegSpeedFactors = CourseLegSpeedFactors.Empty
-    ): RouteTimingAnalysis {
-        if (start == null) {
-            return RouteTimingAnalysis.Empty
-        }
-        val timingStops = buildList {
-            add(StraightLineStop("S", start, null, speedFactors.startSpeedFactor))
-            stops.map { stop ->
-                StraightLineStop(stop.label, stop.point, stop.control, speedFactors.forControl(stop.control))
-            }.forEach(::add)
-            finish?.let { add(StraightLineStop("F", it, null, null)) }
-        }
-        if (timingStops.size < 2) {
-            return RouteTimingAnalysis.Empty
-        }
-        val legRows = mutableListOf<DesktopCourseLegRow>()
-        val waitRows = mutableListOf<DesktopCourseWaitRow>()
-        val arrivalSecondsByControlId = mutableMapOf<String, Int>()
-        var cumulativeSeconds: Double? = 0.0
-        var legFrom = timingStops.first()
-        var legLengthMeters = 0.0
-        var legMovementSeconds = 0.0
-        timingStops.zipWithNext().forEachIndexed { index, (from, to) ->
-            val legPoints = DesktopCourseRouteSampler.sampledStraightLegPoints(from.point, to.point, elevationLookup)
-            legLengthMeters += legPoints.straightLineMeters()
-            val movementSeconds = estimatedIdealSecondsDouble(legPoints, speedModel, from.speedFactorOverride) ?: 0.0
-            legMovementSeconds += movementSeconds
-            val startSeconds = cumulativeSeconds
-            val arrivalSeconds = if (startSeconds != null) {
-                startSeconds + movementSeconds
-            } else {
-                null
-            }
-            val service = to.control?.let { control ->
-                controlServiceTiming(
-                    control = control,
-                    arrivalSeconds = arrivalSeconds,
-                    raceType = raceType,
-                    slotOverride = slotOverrides[control.id],
-                    labelOverride = to.label
-                )
-            } ?: ControlServiceTiming.None
-            if (arrivalSeconds != null && to.control != null) {
-                arrivalSecondsByControlId[to.control.id] = arrivalSeconds.roundToInt()
-            }
-            service.waitRow?.let(waitRows::add)
-            cumulativeSeconds = if (arrivalSeconds != null && service.totalSeconds != null) {
-                arrivalSeconds + service.totalSeconds
-            } else {
-                null
-            }
-            // Mandatory waypoints affect geometry and timing, but are not split destinations.
-            // Keep their unrounded distance and movement time in the enclosing course-object leg.
-            if (to.control == null && index < timingStops.lastIndex - 1) return@forEachIndexed
-            val splitSeconds = if (service.totalSeconds != null) {
-                legMovementSeconds + service.totalSeconds
-            } else {
-                null
-            }
-            legRows += DesktopCourseLegRow(
-                fromLabel = legFrom.label,
-                toLabel = to.label,
-                lengthMeters = legLengthMeters.roundToInt(),
-                splitSeconds = splitSeconds?.roundToInt(),
-                arrivalSeconds = arrivalSeconds?.roundToInt(),
-                departureSeconds = cumulativeSeconds?.roundToInt(),
-                waitSeconds = service.waitSeconds,
-                findPunchSeconds = service.findPunchSeconds,
-                speedFactorOverride = legFrom.speedFactorOverride
-            )
-            legFrom = to
-            legLengthMeters = 0.0
-            legMovementSeconds = 0.0
         }
         return RouteTimingAnalysis(
             legRows = legRows,
@@ -3245,10 +3165,11 @@ object DesktopCourseAnalyzer {
         configuredControls: List<EventControl>,
         courseObjectPoints: List<ProtectedCourseObjectPoint>
     ): List<DesktopCourseKmlExportPoint> {
-        val assignmentsByControlLabel = renumbering
+        val assignmentsByControlId = renumbering
+            ?.takeIf { it.improvesWait }
             ?.assignments
             .orEmpty()
-            .associateBy { it.controlLabel }
+            .associateBy { it.controlId }
         val descriptionsByControlNumber = courseObjectPoints
             .map { it.label to it.description }
             .unambiguousCourseDescriptionsByIdentity()
@@ -3269,7 +3190,7 @@ object DesktopCourseAnalyzer {
                     val control = stop.control
                     val originalLabel = control?.analysisRouteLabel() ?: stop.label
                     val suggestedLabel = if (control?.type == ControlPointType.CONTROL) {
-                        assignmentsByControlLabel[control.publicDisplayLabel()]?.suggestedSlotLabel
+                        assignmentsByControlId[control.id]?.suggestedSlotLabel
                             ?.takeIf { it.isNotBlank() }
                     } else {
                         null
@@ -3307,15 +3228,16 @@ object DesktopCourseAnalyzer {
         controls: List<ControlAnalysisPoint>,
         renumbering: DesktopCourseWaitRenumbering?
     ): Map<String, String> {
-        val assignmentsByControlLabel = renumbering
+        val assignmentsByControlId = renumbering
+            ?.takeIf { it.improvesWait }
             ?.assignments
             .orEmpty()
-            .associateBy { it.controlLabel }
+            .associateBy { it.controlId }
         return controls.mapNotNull { controlPoint ->
             if (controlPoint.control.type != ControlPointType.CONTROL) {
                 return@mapNotNull null
             }
-            val suggestedLabel = assignmentsByControlLabel[controlPoint.control.publicDisplayLabel()]?.suggestedSlotLabel
+            val suggestedLabel = assignmentsByControlId[controlPoint.control.id]?.suggestedSlotLabel
                 ?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
             controlPoint.control.id to suggestedLabel
@@ -3338,6 +3260,7 @@ object DesktopCourseAnalyzer {
         return DesktopCourseCalculatedRouteApplication(
             categoryId = categoryId,
             idealOrderText = idealOrderTokens.joinToString(" "),
+            idealOrderWithoutRenumbering = controls.joinToString(" ") { it.control.idealOrderToken(null) },
             routePoints = routePoints,
             routeLengthMeters = routeLengthMeters,
             climbMeters = climbMeters,
@@ -3704,11 +3627,12 @@ object DesktopCourseAnalyzer {
         if (foxes.size < 2 || foxes.size > MAX_PERMUTATION_CONTROLS) {
             return null
         }
-        val currentTotal = timingForSlots(emptyMap()).waitTotalFor(foxes)
-        var bestTotal = Int.MAX_VALUE
-        var bestSlots = emptyList<RenumberingSlot>()
-        var bestTiming = RouteTimingAnalysis.Empty
+        val currentTiming = timingForSlots(emptyMap())
+        val currentTotal = currentTiming.waitTotalFor(foxes)
         val currentSlots = foxes.map { RenumberingSlot(it.currentSlotIndex, it.currentSlotLabel) }
+        var bestTotal = currentTotal
+        var bestSlots = currentSlots
+        var bestTiming = currentTiming
         currentSlots.permutations().forEach { candidateSlots ->
             val slotOverrides = foxes.zip(candidateSlots).associate { (fox, slot) -> fox.control.id to slot }
             val timing = timingForSlots(slotOverrides)
@@ -3742,9 +3666,9 @@ object DesktopCourseAnalyzer {
         controls: List<EventControl>,
         renumbering: DesktopCourseWaitRenumbering?
     ): Map<String, RenumberingSlot> {
-        val assignmentByLabel = renumbering?.assignments.orEmpty().associateBy { it.controlLabel }
+        val assignmentById = renumbering?.takeIf { it.improvesWait }?.assignments.orEmpty().associateBy { it.controlId }
         return controls.mapNotNull { control ->
-            val assignment = assignmentByLabel[control.publicDisplayLabel()] ?: return@mapNotNull null
+            val assignment = assignmentById[control.id] ?: return@mapNotNull null
             val slotIndex = classicSlotIndexForLabel(assignment.suggestedSlotLabel) ?: return@mapNotNull null
             control.id to RenumberingSlot(slotIndex, assignment.suggestedSlotLabel)
         }.toMap()
@@ -4477,13 +4401,6 @@ private data class RouteStop(
     val label: String,
     val point: CourseGeoPoint,
     val routeIndex: Int,
-    val control: EventControl?,
-    val speedFactorOverride: Double?
-)
-
-private data class StraightLineStop(
-    val label: String,
-    val point: CourseGeoPoint,
     val control: EventControl?,
     val speedFactorOverride: Double?
 )

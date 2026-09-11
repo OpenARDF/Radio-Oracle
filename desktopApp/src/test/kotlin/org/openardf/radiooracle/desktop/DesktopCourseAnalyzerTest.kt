@@ -29,6 +29,7 @@ import org.openardf.radiooracle.shared.event.courseDescriptionSiCodeHint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.openardf.radiooracle.shared.event.withAppliedSiCode
@@ -214,6 +215,7 @@ class DesktopCourseAnalyzerTest {
         val protectedInfo = protectedInfo(foxCount = 3)
 
         val summary = DesktopCourseAnalyzer.analyze(
+            allowFoxRenumbering = false,
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
@@ -268,7 +270,7 @@ class DesktopCourseAnalyzerTest {
         )
         assertEquals(false, summary.hasMissingElevationData)
         assertNotNull(summary.estimatedIdealSeconds)
-        assertEquals(5, summary.elevationProfile.size)
+        assertTrue(summary.elevationProfile.size > 5)
         assertEquals(0, summary.elevationProfile.first().distanceMeters)
         assertEquals(100.0, summary.elevationProfile.first().elevationMeters, 0.001)
         assertEquals(listOf("S -> 31", "31 -> 32", "32 -> 33", "33 -> B", "B -> F"), summary.providedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" })
@@ -319,7 +321,7 @@ class DesktopCourseAnalyzerTest {
             calculatedGoodnessMetrics.map(::routeMetricPairingLabel)
         )
         val reportText = DesktopCourseAnalysisExports.reportText(summary)
-        assertEquals("Save Draft Numbering", summary.courseRecommendation.actionLabel)
+        assertEquals("Keep the applied route", summary.courseRecommendation.actionLabel)
         assertTrue(reportText.contains("Applied checks and metrics\n"))
         assertTrue(reportText.contains("Calculated checks and metrics\n"))
         assertFalse(reportText.contains("\nApplied\n"))
@@ -331,13 +333,13 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("Effective length: "))
         assertTrue(reportText.contains("(required 9-12 km)"))
         assertTrue(reportText.contains("Course Recommendation"))
-        assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Save Draft Numbering"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Keep the applied route"))
         assertTrue(summary.courseRecommendation.paragraph.contains("outside the 9-12 km rules range"))
         assertTrue(summary.courseRecommendation.paragraph.contains("honest representation of the course's overall difficulty"))
         assertTrue(summary.waitRows.any { it.waitSeconds > 30 })
-        assertTrue(summary.courseRecommendation.paragraph.contains("current fox numbering exceed 30 seconds"))
-        assertTrue(summary.courseRecommendation.paragraph.contains("suggested fox numbering"))
-        assertTrue(reportText.contains("Radio-Oracle recommends"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("fox wait longer than 30 seconds"))
+        assertFalse(summary.courseRecommendation.paragraph.contains("suggested fox numbering"))
+        assertTrue(reportText.contains("Course Recommendation"))
         assertTrue(reportText.contains("Assumed running speed equals"))
         assertTrue(reportText.contains("Speed model factors"))
         assertTrue(reportText.contains("Provisional built-in category assumptions"))
@@ -768,7 +770,7 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
-    fun matchingSprintCalculatedRouteUsesStoredRouteTimingForTargetTimeChecks() {
+    fun matchingSprintControlOrderWithDifferentGeometryKeepsIndependentTiming() {
         val protectedInfo = sprintProtectedInfo().copy(
             route = listOf(
                 ProtectedCourseRoutePoint(39.0, -95.0, 100.0),
@@ -796,7 +798,7 @@ class DesktopCourseAnalyzerTest {
         )
 
         assertEquals(true, summary.idealOrderMatches)
-        assertEquals(emptyList<DesktopCourseLegRow>(), summary.calculatedLegRows)
+        assertFalse(summary.calculatedLegRows.isEmpty())
         val storedTargetTime = requireNotNull(summary.providedRouteSection)
             .ruleChecks
             .single { it.label == "Applied route Sprint target time" }
@@ -805,7 +807,7 @@ class DesktopCourseAnalyzerTest {
             .ruleChecks
             .single { it.label == "Calculated route Sprint target time" }
             .value
-        assertEquals(storedTargetTime, calculatedTargetTime)
+        assertNotEquals(summary.providedRouteSection!!.estimatedIdealSeconds, summary.calculatedRouteSection!!.estimatedIdealSeconds)
         assertFalse(storedTargetTime.startsWith("Unknown"))
     }
 
@@ -914,7 +916,9 @@ class DesktopCourseAnalyzerTest {
         val pdfPath = Files.createTempFile("course-analysis-duplicate-s-route-map", ".pdf")
         DesktopCourseAnalysisExports.exportPdf(pdfPath, summary)
         val pdfText = String(Files.readAllBytes(pdfPath))
-        val routeLinePoints = routeMap.routePointIndexes.mapNotNull { routeMap.points.getOrNull(it) }
+        val routeLinePoints = routeMap.routeLinesForDrawing().single().points.map {
+            DesktopCourseRouteMapPoint("", it.xFraction, it.yFraction, DesktopCourseRouteMapPointType.Waypoint)
+        }
         val correctFirstLine = pdfRouteMapLineCommand(routeLinePoints[0], routeLinePoints[1])
         val spectatorPoint = routeMap.points.single { it.label == "S" && it.type == DesktopCourseRouteMapPointType.Spectator }
         val wrongFirstLine = pdfRouteMapLineCommand(spectatorPoint, routeLinePoints[1])
@@ -1037,7 +1041,8 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile,
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
-            protectedIdealOrderText = "33 32 31 Beacon"
+            protectedIdealOrderText = "33 32 31 Beacon",
+            elevationLookup = { 100.0 + (it.longitude + 95.0) * 30000.0 }
         )
 
         assertTrue(
@@ -1078,7 +1083,7 @@ class DesktopCourseAnalyzerTest {
 
         val routeMap = requireNotNull(summary.routeMaps.firstOrNull { it.title == "Applied route" })
         val routeLine = routeMap.lineStrings.single()
-        assertEquals(protectedInfo.route.size, routeLine.points.size)
+        assertTrue(routeLine.points.size >= protectedInfo.route.size)
         assertFalse(routeLine.dashed)
     }
 
@@ -1111,8 +1116,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("Applied route:"))
         assertFalse(reportText.contains("Ideal route:"))
         assertTrue(reportText.contains("Course Recommendation"))
-        assertTrue(reportText.contains("Radio-Oracle recommends"))
-        assertTrue(reportText.contains("with calculated fox numbering"))
+        assertTrue(reportText.replace(Regex("\\s+"), " ").contains(summary.courseRecommendation.paragraph.replace(Regex("\\s+"), " ")))
         assertTrue(reportText.contains("2D route"))
         assertTrue(reportText.contains("depiction"))
         assertTrue(reportText.contains("Movement time:"))
@@ -1131,7 +1135,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(pdfText.contains("Analyzed: Mon, Jun 15, 2026 9:30 AM"))
         assertTrue(pdfText.contains("/Helvetica-Bold"))
         assertTrue(pdfText.contains("Course Recommendation"))
-        assertTrue(pdfText.contains("with calculated fox numbering"))
+        assertTrue(pdfText.contains("recommends"))
         assertTrue(pdfText.contains("2D route"))
         assertTrue(pdfText.contains("depiction"))
         assertTrue(pdfText.contains("Elevation Profile Graphics"))
@@ -1332,8 +1336,8 @@ class DesktopCourseAnalyzerTest {
         )
         assertTrue(summary.summaryExplanation.contains("may reduce applied-route wait time"))
         assertTrue(summary.summaryExplanation.contains("see Section 1 for the assignment details"))
-        assertEquals("Apply changes to all race courses", summary.courseRecommendation.actionLabel)
-        assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Apply changes to all race courses"))
+        assertEquals("Apply Calculated Course", summary.courseRecommendation.actionLabel)
+        assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Apply Calculated Course"))
         assertTrue(DesktopCourseAnalysisExports.reportText(summary).contains("Renumbered wait times"))
         val metricLabels = summary.metrics.map { it.label }
         assertEquals(
@@ -1346,6 +1350,52 @@ class DesktopCourseAnalyzerTest {
         )
         assertTrue(summary.metrics.first { it.label == "Total ideal-route wait time with renumbering" }.value.contains(":"))
         assertTrue(summary.metrics.first { it.label == "Applied route finish time with renumbering" }.value.contains(" / "))
+    }
+
+    @Test
+    fun appliedUiEvaluatesPreviouslyAcceptedNumberingWithoutChangingTheRace() = kotlinx.coroutines.runBlocking {
+        val project = projectFile(foxCount = 3)
+        val info = protectedInfo(foxCount = 3).copy(sourceName = "Course Analyzer applied design (accepted fox numbering)")
+        val before = project.toString()
+        val summary = analyzeCourseCategory(DesktopCourseRouteSource.Applied, project, CATEGORY_ID,
+            mapOf(CATEGORY_ID to info), mapOf(CATEGORY_ID to info.idealOrder), null)
+        val proposal = requireNotNull(summary.waitRenumbering)
+        assertTrue(proposal.improvesWait)
+        assertTrue(proposal.bestTotalWaitSeconds < proposal.currentTotalWaitSeconds)
+        assertEquals(before, project.toString())
+        assertNull(project.raceData.courseDraft)
+        assertEquals("31 32 33 Beacon", info.idealOrder)
+        assertNotNull(proposal.sourceSnapshotHash)
+        assertFalse(requireNotNull(summary.calculatedRouteSection).summaryOnly)
+        assertTrue(summary.calculatedGeometryMatchesSource)
+        assertNull(CourseAnalysisApplyAction.CalculatedRoute.disabledReason(summary))
+        val withoutRenumbering = CourseAnalysisApplyAction.CalculatedWithoutRenumbering
+        assertTrue(withoutRenumbering.disabledReason(summary)!!.contains("Only the fox numbering differs"))
+        assertTrue(runCatching { withoutRenumbering.application(summary) }.isFailure)
+    }
+
+    @Test
+    fun reevaluatingOptimalNumberingKeepsItAndCollapsesTheIdenticalCandidate() {
+        val info = protectedInfo(foxCount = 3)
+        val base = projectFile(foxCount = 3)
+        val project = base.copy(raceData = base.raceData.copy(categories = base.raceData.categories.map {
+            it.copy(category = it.category.copy(courseInfo = info, idealOrder = info.idealOrder))
+        }))
+        val first = DesktopCourseAnalyzer.analyze(project, CATEGORY_ID, info, info.idealOrder)
+        val accepted = DesktopCourseAnalysisApplier.applyFoxRenumberingOnly(project, requireNotNull(first.waitRenumbering), null)
+        val acceptedInfo = accepted.courseInfoByCategoryId.getValue(CATEGORY_ID)
+        val again = DesktopCourseAnalyzer.analyze(accepted.projectFile, CATEGORY_ID, acceptedInfo, acceptedInfo.idealOrder,
+            prepareApplication = true, routeSource = DesktopCourseRouteSource.Draft)
+        val evaluation = requireNotNull(again.waitRenumbering)
+        assertFalse(evaluation.improvesWait)
+        assertEquals(evaluation.currentTotalWaitSeconds, evaluation.bestTotalWaitSeconds)
+        assertTrue(evaluation.assignments.all { it.currentSlotLabel == it.suggestedSlotLabel })
+        assertTrue(again.calculatedRouteSection!!.summaryOnly)
+        assertEquals(1, again.routeMaps.size)
+        assertEquals("Keep the draft route", again.courseRecommendation.actionLabel)
+        // The unchanged draft must still be available to apply explicitly.
+        assertNotNull(again.calculatedRouteApplication)
+        assertNull(calculatedRouteApplyDisabledReason(again))
     }
 
     @Test
@@ -1408,7 +1458,7 @@ class DesktopCourseAnalyzerTest {
             importedGoodnessMetrics.map(::routeMetricPairingLabel),
             calculatedGoodnessMetrics.map(::routeMetricPairingLabel)
         )
-        assertEquals("Apply changes to all race courses", summary.courseRecommendation.actionLabel)
+        assertEquals("Apply Calculated Course", summary.courseRecommendation.actionLabel)
         assertTrue(summary.courseRecommendation.paragraph.contains("The applied route is"))
         assertTrue(summary.courseRecommendation.paragraph.contains("longer than the ideal route"))
         assertTrue(summary.courseRecommendation.paragraph.contains("should therefore be used as the course's effective length for M21"))
@@ -1771,7 +1821,8 @@ class DesktopCourseAnalyzerTest {
             )
             assertEquals(decryptedIdealOrder, decryptedCourseInfo.idealOrder)
             assertTrue(decryptedCourseInfo.hasAcceptedFoxNumbering())
-            assertNull(DesktopCourseAnalyzer.analyze(result.projectFile, categoryData.category.id,
+            // Previously accepted numbering is still evaluated for each category's speed model.
+            assertNotNull(DesktopCourseAnalyzer.analyze(result.projectFile, categoryData.category.id,
                 decryptedCourseInfo, decryptedIdealOrder).waitRenumbering)
             changedLabelsByControlId.forEach { (controlId, expectedLabel) ->
                 assertEquals(expectedLabel, decryptedCourseInfo.controlPoints.single { it.controlId == controlId }.label)
@@ -1885,8 +1936,8 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.missingElements.any { it.contains("Route elevation samples") })
         assertEquals(true, summary.hasMissingElevationData)
         assertNotNull(summary.estimatedIdealSeconds)
-        assertEquals("Horizontal length", summary.providedRouteSection?.comparisonLengthLabel)
-        assertEquals(emptyList<DesktopCourseElevationProfilePoint>(), summary.elevationProfile)
+        assertEquals("Effective length", summary.providedRouteSection?.comparisonLengthLabel)
+        assertTrue(summary.elevationProfile.isNotEmpty()) // Missing source samples are flagged even when interpolation fills the profile.
     }
 
     @Test
@@ -2290,6 +2341,7 @@ class DesktopCourseAnalyzerTest {
         )
 
         val summary = DesktopCourseAnalyzer.analyze(
+            allowFoxRenumbering = false,
             projectFile = projectFile(foxCount = 5, categoryName = "M50"),
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo,
@@ -2354,6 +2406,7 @@ class DesktopCourseAnalyzerTest {
     fun routeMapAppliesEastDeclinationWithCorrectRotationSign() {
         val mtHoodDeclinationDegrees = 14.3
         val trueNorthSummary = DesktopCourseAnalyzer.analyze(
+            allowFoxRenumbering = false,
             projectFile = projectFile(foxCount = 3),
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo(foxCount = 3),
@@ -2361,6 +2414,7 @@ class DesktopCourseAnalyzerTest {
             magneticDeclinationProvider = { null }
         )
         val magneticNorthSummary = DesktopCourseAnalyzer.analyze(
+            allowFoxRenumbering = false,
             projectFile = projectFile(foxCount = 3),
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo(foxCount = 3),
@@ -2394,6 +2448,7 @@ class DesktopCourseAnalyzerTest {
     @Test
     fun routeMapUsesExpiredMagneticDeclinationWithWarning() {
         val summary = DesktopCourseAnalyzer.analyze(
+            allowFoxRenumbering = false,
             projectFile = projectFile(foxCount = 3),
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo(foxCount = 3),

@@ -190,7 +190,7 @@ private fun DesktopCourseApplyFlow(
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     if (!recorded && !busy && (visibleRows.isNotEmpty() || problem != null)) {
                         Button(onClick = { attempt++ }, enabled = ready, modifier = Modifier.testTag("course-apply-all")) {
-                            Text("Apply changes to all race courses")
+                            Text("Apply Calculated Course")
                         }
                     }
                 }

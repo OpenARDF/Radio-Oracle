@@ -15,7 +15,7 @@ enum class DesktopCourseRouteSource(val label: String) {
     val lowerRouteLabel: String get() = "$lowerLabel route"
     val waitAnalysisHeading: String get() = "$label-route wait-time analysis"
     val description: String get() = when (this) {
-        Draft -> "This section analyzes the pending course draft. Save Race preserves it; Apply changes to all race courses makes it active for race downloads and results."
+        Draft -> "This section analyzes the pending course draft. Save Race preserves it; Apply Calculated Course makes the calculated design active for race downloads and results."
         Applied -> "This section analyzes the course currently applied to the race and used for downloads and results."
     }
 }

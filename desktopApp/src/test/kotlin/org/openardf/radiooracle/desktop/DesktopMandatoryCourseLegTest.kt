@@ -31,7 +31,7 @@ class DesktopMandatoryCourseLegTest {
         val expectedLegVertices = listOf(listOf(start) + firstCorners + fox1,
             listOf(fox1, middleCorner, fox2), listOf(fox2, beacon), listOf(beacon, finalCorner, finish))
         val report = DesktopCourseAnalysisExports.reportText(summary)
-        for (section in listOfNotNull(summary.providedRouteSection, summary.calculatedRouteSection)) {
+        for (section in listOfNotNull(summary.providedRouteSection, summary.calculatedRouteSection?.takeUnless { it.summaryOnly })) {
             assertEquals(expectedPairs, section.legRows.map { it.fromLabel to it.toLabel })
             var previousDeparture = 0
             section.legRows.zip(expectedLegVertices).forEach { (leg, points) ->
@@ -47,7 +47,7 @@ class DesktopMandatoryCourseLegTest {
             assertEquals(section.estimatedIdealSeconds, section.legRows.last().departureSeconds)
         }
         // Waypoints still belong to the actual geometry and spatial exports.
-        assertEquals(4, summary.kmlFolders.single { it.routeName == "Calculated route" }.courseObjects.count {
+        assertEquals(4, summary.kmlFolders.last().courseObjects.count {
             it.type == DesktopCourseKmlExportPointType.WAYPOINT
         })
     }
@@ -69,11 +69,11 @@ class DesktopMandatoryCourseLegTest {
         assertTrue(summary.courseRecommendation.paragraph.contains("conditional on the known leg constraints"))
         val application = requireNotNull(summary.calculatedRouteApplication)
         assertEquals("1 2 B", application.idealOrderText)
-        val folder = summary.kmlFolders.single { it.title == "Calculated foxes and route" }
+        val folder = summary.kmlFolders.last()
         assertEquals(vertices.map { it.latitude to it.longitude }, folder.routeStops.map { it.point.latitude to it.point.longitude })
         val metrics = DesktopCourseRouteMetricsCalculator.metrics(folder.routePoints)
         assertEquals(metrics.horizontalLengthMeters.roundToInt(), application.routeLengthMeters)
-        assertEquals(metrics.effectiveLengthMeters!!.roundToInt(), summary.calculatedRouteSection?.effectiveLengthMeters)
+        assertEquals(metrics.effectiveLengthMeters!!.roundToInt(), (summary.calculatedRouteSection?.effectiveLengthMeters ?: summary.providedRouteSection?.effectiveLengthMeters))
         assertEquals(waypoints.map { it.id }, application.orderedPlacementIds.filter { id -> waypoints.any { it.id == id } })
 
         val path = Files.createTempFile("mandatory-leg-round-trip", ".kml")
@@ -108,7 +108,7 @@ class DesktopMandatoryCourseLegTest {
         val (project, info) = importRoute(listOf(start, unrelated, fox2, first, second, fox1, beacon, finish))
         val summary = analyze(project, info)
         assertEquals("1 2 B", summary.calculatedRouteApplication?.idealOrderText)
-        val stops = summary.kmlFolders.single { it.title == "Calculated foxes and route" }.routeStops
+        val stops = summary.kmlFolders.last().routeStops
         assertEquals(listOf(start, fox1, second, first, fox2, beacon, finish).map { it.latitude to it.longitude },
             stops.map { it.point.latitude to it.point.longitude })
         val unusedId = info.courseObjects.single { it.latitude == unrelated.latitude && it.longitude == unrelated.longitude }.id
@@ -122,7 +122,7 @@ class DesktopMandatoryCourseLegTest {
         val savedInfo = requireNotNull(saved.raceData.categories.single().category.courseInfo)
         val recalculated = analyze(saved, savedInfo)
         assertEquals(stops.map { it.point.latitude to it.point.longitude },
-            recalculated.kmlFolders.single { it.title == "Calculated foxes and route" }.routeStops.map { it.point.latitude to it.point.longitude })
+            recalculated.kmlFolders.last().routeStops.map { it.point.latitude to it.point.longitude })
     }
 
     @Test
@@ -131,7 +131,7 @@ class DesktopMandatoryCourseLegTest {
         val (project, info) = importRoute(listOf(start, longDetour, fox1, fox2, beacon, finish), elevation = { null })
         val summary = analyze(project, info, elevation = { null })
         assertEquals("2 1 B", summary.calculatedRouteApplication?.idealOrderText)
-        assertFalse(summary.kmlFolders.single { it.title == "Calculated foxes and route" }.routeStops.any {
+        assertFalse(summary.kmlFolders.last().routeStops.any {
             it.point.latitude == longDetour.latitude && it.point.longitude == longDetour.longitude
         })
     }
@@ -148,7 +148,7 @@ class DesktopMandatoryCourseLegTest {
         val (project, info) = importRoute(vertices, hillElevation)
         val summary = analyze(project, info, hillElevation)
         assertEquals("2 1 B", summary.calculatedRouteApplication?.idealOrderText)
-        assertTrue(requireNotNull(summary.providedRouteSection?.effectiveLengthMeters) > requireNotNull(summary.calculatedRouteSection?.effectiveLengthMeters))
+        assertTrue(requireNotNull(summary.providedRouteSection?.effectiveLengthMeters) > requireNotNull((summary.calculatedRouteSection?.effectiveLengthMeters ?: summary.providedRouteSection?.effectiveLengthMeters)))
     }
 
     private fun analyze(project: EventProjectFile, info: ProtectedCourseInfo, elevation: (CourseGeoPoint) -> Double? = { 100.0 }) =

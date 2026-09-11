@@ -80,26 +80,27 @@ class DesktopPracticeRouteDirectionTest {
         val summary = analyze(project)
         assertTrue("saved=${summary.providedIdealOrder}; calculated=${summary.calculatedIdealOrder}; missing=${summary.missingElements}; note=${summary.calculatedRouteSection?.explanation}", summary.idealOrderMatches == true)
         val calculated = requireNotNull(summary.calculatedRouteSection)
-        assertFalse(calculated.summaryOnly)
+        assertTrue(calculated.summaryOnly)
         assertTrue(calculated.explanation.contains("Practice direction exception"))
         assertTrue(summary.courseRecommendation.paragraph.contains("not the shortest route found"))
         assertTrue(summary.summaryExplanation.contains("Practice direction exception"))
         assertTrue(summary.goodnessMetrics.groups.flatMap { it.metrics }
             .filter { it.label.contains("shortest possible route") }.all { it.value.startsWith("No:") })
         assertTrue(summary.metrics.single { it.label == "Applied route is shortest possible route" }.value.startsWith("No:"))
+        assertEquals(1, summary.routeMaps.size)
         for (map in summary.routeMaps) assertEquals(2, map.points.count { it.type == DesktopCourseRouteMapPointType.Waypoint })
-        val exported = summary.kmlFolders.single { it.routeName == "Calculated route" }
+        val exported = summary.kmlFolders.last()
         for (corner in listOf(corner1, corner2)) assertTrue(exported.routePoints.any { it.distanceMetersTo(corner) < 0.01 })
         val application = requireNotNull(summary.calculatedRouteApplication)
         assertEquals(2, application.courseObjects.count { it.type == ProtectedCourseObjectType.WAYPOINT })
         val expectedLength = DesktopCourseRouteMetricsCalculator.metrics(info.route.map {
             CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
         }).effectiveLengthMeters!!.roundToInt()
-        assertTrue(kotlin.math.abs(expectedLength - calculated.effectiveLengthMeters!!) <= 1)
+        assertTrue(kotlin.math.abs(expectedLength - (summary.providedRouteSection!!.effectiveLengthMeters!!)) <= 1)
 
         val normal = analyze(project.copy(raceData = project.raceData.copy(race = project.raceData.race.copy(raceLevel = RaceLevel.NATIONAL))))
         assertFalse(normal.idealOrderMatches == true)
-        assertTrue(normal.calculatedRouteSection!!.effectiveLengthMeters!! < calculated.effectiveLengthMeters!!)
+        assertTrue(normal.calculatedRouteSection!!.effectiveLengthMeters!! < (summary.providedRouteSection!!.effectiveLengthMeters!!))
         assertFalse(normal.calculatedRouteSection!!.explanation.contains("Practice direction exception"))
     }
 
@@ -141,7 +142,7 @@ class DesktopPracticeRouteDirectionTest {
             val summary = analyze(project)
             assertEquals(level == RaceLevel.PRACTICE, summary.idealOrderMatches)
             val calculatedProfile = summary.profileComparison.last()
-            val exported = summary.kmlFolders.single { it.routeName == "Calculated route" }
+            val exported = summary.kmlFolders.last()
             val route = exported.routePoints
             val controls = info(project).controlPoints.filter { it.type == ControlPointType.CONTROL }
             assertEquals(controls.size, calculatedProfile.markers.size)
@@ -162,6 +163,62 @@ class DesktopPracticeRouteDirectionTest {
     private fun analyze(project: EventProjectFile) = DesktopCourseAnalyzer.analyze(project, "category", info(project),
         info(project).idealOrder, elevationLookup = flat, prepareApplication = true,
         controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS)
+
+    @Test fun identicalGeometryUsesIdenticalSamplesAndTimingWithOldSamplingAndMandatoryLegSpeedFactors() {
+        val project = fixture()
+        val original = info(project)
+        val vertices = original.courseObjects.map { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) }
+        fun height(p: CourseGeoPoint) = 100.0 + 3.0 * kotlin.math.sin((p.longitude + 75.0) * 6500.0)
+        // Reproduce the old KML importer's rounded sample count and stored terrain elevations.
+        val oldSamples = vertices.zipWithNext().flatMapIndexed { index, (a, b) ->
+            val count = (a.distanceMetersTo(b) / 25.0).roundToInt().coerceAtLeast(1)
+            (if (index == 0) 0..count else 1..count).map { step ->
+                val p = a.interpolate(b, step.toDouble() / count)
+                ProtectedCourseRoutePoint(p.latitude, p.longitude, height(p))
+            }
+        }
+        val stored = original.copy(route = oldSamples, courseObjects = original.courseObjects.map {
+            it.copy(speedFactor = if (it.type == ProtectedCourseObjectType.START) 1.7 else it.speedFactor)
+        })
+        var improvements = 0
+        for (cacheAvailable in listOf(true, false)) {
+            val lookup: (CourseGeoPoint) -> Double? = { if (cacheAvailable) height(it) else null }
+            fun analyze(info: ProtectedCourseInfo, renumber: Boolean = false) = DesktopCourseAnalyzer.analyze(
+                project, "category", info, info.idealOrder, elevationLookup = lookup, prepareApplication = true,
+                allowFoxRenumbering = renumber, controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS)
+            val summary = analyze(stored)
+            val applied = requireNotNull(summary.providedRouteSection)
+            val application = requireNotNull(summary.calculatedRouteApplication)
+            assertTrue("Identical Practice route must collapse even when preparing application", summary.calculatedRouteSection!!.summaryOnly)
+            assertEquals(1, summary.profileComparison.size)
+            assertEquals(1, summary.routeMaps.size)
+            assertNotNull(calculatedRouteApplyDisabledReason(summary))
+            assertNull(calculatedRouteApplyDisabledReason(summary.copy(routeSource = DesktopCourseRouteSource.Draft)))
+            assertEquals(summary.kmlFolders.single().routePoints, application.routePoints)
+            assertEquals(applied.climbMeters, application.climbMeters)
+            assertEquals(applied.routeLengthMeters, application.routeLengthMeters)
+            assertEquals(1.7, summary.providedLegRows.first().speedFactorOverride!!, 0.0)
+            val resampled = stored.copy(route = application.routePoints.map {
+                ProtectedCourseRoutePoint(it.latitude, it.longitude, it.elevationMeters)
+            })
+            val repeated = analyze(resampled)
+            assertEquals(summary.providedLegRows, repeated.providedLegRows)
+            assertEquals(summary.estimatedIdealSeconds, repeated.estimatedIdealSeconds)
+
+            val evaluated = analyze(stored, renumber = true)
+            val alternative = requireNotNull(evaluated.calculatedRouteSection)
+            if (!alternative.summaryOnly) {
+                improvements++
+                assertTrue(alternative.waitRenumbering!!.improvesWait)
+                assertEquals("Apply Calculated Course", evaluated.courseRecommendation.actionLabel)
+                assertEquals(evaluated.waitRenumbering!!.currentTotalWaitSeconds, alternative.waitRenumbering!!.currentTotalWaitSeconds)
+                assertEquals(evaluated.providedRouteSection!!.climbMeters, alternative.climbMeters)
+                assertEquals(evaluated.providedRouteSection!!.effectiveLengthMeters, alternative.effectiveLengthMeters)
+                assertEquals(evaluated.kmlFolders.first().routePoints, evaluated.kmlFolders.last().routePoints)
+            }
+        }
+        assertTrue("Exercise an actual renumbered comparison with identical geometry", improvements > 0)
+    }
 
     private fun info(project: EventProjectFile) = requireNotNull(project.raceData.categories.single().category.courseInfo)
 

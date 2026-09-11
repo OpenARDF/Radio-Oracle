@@ -7,6 +7,56 @@ import org.openardf.radiooracle.shared.sportident.*
 import java.nio.file.Files
 
 class DesktopCourseApplicationTest {
+    @Test fun applyingCalculatedWithoutRenumberingKeepsNumberedStationsAtTheirLocationsAcrossCourses() {
+        val base = imported()
+        val first = base.raceData.categories.single()
+        val originalInfo = first.category.courseInfo!!
+        // Add an actual stored detour so applying the calculated geometry is meaningful even
+        // when its control order matches. The Analyzer also proposes a numbering improvement.
+        val route = originalInfo.route
+        val detour = route.first().copy(latitude = route.first().latitude + 0.015,
+            longitude = route.first().longitude - 0.015)
+        val info = originalInfo.copy(route = listOf(route.first(), detour) + route.drop(1))
+        val full = first.copy(category = first.category.copy(courseInfo = info))
+        val shared = full.copy(category = full.category.copy(id = "shared", name = "Shared"),
+            controlPoints = full.controlPoints.map { it.copy(id = "shared-${it.id}", categoryId = "shared") })
+        val source = base.copy(raceData = base.raceData.copy(categories = listOf(full, shared)))
+        val summary = DesktopCourseAnalyzer.analyze(source, full.category.id, info, info.idealOrder,
+            elevationLookup = { 100.0 }, prepareApplication = true)
+        assertFalse(summary.calculatedGeometryMatchesSource)
+        val calculated = CourseAnalysisApplyAction.CalculatedRoute.application(summary)
+        assertTrue(calculated.foxAssignments.any { it.originalLabel != it.calculatedLabel })
+        val unchangedNumbering = CourseAnalysisApplyAction.CalculatedWithoutRenumbering.application(summary)
+        assertEquals(calculated.routePoints, unchangedNumbering.routePoints)
+        assertEquals(calculated.orderedPlacementIds, unchangedNumbering.orderedPlacementIds)
+        assertEquals(calculated.sourceSnapshotHash, unchangedNumbering.sourceSnapshotHash)
+        assertTrue(unchangedNumbering.foxAssignments.all { it.originalLabel == it.calculatedLabel })
+        assertEquals(calculated.idealOrderWithoutRenumbering, unchangedNumbering.idealOrderText)
+        val bindings = source.raceData.categories.associate { c -> c.category.id to
+            info.controlPoints.associate { it.controlId to it.controlId } }
+        val before = EventProjectFileJson.encode(source)
+        for (application in listOf(calculated, unchangedNumbering)) {
+            val prepared = DesktopCourseAnalysisApplier.prepareAll(source,
+                DesktopCourseRouteSelection(info, application, bindings.getValue(full.category.id)),
+                bindings, null, elevationLookup = { 100.0 })
+            val result = DesktopCourseAnalysisApplier.commit(source, prepared)
+            assertEquals(source.raceData.controls, result.raceData.controls)
+            val expectedLabelAtLocation = application.foxAssignments.associate { assignment ->
+                val point = info.controlPoints.single { it.controlId == assignment.controlId }
+                (point.latitude to point.longitude) to assignment.calculatedLabel
+            }
+            for (category in result.raceData.categories) {
+                val actual = category.category.courseInfo!!
+                val labels = actual.controlPoints.filter { it.type == org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL }
+                    .associate { (it.latitude to it.longitude) to it.label }
+                assertEquals(expectedLabelAtLocation, labels)
+                assertFalse(actual.route.any { it.latitude == detour.latitude && it.longitude == detour.longitude })
+            }
+            assertEquals("passed", CourseWorkflowAudit.audit(result.raceData).status)
+        }
+        assertEquals(before, EventProjectFileJson.encode(source))
+    }
+
     private fun imported(): EventProjectFile {
         val folder = Files.createTempDirectory("course-application-")
         DesktopDebugLog.initialize(folder.resolve("logs"))
@@ -189,8 +239,8 @@ class DesktopCourseApplicationTest {
         for (category in categories) {
             val course = category.category.courseInfo!!
             val analysis = DesktopCourseAnalyzer.analyze(source, category.category.id, course, category.category.storedIdealOrder(null),
-                prepareApplication = true)
-            assertNull("Accepted numbering must not be proposed again", analysis.waitRenumbering)
+                prepareApplication = true, allowFoxRenumbering = false)
+            assertNull("Applying the saved numbering without evaluating a new proposal", analysis.waitRenumbering)
             val application = analysis.calculatedRouteApplication!!
             val prepared = DesktopCourseAnalysisApplier.prepareAll(draft,
                 DesktopCourseRouteSelection(course, application, mappings.getValue(category.category.id)), mappings, null,
