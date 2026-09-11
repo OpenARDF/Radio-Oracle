@@ -12,4 +12,12 @@ Both desktop and Android use Race File format 8, including the Save Android Race
 
 `EventProjectFileJson` validates reads and normalized writes. Text names in a KML/GPX import are inputs to an explicit import review; after acceptance, stored assignments use control IDs. Existing shared import, ordering, and binding code remains responsible for those operations.
 
+For unencrypted applied courses, file validation also checks the accepted geometry bindings against category membership and current catalog definitions, including shared control locations. Draft geometry remains separate and can be incomplete. Encrypted geometry is checked when unlocked and used.
+
+Editing a control's label or SI number refreshes the derived applied bindings without moving its location. Editing a category's assigned controls reuses only locations explicitly bound to those IDs in the applied race; missing or conflicting locations require a course design review. Membership changes clear the obsolete stored route and metrics so Course Analyzer can calculate the new route. Direct identity or membership edits to protected courses require removing protection or applying an unlocked course design.
+
 Obsolete files should be retained unchanged. Recovery into a new format requires an explicit, verified conversion of the intended control catalog and assignments, saved as a separate file. Do not silently rewrite the original or guess intended controls from obsolete aliases.
+
+Course file imports are transactions against the applied race, independent of pending Analyzer drafts. KML, KMZ and GPX imports review matching/options and then show the imported Course Report; IOF CourseData XML uses the same final report. Apply Import commits the reviewed data directly, retaining imported control identities, locations, route order and mandatory vertices. Cancel leaves both applied data and any draft unchanged. A successful import replaces the pending draft; a review is rejected if its source course state changed. Recorded activity prevents replacement of the design.
+
+The import report reuses the existing route calculations and diagram renderer without applying an optimized route or a numbering proposal. IOF files containing only assignments and statistics replace those facts and clear obsolete geometry; the report explains why a geographic diagram is unavailable. Existing SI stations retain their catalog IDs. Course Analyzer starts with the applied course and preserves its field numbering; selecting a pending draft and analyzing a different imported file remain optional.

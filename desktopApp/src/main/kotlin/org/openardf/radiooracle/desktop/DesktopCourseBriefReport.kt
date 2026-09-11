@@ -20,6 +20,13 @@ internal data class DesktopCourseBriefReport(
 
 /** A read-only summary of active courses, independent of the CSV's control-set grouping. */
 internal object DesktopCourseBriefReports {
+    fun imported(project: EventProjectFile, categoryIds: Set<String>, password: String?, checkCancelled: () -> Unit = {}): List<DesktopCourseBriefReport> =
+        (project.raceData.categories + project.raceData.courseMappings).filter { it.category.id in categoryIds }.map { data ->
+            checkCancelled()
+            report(project, data, data.category.storedCourseInfo(password), data.category.storedIdealOrder(password),
+                DesktopVenueElevationCache::elevationMeters, importedRoute = true)
+        }
+
     fun build(
         project: EventProjectFile,
         courseInfos: Map<String, ProtectedCourseInfo>,
@@ -36,7 +43,7 @@ internal object DesktopCourseBriefReports {
 
     private fun report(
         project: EventProjectFile, data: EventCategoryData, info: ProtectedCourseInfo?, order: String?,
-        elevationLookup: (CourseGeoPoint) -> Double?
+        elevationLookup: (CourseGeoPoint) -> Double?, importedRoute: Boolean = false
     ): DesktopCourseBriefReport {
         val category = data.category
         val fallback = DesktopCourseBriefReport(
@@ -47,6 +54,7 @@ internal object DesktopCourseBriefReports {
         if (info == null) return fallback.copy(
             isLocked = category.encryptedCourseInfo != null,
             notice = if (category.encryptedCourseInfo != null) "Unlock course data to calculate this report."
+                else if (importedRoute) "This import supplies assignments and course facts without geographic route data."
                 else "Import course locations and route data to calculate the ideal order and graphic."
         )
         return try {
@@ -57,16 +65,18 @@ internal object DesktopCourseBriefReports {
                 allowFoxRenumbering = false
             )
             // When both routes match, the analyzer's calculated section intentionally contains only a note.
-            val section = summary.calculatedRouteSection?.takeUnless { it.summaryOnly }
+            val section = if (importedRoute) summary.providedRouteSection else summary.calculatedRouteSection?.takeUnless { it.summaryOnly }
                 ?: summary.providedRouteSection
-            if (section == null) fallback.copy(notice = "Course geometry is incomplete. Review this course in Course Analyzer.")
+            if (section == null) fallback.copy(notice = "The import does not contain enough geographic data to draw a route.".takeIf { importedRoute }
+                ?: "Course geometry is incomplete. Review this course in Course Analyzer.")
             else DesktopCourseBriefReport(
                 category.id, category.name, section.routeLengthMeters, section.climbMeters,
                 section.effectiveLengthMeters,
-                section.routeOrder.takeIf { summary.calculatedRouteSection != null }.orEmpty(),
-                section.estimatedIdealSeconds.takeIf { summary.calculatedRouteSection != null },
-                section.routeMap?.copy(title = if (summary.calculatedRouteSection != null) "Ideal order" else "Stored route"),
+                section.routeOrder.takeIf { importedRoute || summary.calculatedRouteSection != null }.orEmpty(),
+                section.estimatedIdealSeconds.takeIf { importedRoute || summary.calculatedRouteSection != null },
+                section.routeMap?.copy(title = if (importedRoute) "Imported route" else if (summary.calculatedRouteSection != null) "Ideal order" else "Stored route"),
                 notice = when {
+                    importedRoute -> if (section.effectiveLengthMeters == null) "Elevation data is incomplete." else null
                     summary.calculatedRouteSection == null -> "Showing the stored route; an ideal route could not be calculated."
                     section.effectiveLengthMeters == null -> "Elevation data is incomplete; the time estimate uses horizontal distance."
                     summary.hasMissingCalculatedRouteElevationData -> "Some route elevations are estimated between known points."

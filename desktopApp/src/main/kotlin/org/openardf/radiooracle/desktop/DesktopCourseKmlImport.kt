@@ -251,7 +251,7 @@ object DesktopCourseKmlImporter {
         }
         val ignoredRouteCount = parsedCourseData.routes.size - routeCandidateCourseData.routes.size
         if (ignoredRouteCount > 0) {
-            val importPurpose = if (requireRoutes) "Course Analyzer" else "Control import"
+            val importPurpose = if (requireRoutes) "Course import" else "Control import"
             DesktopDebugLog.info(
                 "CourseKml",
                 "$importPurpose ignored $ignoredRouteCount non-course route geometries from ${path.fileName}"
@@ -263,7 +263,7 @@ object DesktopCourseKmlImporter {
         )
         if (requireRoutes && courseData.routes.isEmpty()) {
             throw DesktopCourseKmlMissingRouteException(
-                "Course Analyzer imports require at least one route LineString or GPX route/track. " +
+                "Course imports require at least one route LineString or GPX route/track. " +
                     "Import control-only files from Setup > Controls > Import."
             )
         }
@@ -772,7 +772,7 @@ object DesktopCourseKmlImporter {
             .sortedWith(synthesizedRouteControlComparator())
         if (start == null || finish == null || foxes.isEmpty() || beacons.isEmpty()) {
             throw DesktopCourseKmlMissingRouteException(
-                "Course Analyzer imports without route LineStrings require named Start, fox/control, Beacon, and Finish point placemarks."
+                "Course imports without route LineStrings require named Start, fox/control, Beacon, and Finish point placemarks."
             )
         }
 
@@ -1939,13 +1939,16 @@ object DesktopCourseKmlImporter {
                     if (categoryId in ignoredCategoryIds) {
                         return@any false
                     }
+                    val placementIds = courseInfo.appliedBindings?.controls
+                        ?.filter { it.controlId == matchedControl.controlId }?.map { it.placementId }?.toSet()
+                        ?: setOf(matchedControl.controlId)
                     courseInfo.controlPoints.any { controlPoint ->
-                        controlPoint.controlId == matchedControl.controlId &&
+                        controlPoint.controlId in placementIds &&
                             (!sameCoordinate(controlPoint.latitude, matchedControl.point.latitude) ||
                                 !sameCoordinate(controlPoint.longitude, matchedControl.point.longitude))
                     } ||
                         courseInfo.courseObjects.any { courseObject ->
-                            courseObject.id == matchedControl.controlId &&
+                            courseObject.id in placementIds &&
                                 (!sameCoordinate(courseObject.latitude, matchedControl.point.latitude) ||
                                     !sameCoordinate(courseObject.longitude, matchedControl.point.longitude))
                         }

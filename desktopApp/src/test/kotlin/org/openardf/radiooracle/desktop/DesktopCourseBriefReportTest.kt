@@ -7,6 +7,59 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.*
 
 class DesktopCourseBriefReportTest {
+    @Test fun stationEditsAndMembershipEditsKeepReportsAvailableAfterSavingAndReopening() {
+        var project = boundCourseReportFixture()
+        project = EventProjectEditor.updateControl(project, "fox-1", "Fox1", "135", ControlPointType.CONTROL,
+            true, "Fox1", "")
+        project = EventProjectEditor.updateCategoryControlPoints(project, "w40", "Fox2") { "new-$it" }
+        project = EventProjectFileJson.decode(EventProjectFileJson.encode(project))
+        val reports = DesktopCourseBriefReports.build(project, emptyMap())
+        assertEquals(2, reports.size)
+        assertTrue(reports.toString(), reports.all { it.routeMap != null && it.idealOrder.isNotEmpty() && it.estimatedIdealSeconds != null })
+        assertEquals(setOf("Fox2"), reports.last().routeMap!!.points.filter { it.type == DesktopCourseRouteMapPointType.Control }.map { it.label }.toSet())
+        val full = project.raceData.categories.first().category.courseInfo!!
+        assertEquals(135, full.appliedBindings!!.controls.single { it.controlId == "fox-1" }.siCode)
+        assertEquals(39.001, CourseControlResolver.resolve(project.raceData.controls.single { it.id == "fox-1" }, listOf(full)).location!!.latitude, 0.000001)
+        assertEquals(listOf(32), DesktopCourseReportCsv.rows(project).last().siControlCodes)
+    }
+
+    @Test fun staleBindingsAreRejectedAndExplicitRepairUsesCurrentIdsWithoutChangingTheSource() {
+        val original = boundCourseReportFixture()
+        val stale = original.copy(raceData = original.raceData.copy(
+            controls = original.raceData.controls.map { if (it.id == "fox-1") it.copy(siCode = 135) else it },
+            categories = original.raceData.categories.map { data -> if (data.category.id != "w40") data else data.copy(
+                controlPoints = listOf(EventControlPoint("new", "w40", 32, ControlPointType.CONTROL, 1, "fox-2")), publicControlIds = listOf("fox-2")) }
+        ))
+        assertTrue(DesktopCourseBriefReports.build(stale, emptyMap()).all { it.notice!!.contains("unavailable") })
+        assertThrows(IllegalArgumentException::class.java) { EventProjectFileJson.encode(stale) }
+        val repaired = AppliedCourseEdits.reconcile(stale)
+        val reopened = EventProjectFileJson.decode(EventProjectFileJson.encode(repaired))
+        val reports = DesktopCourseBriefReports.build(reopened, emptyMap())
+        assertTrue(reports.toString(), reports.all { it.routeMap != null && it.estimatedIdealSeconds != null })
+        assertEquals(listOf("fox-1"), stale.raceData.categories.last().category.courseInfo!!.appliedBindings!!.controls.map { it.controlId })
+        assertEquals(listOf("fox-2"), repaired.raceData.categories.last().category.courseInfo!!.appliedBindings!!.controls.map { it.controlId })
+    }
+
+    @Test fun membershipEditsRejectUnknownLocationsAndConflictsWithoutChangingTheRace() {
+        val source = boundCourseReportFixture()
+        val added = source.copy(raceData = source.raceData.copy(controls = source.raceData.controls +
+            EventControl("fox-3", "race", "Fox3", 33, ControlPointType.CONTROL, publicLabel = "Fox3")))
+        assertThrows(IllegalArgumentException::class.java) {
+            EventProjectEditor.updateCategoryControlPoints(added, "w40", "Fox3") { "new-$it" }
+        }
+        val other = source.raceData.courseMappings.single()
+        val info = other.category.courseInfo!!
+        val moved = info.copy(controlPoints = info.controlPoints.map { it.copy(latitude = it.latitude + 0.01) },
+            courseObjects = info.courseObjects.map { it.copy(latitude = it.latitude + 0.01) })
+        val rebound = CourseDesignBindings.prepare(moved, source.raceData.controls,
+            info.appliedBindings!!.controls.associate { it.placementId to it.controlId }, info.appliedBindings!!.orderedPlacementIds, "moved")
+        val conflicting = source.copy(raceData = source.raceData.copy(courseMappings = listOf(other.copy(category = other.category.copy(courseInfo = rebound)))))
+        assertThrows(IllegalArgumentException::class.java) {
+            EventProjectEditor.updateCategoryControlPoints(conflicting, "w40", "Fox2") { "new-$it" }
+        }
+        assertEquals(listOf("fox-1"), source.raceData.categories.last().controlPoints.map { it.controlId })
+    }
+
     @Test fun reportsEveryActiveCourseAndExcludesInactiveImports() {
         val project = courseReportFixture()
         val reports = DesktopCourseBriefReports.build(project, emptyMap())
@@ -102,6 +155,17 @@ class DesktopCourseBriefReportTest {
         assertNotNull(report.horizontalLengthMeters)
         assertTrue(report.notice!!.contains("Elevation"))
     }
+}
+
+internal fun boundCourseReportFixture(): EventProjectFile {
+    val source = courseReportFixture()
+    fun bind(data: EventCategoryData): EventCategoryData {
+        val info = data.category.courseInfo!!
+        return data.copy(category = data.category.copy(courseInfo = CourseDesignBindings.prepare(info, source.raceData.controls,
+            info.controlPoints.associate { it.controlId to it.controlId }, info.courseObjects.map { it.id }, "fixture")))
+    }
+    return source.copy(raceData = source.raceData.copy(categories = source.raceData.categories.map(::bind),
+        courseMappings = source.raceData.courseMappings.map(::bind)))
 }
 
 internal fun courseReportFixture(): EventProjectFile {

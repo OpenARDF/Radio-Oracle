@@ -17,6 +17,33 @@ import java.nio.file.Files
 class DesktopCourseDesignUiTest {
     @get:Rule val rule = createComposeRule()
 
+    @Test fun analyzerDefaultsToAppliedCourseEvenWithPendingDraft() {
+        val applied = DesktopAuthoritativeCourseImportTest.project()
+        val pending = EventCourseDrafts.edit(applied) { candidate ->
+            EventProjectEditor.replaceCategoryAssignedControls(candidate, "short", listOf("fox1", "fox3")) { "draft-$it" }
+        }
+        val ui = DesktopCourseDesignUi()
+        assertEquals(applied, ui.analysisProject(pending))
+        assertEquals(DesktopCourseRouteSource.Applied, ui.routeSource(pending))
+        ui.analysisSource = DesktopCourseRouteSource.Draft
+        assertEquals(listOf("fox1", "fox3"), ui.analysisProject(pending).raceData.categories.single { it.category.id == "short" }.publicControlIds)
+        // Applying/canceling a draft must not leave the next analysis pointed at a nonexistent draft.
+        assertEquals(applied, ui.analysisProject(applied))
+        assertEquals(DesktopCourseRouteSource.Applied, ui.routeSource(applied))
+    }
+
+    @Test fun appliedAnalysisRemainsAvailableWhenAnUnrelatedDraftExists() {
+        val applied = EventCourseDrafts.candidate(draft())
+        val pending = EventCourseDrafts.edit(applied) { it.copy(raceData = it.raceData.copy(
+            race = it.raceData.race.copy(courseAnalyzerSpeedCompensationFactor = 1.25))) }
+        val summary = analyze(applied, DesktopCourseRouteSource.Applied)
+        var source by mutableStateOf(DesktopCourseRouteSource.Applied)
+        rule.setContent { Text(currentCourseAnalysisResult(pending, summary, source)?.routeSource?.label ?: "Analyze again") }
+        rule.onNodeWithText("Applied").assertExists()
+        rule.runOnIdle { source = DesktopCourseRouteSource.Draft }
+        rule.onNodeWithText("Analyze again").assertExists()
+    }
+
     @Test fun importingMandatoryCornersInvalidatesDisplayedAnalysisAndLateCompletions() {
         val applied = EventCourseDrafts.candidate(draft())
         val oldSummary = analyze(applied, DesktopCourseRouteSource.Applied)

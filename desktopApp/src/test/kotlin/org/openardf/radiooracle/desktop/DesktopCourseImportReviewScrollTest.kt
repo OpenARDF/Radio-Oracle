@@ -44,7 +44,7 @@ class DesktopCourseImportReviewScrollTest(private val scale: Float) {
 
     @Test fun mouseWheelAndScrollbarReachTheEndWithoutMovingTheButtons() {
         showReview()
-        val accept = rule.onNodeWithText("Accept Import")
+        val accept = rule.onNodeWithText("Review Course Report")
         val before = accept.fetchSemanticsNode().boundsInRoot
         finalNotice().assertIsNotDisplayed()
         capture("top")
@@ -74,17 +74,17 @@ class DesktopCourseImportReviewScrollTest(private val scale: Float) {
             moveTo(center)
             scroll(10_000f)
         }
-        rule.onNodeWithText("Accept Import").performClick()
+        rule.onNodeWithText("Review Course Report").performClick()
         rule.onNodeWithText("Import failed: Course data changed. Cancel and import the file again.").assertIsDisplayed()
-        rule.onNodeWithText("Accept Import replaces the outdated draft", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("This import uses the applied race.", substring = true).assertIsDisplayed()
         assertActionsVisible()
     }
 
-    private fun finalNotice() = rule.onNodeWithText("Accept Import will", substring = true)
+    private fun finalNotice() = rule.onNodeWithText("Next, review the imported course report.", substring = true)
 
     private fun assertActionsVisible() {
         rule.onNodeWithText("Cancel").assertIsDisplayed()
-        rule.onNodeWithText("Accept Import").assertIsDisplayed()
+        rule.onNodeWithText("Review Course Report").assertIsDisplayed()
     }
 
     private fun capture(position: String) {
@@ -109,7 +109,7 @@ class DesktopCourseImportReviewScrollTest(private val scale: Float) {
         )
         val draft = org.openardf.radiooracle.shared.event.EventCourseDrafts.start(base)
         val stale = draft.copy(raceData = draft.raceData.copy(race = draft.raceData.race.copy(timeLimitSeconds = 123)))
-        var currentReview by mutableStateOf(if (failOnAccept) review.copy(importDraft = DesktopCourseImportDraft.prepare(stale)) else review)
+        var currentReview by mutableStateOf(if (failOnAccept) review.copy(importTransaction = DesktopCourseImportTransaction.prepare(stale)) else review)
         rule.setContent {
             CompositionLocalProvider(LocalDensity provides Density(scale)) {
                 MaterialTheme {

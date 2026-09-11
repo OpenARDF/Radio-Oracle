@@ -35,6 +35,38 @@ class AppliedCourseBindingsTest {
         assertEquals(CourseResolutionStatus.INVALID, CourseControlResolver.resolve(controls.first(), listOf(moved)).status)
     }
 
+    @Test fun explicitCatalogRefreshPreservesCoordinatesAndVisitsAndRejectsMovedGeometry() {
+        val source = applied()
+        val revised = controls.map { if (it.id == "race-1") it.copy(siCode = 155, label = "New label") else it }
+        val updated = AppliedCourseEdits.refreshCatalog(source, revised)
+        assertNull(CourseDesignBindings.validationError(updated))
+        assertEquals(source.appliedBindings!!.orderedPlacementIds, updated.appliedBindings!!.orderedPlacementIds)
+        assertEquals(41.0, CourseControlResolver.resolve(revised.first(), listOf(updated)).location!!.latitude)
+        assertEquals("New label", updated.controlPoints.last().label)
+        assertEquals(155, updated.appliedBindings.controls.single { it.controlId == "race-1" }.siCode)
+        assertNotEquals(source.appliedBindings.inputFingerprint, updated.appliedBindings.inputFingerprint)
+        assertFailsWith<IllegalArgumentException> { AppliedCourseEdits.refreshCatalog(source.copy(
+            controlPoints = source.controlPoints.map { it.copy(latitude = it.latitude + 1) }), revised) }
+    }
+
+    @Test fun codecRejectsStaleMembershipAndCatalogBindingsOnBothReadAndWrite() {
+        var project = EventProjectFactory.createEmptyProject("race", "Bindings fixture", "2026-09-06T09:00")
+        project = EventProjectEditor.addCategory(project.copy(raceData = project.raceData.copy(controls = controls)), "m21", "M21")
+        project = EventProjectEditor.replaceCategoryAssignedControls(project, "m21", controls.map { it.id }) { "cp-$it" }
+        project = EventProjectEditor.updateCategoryCourseInfo(project, "m21", applied())
+        val staleCatalog = project.copy(raceData = project.raceData.copy(controls = controls.map { it.copy(siCode = it.siCode + 10) }))
+        val staleMembership = EventProjectEditor.replaceCategoryAssignedControls(project, "m21", listOf("race-1")) { "cp-$it" }
+        for (stale in listOf(staleCatalog, staleMembership)) {
+            assertFailsWith<IllegalArgumentException> { EventProjectFileJson.encode(stale) }
+            assertFailsWith<IllegalArgumentException> { EventProjectFileJson.decode(Json { encodeDefaults = true }.encodeToString(stale)) }
+        }
+        val encrypted = EventProjectEditor.updateCategoryEncryptedCourseInfo(project, "m21",
+            ProtectedCourseCipher.encryptCourseInfo(applied(), "fixture-password"))
+        assertFailsWith<IllegalArgumentException> { EventProjectEditor.updateCategoryControlPoints(encrypted, "m21", "Fox1") { "cp-$it" } }
+        assertFailsWith<IllegalArgumentException> { EventProjectEditor.updateControl(encrypted, "race-1", "Fox1", "155",
+            ControlPointType.CONTROL, true, "", "") }
+    }
+
     @Test fun fingerprintIgnoresSourceNamesAndGeneratedIdsButIncludesBindingLocation() {
         val saved = applied()
         val renamed = saved.copy(sourceName = "renamed.kml", sourceSha256 = "new-file-bytes", sampledPointCount = 123,
@@ -75,6 +107,7 @@ class AppliedCourseBindingsTest {
     @Test fun raceFilesAndMixedProtectionSeriesKeepBindingsAndRequireCurrentSchema() {
         var project = EventProjectFactory.createEmptyProject("race", "Bindings fixture", "2026-09-06T09:00")
         project = EventProjectEditor.addCategory(project.copy(raceData = project.raceData.copy(controls = controls)), "m21", "M21")
+        project = EventProjectEditor.replaceCategoryAssignedControls(project, "m21", controls.map { it.id }) { "cp-$it" }
         project = EventProjectEditor.updateCategoryCourseInfo(project, "m21", applied())
         val text = EventProjectFileJson.encode(project.copy(schemaVersion = 6))
         val plain = EventProjectFileJson.decode(text)

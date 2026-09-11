@@ -41,7 +41,7 @@ internal fun ActiveCourseReports(
 }
 
 @Composable
-internal fun CourseBriefReportSection(report: DesktopCourseBriefReport) {
+internal fun CourseBriefReportSection(report: DesktopCourseBriefReport, importedRoute: Boolean = false) {
     Column(Modifier.fillMaxWidth().testTag("course-report-${report.categoryId}"),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Divider()
@@ -49,8 +49,8 @@ internal fun CourseBriefReportSection(report: DesktopCourseBriefReport) {
         Text("Horizontal length: ${DesktopCourseAnalyzer.summaryLengthText(report.horizontalLengthMeters)}")
         Text("Total climb: ${DesktopCourseAnalyzer.summaryClimbText(report.climbMeters)}")
         Text("Effective length: ${DesktopCourseAnalyzer.summaryLengthText(report.effectiveLengthMeters)}")
-        Text("Ideal order: ${report.idealOrder.takeIf { it.isNotEmpty() }?.joinToString(" → ") ?: "Unavailable"}")
-        Text("Estimated ideal time: ${DesktopCourseAnalyzer.summaryDurationText(report.estimatedIdealSeconds)}")
+        Text("${if (importedRoute) "Imported order" else "Ideal order"}: ${report.idealOrder.takeIf { it.isNotEmpty() }?.joinToString(" → ") ?: "Unavailable"}")
+        Text("${if (importedRoute) "Estimated time" else "Estimated ideal time"}: ${DesktopCourseAnalyzer.summaryDurationText(report.estimatedIdealSeconds)}")
         report.notice?.let { Text(it, color = DesktopPalette.Disconnected) }
         report.routeMap?.let { map ->
             // Leave room for the existing map renderer's scale labels below the map frame.

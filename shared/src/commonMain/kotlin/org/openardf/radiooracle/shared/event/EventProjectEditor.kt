@@ -622,6 +622,10 @@ object EventProjectEditor {
             }
         )
         val formattedControlPoints = ControlPointRules.formatControlPoints(definitions)
+        val membershipChanged = categoryData.controlPoints.map { it.controlId }.toSet() != controlPoints.map { it.controlId }.toSet()
+        require(!membershipChanged || categoryData.category.encryptedCourseInfo == null) {
+            "Remove course protection before changing assigned controls, or edit and apply the protected course design."
+        }
 
         val categories = projectFile.raceData.categories.map { data ->
             if (data.category.id == categoryId) {
@@ -636,9 +640,10 @@ object EventProjectEditor {
             }
         }
 
-        return projectFile.copy(
-            raceData = projectFile.raceData.copy(categories = categories, controls = controls)
-        )
+        val updatedRace = projectFile.raceData.copy(categories = categories, controls = controls)
+        return projectFile.copy(raceData = updatedRace.copy(categories = updatedRace.categories.map { data ->
+            if (data.category.id == categoryId) AppliedCourseEdits.reassign(updatedRace, data) else data
+        }))
     }
 
     /** Returns a copy of the Race File with a category course replaced by exact stored control IDs. */
@@ -844,11 +849,26 @@ object EventProjectEditor {
         val controls = projectFile.raceData.controls.mapIndexed { index, control ->
             if (index == controlPosition) updatedControl else control
         }
+        val oldControl = projectFile.raceData.controls[controlPosition]
+        val identityChanged = oldControl.label != updatedControl.label || oldControl.publicLabel != updatedControl.publicLabel ||
+            oldControl.siCode != updatedControl.siCode || oldControl.type != updatedControl.type
+        fun updateCourse(data: EventCategoryData): EventCategoryData {
+            val assigned = data.controlPoints.any { it.controlId == controlId } || controlId in data.publicControlIds
+            require(!identityChanged || !assigned || data.category.encryptedCourseInfo == null) {
+                "Remove course protection before changing this control, or edit and apply the protected course design."
+            }
+            val updated = data.withUpdatedControlDefinition(updatedControl)
+            val info = updated.category.courseInfo ?: return updated
+            if (info.appliedBindings?.controls?.none { it.controlId == controlId } != false) return updated
+            val refreshed = AppliedCourseEdits.refreshCatalog(info, controls)
+            return updated.copy(category = updated.category.copy(courseInfo = refreshed,
+                idealOrder = if (refreshed != info) refreshed.idealOrder else updated.category.idealOrder))
+        }
         val categories = projectFile.raceData.categories.map { categoryData ->
-            categoryData.withUpdatedControlDefinition(updatedControl)
+            updateCourse(categoryData)
         }
         val courseMappings = projectFile.raceData.courseMappings.map { categoryData ->
-            categoryData.withUpdatedControlDefinition(updatedControl)
+            updateCourse(categoryData)
         }
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
@@ -1811,7 +1831,9 @@ object EventProjectEditor {
             val categoryOrder = existingCategoryData?.category?.order ?: nextCategoryOrder++
             val controlPoints = imported.controlPoints.mapIndexed { index, controlPoint ->
                 val definition = ControlPointDefinition(controlPoint.siCode, controlPoint.type, controlPoint.order)
-                val control = EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
+                val control = projectFile.raceData.controls.singleOrNull {
+                    it.siCode == definition.siCode && it.type == definition.type
+                } ?: EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
                 importedControls += control
                 controlPoint.copy(
                     categoryId = categoryId,
@@ -1830,10 +1852,10 @@ object EventProjectEditor {
                         importedCategoryName,
                         imported.category.isMan
                     ),
-                    encryptedIdealOrder = existingCategoryData?.category?.encryptedIdealOrder,
-                    encryptedCourseInfo = existingCategoryData?.category?.encryptedCourseInfo,
-                    idealOrder = existingCategoryData?.category?.idealOrder,
-                    courseInfo = existingCategoryData?.category?.courseInfo,
+                    encryptedIdealOrder = imported.category.encryptedIdealOrder,
+                    encryptedCourseInfo = imported.category.encryptedCourseInfo,
+                    idealOrder = imported.category.idealOrder,
+                    courseInfo = imported.category.courseInfo,
                     controlPointsString = ControlPointRules.formatControlPoints(definitions)
                 ),
                 controlPoints = controlPoints,

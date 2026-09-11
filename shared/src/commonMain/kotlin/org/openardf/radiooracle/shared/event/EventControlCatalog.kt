@@ -48,6 +48,19 @@ object EventControlCatalog {
         }
         val race = project.raceData
         validate(race.controls, race.categories + race.courseMappings, race.aliases, false)
+        val appliedInfos = (race.categories + race.courseMappings).mapNotNull { data ->
+            data.category.courseInfo?.takeIf { data.category.encryptedCourseInfo == null && it.appliedBindings != null }
+                ?.let { data.category.id to it }
+        }.toMap()
+        appliedInfos.forEach { (id, info) ->
+            val name = (race.categories + race.courseMappings).single { it.category.id == id }.category.name
+            try {
+                ResolvedCourseProjection.courseInfo(race, id, info)
+            } catch (error: IllegalArgumentException) {
+                throw IllegalArgumentException("Incompatible Race File: $name: ${error.message}", error)
+            }
+        }
+        ResolvedCourseProjection.courseInfos(race, appliedInfos)
         race.courseDraft?.design?.let { validate(it.controls, it.categories + it.courseMappings, it.aliases, true) }
     }
 

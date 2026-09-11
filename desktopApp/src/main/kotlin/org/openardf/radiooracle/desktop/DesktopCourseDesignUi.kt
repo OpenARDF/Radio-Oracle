@@ -13,11 +13,15 @@ import org.openardf.radiooracle.shared.event.*
 internal val LocalCourseDesign = staticCompositionLocalOf<DesktopCourseDesignUi?> { null }
 
 internal class DesktopCourseDesignUi {
+    var analysisSource by mutableStateOf(DesktopCourseRouteSource.Applied)
     var project by mutableStateOf<EventProjectFile?>(null)
     var courseState by mutableStateOf<DesktopProtectedCourseState?>(null)
     var error by mutableStateOf<String?>(null)
     var pendingApplication by mutableStateOf<DesktopCourseCalculatedRouteApplication?>(null)
     var cancelDraft: () -> Unit = {}
+    fun routeSource(applied: EventProjectFile?) = if (applied?.raceData?.courseDraft != null) analysisSource else DesktopCourseRouteSource.Applied
+    fun analysisProject(applied: EventProjectFile) = if (routeSource(applied) == DesktopCourseRouteSource.Draft)
+        EventCourseDrafts.candidate(applied) else EventCourseDrafts.cancel(applied)
 }
 
 /** Separate loaded candidate state: results keep the session's applied race and its unlocked cache. */

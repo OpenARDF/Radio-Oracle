@@ -728,7 +728,7 @@ object DesktopCourseAnalyzer {
         val idealOrderMatches = calculatedRoute?.let {
             providedFoxIds.isNotEmpty() && providedFoxIds == calculatedFoxIds
         }
-        val calculatedRouteMatchesStored = idealOrderMatches == true && !prepareApplication && practiceDirectionNote == null
+        val calculatedRouteMatchesStored = route.size >= 2 && idealOrderMatches == true && !prepareApplication && practiceDirectionNote == null
         val calculatedRouteElevationSamplePoints = if (
             start != null &&
             finish != null &&

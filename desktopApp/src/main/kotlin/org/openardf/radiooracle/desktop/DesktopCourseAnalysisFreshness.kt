@@ -12,11 +12,14 @@ internal fun currentCourseAnalysisResult(
     completed: DesktopCourseAnalysisSummary?,
     routeSource: DesktopCourseRouteSource = DesktopCourseRouteSource.forProject(project)
 ): DesktopCourseAnalysisSummary? {
-    val currentHash = remember(project?.raceData) {
+    val currentHash = remember(project?.raceData, routeSource) {
         project?.let {
             runCatching {
-                EventCourseDrafts.requireCurrent(it)
-                EventCourseDrafts.snapshotHash(EventCourseDrafts.candidate(it))
+                val input = if (routeSource == DesktopCourseRouteSource.Draft) {
+                    EventCourseDrafts.requireCurrent(it)
+                    EventCourseDrafts.candidate(it)
+                } else EventCourseDrafts.cancel(it)
+                EventCourseDrafts.snapshotHash(input)
             }.getOrNull()
         }
     }
