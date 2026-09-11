@@ -3197,14 +3197,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun updateCourseAnalyzerSpeedFactor(factor: Double): String = runCatching {
-            val candidate = projectFile?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate)
-                ?: throw IllegalStateException("Load a Race File before updating Course Analyzer speed.")
-            projectFile = projectSession.updateCourseDraft(candidate) { project ->
-                EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(project, factor)
-            }
+            projectFile = courseDesignUi.updateSpeedFactor(projectSession, factor)
             hasUnsavedChanges = projectSession.hasUnsavedChanges
-            courseDesignUi.analysisSource = DesktopCourseRouteSource.Draft
-            projectStatusText = "Draft Course Analyzer speed factor updated. Unsaved changes."
+            projectStatusText = "${courseDesignUi.routeSource(projectFile).label} Course Analyzer speed factor updated. Unsaved changes."
             projectStatusText
         }.getOrElse { error ->
             projectStatusText = "Speed factor update failed: ${error.message ?: error::class.simpleName}"

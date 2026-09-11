@@ -76,6 +76,33 @@ class DesktopCourseDesignUiTest {
         rule.onNodeWithText("Analyze again").assertExists()
     }
 
+    @Test fun appliedSpeedChangeInvalidatesReportAndReanalyzesWithAnUnrelatedStaleDraft() {
+        val applied = EventCourseDrafts.candidate(draft())
+        val pending = EventCourseDrafts.edit(applied) {
+            EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(it, 1.25)
+        }
+        val initial = EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(pending, 0.6)
+        val ui = DesktopCourseDesignUi()
+        val session = DesktopProjectSession(DesktopProjectFiles).apply { newProject(initial) }
+        var current by mutableStateOf(initial)
+        val oldSummary = analyze(ui.analysisProject(initial), DesktopCourseRouteSource.Applied)
+        var completed by mutableStateOf(oldSummary)
+        rule.setContent {
+            Text(currentCourseAnalysisResult(current, completed, ui.routeSource(current))?.sourceSnapshotHash ?: "Analyze again")
+        }
+        rule.onNodeWithText(oldSummary.sourceSnapshotHash!!).assertExists()
+        rule.runOnIdle { current = ui.updateSpeedFactor(session, 0.7) }
+        rule.onNodeWithText("Analyze again").assertExists()
+        val refreshed = analyze(ui.analysisProject(current), DesktopCourseRouteSource.Applied)
+        assertNotEquals(oldSummary.sourceSnapshotHash, refreshed.sourceSnapshotHash)
+        assertEquals(initial.raceData.courseDraft, current.raceData.courseDraft)
+        rule.runOnIdle { completed = refreshed }
+        rule.onNodeWithText(refreshed.sourceSnapshotHash!!).assertExists()
+        // A late result using the previous speed cannot replace the current report.
+        rule.runOnIdle { completed = oldSummary.copy(analysisPerformedAtText = "Late result") }
+        rule.onNodeWithText("Analyze again").assertExists()
+    }
+
     @Test fun importingMandatoryCornersInvalidatesDisplayedAnalysisAndLateCompletions() {
         val applied = EventCourseDrafts.candidate(draft())
         val oldSummary = analyze(applied, DesktopCourseRouteSource.Applied)

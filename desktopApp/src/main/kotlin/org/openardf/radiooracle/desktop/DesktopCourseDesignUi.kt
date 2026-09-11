@@ -22,6 +22,24 @@ internal class DesktopCourseDesignUi {
     fun routeSource(applied: EventProjectFile?) = if (applied?.raceData?.courseDraft != null) analysisSource else DesktopCourseRouteSource.Applied
     fun analysisProject(applied: EventProjectFile) = if (routeSource(applied) == DesktopCourseRouteSource.Draft)
         EventCourseDrafts.candidate(applied) else EventCourseDrafts.cancel(applied)
+
+    fun updateSpeedFactor(session: DesktopProjectSession, factor: Double): EventProjectFile =
+        session.updateCurrentProject { current ->
+            when (routeSource(current)) {
+                DesktopCourseRouteSource.Draft -> EventCourseDrafts.edit(current) {
+                    EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(it, factor)
+                }
+                DesktopCourseRouteSource.Applied -> {
+                    val draft = current.raceData.courseDraft
+                    val wasCurrent = draft?.version == 1 && draft.baseSnapshotHash == EventCourseDrafts.snapshotHash(current)
+                    val updated = EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(current, factor)
+                    // Only the applied analysis setting changed. Preserve the draft's own setting
+                    // and design, and never make an already stale draft eligible for application.
+                    if (wasCurrent) updated.copy(raceData = updated.raceData.copy(courseDraft = draft!!.copy(
+                        baseSnapshotHash = EventCourseDrafts.snapshotHash(updated)))) else updated
+                }
+            }
+        }
 }
 
 /** Separate loaded candidate state: results keep the session's applied race and its unlocked cache. */
