@@ -901,9 +901,7 @@ object DesktopAutomationCli {
         return runCatching {
             val source = Path.of(sourceText)
             val target = Path.of(targetText)
-            val projectFile = DesktopProjectFiles.importAndroidRaceBackupJson(source) {
-                UUID.randomUUID().toString()
-            }
+            val projectFile = DesktopProjectFiles.importAndroidRaceBackupJson(source)
             DesktopProjectFiles.write(target, projectFile)
             val validationErrors = EventValidationRules.validateRaceData(projectFile.raceData)
             out.println(

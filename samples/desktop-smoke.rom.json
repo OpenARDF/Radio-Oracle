@@ -1,6 +1,7 @@
 {
-    "schemaVersion": 2,
+    "schemaVersion": 8,
     "appName": "Radio-Oracle",
+    "resultsScoringRevision": 6,
     "raceData": {
         "race": {
             "id": "desktop-smoke-race",
@@ -10,7 +11,9 @@
             "raceType": "CLASSIC",
             "raceLevel": "PRACTICE",
             "raceBand": "M80",
-            "timeLimitSeconds": 7200
+            "timeLimitSeconds": 7200,
+            "courseAnalyzerSpeedCompensationFactor": 1.0,
+            "combinedNationalRegionalAwards": false
         },
         "categories": [
             {
@@ -19,14 +22,10 @@
                     "raceId": "desktop-smoke-race",
                     "name": "M21",
                     "isMan": true,
-                    "maxAge": null,
                     "lengthMeters": 5000,
                     "climbMeters": 100,
                     "order": 1,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -68,14 +67,10 @@
                     "raceId": "desktop-smoke-race",
                     "name": "W21",
                     "isMan": false,
-                    "maxAge": null,
                     "lengthMeters": 4200,
                     "climbMeters": 80,
                     "order": 2,
-                    "differentProperties": true,
-                    "raceType": "SPRINT",
-                    "raceBand": "M2",
-                    "timeLimitSeconds": 3600,
+                    "differentProperties": false,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -138,9 +133,13 @@
                         "siNumber": 123456,
                         "siRent": false,
                         "startNumber": 101,
-                        "drawnStartTimeSeconds": 600
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 600,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -149,7 +148,6 @@
                         "competitorId": "competitor-alice",
                         "siNumber": 123456,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 600,
                         "finishTimeSeconds": 1800,
                         "readoutDateTimeIso": "2026-05-31T11:00",
@@ -176,14 +174,16 @@
                         "index": "OK002",
                         "isMan": true,
                         "birthYear": 1988,
-                        "siNumber": null,
                         "siRent": true,
                         "startNumber": 102,
-                        "drawnStartTimeSeconds": 660
-                    },
-                    "category": null
-                },
-                "readoutData": null
+                        "drawnStartTimeSeconds": 660,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
+                }
             }
         ],
         "unmatchedReadoutData": [
@@ -191,10 +191,8 @@
                 "result": {
                     "id": "result-unmatched",
                     "raceId": "desktop-smoke-race",
-                    "competitorId": null,
                     "siNumber": 654321,
                     "cardType": 10,
-                    "checkTimeSeconds": null,
                     "startTimeSeconds": 600,
                     "finishTimeSeconds": 2100,
                     "readoutDateTimeIso": "2026-05-31T11:05",
@@ -216,11 +214,8 @@
                 "label": "FOX 1",
                 "siCode": 31,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-32-32-control",
@@ -228,11 +223,8 @@
                 "label": "32",
                 "siCode": 32,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-33-33-control",
@@ -240,11 +232,8 @@
                 "label": "33",
                 "siCode": 33,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-41-41-control",
@@ -252,11 +241,8 @@
                 "label": "41",
                 "siCode": 41,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-42-42-control",
@@ -264,11 +250,8 @@
                 "label": "42",
                 "siCode": 42,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-beacon-90",
@@ -276,12 +259,12 @@
                 "label": "B",
                 "siCode": 90,
                 "type": "BEACON",
+                "scored": false,
                 "mandatory": false,
                 "publicLabel": "B",
-                "latitude": null,
-                "longitude": null,
                 "notes": "Sprint beacon"
             }
-        ]
+        ],
+        "courseMappings": []
     }
 }

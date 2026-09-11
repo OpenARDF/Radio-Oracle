@@ -54,6 +54,25 @@ class EventProjectFileTest {
     }
 
     @Test
+    fun rejectsAmbiguousCatalogsAndMissingOrConflictingCourseReferences() {
+        val project = EventProjectFileJson.normalizedForStorage(EventProjectFile(raceData = raceData()))
+        val race = project.raceData
+        val variants = listOf(
+            race.copy(controls = race.controls + race.controls.single()),
+            race.copy(controls = race.controls + race.controls.single().copy(id = "second-id")),
+            race.copy(categories = race.categories.map { it.copy(controlPoints = it.controlPoints.map { p -> p.copy(controlId = "missing") }) }),
+            race.copy(categories = race.categories.map { it.copy(publicControlIds = listOf("missing")) }),
+            race.copy(aliases = listOf(EventAlias("old", "race", 31, "Wrong label")))
+        )
+        val json = kotlinx.serialization.json.Json { encodeDefaults = true }
+        for (variant in variants) {
+            assertFailsWith<IllegalArgumentException> {
+                EventProjectFileJson.decode(json.encodeToString(EventProjectFile.serializer(), project.copy(raceData = variant)))
+            }
+        }
+    }
+
+    @Test
     fun serializesAndDeserializesPortableProjectFiles() {
         val original = EventProjectFile(raceData = raceData())
 
@@ -228,45 +247,17 @@ class EventProjectFileTest {
     }
 
     @Test
-    fun backfillsControlsWhenOlderProjectFileOmitsControlCatalog() {
+    fun rejectsObsoleteFilesAndMissingControlCatalogs() {
         val encoded = EventProjectFileJson.encode(EventProjectFile(raceData = raceData()))
-            .replace(
-                Regex(""",\n\s+"controls": \[\]"""),
-                ""
-            )
-
-        val decoded = EventProjectFileJson.decode(encoded)
-
-        assertEquals(listOf("FOX 1"), decoded.raceData.controls.map { it.label })
-        assertEquals(listOf(31), decoded.raceData.controls.map { it.siCode })
-        assertEquals(listOf(ControlPointType.CONTROL), decoded.raceData.controls.map { it.type })
-    }
-
-    @Test
-    fun migratesLegacyMandatoryControlsToUnscoredControls() {
-        val projectFile = EventProjectFile(
-            raceData = raceData().copy(
-                controls = listOf(
-                    EventControl(
-                        id = "control-31",
-                        raceId = "race",
-                        label = "FOX 1",
-                        siCode = 31,
-                        type = ControlPointType.CONTROL,
-                        scored = true,
-                        mandatory = true
-                    )
-                )
-            )
-        )
-        val legacyEncoded = EventProjectFileJson.encode(projectFile)
-            .replace("\"schemaVersion\": ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION}", "\"schemaVersion\": 2")
-            .replace(Regex("""\s+"scored": true,\n"""), "")
-
-        val decoded = EventProjectFileJson.decode(legacyEncoded)
-
-        assertFalse(decoded.raceData.controls.single().scored)
-        assertFalse(decoded.raceData.controls.single().mandatory)
+        for (version in 1 until EventProjectFileFormat.CURRENT_SCHEMA_VERSION) {
+            assertFailsWith<IllegalArgumentException> {
+                EventProjectFileJson.decode(encoded.replace("\"schemaVersion\": ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION}", "\"schemaVersion\": $version"))
+            }
+        }
+        val tree = kotlinx.serialization.json.Json.parseToJsonElement(encoded) as kotlinx.serialization.json.JsonObject
+        val race = tree["raceData"] as kotlinx.serialization.json.JsonObject
+        val missing = kotlinx.serialization.json.JsonObject(tree + ("raceData" to kotlinx.serialization.json.JsonObject(race - "controls")))
+        assertFailsWith<IllegalArgumentException> { EventProjectFileJson.decode(missing.toString()) }
     }
 
     @Test
@@ -351,6 +342,7 @@ class EventProjectFileTest {
                         EventControlPoint(
                             id = "control",
                             categoryId = "category",
+                            controlId = "control-31",
                             siCode = 31,
                             type = ControlPointType.CONTROL,
                             order = 1
@@ -359,6 +351,7 @@ class EventProjectFileTest {
                     competitors = listOf(competitor())
                 )
             ),
+            controls = listOf(EventControl("control-31", "race", "FOX 1", 31, ControlPointType.CONTROL)),
             aliases = listOf(
                 EventAlias(
                     id = "alias",

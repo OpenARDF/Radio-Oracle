@@ -205,7 +205,7 @@ class DesktopAutomationCliTest {
     }
 
     @Test
-    fun importAndroidEventFileCommandWritesDesktopEventFile() {
+    fun importAndroidEventFileCommandRejectsObsoleteBackupFormat() {
         val directory = Files.createTempDirectory("radio-oracle-automation")
         val androidPath = directory.resolve("Android Event.ardfjs")
         val desktopPath = directory.resolve("Android Event.json")
@@ -233,14 +233,9 @@ class DesktopAutomationCliTest {
             androidPath.toString(),
             desktopPath.toString()
         )
-        val openResult = runAutomation("open-event-file", desktopPath.toString())
-
-        assertEquals(0, importResult.exitCode)
-        assertTrue(importResult.stdout.contains("\"command\":\"import-android-event-file\""))
-        assertTrue(importResult.stdout.contains("\"raceName\":\"Android Event\""))
-        assertTrue(Files.exists(desktopPath))
-        assertEquals(0, openResult.exitCode)
-        assertTrue(openResult.stdout.contains("\"raceName\":\"Android Event\""))
+        assertEquals(66, importResult.exitCode)
+        assertTrue(importResult.stderr.contains("Incompatible Race File format"))
+        assertFalse(Files.exists(desktopPath))
     }
 
     @Test
@@ -265,7 +260,7 @@ class DesktopAutomationCliTest {
         assertTrue(exportResult.stdout.contains("\"command\":\"export-android-event-file\""))
         assertTrue(exportResult.stdout.contains("\"raceName\":\"Desktop Event\""))
         assertTrue(Files.exists(androidPath))
-        assertTrue(Files.readString(androidPath).contains("\"race_name\": \"Desktop Event\""))
+        assertEquals("Desktop Event", DesktopProjectFiles.read(androidPath).raceData.race.name)
         assertEquals(0, importResult.exitCode)
         assertTrue(importResult.stdout.contains("\"raceName\":\"Desktop Event\""))
     }

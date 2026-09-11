@@ -28,6 +28,52 @@ import org.openardf.radiooracle.shared.domain.ControlPointType
 
 /** Builds and backfills the race-level logical control catalog. */
 object EventControlCatalog {
+    /** Race files reference controls explicitly; never guess identity from an alias or an SI number. */
+    fun requireCanonical(project: EventProjectFile) {
+        fun validate(controls: List<EventControl>, categories: List<EventCategoryData>, aliases: List<EventAlias>, draft: Boolean) {
+            fun check(value: Boolean, detail: String) = require(value) { "Incompatible ${if (draft) "course draft" else "Race File"}: $detail" }
+            check(controls.all { it.id.isNotBlank() } && controls.map { it.id }.distinct().size == controls.size,
+                "control IDs must be present and unique.")
+            check(draft || controls.map { it.siCode }.distinct().size == controls.size,
+                "each SI station number must belong to exactly one control.")
+            val byId = controls.associateBy { it.id }
+            check(aliases.none { alias -> controls.any { it.siCode == alias.siCode } },
+                "a station has both a control definition and a separate alias. Control labels must have one source.")
+            categories.forEach { data ->
+                check(data.controlPoints.all { it.controlId in byId }, "${data.category.name} references an unknown or missing control ID.")
+                check(data.publicControlIds.all { it in byId }, "${data.category.name} has an unknown assigned control ID.")
+                check(data.publicControlIds.isEmpty() || data.publicControlIds.toSet() == data.controlPoints.map { it.controlId }.toSet(),
+                    "${data.category.name} has conflicting lists of assigned controls.")
+            }
+        }
+        val race = project.raceData
+        validate(race.controls, race.categories + race.courseMappings, race.aliases, false)
+        race.courseDraft?.design?.let { validate(it.controls, it.categories + it.courseMappings, it.aliases, true) }
+    }
+
+    /** Legacy consumers need aliases; derive catalogued stations from their current control records. */
+    fun resolvedAliases(raceData: EventRaceData): List<EventAlias> {
+        val current = raceData.controls
+            .sortedWith(compareBy<EventControl>({ it.siCode }, { it.type.name }, { it.label }))
+            .map { control -> EventAlias("alias-from-${control.id}", raceData.race.id, control.siCode,
+                control.publicLabel?.takeIf { it.isNotBlank() } ?: control.label) }
+            .filter { it.name.isNotBlank() }
+        return (current + raceData.aliases).distinctBy { it.siCode }
+    }
+
+    /** The catalog owns these names. Keep legacy aliases only for stations outside that catalog. */
+    internal fun removeCatalogAliases(project: EventProjectFile): EventProjectFile {
+        fun remaining(controls: List<EventControl>, aliases: List<EventAlias>): List<EventAlias> {
+            val codes = controls.filter { it.label.isNotBlank() || !it.publicLabel.isNullOrBlank() }.map { it.siCode }.toSet()
+            return aliases.filterNot { it.siCode in codes }
+        }
+        val race = project.raceData
+        val updated = project.copy(raceData = race.copy(aliases = remaining(race.controls, race.aliases),
+            courseDraft = race.courseDraft?.let { draft -> draft.copy(design = draft.design.copy(
+                aliases = remaining(draft.design.controls, draft.design.aliases))) }))
+        return EventCourseDrafts.rebaseNormalizedDraft(project, updated)
+    }
+
     /** Conservative classic radio-orienteering controls: 1..5 plus beacon M. */
     fun classicPreset(raceId: String): List<EventControl> =
         numberedControls(raceId, labels = (1..5).map { it.toString() }, firstSiCode = 31) +

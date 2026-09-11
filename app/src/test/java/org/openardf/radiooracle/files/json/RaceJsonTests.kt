@@ -74,7 +74,6 @@ import java.io.InputStream
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.runBlocking
 import org.openardf.radiooracle.backend.files.EventFileTransferUploads
-import org.openardf.radiooracle.shared.files.RaceBackupJsonImports
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -98,9 +97,7 @@ class RaceJsonTests {
         assertEquals("Transfer Race.json", upload.fileName)
         assertEquals(raceData.race.id.toString(), decoded.raceData.race.id)
         assertEquals(raceData.competitorData.size, decoded.raceData.competitorData.size)
-        assertEquals(decoded, RaceBackupJsonImports.projectFile(text) {
-            error("Modern IDs must be retained")
-        })
+        assertEquals(decoded.raceData.race.name, JsonProcessor.importRaceData(text, dataProcessor).race.name)
     }
 
 //    @Test
@@ -145,36 +142,17 @@ class RaceJsonTests {
     }
 
     @Test
-    fun testValidFromJson() {
-
-        val stream = resourceStream("json/json_valid_race_import.ardfjs")
-        val raceData = JsonProcessor.importRaceData(stream, dataProcessor)
-
-        assertEquals("EXAMPLE", raceData.race.name)
-        assertEquals(LocalDateTime.of(2025, 11, 28, 13, 0, 0), raceData.race.startDateTime)
-        assertEquals(RaceType.CLASSIC, raceData.race.raceType)
-        assertEquals(RaceBand.M80, raceData.race.raceBand)
-        assertEquals(RaceLevel.DISTRICT, raceData.race.raceLevel)
-
-        val categories = raceData.categories.map { it.category.name }.sorted()
-        assertEquals(listOf("D19", "D20", "M19", "M20", "Ostatní", "RT"), categories)
-
-        val competitors = raceData.competitorData.map { it.competitorCategory.competitor }
-        val startNumbers = competitors.map { it.startNumber }.sorted()
-        assertEquals(listOf(0, 0, 0, 0, 0, 0, 40), startNumbers)
-
-        val comp1 =
-            raceData.competitorData.find { it.competitorCategory.competitor.siNumber == 10000 }
-        assertEquals("KOLSKÝ Pavel", comp1?.competitorCategory?.competitor?.getFullName())
-        assertEquals(ResultStatus.MISPUNCHED, comp1?.readoutData?.result?.resultStatus)
-
+    fun rejectsObsoleteRaceBackupJson() {
+        assertThrows(IllegalArgumentException::class.java) {
+            JsonProcessor.importRaceData(resourceStream("json/json_valid_race_import.ardfjs"), dataProcessor)
+        }
     }
 
     // Should throw exception, since the required start time is missing
     @Test
     fun testInvalidFromJson() {
         val stream = resourceStream("json/json_invalid_race_import.ardfjs")
-        assertThrows(JsonDataException::class.java) {
+        assertThrows(IllegalArgumentException::class.java) {
             JsonProcessor.importRaceData(
                 stream,
                 dataProcessor

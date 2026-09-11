@@ -1,6 +1,7 @@
 {
-    "schemaVersion": 3,
+    "schemaVersion": 8,
     "appName": "Radio-Oracle",
+    "resultsScoringRevision": 6,
     "raceData": {
         "race": {
             "id": "sample-series-day-2",
@@ -11,13 +12,15 @@
             "raceLevel": "PRACTICE",
             "raceBand": "M80",
             "timeLimitSeconds": 7200,
-            "courseAnalyzerSpeedCompensationFactor": 1.0
+            "courseAnalyzerSpeedCompensationFactor": 1.0,
+            "combinedNationalRegionalAwards": false
         },
         "categories": [],
         "aliases": [],
         "competitorData": [],
         "unmatchedReadoutData": [],
-        "controls": []
+        "controls": [],
+        "courseMappings": []
     },
     "seriesLink": {
         "seriesId": "sample-series",

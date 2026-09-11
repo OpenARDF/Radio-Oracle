@@ -2,6 +2,9 @@ package org.openardf.radiooracle.desktop
 
 import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asSkiaBitmap
@@ -65,6 +68,18 @@ class DesktopCourseImportReviewScrollTest(private val scale: Float) {
         assertActionsVisible()
     }
 
+    @Test fun failedAcceptShowsErrorInsideTheDialogWithRecoveryNoticeAndButtonsVisible() {
+        showReview(failOnAccept = true)
+        rule.onAllNodes(hasScrollAction()).onFirst().performMouseInput {
+            moveTo(center)
+            scroll(10_000f)
+        }
+        rule.onNodeWithText("Accept Import").performClick()
+        rule.onNodeWithText("Import failed: Course data changed. Cancel and import the file again.").assertIsDisplayed()
+        rule.onNodeWithText("Accept Import replaces the outdated draft", substring = true).assertIsDisplayed()
+        assertActionsVisible()
+    }
+
     private fun finalNotice() = rule.onNodeWithText("Accept Import will", substring = true)
 
     private fun assertActionsVisible() {
@@ -81,7 +96,7 @@ class DesktopCourseImportReviewScrollTest(private val scale: Float) {
         Files.write(path, image.encodeToData()!!.bytes)
     }
 
-    private fun showReview() {
+    private fun showReview(failOnAccept: Boolean = false) {
         val path = Path.of(requireNotNull(javaClass.getResource("/condes/course.gpx")).toURI())
         val base = EventProjectFactory.createEmptyProject("race", "Import review", "2026-09-11T09:00")
         val (updated, summary) = DesktopCourseKmlImporter.importProtectedCourseInfo(
@@ -92,10 +107,15 @@ class DesktopCourseImportReviewScrollTest(private val scale: Float) {
             "course.gpx", path, base, updated, summary, updated, summary,
             null, null, null, null, null, null, false
         )
+        val draft = org.openardf.radiooracle.shared.event.EventCourseDrafts.start(base)
+        val stale = draft.copy(raceData = draft.raceData.copy(race = draft.raceData.race.copy(timeLimitSeconds = 123)))
+        var currentReview by mutableStateOf(if (failOnAccept) review.copy(importDraft = DesktopCourseImportDraft.prepare(stale)) else review)
         rule.setContent {
             CompositionLocalProvider(LocalDensity provides Density(scale)) {
                 MaterialTheme {
-                    CourseKmlKmzImportReviewDialog(review, { _, _, _, _, _, _, _ -> }, {})
+                    CourseKmlKmzImportReviewDialog(currentReview, { _, _, _, _, _, _, _ ->
+                        if (failOnAccept) currentReview = currentReview.copy(applyError = "Course data changed. Cancel and import the file again.")
+                    }, {})
                 }
             }
         }

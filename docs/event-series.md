@@ -6,7 +6,7 @@ The manifest inside the container is authoritative. Radio-Oracle does not infer 
 
 Each linked Race File may also contain a `seriesLink` with the series ID and race ID. That backlink helps the desktop app recognize that the open Race File belongs to a series, but it does not define membership by itself. If the backlink and manifest disagree, validation reports the mismatch.
 
-Existing folder-based series using `*.series.radio-oracle.json` plus standalone Race Files remain readable and exportable for compatibility.
+Folder-based series using `*.series.radio-oracle.json` plus standalone Race Files remain readable and exportable. Every member Race File must use the current format (format 8 starting with 1.0.46); older members are rejected rather than automatically converted. See [Control identities and the Race File format](control-catalog.md).
 
 ## Desktop Workflow
 

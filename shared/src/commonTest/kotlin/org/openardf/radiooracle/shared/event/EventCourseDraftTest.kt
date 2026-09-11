@@ -52,6 +52,26 @@ class EventCourseDraftTest {
         assertFailsWith<IllegalArgumentException> { EventCourseDrafts.requireCurrent(EventProjectFileJson.decode(EventProjectFileJson.encode(stale))) }
     }
 
+    @Test fun writerRemovesCatalogAliasesAndReaderRejectsConflictingDefinitions() {
+        val original = project().let { p -> p.copy(raceData = p.raceData.copy(aliases = listOf(
+            EventAlias("wrong", "race", 131, "Fox5"), EventAlias("legacy-only", "race", 199, "Check")))) }
+        val draft = EventCourseDrafts.edit(original) { move(it, 41.0) }
+        val rawJson = kotlinx.serialization.json.Json { encodeDefaults = true }
+        val raw = rawJson.encodeToString(EventProjectFile.serializer(), draft)
+        assertFailsWith<IllegalArgumentException> { EventProjectFileJson.decode(raw) }
+        for (reopened in listOf(EventProjectFileJson.decode(EventProjectFileJson.encode(draft)))) {
+            EventCourseDrafts.requireCurrent(reopened)
+            assertEquals(listOf(199), reopened.raceData.aliases.map { it.siCode })
+            assertEquals(listOf(199), reopened.raceData.courseDraft!!.design.aliases.map { it.siCode })
+            assertEquals("Fox1", EventControlCatalog.resolvedAliases(reopened.raceData).first { it.siCode == 131 }.name)
+            assertEquals(41.0, EventCourseDrafts.candidate(reopened).raceData.categories.single().category.courseInfo!!.controlPoints.single().latitude)
+        }
+        val stale = move(draft, 42.0)
+        assertFailsWith<IllegalArgumentException> {
+            EventCourseDrafts.requireCurrent(EventProjectFileJson.decode(rawJson.encodeToString(EventProjectFile.serializer(), stale)))
+        }
+    }
+
     @Test fun protectionCoversAppliedAndDraftCourseDataAndPreservesFreshness() {
         val draft = EventCourseDrafts.edit(project()) { move(it, 41.0) }
         val protected = ProtectedCourseCipher.protectProjectCourseData(draft, "fixture-password")

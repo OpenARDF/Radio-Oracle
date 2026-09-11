@@ -302,10 +302,11 @@ class DesktopProjectFilesTest {
         DesktopProjectFiles.exportAndroidRaceBackupJson(path, EventProjectFile(raceData = raceDataWithReadout()))
         val exported = Files.readString(path)
 
-        assertTrue(exported.contains("\"race_name\": \"Desktop File Race\""))
-        assertTrue(exported.contains("\"race_time_limit\": \"120\""))
-        assertTrue(exported.contains("\"unmatched_results\""))
-        assertTrue(exported.contains("\"competitor_category\": \"M21\""))
+        val decoded = EventProjectFileJson.decode(exported)
+        assertEquals("Desktop File Race", decoded.raceData.race.name)
+        assertEquals(7200L, decoded.raceData.race.timeLimitSeconds)
+        assertEquals("M21", decoded.raceData.categories.single().category.name)
+        assertEquals("competitor", decoded.raceData.competitorData.single().competitorCategory.competitor.id)
     }
 
     @Test
@@ -315,9 +316,7 @@ class DesktopProjectFilesTest {
         DesktopProjectFiles.exportAndroidRaceBackupJson(path, EventProjectFile(raceData = raceDataWithReadout()))
         var nextId = 0
 
-        val imported = DesktopProjectFiles.importAndroidRaceBackupJson(path) {
-            "imported-${nextId++}"
-        }
+        val imported = DesktopProjectFiles.importAndroidRaceBackupJson(path)
 
         assertEquals("Desktop File Race", imported.raceData.race.name)
         assertEquals("M21", imported.raceData.categories.single().category.name)
@@ -345,9 +344,7 @@ class DesktopProjectFilesTest {
         Files.writeString(oldPath, text)
 
         assertEquals(expected, DesktopProjectFiles.read(modernPath))
-        assertEquals(expected, DesktopProjectFiles.importAndroidRaceBackupJson(oldPath) {
-            error("Modern IDs must be retained")
-        })
+        assertEquals(expected, DesktopProjectFiles.importAndroidRaceBackupJson(oldPath))
         assertEquals(text, Files.readString(oldPath))
     }
 

@@ -1,6 +1,7 @@
 {
-    "schemaVersion": 2,
+    "schemaVersion": 8,
     "appName": "Radio-Oracle",
+    "resultsScoringRevision": 6,
     "raceData": {
         "race": {
             "id": "usa-density-race",
@@ -10,7 +11,9 @@
             "raceType": "CLASSIC",
             "raceLevel": "REGIONAL",
             "raceBand": "M80",
-            "timeLimitSeconds": 7200
+            "timeLimitSeconds": 7200,
+            "courseAnalyzerSpeedCompensationFactor": 1.0,
+            "combinedNationalRegionalAwards": false
         },
         "categories": [
             {
@@ -24,9 +27,6 @@
                     "climbMeters": 60,
                     "order": 1,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -73,9 +73,6 @@
                     "climbMeters": 75,
                     "order": 2,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -131,9 +128,6 @@
                     "climbMeters": 95,
                     "order": 3,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -198,9 +192,6 @@
                     "climbMeters": 210,
                     "order": 4,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -256,9 +247,6 @@
                     "climbMeters": 240,
                     "order": 5,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -314,9 +302,6 @@
                     "climbMeters": 210,
                     "order": 6,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -381,9 +366,6 @@
                     "climbMeters": 180,
                     "order": 7,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -439,9 +421,6 @@
                     "climbMeters": 150,
                     "order": 8,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -497,9 +476,6 @@
                     "climbMeters": 150,
                     "order": 9,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -555,9 +531,6 @@
                     "climbMeters": 120,
                     "order": 10,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -604,9 +577,6 @@
                     "climbMeters": 60,
                     "order": 11,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -653,9 +623,6 @@
                     "climbMeters": 75,
                     "order": 12,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -711,9 +678,6 @@
                     "climbMeters": 95,
                     "order": 13,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -778,9 +742,6 @@
                     "climbMeters": 270,
                     "order": 14,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -836,9 +797,6 @@
                     "climbMeters": 320,
                     "order": 15,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -903,9 +861,6 @@
                     "climbMeters": 270,
                     "order": 16,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -961,9 +916,6 @@
                     "climbMeters": 210,
                     "order": 17,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -1028,9 +980,6 @@
                     "climbMeters": 180,
                     "order": 18,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -1086,9 +1035,6 @@
                     "climbMeters": 150,
                     "order": 19,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -1144,9 +1090,6 @@
                     "climbMeters": 120,
                     "order": 20,
                     "differentProperties": false,
-                    "raceType": null,
-                    "raceBand": null,
-                    "timeLimitSeconds": null,
                     "controlPointsString": ""
                 },
                 "controlPoints": [
@@ -1200,9 +1143,13 @@
                         "siNumber": 812345,
                         "siRent": false,
                         "startNumber": 101,
-                        "drawnStartTimeSeconds": 600
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 600,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1211,7 +1158,6 @@
                         "competitorId": "competitor-001",
                         "siNumber": 812345,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 600,
                         "finishTimeSeconds": 3150,
                         "readoutDateTimeIso": "2026-06-14T10:22",
@@ -1241,9 +1187,13 @@
                         "siNumber": 823456,
                         "siRent": false,
                         "startNumber": 102,
-                        "drawnStartTimeSeconds": 660
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 660,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1252,7 +1202,6 @@
                         "competitorId": "competitor-002",
                         "siNumber": 823456,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 660,
                         "finishTimeSeconds": 2820,
                         "readoutDateTimeIso": "2026-06-14T10:22",
@@ -1282,9 +1231,13 @@
                         "siNumber": 834567,
                         "siRent": false,
                         "startNumber": 103,
-                        "drawnStartTimeSeconds": 720
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 720,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1293,7 +1246,6 @@
                         "competitorId": "competitor-003",
                         "siNumber": 834567,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 720,
                         "finishTimeSeconds": 3780,
                         "readoutDateTimeIso": "2026-06-14T10:22",
@@ -1323,9 +1275,13 @@
                         "siNumber": 845678,
                         "siRent": false,
                         "startNumber": 104,
-                        "drawnStartTimeSeconds": 780
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 780,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1334,7 +1290,6 @@
                         "competitorId": "competitor-004",
                         "siNumber": 845678,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 780,
                         "finishTimeSeconds": 3400,
                         "readoutDateTimeIso": "2026-06-14T10:22",
@@ -1364,9 +1319,13 @@
                         "siNumber": 856789,
                         "siRent": false,
                         "startNumber": 105,
-                        "drawnStartTimeSeconds": 840
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 840,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1375,7 +1334,6 @@
                         "competitorId": "competitor-005",
                         "siNumber": 856789,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 840,
                         "finishTimeSeconds": 2460,
                         "readoutDateTimeIso": "2026-06-14T10:22",
@@ -1405,9 +1363,13 @@
                         "siNumber": 867890,
                         "siRent": false,
                         "startNumber": 106,
-                        "drawnStartTimeSeconds": 900
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 900,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1416,7 +1378,6 @@
                         "competitorId": "competitor-006",
                         "siNumber": 867890,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 900,
                         "finishTimeSeconds": 3510,
                         "readoutDateTimeIso": "2026-06-14T10:22",
@@ -1443,14 +1404,16 @@
                         "index": "FIN-M70-031",
                         "isMan": true,
                         "birthYear": 1955,
-                        "siNumber": null,
                         "siRent": true,
                         "startNumber": 107,
-                        "drawnStartTimeSeconds": 960
-                    },
-                    "category": null
-                },
-                "readoutData": null
+                        "drawnStartTimeSeconds": 960,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
+                }
             },
             {
                 "competitorCategory": {
@@ -1467,9 +1430,13 @@
                         "siNumber": 878901,
                         "siRent": false,
                         "startNumber": 108,
-                        "drawnStartTimeSeconds": 1020
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 1020,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1478,7 +1445,6 @@
                         "competitorId": "competitor-008",
                         "siNumber": 878901,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 1020,
                         "finishTimeSeconds": 3300,
                         "readoutDateTimeIso": "2026-06-14T10:22",
@@ -1508,9 +1474,13 @@
                         "siNumber": 889123,
                         "siRent": false,
                         "startNumber": 109,
-                        "drawnStartTimeSeconds": 1080
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 1080,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1519,7 +1489,6 @@
                         "competitorId": "competitor-009",
                         "siNumber": 889123,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 1080,
                         "finishTimeSeconds": 3900,
                         "readoutDateTimeIso": "2026-06-14T10:35",
@@ -1549,9 +1518,13 @@
                         "siNumber": 889234,
                         "siRent": false,
                         "startNumber": 110,
-                        "drawnStartTimeSeconds": 1140
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 1140,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1560,7 +1533,6 @@
                         "competitorId": "competitor-010",
                         "siNumber": 889234,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 1140,
                         "finishTimeSeconds": 3570,
                         "readoutDateTimeIso": "2026-06-14T10:31",
@@ -1590,9 +1562,13 @@
                         "siNumber": 889345,
                         "siRent": false,
                         "startNumber": 111,
-                        "drawnStartTimeSeconds": 1200
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 1200,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1601,7 +1577,6 @@
                         "competitorId": "competitor-011",
                         "siNumber": 889345,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 1200,
                         "finishTimeSeconds": 4380,
                         "readoutDateTimeIso": "2026-06-14T10:43",
@@ -1631,9 +1606,13 @@
                         "siNumber": 889456,
                         "siRent": false,
                         "startNumber": 112,
-                        "drawnStartTimeSeconds": 1260
-                    },
-                    "category": null
+                        "drawnStartTimeSeconds": 1260,
+                        "bibNumber": "",
+                        "corridor": "",
+                        "callSign": "SWL",
+                        "email": "",
+                        "cellPhone": ""
+                    }
                 },
                 "readoutData": {
                     "result": {
@@ -1642,7 +1621,6 @@
                         "competitorId": "competitor-012",
                         "siNumber": 889456,
                         "cardType": 10,
-                        "checkTimeSeconds": null,
                         "startTimeSeconds": 1260,
                         "finishTimeSeconds": 3840,
                         "readoutDateTimeIso": "2026-06-14T10:34",
@@ -1663,10 +1641,8 @@
                 "result": {
                     "id": "result-unmatched-001",
                     "raceId": "usa-density-race",
-                    "competitorId": null,
                     "siNumber": 889012,
                     "cardType": 10,
-                    "checkTimeSeconds": null,
                     "startTimeSeconds": 1080,
                     "finishTimeSeconds": 3720,
                     "readoutDateTimeIso": "2026-06-14T10:32",
@@ -1688,11 +1664,8 @@
                 "label": "Fox 1",
                 "siCode": 31,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-32-32-control",
@@ -1700,11 +1673,8 @@
                 "label": "32",
                 "siCode": 32,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-33-33-control",
@@ -1712,11 +1682,8 @@
                 "label": "33",
                 "siCode": 33,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-34-34-control",
@@ -1724,11 +1691,8 @@
                 "label": "34",
                 "siCode": 34,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-41-41-control",
@@ -1736,11 +1700,8 @@
                 "label": "41",
                 "siCode": 41,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-42-42-control",
@@ -1748,11 +1709,8 @@
                 "label": "42",
                 "siCode": 42,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-43-43-control",
@@ -1760,11 +1718,8 @@
                 "label": "43",
                 "siCode": 43,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-44-44-control",
@@ -1772,11 +1727,8 @@
                 "label": "44",
                 "siCode": 44,
                 "type": "CONTROL",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": true,
+                "mandatory": false
             },
             {
                 "id": "control-finishbeacon-90-beacon",
@@ -1784,12 +1736,10 @@
                 "label": "Finish Beacon",
                 "siCode": 90,
                 "type": "BEACON",
-                "mandatory": false,
-                "publicLabel": null,
-                "latitude": null,
-                "longitude": null,
-                "notes": null
+                "scored": false,
+                "mandatory": false
             }
-        ]
+        ],
+        "courseMappings": []
     }
 }

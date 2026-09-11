@@ -42,6 +42,12 @@ The project currently includes:
 - desktop SPORTident download support for attached READOUT/SI MASTER stations
 - shared Kotlin race, result, import/export, and validation logic
 
+## Race File Compatibility
+
+Version 1.0.46 uses Race File format 8 on desktop and Android. Update both apps before transferring races. Older Race Files and legacy Android race-backup JSON are rejected rather than reconstructed from obsolete aliases. Keep original files unchanged; any recovery should be verified and saved separately.
+
+The control catalog owns control identities, labels, and station assignments. See [Control identities and the Race File format](docs/control-catalog.md).
+
 ## More Information
 
 - [Desktop preparation and packaging](docs/desktop-prep.md)

@@ -4116,7 +4116,7 @@ class EventProjectEditorTest {
                     assertFailsWith<IllegalArgumentException>(label) { appendPracticeDownload(first, reread, "second", policy) }
                     first
                 } else appendPracticeDownload(first, reread, "second", policy)
-                val saved = EventProjectFileJson.decode(EventProjectFileJson.encode(updated))
+                val saved = EventProjectFileJson.decode(EventProjectFileJson.encode(EventControlCatalog.backfillControls(updated)))
                 val rows = saved.raceData.competitorData.mapNotNull { it.readoutData } + saved.raceData.unmatchedReadoutData
                 val expectedIds = when (policy) {
                     EventReadoutDuplicatePolicy.Reject -> setOf("first")

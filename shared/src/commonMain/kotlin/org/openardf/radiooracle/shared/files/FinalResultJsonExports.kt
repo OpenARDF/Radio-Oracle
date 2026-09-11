@@ -149,26 +149,13 @@ object FinalResultJsonExports {
         )
     }
 
-    internal fun androidAliases(raceData: EventRaceData): List<FinalAliasJson> {
-        val controlAliases = raceData.controls
-            .sortedWith(compareBy<EventControl>({ it.siCode }, { it.type.name }, { it.label }))
-            .map { control ->
-                FinalAliasJson(
-                    aliasSiCode = control.siCode,
-                    aliasName = control.androidDisplayLabel()
-                )
-            }
-        val legacyAliases = raceData.aliases.map { it.toFinalAlias() }
-        return (controlAliases + legacyAliases)
+    internal fun androidAliases(raceData: EventRaceData): List<FinalAliasJson> =
+        org.openardf.radiooracle.shared.event.EventControlCatalog.resolvedAliases(raceData)
+            .map { it.toFinalAlias() }
             .filter { it.aliasName != it.aliasSiCode.toString() }
-            .distinctBy { it.aliasSiCode }
-    }
 
     internal fun controlLabelsByCode(raceData: EventRaceData): Map<Int, String> =
         androidAliases(raceData).associate { it.aliasSiCode to it.aliasName }
-
-    private fun EventControl.androidDisplayLabel(): String =
-        publicLabel?.takeIf { it.isNotBlank() } ?: label
 
     private fun EventAlias.toFinalAlias(): FinalAliasJson =
         FinalAliasJson(aliasSiCode = siCode, aliasName = name)

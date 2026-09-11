@@ -12,6 +12,37 @@ import java.io.File
 
 /** Verifies the adapter boundary before final Apply can write authoritative bindings. */
 class CourseWorkflowTransferTest {
+    @Test fun correctedControlLabelsAndAssignmentsSurviveAndroidImportDespiteOldAliases() {
+        var project = EventProjectFactory.createEmptyProject("race", "Corrected courses", "2026-09-13T10:00")
+        val controls = listOf(1, 2, 4, 3, 5, 6).map { number ->
+            EventControl("stable-placement-$number", "race", if (number == 6) "B" else "$number", 130 + number,
+                if (number == 6) ControlPointType.BEACON else ControlPointType.CONTROL)
+        }
+        val oldAliases = listOf("4", "3", "5", "2", "1", "B").mapIndexed { index, name ->
+            EventAlias("old-alias-$index", "race", 131 + index, name)
+        }
+        project = project.copy(raceData = project.raceData.copy(controls = controls, aliases = oldAliases))
+        for ((name, numbers) in listOf("Full" to listOf(1, 2, 4, 3, 5, 6), "Short" to listOf(1, 3, 4, 6))) {
+            project = EventProjectEditor.addCategory(project, name, name)
+            project = EventProjectEditor.replaceCategoryAssignedControls(project, name, numbers.map { "stable-placement-$it" }) { "$name-$it" }
+        }
+        // A saved import draft must not replace the active Short assignment during transfer.
+        project = EventCourseDrafts.edit(project) { EventProjectEditor.replaceCategoryAssignedControls(it, "Short",
+            listOf("stable-placement-2", "stable-placement-5", "stable-placement-6")) { "draft-$it" } }
+        val decoded = EventProjectFileJson.decode(EventProjectFileJson.encode(project))
+        val native = project.raceData.toRoomRaceData().withFreshImportIds()
+        val names = native.aliases.associate { it.siCode to it.name }
+        val expected = mapOf("Short" to listOf("1", "3", "4", "B"), "Full" to listOf("1", "2", "3", "4", "5", "B"))
+        for (category in native.categories) {
+            assertEquals(expected[category.category.name], category.controlPoints.sortedBy { it.order }.map { names[it.siCode] })
+        }
+        val returned = native.toEventRaceData()
+        assertEquals(controls.associate { it.id to it.label }, returned.controls.associate { it.id to (it.publicLabel ?: it.label) })
+        val exportAliases = org.openardf.radiooracle.shared.files.RaceBackupJsonExports.raceDocument(decoded.raceData)
+            .aliases.associate { it.aliasSiCode to it.aliasName }
+        assertEquals(exportAliases, names)
+    }
+
     @Test fun preservesCatalogIdentityAcrossRoomAndProtectionModes() {
         val project = courseTransferFixture()
         val info = project.raceData.categories.single().category.courseInfo!!

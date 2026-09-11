@@ -60,7 +60,7 @@ android {
         applicationId = "org.openardf.radiooracle"
         minSdk = 26
         targetSdk = 37
-        versionCode = 53
+        versionCode = 54
         versionName = rootProject.ext.radioOracleVersion
         buildConfigField "String", "BUILD_DATE_UTC", "\"${Instant.now().toString()}\""
 

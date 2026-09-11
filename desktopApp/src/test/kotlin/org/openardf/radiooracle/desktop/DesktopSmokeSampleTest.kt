@@ -345,10 +345,9 @@ class DesktopSmokeSampleTest {
         DesktopProjectFiles.exportAndroidRaceBackupJson(target, projectFile)
         val exported = Files.readString(target)
 
-        assertTrue(exported.contains("\"race_name\": \"Desktop Smoke Race\""))
-        assertTrue(exported.contains("\"race_time_limit\": \"120\""))
-        assertTrue(exported.contains("\"unmatched_results\""))
-        assertTrue(exported.contains("\"si_number\": 654321"))
+        val decoded = org.openardf.radiooracle.shared.event.EventProjectFileJson.decode(exported)
+        assertEquals(projectFile.raceData, decoded.raceData)
+        assertEquals(projectFile.raceData.categories.map { it.publicControlIds }, decoded.raceData.categories.map { it.publicControlIds })
     }
 
     @Test
@@ -361,9 +360,7 @@ class DesktopSmokeSampleTest {
         var nextId = 0
 
         DesktopProjectFiles.exportAndroidRaceBackupJson(backup, projectFile)
-        val imported = DesktopProjectFiles.importAndroidRaceBackupJson(backup) {
-            "smoke-import-${nextId++}"
-        }
+        val imported = DesktopProjectFiles.importAndroidRaceBackupJson(backup)
         session.newProject(imported)
 
         assertEquals("Desktop Smoke Race", imported.raceData.race.name)

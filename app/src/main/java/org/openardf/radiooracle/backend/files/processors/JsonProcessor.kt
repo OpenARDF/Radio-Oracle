@@ -128,32 +128,12 @@ object JsonProcessor : FormatProcessor {
     /** Imports a full race backup from a JSON string using the race-data Moshi adapter. */
     fun importRaceData(jsonString: String, dataProcessor: DataProcessor): RaceData {
         val fingerprint = jsonString.sha256Hex()
-        if (jsonString.contains("\"appName\"") && jsonString.contains("\"raceData\"")) {
-            val projectFile = EventProjectFileJson.decode(jsonString)
-            val eventRaceData = projectFile.raceData
-            return eventRaceData.toRoomRaceData().also { roomRaceData ->
-                roomRaceData.race.publicResultsUrl =
-                    projectFile.publicResultsPublication?.url
-                roomRaceData.race.publicResultsPublishedAtIso =
-                    projectFile.publicResultsPublication?.publishedAtIso
-            }.withImportIdentity(
-                sourceId = "event-file:${eventRaceData.race.id}",
-                fingerprint = fingerprint
-            )
-        }
-
-        val moshi: Moshi = Moshi.Builder()
-            .add(RaceDataJsonAdapter(dataProcessor))
-            .add(LocalDateTimeAdapter())
-            .add(KotlinJsonAdapterFactory())
-            .build()
-        val adapter = moshi.adapter<RaceData>()
-
-        val raceData = adapter.nonNull().fromJson(jsonString)!!
-        return raceData.withImportIdentity(
-            sourceId = "android-race:${raceData.race.id}",
-            fingerprint = fingerprint
-        )
+        val projectFile = EventProjectFileJson.decode(jsonString)
+        val eventRaceData = projectFile.raceData
+        return eventRaceData.toRoomRaceData().also { roomRaceData ->
+            roomRaceData.race.publicResultsUrl = projectFile.publicResultsPublication?.url
+            roomRaceData.race.publicResultsPublishedAtIso = projectFile.publicResultsPublication?.publishedAtIso
+        }.withImportIdentity(sourceId = "event-file:${eventRaceData.race.id}", fingerprint = fingerprint)
     }
 
     /** Parses the ROBIS response shape returned by the live-result service. */

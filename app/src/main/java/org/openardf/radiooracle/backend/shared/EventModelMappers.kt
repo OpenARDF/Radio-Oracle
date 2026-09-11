@@ -313,14 +313,6 @@ private fun EventAlias.toRoomAlias(idMapper: RoomIdMapper): Alias =
         name = name
     )
 
-private fun EventControl.toRoomAlias(idMapper: RoomIdMapper): Alias =
-    Alias(
-        id = idMapper.uuidFor("alias-from-$id"),
-        raceId = idMapper.uuidFor(raceId),
-        siCode = siCode,
-        name = publicLabel?.takeIf { it.isNotBlank() } ?: label
-    )
-
 /** Converts the portable shared competitor model back into an Android Room entity. */
 fun EventCompetitor.toRoomCompetitor(): Competitor =
     toRoomCompetitor(RoomIdMapper())
@@ -516,17 +508,8 @@ fun EventRaceData.toRoomRaceData(): RaceData {
     )
 }
 
-private fun EventRaceData.androidCompatibleAliases(idMapper: RoomIdMapper): List<Alias> {
-    val existingAliases = aliases.map { it.toRoomAlias(idMapper) }
-    val existingCodes = existingAliases.map { it.siCode }.toSet()
-    val controlAliases = controls
-        .filter { control -> control.label.isNotBlank() || !control.publicLabel.isNullOrBlank() }
-        .map { it.toRoomAlias(idMapper) }
-        .filterNot { it.siCode in existingCodes }
-        .distinctBy { it.siCode }
-    return (existingAliases + controlAliases)
-        .distinctBy { it.siCode }
-}
+private fun EventRaceData.androidCompatibleAliases(idMapper: RoomIdMapper): List<Alias> =
+    org.openardf.radiooracle.shared.event.EventControlCatalog.resolvedAliases(this).map { it.toRoomAlias(idMapper) }
 
 private class RoomIdMapper {
     private val ids = mutableMapOf<String, UUID>()

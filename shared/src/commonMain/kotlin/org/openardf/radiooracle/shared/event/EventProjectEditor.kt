@@ -856,7 +856,7 @@ object EventProjectEditor {
                 categories = categories,
                 courseMappings = courseMappings
             )
-        )
+        ).let(EventControlCatalog::removeCatalogAliases)
     }
 
     /** Validate a label permutation as a whole, using the same control rules and derived-field updates as an individual edit. */

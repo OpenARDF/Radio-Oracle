@@ -82,7 +82,7 @@ class AppliedCourseBindingsTest {
         assertEquals(applied(), plain.raceData.categories.single().category.courseInfo)
         assertFalse(EventProjectFileFormat.isSupportedSchema(999))
         assertFailsWith<IllegalArgumentException> {
-            EventProjectFileJson.decode(text.replace("\"schemaVersion\": 7", "\"schemaVersion\": 999"))
+            EventProjectFileJson.decode(text.replace("\"schemaVersion\": ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION}", "\"schemaVersion\": 999"))
         }
         val encrypted = EventProjectEditor.updateCategoryEncryptedCourseInfo(project, "m21",
             ProtectedCourseCipher.encryptCourseInfo(applied(), "fixture-password"))

@@ -92,7 +92,9 @@ object EventProjectFileJson {
                     metadata.copy(results = retained, contexts = metadata.contexts.filterKeys { it in contextIds })
                 }
             }
-        ).let { EventCourseDrafts.rebaseNormalizedDraft(projectFile, it) }
+        ).let(EventControlCatalog::removeCatalogAliases)
+            .let { EventCourseDrafts.rebaseNormalizedDraft(projectFile, it) }
+            .also(EventControlCatalog::requireCanonical)
 
     /** Encodes a Race File using the stable, shared desktop-beta JSON format. */
     fun encode(projectFile: EventProjectFile): String =
@@ -110,40 +112,27 @@ object EventProjectFileJson {
             ?.jsonPrimitive
             ?.intOrNull
             ?: 0
-        val raceDataJson = rootJson["raceData"]
-            ?.jsonObject
-        val hasControlsField = raceDataJson
-            ?.containsKey("controls") == true
-        val hasPublicControlIdsField = raceDataJson
-            ?.get("categories")
-            ?.toString()
-            ?.contains("publicControlIds") == true
-        val needsControlBackfill = !hasControlsField || !hasPublicControlIdsField || !text.contains("\"controlId\"")
-        val needsControlScoringMigration = !text.contains("\"scored\"")
+        val version = rootJson["schemaVersion"]?.jsonPrimitive?.intOrNull
+        require(version == EventProjectFileFormat.CURRENT_SCHEMA_VERSION) {
+            "Incompatible Race File format ${version ?: "(missing)"}. This version requires format ${EventProjectFileFormat.CURRENT_SCHEMA_VERSION} with explicit control identities. Older Race Files are not automatically converted."
+        }
+        require(rootJson["raceData"]?.jsonObject?.containsKey("controls") == true) {
+            "Incompatible Race File: the control catalog is missing."
+        }
         val projectFile = json.decodeFromString<EventProjectFile>(text)
-        require(projectFile.isSupportedSchema()) {
-            "Unsupported Radio-Oracle Race File schema version: ${projectFile.schemaVersion}"
-        }
-        val backfilledProjectFile = if (needsControlBackfill) {
-            EventControlCatalog.backfillControls(projectFile)
-        } else {
-            projectFile
-        }
-        val migratedProjectFile = if (needsControlScoringMigration) {
-            EventControlCatalog.migrateLegacyControlScoring(backfilledProjectFile)
-        } else {
-            backfilledProjectFile
-        }
+        EventControlCatalog.requireCanonical(projectFile)
         val normalizedProjectFile = EventStartNumbers.assignFromDrawnStartTimes(
-            reconcileStandardCategoryGenders(clearPublicControlLocations(migratedProjectFile))
+            EventControlCatalog.removeCatalogAliases(
+                reconcileStandardCategoryGenders(clearPublicControlLocations(projectFile)))
         )
-        return if (storedResultsScoringRevision < EventResultScoringFormat.CURRENT_REVISION) {
+        val result = if (storedResultsScoringRevision < EventResultScoringFormat.CURRENT_REVISION) {
             EventProjectEditor.repairLegacyZeroFoxResults(normalizedProjectFile)
                 .projectFile
                 .copy(resultsScoringRevision = EventResultScoringFormat.CURRENT_REVISION)
         } else {
             normalizedProjectFile
         }
+        return EventCourseDrafts.rebaseNormalizedDraft(projectFile, result)
     }
 
     private fun clearPublicControlLocations(projectFile: EventProjectFile): EventProjectFile {
@@ -195,11 +184,11 @@ object EventProjectFileJson {
 /** Schema metadata for portable Radio-Oracle Race Files. */
 object EventProjectFileFormat {
     const val APP_NAME = "Radio-Oracle"
-    const val CURRENT_SCHEMA_VERSION = 7
+    const val CURRENT_SCHEMA_VERSION = 8
 
-    /** Returns true when the supplied schema version is within the supported range. */
+    /** Obsolete Race Files are rejected rather than reconstructed from legacy aliases or SI numbers. */
     fun isSupportedSchema(schemaVersion: Int): Boolean =
-        schemaVersion in 1..CURRENT_SCHEMA_VERSION
+        schemaVersion == CURRENT_SCHEMA_VERSION
 }
 
 /** Revision metadata for scoring migrations that do not otherwise change the Race File schema. */

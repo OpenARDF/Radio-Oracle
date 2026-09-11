@@ -3776,7 +3776,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     selectedSummary.importedCategoryCount == 0 &&
                     selectedSummary.duplicateCategoryCount > 0 &&
                     selectedSummary.hasDuplicateMissingElevations
-                val projectToApply = if (isDuplicateElevationRetry) {
+                val projectToApply = if (isDuplicateElevationRetry && !review.importDraft.replacesOutdatedDraft) {
                     projectSession.currentProject?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate) ?: selectedProject
                 } else {
                     selectedProject
@@ -3800,7 +3800,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     projectAfterAssignments
                 }
                 checkpointBeforeImport("controls/route $formatLabel import ${review.sourceName}")
-                projectFile = projectSession.updateCourseDraft(review.baseProject) { updatedProject }
+                projectFile = projectSession.updateCurrentProject { current ->
+                    review.importDraft.applyTo(current) { updatedProject }
+                }
                 syncProtectedCourseState(requireNotNull(projectFile), review.password)
                 pendingCourseKmlKmzImportReview = null
                 recordActivity("Saved draft controls/route $formatLabel import ${review.sourceName}.")
@@ -3897,6 +3899,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     "Apply failed for controls/route $formatLabel import ${review.sourceName}: $message\n${error.stackTraceToString()}"
                 )
                 projectStatusText = "Controls/route $formatLabel import failed while applying: $message"
+                pendingCourseKmlKmzImportReview = review.copy(applyError = message)
             }
         }
 
@@ -3906,7 +3909,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             categoryOverrideId: String? = null,
             requireRoutes: Boolean = true
         ) {
-            var currentProject = projectSession.currentProject?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate) ?: return
+            var importDraft = DesktopCourseImportDraft.prepare(projectSession.currentProject ?: return)
+            var currentProject = importDraft.baseProject
             val formatLabel = controlsRouteImportFormatLabel(path.fileName.toString())
             if (isImportingCourseKmlKmz) {
                 return
@@ -3977,7 +3981,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 }
 
             suspend fun resolveDuplicateElevationsFromLocalCache(summary: DesktopCourseKmlImportSummary): EventProjectFile? {
-                if (!summary.hasDuplicateMissingElevations) {
+                if (!summary.hasDuplicateMissingElevations || importDraft.replacesOutdatedDraft) {
                     return null
                 }
                 val projectBeforeRepair = currentProject
@@ -4006,8 +4010,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     if (repairedProject == null) {
                         initialPreview
                     } else {
-                        currentProject = repairedProject
-                        buildPreview(repairedProject)
+                        importDraft = DesktopCourseImportDraft.prepare(requireNotNull(projectSession.currentProject))
+                        currentProject = importDraft.baseProject
+                        buildPreview(currentProject)
                     }
                 }
                 result.onSuccess { preview ->
@@ -4076,6 +4081,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                             sourceName = path.fileName.toString(),
                             path = path,
                             baseProject = currentProject,
+                            importDraft = importDraft,
                             updatedProject = updatedProject,
                             summary = summary,
                             createdMissingCategoryProject = preview.createdMissingCategoryProject,
@@ -4295,7 +4301,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         fun importAndroidRaceBackupJson(path: Path) {
             runCatching {
                 lockProtectedCourseOrder()
-                val imported = DesktopProjectFiles.importAndroidRaceBackupJson(path) { UUID.randomUUID().toString() }
+                val imported = DesktopProjectFiles.importAndroidRaceBackupJson(path)
                 projectFile = projectSession.newProject(imported)
                 newEventDraftProject = null
                 hasUnsavedEventDefinitionChanges = false
@@ -6034,9 +6040,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                         runCatching {
                             clearAssignedControlsWarning()
                             lockProtectedCourseOrder()
-                            val imported = DesktopProjectFiles.importAndroidRaceBackupJson(result.path) {
-                                UUID.randomUUID().toString()
-                            }
+                            val imported = DesktopProjectFiles.importAndroidRaceBackupJson(result.path)
                             projectFile = projectSession.newProject(imported)
                             newEventDraftProject = null
                             hasUnsavedEventDefinitionChanges = false
@@ -8953,6 +8957,15 @@ internal fun CourseKmlKmzImportReviewDialog(
                         formatLabel = formatLabel
                     )
                 }
+                if (review.importDraft.replacesOutdatedDraft) {
+                    Text(
+                        "The race's course settings changed since the previous draft. This import uses the current race settings. Accept Import replaces the outdated draft; Cancel keeps it.",
+                        color = DesktopPalette.Error
+                    )
+                }
+                review.applyError?.let { message ->
+                    Text("Import failed: $message", color = DesktopPalette.Error, fontWeight = FontWeight.Bold)
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -9325,27 +9338,27 @@ private fun CourseRouteImportFinalNotice(
             summary.assignedCategoryControlCount == 0 &&
             summary.changedControlLocationCount == 0
         ) {
-            "Accept Import will copy matched $formatLabel control names into blank Public Label fields in the active Race File model. Matching Notes that duplicate the imported names are cleared. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+            "Accept Import will copy matched $formatLabel control names into blank Public Label fields in the course draft. Matching Notes that duplicate the imported names are cleared. Analyze and Apply changes to all race courses to activate the draft. Save Race preserves the draft on disk. Cancel leaves the Race File unchanged."
         } else if (
             summary.hasLabelConversions &&
             summary.importedCategoryCount == 0 &&
             summary.assignedCategoryControlCount == 0 &&
             summary.changedControlLocationCount == 0
         ) {
-            "Accept Import will use these $formatLabel names as matches to existing Race File labels in the active Race File model. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+            "Accept Import will use these $formatLabel names as matches to existing Race File labels in the course draft. Control labels and public labels are not renamed. No route facts, assigned controls, or control locations will change. Analyze and Apply changes to all race courses to activate the draft. Save Race preserves the draft on disk. Cancel leaves the Race File unchanged."
         } else if (
             summary.importedCategoryCount == 0 &&
             (summary.changedControlLocationCount > 0 || summary.controlIdentityUpdateCount > 0)
         ) {
-            "Accept Import will update control identities or locations in the active Race File model. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+            "Accept Import will update control identities or locations in the course draft. Affected stored route geometry is invalidated when locations change so Course Analyzer can recalculate route facts. Category assigned controls are changed only when the assignment checkbox is selected. Analyze and Apply changes to all race courses to activate the draft. Save Race preserves the draft on disk. Cancel leaves the Race File unchanged."
         } else if (summary.importedCategoryCount == 0 && summary.controlSiConflictCount > 0) {
             "Choose whether to retain current Race File SI numbers or overwrite them from imported SI= lines. Cancel leaves the Race File unchanged."
         } else if (summary.importedCategoryCount == 0 && summary.assignedCategoryControlCount > 0) {
-            "Accept Import will make the matched $formatLabel control points active in memory for Course Analyzer. Category assigned controls are changed only when the assignment checkbox is selected. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+            "Accept Import will make the matched $formatLabel control points available in the course draft for Course Analyzer. Category assigned controls are changed only when the assignment checkbox is selected. Analyze and Apply changes to all race courses to activate the draft. Save Race preserves the draft on disk. Cancel leaves the Race File unchanged."
         } else if (summary.hasLabelConversions) {
-            "Accept Import will use these $formatLabel names as matches to existing Race File labels, then update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+            "Accept Import will use these $formatLabel names as matches to existing Race File labels, then update route facts, ideal order, and any changed control locations in the course draft. Category assigned controls are changed only when the assignment checkbox is selected. Control labels and public labels are not renamed. Analyze and Apply changes to all race courses to activate the draft. Save Race preserves the draft on disk. Cancel leaves the Race File unchanged."
         } else {
-            "Accept Import will update route facts, ideal order, and any changed control locations in the active Race File model. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import becomes active. Save Race is still required to write changes to disk. Cancel leaves the Race File unchanged."
+            "Accept Import will update route facts, ideal order, and any changed control locations in the course draft. Category assigned controls are changed only when the assignment checkbox is selected. Elevation retrieval samples missing USGS 3DEP route and course-object points after the import is accepted. Analyze and Apply changes to all race courses to activate the draft. Save Race preserves the draft on disk. Cancel leaves the Race File unchanged."
         },
         fontSize = 13.sp,
         color = Color.DarkGray
@@ -11256,7 +11269,9 @@ internal data class PendingCourseKmlKmzImportReview(
     val overwriteSiCreatedMissingCategorySummary: DesktopCourseKmlImportSummary?,
     val password: String?,
     val categoryOverrideId: String?,
-    val requireRoutes: Boolean
+    val requireRoutes: Boolean,
+    val importDraft: DesktopCourseImportDraft = DesktopCourseImportDraft.prepare(baseProject),
+    val applyError: String? = null
 )
 
 private data class SelectedCourseKmlKmzImportPreview(

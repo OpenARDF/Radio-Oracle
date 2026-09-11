@@ -37,8 +37,6 @@ import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.LiveResultJsonExports
 import org.openardf.radiooracle.shared.files.ResultReportExports
 import org.openardf.radiooracle.shared.files.SplitResultExports
-import org.openardf.radiooracle.shared.files.RaceBackupJsonImports
-import org.openardf.radiooracle.shared.files.RaceBackupJsonExports
 import org.openardf.radiooracle.shared.files.TextResultExports
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -65,8 +63,8 @@ object DesktopProjectFiles : ProjectFileStore {
         writeDesktopTextAtomically(path, EventProjectFileJson.encode(projectFile))
     }
 
-    fun importAndroidRaceBackupJson(path: Path, idFactory: () -> String): EventProjectFile =
-        RaceBackupJsonImports.projectFile(Files.readString(path, StandardCharsets.UTF_8), idFactory)
+    fun importAndroidRaceBackupJson(path: Path): EventProjectFile =
+        EventProjectFileJson.decode(Files.readString(path, StandardCharsets.UTF_8))
 
     fun exportCategoriesCsv(path: Path, projectFile: EventProjectFile, includeEncryptedIdealOrder: Boolean = false) {
         writeText(path, EventCsvExports.categories(projectFile.raceData, includeEncryptedIdealOrder))
@@ -151,7 +149,7 @@ object DesktopProjectFiles : ProjectFileStore {
     }
 
     fun exportAndroidRaceBackupJson(path: Path, projectFile: EventProjectFile) {
-        writeText(path, RaceBackupJsonExports.race(projectFile.raceData))
+        writeText(path, EventProjectFileJson.encode(projectFile))
     }
 
     fun exportLiveResultsJson(path: Path, projectFile: EventProjectFile) {
