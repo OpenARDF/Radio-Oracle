@@ -162,7 +162,7 @@ object DesktopCourseGraphic {
     internal fun routeMap(
         path: Path,
         courseData: DesktopCourseKmlData,
-        magneticDeclinationProvider: (CourseGeoPoint) -> DesktopMagneticDeclinationResult? = { null }
+        magneticDeclinationProvider: (CourseGeoPoint) -> DesktopMagneticDeclinationResult? = DesktopMagneticDeclination::result
     ): DesktopCourseRouteMap {
         val visiblePoints = courseData.controls.filter { it.isVisible }
         val visibleRoutes = courseData.routes.filter { it.isVisible }

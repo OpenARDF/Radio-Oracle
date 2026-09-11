@@ -433,16 +433,8 @@ object DesktopCourseAnalysisExports {
             appendLine("No leg rows available.")
             return
         }
-        legs.forEach { leg ->
-            val speedText = leg.speedFactorOverride
-                ?.let { " (speed x${twoDecimalText(it)})" }
-                .orEmpty()
-            val waitText = leg.waitSeconds?.let { " (waits ${secondsText(it)})" }.orEmpty()
-            appendLine(
-                "${leg.fromLabel} -> ${leg.toLabel}: ${kilometersText(leg.lengthMeters)}  " +
-                    "split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}$waitText$speedText"
-            )
-        }
+        appendLine(COURSE_LEG_TIMING_NOTE)
+        legs.forEach { leg -> appendLine("${leg.fromLabel} -> ${leg.toLabel}: ${leg.analysisText()}") }
     }
 
     private fun StringBuilder.appendWaitRows(title: String, waitRows: List<DesktopCourseWaitRow>) {

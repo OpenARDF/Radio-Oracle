@@ -320,7 +320,8 @@ data class DesktopCourseLegRow(
     val toLabel: String,
     val lengthMeters: Int?,
     val splitSeconds: Int?,
-    val cumulativeSeconds: Int?,
+    val arrivalSeconds: Int?,
+    val departureSeconds: Int?,
     val waitSeconds: Int? = null,
     val findPunchSeconds: Int? = null,
     val speedFactorOverride: Double? = null
@@ -514,7 +515,7 @@ object DesktopCourseAnalyzer {
         analysisPerformedAtText: String = DesktopDateTimeText.displayText(LocalDateTime.now().withNano(0)),
         elevationLookup: (CourseGeoPoint) -> Double? = { null },
         elevationCacheNotes: (List<CourseGeoPoint>) -> List<String> = { emptyList() },
-        magneticDeclinationProvider: (CourseGeoPoint) -> DesktopMagneticDeclinationResult? = { null },
+        magneticDeclinationProvider: (CourseGeoPoint) -> DesktopMagneticDeclinationResult? = DesktopMagneticDeclination::result,
         controlIdentityMode: DesktopCourseControlIdentityMode =
             DesktopCourseControlIdentityMode.ANALYZER_SAVED_NUMBERING,
         allowFoxRenumbering: Boolean = true,
@@ -1046,7 +1047,7 @@ object DesktopCourseAnalyzer {
                     DesktopCourseElevationProfileSummary(
                         title = routeSource.routeLabel,
                         profile = it.elevationProfile,
-                        markers = providedElevationMarkers(route, providedControls, controlsWithPoints)
+                        markers = elevationMarkers(route, it.elevationProfile, providedControls, controlsWithPoints)
                     )
                 )
             }
@@ -1055,11 +1056,11 @@ object DesktopCourseAnalyzer {
                     DesktopCourseElevationProfileSummary(
                         title = "Calculated route (calculated fox numbering)",
                         profile = it.elevationProfile,
-                        markers = calculatedElevationMarkers(
-                            start = start,
-                            controls = calculatedRoute?.controls.orEmpty(),
-                            finish = finish,
-                            elevationLookup = elevationLookup,
+                        markers = elevationMarkers(
+                            route = calculatedRouteAnalysis?.routePoints.orEmpty(),
+                            profile = it.elevationProfile,
+                            controls = calculatedRoute?.controls.orEmpty().map { point -> point.control },
+                            controlsWithPoints = calculatedRoute?.controls.orEmpty(),
                             labelOverrides = calculatedLabelOverrides
                         )
                     )
@@ -1572,6 +1573,7 @@ object DesktopCourseAnalyzer {
             climbMeters = climbMeters,
             effectiveLengthMeters = effectiveLengthMeters,
             estimatedSeconds = timing.totalSeconds,
+            routePoints = route,
             elevationProfile = elevationProfile(route),
             arrivalSecondsByControlId = timing.arrivalSecondsByControlId
         )
@@ -1615,6 +1617,7 @@ object DesktopCourseAnalyzer {
             climbMeters = climbMeters,
             effectiveLengthMeters = effectiveLengthMeters,
             estimatedSeconds = timing.totalSeconds,
+            routePoints = points,
             elevationProfile = elevationProfile(points),
             arrivalSecondsByControlId = timing.arrivalSecondsByControlId
         )
@@ -2705,7 +2708,8 @@ object DesktopCourseAnalyzer {
                 toLabel = to.label,
                 lengthMeters = lengthMeters,
                 splitSeconds = splitSeconds?.roundToInt(),
-                cumulativeSeconds = cumulativeSeconds?.roundToInt(),
+                arrivalSeconds = arrivalSeconds?.roundToInt(),
+                departureSeconds = cumulativeSeconds?.roundToInt(),
                 waitSeconds = service.waitSeconds,
                 findPunchSeconds = service.findPunchSeconds,
                 speedFactorOverride = from.speedFactorOverride
@@ -2746,10 +2750,14 @@ object DesktopCourseAnalyzer {
         val waitRows = mutableListOf<DesktopCourseWaitRow>()
         val arrivalSecondsByControlId = mutableMapOf<String, Int>()
         var cumulativeSeconds: Double? = 0.0
-        timingStops.zipWithNext().forEach { (from, to) ->
+        var legFrom = timingStops.first()
+        var legLengthMeters = 0.0
+        var legMovementSeconds = 0.0
+        timingStops.zipWithNext().forEachIndexed { index, (from, to) ->
             val legPoints = DesktopCourseRouteSampler.sampledStraightLegPoints(from.point, to.point, elevationLookup)
-            val lengthMeters = legPoints.straightLineMeters().roundToInt()
+            legLengthMeters += legPoints.straightLineMeters()
             val movementSeconds = estimatedIdealSecondsDouble(legPoints, speedModel, from.speedFactorOverride) ?: 0.0
+            legMovementSeconds += movementSeconds
             val startSeconds = cumulativeSeconds
             val arrivalSeconds = if (startSeconds != null) {
                 startSeconds + movementSeconds
@@ -2774,21 +2782,28 @@ object DesktopCourseAnalyzer {
             } else {
                 null
             }
+            // Mandatory waypoints affect geometry and timing, but are not split destinations.
+            // Keep their unrounded distance and movement time in the enclosing course-object leg.
+            if (to.control == null && index < timingStops.lastIndex - 1) return@forEachIndexed
             val splitSeconds = if (service.totalSeconds != null) {
-                movementSeconds + service.totalSeconds
+                legMovementSeconds + service.totalSeconds
             } else {
                 null
             }
             legRows += DesktopCourseLegRow(
-                fromLabel = from.label,
+                fromLabel = legFrom.label,
                 toLabel = to.label,
-                lengthMeters = lengthMeters,
+                lengthMeters = legLengthMeters.roundToInt(),
                 splitSeconds = splitSeconds?.roundToInt(),
-                cumulativeSeconds = cumulativeSeconds?.roundToInt(),
+                arrivalSeconds = arrivalSeconds?.roundToInt(),
+                departureSeconds = cumulativeSeconds?.roundToInt(),
                 waitSeconds = service.waitSeconds,
                 findPunchSeconds = service.findPunchSeconds,
-                speedFactorOverride = from.speedFactorOverride
+                speedFactorOverride = legFrom.speedFactorOverride
             )
+            legFrom = to
+            legLengthMeters = 0.0
+            legMovementSeconds = 0.0
         }
         return RouteTimingAnalysis(
             legRows = legRows,
@@ -2928,12 +2943,15 @@ object DesktopCourseAnalyzer {
         }
     }
 
-    private fun providedElevationMarkers(
+    // Read both coordinates from the samples used by the plotted profile. Reconstructing direct
+    // control-to-control legs here omits mandatory bends and shifts markers along the distance axis.
+    private fun elevationMarkers(
         route: List<CourseGeoPoint>,
+        profile: List<DesktopCourseElevationProfilePoint>,
         controls: List<EventControl>,
-        controlsWithPoints: List<ControlAnalysisPoint>
+        controlsWithPoints: List<ControlAnalysisPoint>,
+        labelOverrides: Map<String, String> = emptyMap()
     ): List<DesktopCourseElevationProfileMarker> {
-        val profile = elevationProfile(route)
         if (profile.isEmpty()) {
             return emptyList()
         }
@@ -2944,7 +2962,7 @@ object DesktopCourseAnalyzer {
                 val nearestIndex = route.indices.minByOrNull { route[it].distanceMetersTo(point) } ?: return@mapNotNull null
                 val profilePoint = profile.getOrNull(nearestIndex) ?: return@mapNotNull null
                 DesktopCourseElevationProfileMarker(
-                    label = control.analysisRouteLabel(),
+                    label = labelOverrides[control.id] ?: control.analysisRouteLabel(),
                     distanceMeters = profilePoint.distanceMeters,
                     elevationMeters = profilePoint.elevationMeters
                 )
@@ -3105,50 +3123,6 @@ object DesktopCourseAnalyzer {
         courseObjects: List<ProtectedCourseObjectPoint>
     ): Boolean =
         courseObjects.any { it.type == type && distanceMetersTo(it.toGeoPoint()) <= ROUTE_STOP_TOLERANCE_METERS }
-
-    private fun calculatedElevationMarkers(
-        start: CourseGeoPoint?,
-        controls: List<ControlAnalysisPoint>,
-        finish: CourseGeoPoint?,
-        elevationLookup: (CourseGeoPoint) -> Double?,
-        labelOverrides: Map<String, String> = emptyMap()
-    ): List<DesktopCourseElevationProfileMarker> {
-        if (start == null || finish == null) {
-            return emptyList()
-        }
-        val stops = buildList {
-            add(StraightLineStop("S", start, null, null))
-            controls.mapNotNull { controlPoint ->
-                controlPoint.point?.let { point ->
-                    StraightLineStop(
-                        labelOverrides[controlPoint.control.id] ?: controlPoint.control.analysisRouteLabel(),
-                        point,
-                        controlPoint.control,
-                        null
-                    )
-                }
-            }.forEach(::add)
-            add(StraightLineStop("F", finish, null, null))
-        }
-        if (stops.size < 2) {
-            return emptyList()
-        }
-        val markers = mutableListOf<DesktopCourseElevationProfileMarker>()
-        var distanceMeters = 0.0
-        stops.zipWithNext().forEach { (from, to) ->
-            val legPoints = DesktopCourseRouteSampler.sampledStraightLegPoints(from.point, to.point, elevationLookup)
-            distanceMeters += legPoints.straightLineMeters()
-            val markerPoint = legPoints.lastOrNull()
-            if (to.control?.type == ControlPointType.CONTROL && markerPoint?.elevationMeters != null) {
-                markers += DesktopCourseElevationProfileMarker(
-                    label = to.label,
-                    distanceMeters = distanceMeters.roundToInt(),
-                    elevationMeters = requireNotNull(markerPoint.elevationMeters)
-                )
-            }
-        }
-        return markers
-    }
 
     private fun providedKmlCourseObjects(
         route: List<CourseGeoPoint>,
@@ -3638,9 +3612,10 @@ object DesktopCourseAnalyzer {
         slotOverride: RenumberingSlot?,
         labelOverride: String? = null
     ): ControlServiceTiming {
-        if (!isClassicStyle(raceType) || control.type != ControlPointType.CONTROL || arrivalSeconds == null) {
+        if (!isClassicStyle(raceType) || control.type != ControlPointType.CONTROL) {
             return ControlServiceTiming.None
         }
+        if (arrivalSeconds == null) return ControlServiceTiming.Unknown
         val slotIndex = slotOverride?.slotIndex ?: classicSlotIndex(control) ?: return ControlServiceTiming.Unknown
         val slotLabel = slotOverride?.slotLabel ?: classicSlotLabel(control)
         val roundedArrival = arrivalSeconds.roundToInt()
@@ -4548,7 +4523,7 @@ private data class ControlServiceTiming(
     val waitRow: DesktopCourseWaitRow?
 ) {
     companion object {
-        val None = ControlServiceTiming(null, null, 0.0, null)
+        val None = ControlServiceTiming(0, 0, 0.0, null)
         val Unknown = ControlServiceTiming(null, null, null, null)
     }
 }
@@ -4561,6 +4536,7 @@ private data class RouteAnalysis(
     val climbMeters: Double?,
     val effectiveLengthMeters: Double?,
     val estimatedSeconds: Double?,
+    val routePoints: List<CourseGeoPoint>,
     val elevationProfile: List<DesktopCourseElevationProfilePoint>,
     val arrivalSecondsByControlId: Map<String, Int>
 )

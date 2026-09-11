@@ -7,6 +7,24 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.*
 
 class DesktopCourseBriefReportTest {
+    @Test fun activeAndImportReportsUseMagneticNorthWithoutCallerConfiguration() {
+        val project = courseReportFixture()
+        val reports = DesktopCourseBriefReports.build(project, emptyMap()) +
+            DesktopCourseBriefReports.imported(project, project.raceData.categories.map { it.category.id }.toSet(), null)
+        assertEquals(4, reports.size)
+        reports.forEach { report ->
+            val map = requireNotNull(report.routeMap)
+            assertTrue("${report.courseName} must use magnetic north", map.magneticDeclinationDegrees?.isFinite() == true)
+            assertTrue(map.northOrientationText().startsWith("Magnetic north"))
+            val category = project.raceData.categories.single { it.category.id == report.categoryId }.category
+            val trueNorth = DesktopCourseAnalyzer.analyze(project, category.id, category.courseInfo, category.idealOrder,
+                controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS, allowFoxRenumbering = false,
+                magneticDeclinationProvider = { null })
+            assertTrue("The graphic must actually rotate, not just change its orientation label",
+                trueNorth.routeMaps.none { it.points == map.points })
+        }
+    }
+
     @Test fun stationEditsAndMembershipEditsKeepReportsAvailableAfterSavingAndReopening() {
         var project = boundCourseReportFixture()
         project = EventProjectEditor.updateControl(project, "fox-1", "Fox1", "135", ControlPointType.CONTROL,

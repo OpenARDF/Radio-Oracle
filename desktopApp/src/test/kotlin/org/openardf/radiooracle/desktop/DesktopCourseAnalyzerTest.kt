@@ -273,17 +273,18 @@ class DesktopCourseAnalyzerTest {
         assertEquals(100.0, summary.elevationProfile.first().elevationMeters, 0.001)
         assertEquals(listOf("S -> 31", "31 -> 32", "32 -> 33", "33 -> B", "B -> F"), summary.providedLegRows.map { "${it.fromLabel} -> ${it.toLabel}" })
         assertEquals(emptyList<DesktopCourseLegRow>(), summary.calculatedLegRows)
-        assertTrue(summary.providedLegRows.all { it.lengthMeters != null && it.splitSeconds != null && it.cumulativeSeconds != null })
-        assertEquals(summary.estimatedIdealSeconds, summary.providedLegRows.last().cumulativeSeconds)
+        assertTrue(summary.providedLegRows.all { it.lengthMeters != null && it.splitSeconds != null && it.departureSeconds != null })
+        assertEquals(summary.estimatedIdealSeconds, summary.providedLegRows.last().departureSeconds)
         assertEquals(listOf("31", "32", "33"), summary.waitRows.map { it.controlLabel })
         summary.providedLegRows.take(3).zip(summary.waitRows).forEach { (leg, wait) ->
-            assertEquals(wait.arrivalSeconds + wait.waitSeconds + 30, leg.cumulativeSeconds)
+            assertEquals(wait.arrivalSeconds, leg.arrivalSeconds)
+            assertEquals(wait.arrivalSeconds + wait.waitSeconds + 30, leg.departureSeconds)
             assertEquals(wait.waitSeconds, leg.waitSeconds)
             assertEquals(30, leg.findPunchSeconds)
         }
         assertEquals(emptyList<DesktopCourseWaitRow>(), requireNotNull(summary.calculatedRouteSection).waitRows)
-        assertEquals(listOf(null, null), summary.providedLegRows.takeLast(2).map { it.waitSeconds })
-        assertEquals(listOf(null, null), summary.providedLegRows.takeLast(2).map { it.findPunchSeconds })
+        assertEquals(listOf(0, 0), summary.providedLegRows.takeLast(2).map { it.waitSeconds })
+        assertEquals(listOf(0, 0), summary.providedLegRows.takeLast(2).map { it.findPunchSeconds })
         assertTrue(summary.metrics.any {
             it.label == "Effective length" &&
                 it.value.endsWith("(required 9-12 km)") &&
@@ -391,7 +392,8 @@ class DesktopCourseAnalyzerTest {
         assertEquals(0, importedArrival.waitSeconds)
         assertEquals(0, importedLeg.waitSeconds)
         assertEquals(0, importedLeg.findPunchSeconds)
-        assertEquals(importedArrival.arrivalSeconds, importedLeg.cumulativeSeconds)
+        assertEquals(importedArrival.arrivalSeconds, importedLeg.departureSeconds)
+        assertEquals(importedArrival.arrivalSeconds, importedLeg.arrivalSeconds)
 
         val calculatedSummary = DesktopCourseAnalyzer.analyze(
             projectFile = projectFile(foxCount = 2),
@@ -402,10 +404,46 @@ class DesktopCourseAnalyzerTest {
 
         val calculatedActiveLeg = calculatedSummary.calculatedLegRows.first { it.waitSeconds == 0 }
         assertEquals(0, calculatedActiveLeg.findPunchSeconds)
+        assertEquals(calculatedActiveLeg.arrivalSeconds, calculatedActiveLeg.departureSeconds)
         assertEquals(
             calculatedSummary.calculatedRouteSection?.waitRows?.first { it.waitSeconds == 0 }?.arrivalSeconds,
-            calculatedActiveLeg.cumulativeSeconds
+            calculatedActiveLeg.departureSeconds
         )
+    }
+
+    @Test
+    fun allAppliedAndCalculatedLegsExposeArrivalDepartureAndWaitInExports() {
+        val summary = DesktopCourseAnalyzer.analyze(projectFile(foxCount = 3), CATEGORY_ID,
+            protectedInfo(foxCount = 3), "33 32 31 Beacon", allowFoxRenumbering = false)
+        assertTrue(summary.providedLegRows.isNotEmpty())
+        assertTrue(summary.calculatedLegRows.isNotEmpty())
+        val report = DesktopCourseAnalysisExports.reportText(summary)
+        for (legs in listOf(summary.providedLegRows, summary.calculatedLegRows)) {
+            for (leg in legs) {
+                assertNotNull(leg.arrivalSeconds)
+                assertNotNull(leg.departureSeconds)
+                assertNotNull(leg.waitSeconds)
+                assertEquals(leg.arrivalSeconds!! + leg.waitSeconds!! + leg.findPunchSeconds!!, leg.departureSeconds)
+                assertTrue(report.contains(leg.analysisText()))
+            }
+            assertEquals(0, legs.last().waitSeconds)
+            assertEquals(legs.last().arrivalSeconds, legs.last().departureSeconds)
+        }
+        assertTrue(report.contains(COURSE_LEG_TIMING_NOTE))
+        assertFalse(report.contains(" cumulative "))
+    }
+
+    @Test
+    fun legPresentationDistinguishesArrivalWaitAndTimeFound() {
+        val leg = DesktopCourseLegRow("S", "4", 1220, 810, 641, 810, 139, 30)
+        val text = leg.analysisText()
+        assertTrue(text.contains("Arrival: 10:41"))
+        assertTrue(text.contains("Time found / departure: 13:30"))
+        assertTrue(text.contains("Total wait: 2:19"))
+        assertTrue(text.contains("Find/punch allowance: 0:30"))
+        val unknown = leg.copy(arrivalSeconds = null, departureSeconds = null, waitSeconds = null, findPunchSeconds = null)
+        assertTrue(unknown.analysisText().contains("Total wait: Unknown"))
+        assertTrue(unknown.analysisText().contains("Arrival: Unknown"))
     }
 
     @Test
@@ -552,6 +590,9 @@ class DesktopCourseAnalyzerTest {
             .filterNot { it == "B" }
         assertEquals(calculatedFoxLabels, calculatedProfile.markers.map { it.label })
         assertTrue(calculatedProfile.markers.all { it.distanceMeters > 0 && it.elevationMeters > 0.0 })
+        assertTrue(calculatedProfile.markers.all { marker -> calculatedProfile.profile.any {
+            it.distanceMeters == marker.distanceMeters && it.elevationMeters == marker.elevationMeters
+        } })
     }
 
     @Test
@@ -945,7 +986,7 @@ class DesktopCourseAnalyzerTest {
     }
 
     @Test
-    fun omitsClassicWaitAndFindPunchAllowanceForSprintAndFoxoring() {
+    fun reportsZeroWaitAndFindPunchAllowanceForSprintAndFoxoringLegs() {
         listOf(RaceType.SPRINT, RaceType.FOXORING).forEach { raceType ->
             val summary = DesktopCourseAnalyzer.analyze(
                 projectFile = projectFile(foxCount = 3, raceType = raceType),
@@ -957,8 +998,8 @@ class DesktopCourseAnalyzerTest {
             assertEquals("raceType=$raceType", emptyList<DesktopCourseWaitRow>(), summary.waitRows)
             assertEquals("raceType=$raceType", emptyList<DesktopCourseWaitRow>(), summary.providedRouteSection?.waitRows)
             assertEquals("raceType=$raceType", emptyList<DesktopCourseWaitRow>(), summary.calculatedRouteSection?.waitRows)
-            assertTrue("raceType=$raceType", summary.providedLegRows.all { it.waitSeconds == null && it.findPunchSeconds == null })
-            assertTrue("raceType=$raceType", summary.calculatedLegRows.all { it.waitSeconds == null && it.findPunchSeconds == null })
+            assertTrue("raceType=$raceType", summary.providedLegRows.all { it.waitSeconds == 0 && it.findPunchSeconds == 0 })
+            assertTrue("raceType=$raceType", summary.calculatedLegRows.all { it.waitSeconds == 0 && it.findPunchSeconds == 0 })
             assertFalse("raceType=$raceType", summary.providedRouteSection?.includeWaitAnalysis ?: true)
             assertFalse("raceType=$raceType", summary.calculatedRouteSection?.includeWaitAnalysis ?: true)
             assertFalse(
@@ -968,13 +1009,14 @@ class DesktopCourseAnalyzerTest {
                     .any { it.label.contains("wait", ignoreCase = true) }
             )
             val reportText = DesktopCourseAnalysisExports.reportText(summary)
-            assertFalse("raceType=$raceType report=$reportText", reportText.contains("wait", ignoreCase = true))
-            assertFalse("raceType=$raceType report=$reportText", reportText.contains("find/punch", ignoreCase = true))
+            assertTrue("raceType=$raceType", reportText.contains("Total wait: 0:00"))
+            assertTrue("raceType=$raceType", reportText.contains("Find/punch allowance: 0:00"))
+            assertTrue((summary.providedLegRows + summary.calculatedLegRows).all { it.arrivalSeconds == it.departureSeconds })
             val pdfPath = Files.createTempFile("course-analysis-no-wait-$raceType", ".pdf")
             DesktopCourseAnalysisExports.exportPdf(pdfPath, summary)
             val pdfText = String(Files.readAllBytes(pdfPath))
-            assertFalse("raceType=$raceType", pdfText.contains("wait", ignoreCase = true))
-            assertFalse("raceType=$raceType", pdfText.contains("find/punch", ignoreCase = true))
+            assertTrue("raceType=$raceType", pdfText.contains("Total wait: 0:00"))
+            assertTrue("raceType=$raceType", pdfText.contains("Find/punch allowance: 0:00"))
             assertFalse(
                 "raceType=$raceType missing=${summary.missingElements}",
                 summary.missingElements.any { it.contains("Transmit-slot wait analysis") }
@@ -1074,7 +1116,9 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("2D route"))
         assertTrue(reportText.contains("depiction"))
         assertTrue(reportText.contains("Movement time:"))
-        assertTrue(reportText.contains("(waits "))
+        assertTrue(reportText.contains("Arrival: "))
+        assertTrue(reportText.contains("Time found / departure: "))
+        assertTrue(reportText.contains("Total wait: "))
 
         val pdfPath = Files.createTempFile("course-analysis", ".pdf")
         val exportPaths = DesktopCourseAnalysisExports.exportPdfAndKml(pdfPath, summary)
@@ -2313,7 +2357,8 @@ class DesktopCourseAnalyzerTest {
             projectFile = projectFile(foxCount = 3),
             categoryId = CATEGORY_ID,
             protectedCourseInfo = protectedInfo(foxCount = 3),
-            protectedIdealOrderText = null
+            protectedIdealOrderText = null,
+            magneticDeclinationProvider = { null }
         )
         val magneticNorthSummary = DesktopCourseAnalyzer.analyze(
             projectFile = projectFile(foxCount = 3),

@@ -114,6 +114,10 @@ class DesktopCourseGraphicTest {
         val path = Files.createTempDirectory("radio-oracle-graphic").resolve("Sprint Layout.kml")
         Files.writeString(path, sampleKml())
 
+        val defaultMap = DesktopCourseGraphic.routeMap(path, DesktopCourseFileReader.read(path))
+        assertTrue(defaultMap.magneticDeclinationDegrees?.isFinite() == true)
+        assertTrue(defaultMap.northOrientationText().startsWith("Magnetic north"))
+
         val routeMap = DesktopCourseGraphic.routeMap(
             path = path,
             courseData = DesktopCourseFileReader.read(path),

@@ -21912,14 +21912,11 @@ private fun CourseAnalysisLegRows(title: String, legs: List<DesktopCourseLegRow>
             )
             return@Column
         }
+        Text(COURSE_LEG_TIMING_NOTE, color = DesktopPalette.Black, fontSize = 13.sp)
         legs.forEach { leg ->
-            val speedText = leg.speedFactorOverride
-                ?.let { " (speed x${twoDecimalText(it)})" }
-                .orEmpty()
-            val waitText = leg.waitSeconds?.let { " (waits ${secondsText(it)})" }.orEmpty()
             CourseAnalysisRow(
                 label = "${leg.fromLabel} -> ${leg.toLabel}",
-                value = "${kilometersText(leg.lengthMeters)}  split ${secondsText(leg.splitSeconds)}  cumulative ${secondsText(leg.cumulativeSeconds)}$waitText$speedText"
+                value = leg.analysisText()
             )
         }
     }

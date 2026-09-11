@@ -20,6 +20,38 @@ class DesktopMandatoryCourseLegTest {
     private val finish = CourseGeoPoint(35.0, -77.96)
     private val objects = linkedMapOf("Start" to start, "1" to fox1, "2" to fox2, "B" to beacon, "Finish" to finish)
 
+    @Test fun legRowsCombineMandatoryBendsWithoutDroppingTheirDistanceOrTime() {
+        val firstCorners = listOf(CourseGeoPoint(35.001, -77.998), CourseGeoPoint(35.001, -77.993))
+        val middleCorner = CourseGeoPoint(35.001, -77.985)
+        val finalCorner = CourseGeoPoint(35.002, -77.965)
+        val vertices = listOf(start) + firstCorners + listOf(fox1, middleCorner, fox2, beacon, finalCorner, finish)
+        val (project, info) = importRoute(vertices)
+        val summary = analyze(project, info)
+        val expectedPairs = listOf("S" to "1", "1" to "2", "2" to "B", "B" to "F")
+        val expectedLegVertices = listOf(listOf(start) + firstCorners + fox1,
+            listOf(fox1, middleCorner, fox2), listOf(fox2, beacon), listOf(beacon, finalCorner, finish))
+        val report = DesktopCourseAnalysisExports.reportText(summary)
+        for (section in listOfNotNull(summary.providedRouteSection, summary.calculatedRouteSection)) {
+            assertEquals(expectedPairs, section.legRows.map { it.fromLabel to it.toLabel })
+            var previousDeparture = 0
+            section.legRows.zip(expectedLegVertices).forEach { (leg, points) ->
+                val expectedLength = points.zipWithNext().sumOf { (a, b) -> a.distanceMetersTo(b) }.roundToInt()
+                assertTrue("${leg.fromLabel} -> ${leg.toLabel} must include every bend",
+                    kotlin.math.abs(expectedLength - leg.lengthMeters!!) <= 1)
+                assertTrue(leg.arrivalSeconds!! > previousDeparture)
+                assertEquals(leg.arrivalSeconds + leg.waitSeconds!! + leg.findPunchSeconds!!, leg.departureSeconds)
+                assertTrue(kotlin.math.abs(leg.splitSeconds!! - (leg.departureSeconds!! - previousDeparture)) <= 1)
+                previousDeparture = leg.departureSeconds
+                assertTrue(report.contains(leg.analysisText()))
+            }
+            assertEquals(section.estimatedIdealSeconds, section.legRows.last().departureSeconds)
+        }
+        // Waypoints still belong to the actual geometry and spatial exports.
+        assertEquals(4, summary.kmlFolders.single { it.routeName == "Calculated route" }.courseObjects.count {
+            it.type == DesktopCourseKmlExportPointType.WAYPOINT
+        })
+    }
+
     @Test
     fun originalVerticesSurviveAnalysisMetricsAndKmlRoundTrip() {
         val corners = listOf(CourseGeoPoint(35.001, -77.998), CourseGeoPoint(35.001, -77.993))

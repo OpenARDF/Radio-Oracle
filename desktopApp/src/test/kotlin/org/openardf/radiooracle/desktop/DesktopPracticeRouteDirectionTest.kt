@@ -134,6 +134,31 @@ class DesktopPracticeRouteDirectionTest {
         assertTrue(DesktopClassicRouteAnalysis.projection(youth).isEmpty())
     }
 
+    @Test fun calculatedElevationMarkersFollowMandatoryGeometryForRetainedAndReorderedCourses() {
+        for (level in listOf(RaceLevel.PRACTICE, RaceLevel.NATIONAL)) {
+            val original = fixture()
+            val project = original.copy(raceData = original.raceData.copy(race = original.raceData.race.copy(raceLevel = level)))
+            val summary = analyze(project)
+            assertEquals(level == RaceLevel.PRACTICE, summary.idealOrderMatches)
+            val calculatedProfile = summary.profileComparison.last()
+            val exported = summary.kmlFolders.single { it.routeName == "Calculated route" }
+            val route = exported.routePoints
+            val controls = info(project).controlPoints.filter { it.type == ControlPointType.CONTROL }
+            assertEquals(controls.size, calculatedProfile.markers.size)
+            for (marker in calculatedProfile.markers) {
+                val control = controls.single { it.label == marker.label }
+                val point = CourseGeoPoint(control.latitude, control.longitude)
+                val index = route.indices.minBy { route[it].distanceMetersTo(point) }
+                assertTrue(route[index].distanceMetersTo(point) < 0.01)
+                val expectedDistance = route.take(index + 1).zipWithNext().sumOf { (a, b) -> a.distanceMetersTo(b) }.roundToInt()
+                assertEquals("$level control ${marker.label} must include preceding mandatory bends", expectedDistance, marker.distanceMeters)
+                assertTrue("Marker must lie on its plotted elevation profile", calculatedProfile.profile.any {
+                    it.distanceMeters == marker.distanceMeters && it.elevationMeters == marker.elevationMeters
+                })
+            }
+        }
+    }
+
     private fun analyze(project: EventProjectFile) = DesktopCourseAnalyzer.analyze(project, "category", info(project),
         info(project).idealOrder, elevationLookup = flat, prepareApplication = true,
         controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS)
