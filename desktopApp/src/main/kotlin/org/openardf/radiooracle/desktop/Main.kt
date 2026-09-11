@@ -14041,7 +14041,9 @@ private fun SectionWorkspace(
         CourseToolsSectionWorkspaceContent(
             section = section,
             projectFile = projectFile,
-            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+            protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+            protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+            onUnlock = onUnlockProtectedCourseOrder
         )
         if (section == DesktopSection.Races) {
             AppSettingsSection("Race Password Protection") {
@@ -19725,13 +19727,17 @@ private fun String.sprintFastNumber(): Int? {
 private fun CourseToolsSectionWorkspaceContent(
     section: DesktopSection,
     projectFile: EventProjectFile?,
-    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    protectedIdealOrderByCategoryId: Map<String, String>,
+    onUnlock: (String) -> Boolean
 ) {
     when (section) {
         DesktopSection.CourseReport -> projectFile?.let {
             CourseReportPanel(
                 projectFile = it,
-                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
+                protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
+                protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
+                onUnlock = onUnlock
             )
         }
         DesktopSection.KmlMoveCourse -> KmlMoveCoursePanel()
@@ -19743,11 +19749,14 @@ private fun CourseToolsSectionWorkspaceContent(
 }
 
 @Composable
-private fun CourseReportPanel(
+internal fun CourseReportPanel(
     projectFile: EventProjectFile,
-    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
+    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
+    protectedIdealOrderByCategoryId: Map<String, String>,
+    onUnlock: (String) -> Boolean
 ) {
     var statusText by remember(projectFile.raceData.race.id) { mutableStateOf<String?>(null) }
+    var showUnlock by remember(projectFile.raceData.race.id) { mutableStateOf(false) }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -19774,9 +19783,8 @@ private fun CourseReportPanel(
                 color = DesktopPalette.Black,
                 fontSize = 14.sp
             )
-            return@Column
         }
-        Button(
+        if (reportRows.isNotEmpty()) Button(
             onClick = {
                 DesktopFileDialogs.chooseExportCsv(
                     title = "Export Course Report CSV",
@@ -19810,7 +19818,15 @@ private fun CourseReportPanel(
                 fontSize = 13.sp
             )
         }
+        ActiveCourseReports(projectFile, protectedCourseInfoByCategoryId, protectedIdealOrderByCategoryId) { showUnlock = true }
     }
+    if (showUnlock) CourseKmlKmzUnlockDialog(
+        title = "Unlock Course Report",
+        description = "Enter the Race Password to display course orders and graphics.",
+        confirmLabel = "Unlock",
+        onUnlock = { password -> onUnlock(password).also { if (it) showUnlock = false } },
+        onCancel = { showUnlock = false }
+    )
 }
 
 @Composable

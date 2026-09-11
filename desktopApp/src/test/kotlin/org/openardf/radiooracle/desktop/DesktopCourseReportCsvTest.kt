@@ -37,12 +37,67 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventControl
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ProtectedCourseRoutePoint
+import java.nio.file.Files
+import java.nio.file.Path
 
 class DesktopCourseReportCsvTest {
+    @Test
+    fun fileExportExcludesInactiveImportsEvenWhenTheirMetricsAreAvailable() {
+        val allCourses = projectFile(listOf(
+            CategoryCourse("M21", listOf(170, 171), 1, 2_000, 20),
+            CategoryCourse("W40", listOf(181), 2, 1_500, 15),
+            CategoryCourse("M70", listOf(170, 171, 172), 3, 8_000, 80),
+            // Must not replace the active M21 metrics when identical control sets are grouped.
+            CategoryCourse("M50", listOf(170, 171), 4, 9_000, 90)
+        ))
+        val project = allCourses.copy(raceData = allCourses.raceData.copy(
+            categories = allCourses.raceData.categories.take(2),
+            courseMappings = allCourses.raceData.categories.drop(2)
+        ))
+        val infos = allCourses.raceData.categories.associate { data -> data.category.let {
+            it.id to ProtectedCourseInfo(lengthMeters = it.lengthMeters, climbMeters = it.climbMeters)
+        } }
+        val path = Path.of("build/reports/course-report/active-only.csv")
+        Files.createDirectories(path.parent)
+        DesktopProjectFiles.exportCourseReportCsv(path, project, infos)
+        assertEquals("Course,km,m,C1,C2\r\n80m-Classic_1,2,20,170,171\r\n80m-Classic_2,1.5,15,181,\r\n",
+            Files.readString(path))
+    }
+
+    @Test
+    fun inactiveImportsAloneProduceNoCsvDataRows() {
+        val base = projectFile(listOf(CategoryCourse("M70", listOf(170, 171), 1, 3_000, 30)))
+        val project = base.copy(raceData = base.raceData.copy(
+            categories = emptyList(), courseMappings = base.raceData.categories
+        ))
+        val infos = mapOf("category-1" to ProtectedCourseInfo(lengthMeters = 3_000, climbMeters = 30))
+        assertTrue(DesktopCourseReportCsv.rows(project, infos).isEmpty())
+        assertEquals("Course,km,m\r\n", DesktopCourseReportCsv.generate(project, infos))
+    }
+
+    @Test
+    fun importedCourseAppearsOnlyAfterActivation() {
+        val base = projectFile(listOf(
+            CategoryCourse("M21", listOf(170), 1, 2_000, 20),
+            CategoryCourse("W40", listOf(181, 182), 2, 3_000, 30)
+        ))
+        val project = base.copy(raceData = base.raceData.copy(
+            categories = base.raceData.categories.take(1), courseMappings = base.raceData.categories.drop(1)
+        ))
+        assertEquals(listOf(listOf(170)), DesktopCourseReportCsv.rows(project).map { it.siControlCodes })
+        val activated = EventProjectEditor.addCategoryActivatingCourseMapping(
+            project, "activated-w40", "W40", controlPointIdFactory = { "activated-control-$it" }
+        ).projectFile
+        assertTrue(activated.raceData.courseMappings.isEmpty())
+        assertEquals("Course,km,m,C1,C2\r\n80m-Classic_1,3,30,181,182\r\n80m-Classic_2,2,20,170,\r\n",
+            DesktopCourseReportCsv.generate(activated))
+    }
+
     @Test
     fun exportsUniqueRoutesLongestFirstWithExpandedControlColumns() {
         val projectFile = projectFile(

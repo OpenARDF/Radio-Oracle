@@ -2171,13 +2171,13 @@ object DesktopCourseAnalyzer {
             label.startsWith("Sprint ") ||
             label.startsWith("Foxoring ")
 
-    private fun summaryLengthText(value: Int?): String =
+    internal fun summaryLengthText(value: Int?): String =
         value?.let { "${twoDecimals(it / 1000.0)} km" } ?: "Unknown"
 
-    private fun summaryClimbText(value: Int?): String =
+    internal fun summaryClimbText(value: Int?): String =
         value?.let { "$it m" } ?: "Unknown"
 
-    private fun summaryDurationText(value: Int?): String =
+    internal fun summaryDurationText(value: Int?): String =
         value?.let(::compactDurationText) ?: "Unknown"
 
     private fun calculatedRouteCandidate(

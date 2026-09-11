@@ -1463,7 +1463,7 @@ object DesktopNavigation {
         "setup.tools.course-tools.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
         "setup.tools.course-tools.course-report" to
-            "Use Course Report to export one CSV row per unique set of course controls with distance, climb, and ascending SI control numbers.",
+            "Use Course Report to view each active course’s length, climb, effective length, ideal order, estimated time, and 2D graphic, or export the existing CSV of unique control sets.",
         "setup.tools.course-tools.course-analysis.import-kml-kmz" to
             "Use Import Course KML/KMZ to bring in control placemarks and required category route lines for course analysis and category course assignments.",
         "setup.tools.course-tools.course-analysis.import-gpx" to

@@ -47,6 +47,7 @@ object DesktopCourseReportCsv {
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap()
     ): List<DesktopCourseReportRow> {
         val raceData = projectFile.raceData
+        // Imported courseMappings and their decrypted data are not export candidates until activated.
         val candidates = raceData.categories.mapNotNull { categoryData ->
             val categoryId = categoryData.category.id
             val protectedCourseInfo = protectedCourseInfoByCategoryId[categoryId]
