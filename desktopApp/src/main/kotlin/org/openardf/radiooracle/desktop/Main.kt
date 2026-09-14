@@ -5005,7 +5005,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 val ids = (pruneResult.projectFile.raceData.categories + pruneResult.projectFile.raceData.courseMappings)
                     .filter { StandardCategoryRules.normalizedCategoryName(it.category.name) in names }.map { it.category.id }.toSet()
                 pendingAuthoritativeCourseImport = DesktopCourseImportReview(review.path.fileName.toString(), review.transaction,
-                    pruneResult.projectFile, ids, protectedCoursePassword, notes = review.warningLines)
+                    pruneResult.projectFile, ids, currentProject.courseDataPassword(protectedCoursePassword),
+                    fetchElevations = true, notes = review.warningLines, analyzeIofCourses = true)
                 pendingIofCourseDataImportReview = null
                 projectStatusText = "Review the imported courses, then Apply Import or Cancel."
             }.onFailure { error ->
@@ -7157,7 +7158,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 pendingAuthoritativeCourseImport = null
                 courseDesignUi.analysisSource = DesktopCourseRouteSource.Applied
-                projectStatusText = "Applied ${review.sourceName}. Imported numbering, locations and routes are active. Save Race to write the changes to disk. Course Analyzer is optional."
+                projectStatusText = "Applied ${review.sourceName}. Reviewed courses are active. Save Race to write the changes to disk."
                 recentImportReport = DesktopImportReport("Course import: ${review.sourceName}",
                     withRollbackBackupLine(listOf("Applied imported course data directly to the race.") + review.notes))
                 recordActivity("Applied authoritative course import ${review.sourceName}.")

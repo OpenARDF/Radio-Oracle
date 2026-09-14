@@ -114,7 +114,18 @@ data class ProtectedCourseInfo(
     /** Field labels before Course Analyzer renumbering, keyed by immutable geometry control ID. */
     val resultControlLabelsById: Map<String, String> = emptyMap(),
     /** Explicit reviewed field bindings; older course payloads have no applied revision. */
-    val appliedBindings: AppliedCourseBindings? = null
+    val appliedBindings: AppliedCourseBindings? = null,
+    /** Original IOF horizontal distances, attached to endpoints independently of the chosen order. */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val suppliedLegLengths: List<ProtectedCourseLegLength> = emptyList()
+)
+
+@Serializable
+data class ProtectedCourseLegLength(
+    val fromId: String,
+    val toId: String,
+    val lengthMeters: Double
 )
 
 @Serializable

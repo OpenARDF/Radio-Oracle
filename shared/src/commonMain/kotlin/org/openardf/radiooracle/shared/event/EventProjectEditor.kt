@@ -1818,7 +1818,8 @@ object EventProjectEditor {
         }
 
         var nextCategoryOrder = (projectFile.raceData.categories.maxOfOrNull { it.category.order } ?: -1) + 1
-        val categories = projectFile.raceData.categories.toMutableList()
+        val activeIds = projectFile.raceData.categories.map { it.category.id }.toSet()
+        val categories = (projectFile.raceData.categories + projectFile.raceData.courseMappings).toMutableList()
         val importedControls = mutableListOf<EventControl>()
         var importedCount = 0
         var updatedCount = 0
@@ -1841,6 +1842,12 @@ object EventProjectEditor {
                     order = index + 1
                 )
             }
+            val idMap = imported.controlPoints.zip(controlPoints).associate { (old, new) -> old.controlId to new.controlId }
+            val info = imported.category.courseInfo?.let { info -> info.copy(
+                controlPoints = info.controlPoints.map { it.copy(controlId = idMap[it.controlId] ?: it.controlId) },
+                courseObjects = info.courseObjects.map { it.copy(id = idMap[it.id] ?: it.id) },
+                suppliedLegLengths = info.suppliedLegLengths.map { it.copy(fromId = idMap[it.fromId] ?: it.fromId, toId = idMap[it.toId] ?: it.toId) }
+            ) }
             val definitions = controlPoints.map { ControlPointDefinition(it.siCode, it.type, it.order) }
             val updatedCategoryData = EventCategoryData(
                 category = imported.category.copy(
@@ -1855,7 +1862,7 @@ object EventProjectEditor {
                     encryptedIdealOrder = imported.category.encryptedIdealOrder,
                     encryptedCourseInfo = imported.category.encryptedCourseInfo,
                     idealOrder = imported.category.idealOrder,
-                    courseInfo = imported.category.courseInfo,
+                    courseInfo = info,
                     controlPointsString = ControlPointRules.formatControlPoints(definitions)
                 ),
                 controlPoints = controlPoints,
@@ -1875,7 +1882,8 @@ object EventProjectEditor {
         return IofCourseDataImportOutcome(
             projectFile = projectFile.copy(
                 raceData = projectFile.raceData.copy(
-                    categories = categories,
+                    categories = categories.filter { it.category.id in activeIds },
+                    courseMappings = categories.filter { it.category.id !in activeIds },
                     controls = EventControlCatalog.mergeControls(projectFile.raceData.controls, importedControls)
                 )
             ),

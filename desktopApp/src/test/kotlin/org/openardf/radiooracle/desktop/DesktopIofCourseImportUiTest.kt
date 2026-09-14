@@ -1,0 +1,45 @@
+package org.openardf.radiooracle.desktop
+
+import androidx.compose.material.MaterialTheme
+import androidx.compose.ui.graphics.asSkiaBitmap
+import java.nio.file.Files
+import java.nio.file.Path
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import org.junit.Assert.*
+import org.junit.Rule
+import org.junit.Test
+import org.openardf.radiooracle.shared.event.*
+import org.openardf.radiooracle.shared.files.IofXmlImports
+
+class DesktopIofCourseImportUiTest {
+    @get:Rule val rule = createComposeRule()
+
+    @Test fun reportsPrecedeAcceptanceAndRejectDoesNotApply() {
+        val original = EventProjectFactory.createEmptyProject("race", "Review", "2026-09-14T09:00")
+        val imported = EventProjectEditor.importIofCourseData(original,
+            IofXmlImports.courseData(DesktopIofCourseAnalysisTest().xml(), original.raceData.race).parsedData).projectFile
+        val review = DesktopCourseImportReview("courses.xml", DesktopCourseImportTransaction.prepare(original), imported,
+            imported.raceData.courseMappings.map { it.category.id }.toSet(), null, analyzeIofCourses = true)
+        var accepted: EventProjectFile? = null
+        var rejected = false
+        rule.setContent { MaterialTheme {
+            CourseImportReportDialog(review, onApply = { accepted = it }, onCancel = { rejected = true })
+        } }
+        rule.waitUntil(30_000) { rule.onAllNodesWithText("W21, M21").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("W21, M21").assertExists()
+        rule.onNodeWithText("Accept Import").assertIsEnabled()
+        val image = rule.onNodeWithTag("desktop-alert").captureToImage()
+        val output = Path.of("build/reports/iof-import-review.png")
+        Files.createDirectories(output.parent)
+        Files.write(output, org.jetbrains.skia.Image.makeFromBitmap(image.asSkiaBitmap()).encodeToData()!!.bytes)
+        rule.onNodeWithText("Reject Import").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertTrue(rejected); assertNull(accepted) }
+        rule.onNodeWithText("Accept Import").performClick()
+        rule.runOnIdle {
+            assertNotNull(accepted)
+            assertTrue(original.raceData.courseMappings.isEmpty())
+            assertEquals(2, accepted!!.raceData.courseMappings.size)
+        }
+    }
+}

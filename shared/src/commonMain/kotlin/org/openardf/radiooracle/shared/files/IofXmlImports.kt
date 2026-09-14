@@ -28,7 +28,9 @@ import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
-import org.openardf.radiooracle.shared.event.EventCategory
+import org.openardf.radiooracle.shared.event.*
+import org.openardf.radiooracle.shared.course.ControlPointDefinition
+import kotlin.math.roundToInt
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRace
@@ -198,18 +200,6 @@ object IofXmlImports {
             warnings = warnings
         )
         raceCourseData.warnUnsupportedChildren(
-            childName = "Control",
-            location = "/CourseData/RaceCourseData/Control",
-            reason = "Race-level control definitions, positions, and map coordinates are valid IOF data but are not imported yet; courses are built from CourseControl codes.",
-            warnings = warnings
-        )
-        raceCourseData.warnUnsupportedChildren(
-            childName = "ClassCourseAssignment",
-            location = "/CourseData/RaceCourseData/ClassCourseAssignment",
-            reason = "Class-course assignments are not applied yet; courses are imported as editable Radio-Oracle categories.",
-            warnings = warnings
-        )
-        raceCourseData.warnUnsupportedChildren(
             childName = "PersonCourseAssignment",
             location = "/CourseData/RaceCourseData/PersonCourseAssignment",
             reason = "Person-course assignments are valid IOF data but are not applied by Radio-Oracle CourseData imports yet.",
@@ -224,14 +214,18 @@ object IofXmlImports {
             severity = IofXmlImportSeverity.UNSUPPORTED
         )
 
-        val categories = raceCourseData.children("Course").mapIndexed { index, course ->
+        val definitions = raceCourseData.children("Control").associateBy { it.childText("Id").orEmpty() }
+        val courseNodes = raceCourseData.children("Course")
+        val courses = courseNodes.mapIndexed { index, course ->
             course.toCategoryData(
                 race = race,
                 index = index,
                 idFactory = idFactory,
-                warnings = warnings
+                warnings = warnings,
+                definitions = definitions
             )
         }
+        val categories = assignedCourses(raceCourseData, courseNodes, courses, idFactory, warnings)
 
         return IofXmlImportResult(
             parsedData = IofCourseDataPreview(
@@ -443,89 +437,105 @@ object IofXmlImports {
         IofXmlValidator.requireValid(xml, iofSchema)
     }
 
+    private fun assignedCourses(root: XmlNode, nodes: List<XmlNode>, courses: List<EventCategoryData>,
+                                idFactory: (String) -> String, warnings: MutableList<IofXmlUnsupportedItem>): List<EventCategoryData> {
+        val assignments = root.children("ClassCourseAssignment")
+        if (assignments.isEmpty()) return courses
+        if (assignments.groupBy { it.childText("ClassName") }.any { it.value.size > 1 }) {
+            warnings += IofXmlUnsupportedItem("CourseData", "/CourseData/RaceCourseData/ClassCourseAssignment",
+                "Class-course assignments offer multiple courses for one class. Named courses are retained as separate mappings; class assignments need manual review.", IofXmlImportSeverity.UNSUPPORTED)
+            return courses
+        }
+        val used = mutableSetOf<Int>()
+        val assigned = assignments.map { assignment ->
+            val name = assignment.childText("ClassName").orEmpty()
+            val matches = nodes.indices.filter { index ->
+                val courseName = assignment.childText("CourseName")
+                val family = assignment.childText("CourseFamily")
+                (courseName != null || family != null) &&
+                    (courseName == null || nodes[index].childText("Name") == courseName) &&
+                    (family == null || nodes[index].childText("CourseFamily") == family)
+            }
+            require(matches.size == 1) { "Class $name must identify one unambiguous course; forked or missing course assignments need review." }
+            val index = matches.single()
+            used += index
+            val data = courses[index]
+            val id = idFactory("iof-class-$name")
+            data.copy(category = data.category.copy(id = id, name = name),
+                controlPoints = data.controlPoints.map { it.copy(id = "$id-${it.id}", categoryId = id) })
+        }
+        return assigned + courses.filterIndexed { index, _ -> index !in used }
+    }
+
     private fun XmlNode.toCategoryData(
-        race: EventRace,
-        index: Int,
-        idFactory: (String) -> String,
-        warnings: MutableList<IofXmlUnsupportedItem>
+        race: EventRace, index: Int, idFactory: (String) -> String,
+        warnings: MutableList<IofXmlUnsupportedItem>, definitions: Map<String, XmlNode>
     ): EventCategoryData {
         val courseName = childText("Name")?.takeIf { it.isNotBlank() }
             ?: throw IofXmlImportException("CourseData course name missing at /CourseData/RaceCourseData/Course[${index + 1}].")
-        if (child("CourseFamily") != null) {
-            warnings += IofXmlUnsupportedItem(
-                messageType = "CourseData",
-                location = "/CourseData/RaceCourseData/Course[${index + 1}]/CourseFamily",
-                reason = "Course family is valid IOF data but is not represented in Radio-Oracle categories."
-            )
-        }
-        descendants("MapPosition").forEach { _ ->
-            warnings += IofXmlUnsupportedItem(
-                messageType = "CourseData",
-                location = "/CourseData/RaceCourseData/Course[${index + 1}]",
-                reason = "Map positions are valid IOF data but are not represented in Radio-Oracle category imports."
-            )
-        }
         warnUnsupportedCoursePresentationData(index, warnings)
         val categoryId = idFactory("iof-course-category-$index-$courseName")
-        val controlPoints = mutableListOf<EventControlPoint>()
-        children("CourseControl").forEachIndexed { controlIndex, courseControl ->
-            val type = courseControl.attribute("type") ?: "Control"
-            val controlCode = courseControl.childText("Control")?.trim().orEmpty()
-            when (type) {
-                "Control" -> {
-                    val siCode = controlCode.toIntOrNull()
-                    if (siCode != null) {
-                        controlPoints += EventControlPoint(
-                            id = idFactory("iof-course-control-$categoryId-$controlIndex-$siCode"),
-                            categoryId = categoryId,
-                            siCode = siCode,
-                            type = ControlPointType.CONTROL,
-                            order = controlPoints.size + 1
-                        )
-                    } else {
-                        warnings += IofXmlUnsupportedItem(
-                            messageType = "CourseData",
-                            location = "/CourseData/RaceCourseData/Course[${index + 1}]/CourseControl[${controlIndex + 1}]",
-                            reason = "Radio-Oracle category imports require numeric SI control codes."
-                        )
-                    }
+        val controls = mutableListOf<EventControlPoint>()
+        val objects = mutableListOf<ProtectedCourseObjectPoint>()
+        val legs = mutableListOf<ProtectedCourseLegLength>()
+        var previousId: String? = null
+        children("CourseControl").forEachIndexed { visit, node ->
+            require(node.children("Control").size == 1) { "Course $courseName has alternative controls; select a single course before importing." }
+            val code = node.childText("Control").orEmpty().trim()
+            val definition = definitions[code]
+            val type = node.attribute("type") ?: definition?.attribute("type") ?: "Control"
+            val name = definition?.childText("Name").orEmpty()
+            val role = ControlRoleLabelRules.inferredSpecialRole(name)
+                ?: ControlRoleLabelRules.inferredSpecialRole(code) ?: ControlPointType.CONTROL
+            val objectType = when (type) {
+                "Start" -> ProtectedCourseObjectType.START
+                "Finish" -> ProtectedCourseObjectType.FINISH
+                "Control" -> when (role) {
+                    ControlPointType.CONTROL -> ProtectedCourseObjectType.CONTROL
+                    ControlPointType.BEACON -> ProtectedCourseObjectType.BEACON
+                    ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
                 }
-                "Start", "Finish" -> {
-                    warnings += IofXmlUnsupportedItem(
-                        messageType = "CourseData",
-                        location = "/CourseData/RaceCourseData/Course[${index + 1}]/CourseControl[${controlIndex + 1}]",
-                        reason = "$type controls are valid IOF data but are not part of Radio-Oracle assigned transmitter order."
-                    )
-                }
-                else -> {
-                    warnings += IofXmlUnsupportedItem(
-                        messageType = "CourseData",
-                        location = "/CourseData/RaceCourseData/Course[${index + 1}]/CourseControl[${controlIndex + 1}]",
-                        reason = "Unsupported IOF course-control type: $type.",
-                        severity = IofXmlImportSeverity.UNSUPPORTED
-                    )
-                }
+                else -> throw IofXmlImportException("Unsupported course-control type $type in $courseName.")
             }
+            val siCode = (definition?.childText("PunchingUnitId") ?: code).toIntOrNull()
+            require(type != "Control" || siCode != null) { "Course $courseName: $code needs a numeric SI code or PunchingUnitId." }
+            val control = if (type == "Control") EventControlCatalog.controlForDefinition(race.id,
+                ControlPointDefinition(requireNotNull(siCode), role, visit + 1)) else null
+            val id = control?.id ?: idFactory("iof-placement-$type-$code")
+            if (control != null) controls += EventControlPoint(
+                id = idFactory("iof-course-control-$categoryId-$visit"), categoryId = categoryId,
+                siCode = control.siCode, type = role, order = controls.size + 1, controlId = id)
+            node.childText("LegLength")?.let { text ->
+                val length = text.toDoubleOrNull()
+                require(length != null && length.isFinite() && length >= 0) { "Invalid leg length for $code in $courseName." }
+                // A Start leg can describe the timed start to the start flag; preserve it separately.
+                legs += ProtectedCourseLegLength(previousId ?: "iof-time-start", id, length)
+            }
+            previousId = id
+            val position = definition?.child("Position")
+            val lat = position?.attribute("lat")?.toDoubleOrNull()
+            val lng = position?.attribute("lng")?.toDoubleOrNull()
+            if (lat != null && lng != null && lat.isFinite() && lng.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0) {
+                val label = control?.label ?: if (type == "Start") "Start" else "Finish"
+                objects += ProtectedCourseObjectPoint(id, label, objectType, lat, lng,
+                    position.attribute("alt")?.toDoubleOrNull()?.takeIf { it.isFinite() })
+            } else warnings += IofXmlUnsupportedItem("CourseData", "/Course/$courseName/$code",
+                "Geographic coordinates are missing or invalid for $code; route analysis needs latitude and longitude.")
         }
-        return EventCategoryData(
-            category = EventCategory(
-                id = categoryId,
-                raceId = race.id,
-                name = courseName,
-                isMan = true,
-                maxAge = null,
-                lengthMeters = childText("Length")?.trim()?.toIntOrNull() ?: 0,
-                climbMeters = childText("Climb")?.trim()?.toIntOrNull() ?: 0,
-                order = index,
-                differentProperties = false,
-                raceType = null,
-                raceBand = null,
-                timeLimitSeconds = null,
-                controlPointsString = ""
-            ),
-            controlPoints = controlPoints,
-            competitors = emptyList()
-        )
+        val info = ProtectedCourseInfo(sourceName = "IOF CourseData: $courseName",
+            lengthMeters = childText("Length")?.toDoubleOrNull()?.roundToInt(),
+            climbMeters = childText("Climb")?.toDoubleOrNull()?.roundToInt(),
+            route = objects.map { ProtectedCourseRoutePoint(it.latitude, it.longitude, it.elevationMeters) },
+            courseObjects = objects.distinctBy { it.id },
+            controlPoints = objects.filter { it.type.controlRole() != null }.distinctBy { it.id }.map {
+                ProtectedCourseControlPoint(it.id, it.label, it.latitude, it.longitude,
+                    requireNotNull(it.type.controlRole()), it.elevationMeters)
+            }, suppliedLegLengths = legs)
+        return EventCategoryData(category = EventCategory(id = categoryId, raceId = race.id, name = courseName,
+            isMan = StandardCategoryRules.inferIsManFromName(courseName) ?: true, maxAge = null,
+            lengthMeters = info.lengthMeters ?: 0, climbMeters = info.climbMeters ?: 0, order = index,
+            differentProperties = false, raceType = null, raceBand = null, timeLimitSeconds = null,
+            controlPointsString = "", courseInfo = info), controlPoints = controls, competitors = emptyList())
     }
 
     private fun XmlNode.toCompetitorImportRow(
@@ -612,13 +622,13 @@ object IofXmlImports {
         index: Int,
         warnings: MutableList<IofXmlUnsupportedItem>
     ) {
-        val unsupportedNames = listOf("LegLength", "MapText", "MapTextPosition")
+        val unsupportedNames = listOf("MapText", "MapTextPosition")
         val presentNames = unsupportedNames.filter { descendants(it).isNotEmpty() }
         if (presentNames.isEmpty()) return
         warnings += IofXmlUnsupportedItem(
             messageType = "CourseData",
             location = "/CourseData/RaceCourseData/Course[${index + 1}]/CourseControl",
-            reason = "Course leg lengths and map presentation data are valid IOF data but are not represented in Radio-Oracle category imports: ${presentNames.joinToString()}."
+            reason = "Map presentation data are valid IOF data but are not represented in Radio-Oracle category imports: ${presentNames.joinToString()}."
         )
     }
 

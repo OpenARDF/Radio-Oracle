@@ -2241,8 +2241,8 @@ object DesktopCourseAnalyzer {
             missing += "Sprint loop route calculation requires a spectator or the beacon as the transition control."
             return null
         }
-        val slowFoxes = foxes.filterNot { it.control.isSprintFastFox() }
-        val fastFoxes = foxes.filter { it.control.isSprintFastFox() }
+        val slowFoxes = foxes.filterNot { isSprintFastFox(it.control) }
+        val fastFoxes = foxes.filter { isSprintFastFox(it.control) }
         val firstLoop = boundedLoopRoute(
             start = start,
             finish = transitionPoint,
@@ -2606,18 +2606,42 @@ object DesktopCourseAnalyzer {
         elevationLookup: (CourseGeoPoint) -> Double?,
         waypoints: List<MandatoryRouteWaypoint> = emptyList()
     ): List<ControlAnalysisPoint> {
-        if (controls.size < 4) {
-            return controls
+        if (controls.size < 4) return controls
+        return improveCourseOrder(controls) { order ->
+            routeComparisonLength(start, finish, order, beacon, elevationLookup, waypoints = waypoints)
         }
+    }
+
+    /** The import path supplies a cost that includes declared IOF leg distances. */
+    internal fun <T> minimumCostCourseOrder(controls: List<T>, cost: (List<T>) -> Double,
+                                          checkCancelled: () -> Unit = {}): List<T> {
+        if (controls.size <= 8) return controls.permutations().minBy { checkCancelled(); cost(it) }
+        val remaining = controls.toMutableList()
+        val greedy = mutableListOf<T>()
+        while (remaining.isNotEmpty()) {
+            checkCancelled()
+            val next = remaining.minBy { cost(greedy + it) }
+            greedy += next
+            remaining.remove(next)
+        }
+        return listOf(controls, greedy).map { improveCourseOrder(it, checkCancelled, cost) }.minBy(cost)
+    }
+
+    private fun <T> improveCourseOrder(controls: List<T>, checkCancelled: () -> Unit = {},
+                                      cost: (List<T>) -> Double): List<T> {
         var best = controls
+        var bestCost = cost(best)
         var improved = true
         while (improved) {
             improved = false
             for (i in 0 until best.lastIndex) {
                 for (k in i + 1..best.lastIndex) {
+                    checkCancelled()
                     val candidate = best.take(i) + best.subList(i, k + 1).asReversed() + best.drop(k + 1)
-                    if (routeComparisonLength(start, finish, candidate, beacon, elevationLookup, waypoints = waypoints) < routeComparisonLength(start, finish, best, beacon, elevationLookup, waypoints = waypoints)) {
+                    val candidateCost = cost(candidate)
+                    if (candidateCost < bestCost) {
                         best = candidate
+                        bestCost = candidateCost
                         improved = true
                     }
                 }
@@ -3603,13 +3627,14 @@ object DesktopCourseAnalyzer {
         }
     }
 
-    private fun EventControl.isSprintFastFox(): Boolean =
+    internal fun isSprintFastFox(control: EventControl): Boolean = with(control) {
         type == ControlPointType.CONTROL &&
             (
                 siCode in 41..45 ||
                     DesktopCoursePointLabelClassifier.sprintFastFoxNumber(label) != null ||
                     DesktopCoursePointLabelClassifier.sprintFastFoxNumber(publicLabel.orEmpty()) != null
             )
+    }
 
     private fun factorial(value: Int): Int =
         if (value <= 1) 1 else (2..value).fold(1) { acc, next -> acc * next }

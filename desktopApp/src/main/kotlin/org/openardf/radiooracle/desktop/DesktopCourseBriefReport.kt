@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 
 internal data class DesktopCourseBriefReport(
     val categoryId: String,
@@ -15,7 +16,8 @@ internal data class DesktopCourseBriefReport(
     val estimatedIdealSeconds: Int? = null,
     val routeMap: DesktopCourseRouteMap? = null,
     val notice: String? = null,
-    val isLocked: Boolean = false
+    val isLocked: Boolean = false,
+    val legWarnings: List<String> = emptyList()
 )
 
 /** A read-only summary of active courses, independent of the CSV's control-set grouping. */
@@ -51,12 +53,13 @@ internal object DesktopCourseBriefReports {
             horizontalLengthMeters = category.lengthMeters.takeIf { it > 0 },
             climbMeters = category.climbMeters.takeIf { category.lengthMeters > 0 || it > 0 }
         )
-        if (info == null) return fallback.copy(
+        if (info == null || (info.route.isEmpty() && info.courseObjects.isEmpty())) return fallback.copy(
             isLocked = category.encryptedCourseInfo != null,
             notice = if (category.encryptedCourseInfo != null) "Unlock course data to calculate this report."
                 else if (importedRoute) "This import supplies assignments and course facts without geographic route data."
                 else "Import course locations and route data to calculate the ideal order and graphic."
         )
+        val reviewedIof = info.sourceName.startsWith("IOF CourseData:") && info.appliedBindings != null
         return try {
             val summary = DesktopCourseAnalyzer.analyze(
                 project, category.id, info, order,
@@ -65,23 +68,27 @@ internal object DesktopCourseBriefReports {
                 allowFoxRenumbering = false
             )
             // When both routes match, the analyzer's calculated section intentionally contains only a note.
-            val section = if (importedRoute) summary.providedRouteSection else summary.calculatedRouteSection?.takeUnless { it.summaryOnly }
+            val section = if (importedRoute || reviewedIof) summary.providedRouteSection else summary.calculatedRouteSection?.takeUnless { it.summaryOnly }
                 ?: summary.providedRouteSection
             if (section == null) fallback.copy(notice = "The import does not contain enough geographic data to draw a route.".takeIf { importedRoute }
                 ?: "Course geometry is incomplete. Review this course in Course Analyzer.")
             else DesktopCourseBriefReport(
-                category.id, category.name, section.routeLengthMeters, section.climbMeters,
-                section.effectiveLengthMeters,
-                section.routeOrder.takeIf { importedRoute || summary.calculatedRouteSection != null }.orEmpty(),
-                section.estimatedIdealSeconds.takeIf { importedRoute || summary.calculatedRouteSection != null },
+                category.id, category.name,
+                if (reviewedIof) info.lengthMeters else section.routeLengthMeters,
+                if (reviewedIof) info.climbMeters else section.climbMeters,
+                if (reviewedIof) info.effectiveLengthMeters() else section.effectiveLengthMeters,
+                section.routeOrder.takeIf { importedRoute || reviewedIof || summary.calculatedRouteSection != null }.orEmpty(),
+                section.estimatedIdealSeconds.takeIf { (importedRoute || summary.calculatedRouteSection != null) && (!reviewedIof || info.suppliedLegLengths.isEmpty()) },
                 section.routeMap?.copy(title = if (importedRoute) "Imported route" else if (summary.calculatedRouteSection != null) "Ideal order" else "Stored route"),
                 notice = when {
+                    reviewedIof -> "Showing the accepted IOF route and retained XML leg distances. Terrain detours have unknown geometry; climb is estimated where elevations are available."
                     importedRoute -> if (section.effectiveLengthMeters == null) "Elevation data is incomplete." else null
                     summary.calculatedRouteSection == null -> "Showing the stored route; an ideal route could not be calculated."
                     section.effectiveLengthMeters == null -> "Elevation data is incomplete; the time estimate uses horizontal distance."
                     summary.hasMissingCalculatedRouteElevationData -> "Some route elevations are estimated between known points."
                     else -> null
-                }
+                },
+                legWarnings = if (reviewedIof) DesktopIofCourseAnalysis.legWarnings(info) else emptyList()
             )
         } catch (error: Exception) {
             if (error is CancellationException) throw error

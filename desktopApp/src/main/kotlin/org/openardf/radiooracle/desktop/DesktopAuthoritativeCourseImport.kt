@@ -2,7 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.*
 
-/** The preview and final Apply share the same prepared data; no optimizer or numbering proposal is applied. */
+/** Final Apply uses the exact prepared candidate shown in the report. */
 internal data class DesktopCourseImportReview(
     val sourceName: String,
     val transaction: DesktopCourseImportTransaction,
@@ -10,7 +10,8 @@ internal data class DesktopCourseImportReview(
     val categoryIds: Set<String>,
     val password: String?,
     val fetchElevations: Boolean = false,
-    val notes: List<String> = emptyList()
+    val notes: List<String> = emptyList(),
+    val analyzeIofCourses: Boolean = false
 )
 
 internal object DesktopAuthoritativeCourseImport {

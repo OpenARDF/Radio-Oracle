@@ -1423,7 +1423,7 @@ class EventProjectEditorTest {
         assertEquals(1, outcome.importedCount)
         assertEquals(1, outcome.updatedCount)
         val updatedExisting = outcome.projectFile.raceData.categories.single { it.category.name == "M21" }
-        val added = outcome.projectFile.raceData.categories.single { it.category.name == "W21" }
+        val added = outcome.projectFile.raceData.courseMappings.single { it.category.name == "W21" }
         assertEquals("cat-1", updatedExisting.category.id)
         assertEquals(7, updatedExisting.category.order)
         assertEquals(4500, updatedExisting.category.lengthMeters)

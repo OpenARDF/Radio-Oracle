@@ -43,9 +43,7 @@ class IofXmlImportsTest {
         assertEquals("10:00:00", result.parsedData.startTime)
         assertEquals(listOf("A"), result.parsedData.categories.map { it.category.name })
         assertEquals(listOf(31, 32), result.parsedData.categories.single().controlPoints.map { it.siCode })
-        assertTrue(result.unsupportedItems.any { it.location.endsWith("/CourseFamily") })
-        assertTrue(result.unsupportedItems.any { it.reason.contains("Start controls") })
-        assertTrue(result.unsupportedItems.any { it.reason.contains("Finish controls") })
+        assertTrue(result.unsupportedItems.any { it.reason.contains("coordinates are missing") })
     }
 
     @Test
@@ -146,10 +144,9 @@ class IofXmlImportsTest {
         assertEquals("Example event", result.parsedData.eventName)
         assertEquals(listOf("A", "B"), result.parsedData.categories.map { it.category.name })
         assertEquals(listOf(31, 32, 33), result.parsedData.categories.first().controlPoints.take(3).map { it.siCode })
-        assertTrue(result.unsupportedItems.any { it.reason.contains("Course family") })
-        assertTrue(result.unsupportedItems.any { it.reason.contains("Race-level control definitions") })
+        assertTrue(result.parsedData.categories.first().category.courseInfo!!.courseObjects.isNotEmpty())
         assertTrue(result.unsupportedItems.any { it.reason.contains("Class-course assignments") })
-        assertTrue(result.unsupportedItems.any { it.reason.contains("Course leg lengths") })
+        assertTrue(result.parsedData.categories.first().category.courseInfo!!.suppliedLegLengths.isNotEmpty())
     }
 
     @Test
