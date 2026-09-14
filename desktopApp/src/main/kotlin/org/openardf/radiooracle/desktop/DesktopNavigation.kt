@@ -167,7 +167,8 @@ data class DesktopNavigationReadiness(
     val raceBand: RaceBand? = null,
     val competitorCount: Int = 0,
     val unassignedCompetitorCount: Int = 0,
-    val unscheduledCompetitorCount: Int = 0
+    val unscheduledCompetitorCount: Int = 0,
+    val courseImportDisabledReason: String? = null
 ) {
     val isSetupComplete: Boolean
         get() = hasEventFile &&
@@ -204,8 +205,8 @@ data class DesktopNavigationReadiness(
                 hasCompetitors = hasCompetitors,
                 hasAssignedCompetitors = hasAssignedCompetitors,
                 hasStartList = hasCompetitors && unscheduledCompetitorCount == 0,
-                hasRaceOpsData = raceData.competitorData.registrations().any { it.readoutData != null } ||
-                    raceData.unmatchedReadoutData.isNotEmpty(),
+                hasRaceOpsData = org.openardf.radiooracle.shared.event.EventCourseDrafts.hasRecordedActivity(raceData),
+                courseImportDisabledReason = DesktopCourseImportAvailability.disabledReason(projectFile),
                 hasSeriesContext = projectFile.seriesLink != null,
                 raceType = raceData.race.raceType,
                 raceLevel = raceData.race.raceLevel,
@@ -1063,6 +1064,8 @@ object DesktopNavigation {
         if (item.requiresEventFile && !readiness.hasEventFile) {
             return false
         }
+        if (item.action in DesktopCourseImportAvailability.designImportActions &&
+            (readiness.courseImportDisabledReason != null || readiness.hasRaceOpsData)) return false
         return when {
             item.id.startsWith("setup.categories") -> readiness.hasControls
             item.id.startsWith("setup.competitors") -> readiness.hasControls && readiness.hasCategories
@@ -1123,6 +1126,10 @@ object DesktopNavigation {
         }
         if (item.requiresEventFile && !readiness.hasEventFile) {
             return "Open or create a Race File first."
+        }
+        if (item.action in DesktopCourseImportAvailability.designImportActions &&
+            (readiness.courseImportDisabledReason != null || readiness.hasRaceOpsData)) {
+            return readiness.courseImportDisabledReason ?: DesktopCourseImportAvailability.ReadoutRestriction
         }
         return when {
             item.id.startsWith("setup.categories") ->

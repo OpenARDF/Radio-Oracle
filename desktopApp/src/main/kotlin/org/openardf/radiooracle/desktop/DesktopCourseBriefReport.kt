@@ -78,10 +78,12 @@ internal object DesktopCourseBriefReports {
                 if (reviewedIof) info.climbMeters else section.climbMeters,
                 if (reviewedIof) info.effectiveLengthMeters() else section.effectiveLengthMeters,
                 section.routeOrder.takeIf { importedRoute || reviewedIof || summary.calculatedRouteSection != null }.orEmpty(),
-                section.estimatedIdealSeconds.takeIf { (importedRoute || summary.calculatedRouteSection != null) && (!reviewedIof || info.suppliedLegLengths.isEmpty()) },
+                section.estimatedIdealSeconds.takeIf { (importedRoute || summary.calculatedRouteSection != null) && (!reviewedIof || DesktopIofCourseAnalysis.legWarnings(info).isEmpty()) },
                 section.routeMap?.copy(title = if (importedRoute) "Imported route" else if (summary.calculatedRouteSection != null) "Ideal order" else "Stored route"),
                 notice = when {
-                    reviewedIof -> "Showing the accepted IOF route and retained XML leg distances. Terrain detours have unknown geometry; climb is estimated where elevations are available."
+                    reviewedIof -> "Showing the accepted IOF route and retained XML leg distances. " +
+                        if (DesktopIofCourseAnalysis.legWarnings(info).isEmpty()) "Legs differing from straight lines by 3 m or less are treated as straight lines."
+                        else "Terrain detours have unknown geometry; climb is estimated where elevations are available."
                     importedRoute -> if (section.effectiveLengthMeters == null) "Elevation data is incomplete." else null
                     summary.calculatedRouteSection == null -> "Showing the stored route; an ideal route could not be calculated."
                     section.effectiveLengthMeters == null -> "Elevation data is incomplete; the time estimate uses horizontal distance."

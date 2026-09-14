@@ -3767,12 +3767,19 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
         }
 
+        fun blockUnavailableCourseImport(): Boolean {
+            val reason = DesktopCourseImportAvailability.disabledReason(projectSession.currentProject) ?: return false
+            projectStatusText = reason
+            return true
+        }
+
         fun startCourseKmlKmzImport(
             path: Path,
             password: String?,
             categoryOverrideId: String? = null,
             requireRoutes: Boolean = true
         ) {
+            if (blockUnavailableCourseImport()) return
             val importTransaction = DesktopCourseImportTransaction.prepare(projectSession.currentProject ?: return)
             val currentProject = importTransaction.baseProject
             val formatLabel = controlsRouteImportFormatLabel(path.fileName.toString())
@@ -3941,6 +3948,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportCourseKmlKmzUnlocked(password: String?, requireRoutes: Boolean = true) {
+            if (blockUnavailableCourseImport()) return
             if (isImportingCourseKmlKmz) {
                 return
             }
@@ -3950,6 +3958,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportCourseGpxUnlocked(password: String?, requireRoutes: Boolean = true) {
+            if (blockUnavailableCourseImport()) return
             if (isImportingCourseKmlKmz) {
                 return
             }
@@ -3959,6 +3968,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportCourseKmlKmz() {
+            if (blockUnavailableCourseImport()) return
             val currentProject = projectSession.currentProject ?: return
             val password = protectedCoursePassword
             if (currentProject.hasEncryptedCategoryData() && password == null) {
@@ -3970,6 +3980,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportCourseGpx() {
+            if (blockUnavailableCourseImport()) return
             val currentProject = projectSession.currentProject ?: return
             val password = protectedCoursePassword
             if (currentProject.hasEncryptedCategoryData() && password == null) {
@@ -3981,6 +3992,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportControlsKmlKmz() {
+            if (blockUnavailableCourseImport()) return
             val currentProject = projectSession.currentProject ?: return
             val password = protectedCoursePassword
             if (currentProject.hasEncryptedCategoryData() && password == null) {
@@ -3992,6 +4004,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun chooseImportControlsGpx() {
+            if (blockUnavailableCourseImport()) return
             val currentProject = projectSession.currentProject ?: return
             val password = protectedCoursePassword
             if (currentProject.hasEncryptedCategoryData() && password == null) {
@@ -4936,6 +4949,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun importIofCourseDataXml() {
+            if (blockUnavailableCourseImport()) return
             DesktopFileDialogs.chooseImportIofXml("Import IOF CourseData XML")?.let { path ->
                 runCatching {
                     val transaction = DesktopCourseImportTransaction.prepare(projectSession.currentProject
@@ -6011,7 +6025,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun isNavActionEnabled(action: DesktopNavAction): Boolean =
-            when (action) {
+            if (action in DesktopCourseImportAvailability.designImportActions) {
+                DesktopCourseImportAvailability.disabledReason(projectFile) == null
+            } else when (action) {
                 DesktopNavAction.NewEventFile,
                 DesktopNavAction.OpenEventFile,
                 DesktopNavAction.ReceiveFileFromAndroid,
@@ -6049,6 +6065,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
 
         fun disabledNavActionReason(action: DesktopNavAction): String? {
+            if (action in DesktopCourseImportAvailability.designImportActions) {
+                return DesktopCourseImportAvailability.disabledReason(projectFile)
+            }
             if (isNavActionEnabled(action)) {
                 return null
             }
@@ -6554,6 +6573,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }
 
         fun handleNavAction(action: DesktopNavAction) {
+            if (action in DesktopCourseImportAvailability.designImportActions && blockUnavailableCourseImport()) return
             val routeExportActions = setOf(DesktopNavAction.ExportResultsCsv, DesktopNavAction.ExportSplitResultsCsv,
                 DesktopNavAction.ExportSplitResultsPdf, DesktopNavAction.ExportResultsText, DesktopNavAction.ExportResultsHtml,
                 DesktopNavAction.ExportResultReportHtml, DesktopNavAction.ExportResultReportXml, DesktopNavAction.ExportResultReportPdf)
@@ -7149,7 +7169,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             )
         }
         pendingAuthoritativeCourseImport?.let { review ->
-            CourseImportReportDialog(review, onApply = { candidate ->
+            CourseImportReportDialog(review, currentProject = projectFile, onApply = { candidate ->
                 checkpointBeforeImport("course import ${review.sourceName}")
                 projectFile = projectSession.updateCurrentProject { current ->
                     review.transaction.applyTo(current) { candidate }
@@ -13452,14 +13472,14 @@ private fun WorkflowBar(
     }
 }
 
-private enum class DisabledReasonTooltipPlacement {
+internal enum class DisabledReasonTooltipPlacement {
     AboveCursor,
     RightOfCursor
 }
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun DisabledReasonTooltip(
+internal fun DisabledReasonTooltip(
     reason: String?,
     placement: DisabledReasonTooltipPlacement = DisabledReasonTooltipPlacement.AboveCursor,
     content: @Composable () -> Unit
@@ -13870,7 +13890,8 @@ private fun SectionWorkspace(
             )
         }
         if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
-            ControlsRouteKmlImportPanel(onSelectFile = onImportControlsRouteKmlKmz)
+            ControlsRouteKmlImportPanel(onSelectFile = onImportControlsRouteKmlKmz,
+                disabledReason = DesktopCourseImportAvailability.disabledReason(projectFile))
         }
         if (section == DesktopSection.SeriesEvents) {
             EventSeriesEventsPanel(
@@ -20328,13 +20349,15 @@ private fun ClassicCourseGeneratorResultView(result: ClassicCourseGeneratorResul
 }
 
 @Composable
-private fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit) {
+internal fun ControlsRouteKmlImportPanel(onSelectFile: () -> Unit, disabledReason: String? = null) {
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Button(onClick = onSelectFile) {
-            ButtonLabel("Import Controls KML/KMZ...")
+        DisabledReasonTooltip(disabledReason) {
+            Button(onClick = onSelectFile, enabled = disabledReason == null) {
+                ButtonLabel("Import Controls KML/KMZ...")
+            }
         }
         Text(
             text = "Controls CSV files update control identity fields only: SI code, role, scoring, public label, and notes. They do not contain latitude/longitude columns and cannot update control locations. KML/KMZ can update stored course control coordinates; a Race Password is required only when the Race File is encrypted. Coordinates are not written to public control fields.",

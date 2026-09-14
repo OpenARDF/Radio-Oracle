@@ -11,12 +11,15 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 
 @Composable
 internal fun CourseImportReportDialog(review: DesktopCourseImportReview,
-    onApply: (EventProjectFile) -> Unit, onCancel: () -> Unit) {
+    onApply: (EventProjectFile) -> Unit, onCancel: () -> Unit,
+    currentProject: EventProjectFile? = review.transaction.baseProject) {
+    val restriction = remember(review, currentProject) { review.transaction.disabledReason(currentProject) }
     var prepared by remember(review) { mutableStateOf<EventProjectFile?>(null) }
     var reports by remember(review) { mutableStateOf<List<DesktopCourseBriefReport>?>(null) }
     var elevationWarning by remember(review) { mutableStateOf<String?>(null) }
     var error by remember(review) { mutableStateOf<String?>(null) }
-    LaunchedEffect(review) {
+    LaunchedEffect(review, restriction) {
+        if (restriction != null) return@LaunchedEffect
         try {
             val result = withContext(Dispatchers.Default) {
                 var warning: String? = null
@@ -58,12 +61,13 @@ internal fun CourseImportReportDialog(review: DesktopCourseImportReview,
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(review.sourceName)
-                Text(if (review.analyzeIofCourses) "Review one report per unique course. Accept Import transfers the analyzed courses to the race. Reject Import discards this temporary import. Differences from straight-line leg length greater than 1 m are flagged."
+                restriction?.let { Text(it, color = MaterialTheme.colors.error) }
+                Text(if (review.analyzeIofCourses) "Review one report per unique course. Accept Import transfers the analyzed courses to the race. Reject Import discards this temporary import. Differences from straight-line leg length greater than 3 m are flagged; differences of 3 m or less are treated as straight lines."
                     else "Apply Import applies these courses to the matched race categories. Imported numbering, locations and routes are retained. Course Analyzer is optional.")
                 if (review.transaction.replacesDraft) Text("Applying this import replaces the pending course draft. Cancel keeps the current race and draft.")
                 review.notes.forEach { Text(it) }
                 elevationWarning?.let { Text(it) }
-                if (reports == null && error == null) {
+                if (reports == null && error == null && restriction == null) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                     Text(if (review.fetchElevations) "Preparing the report and retrieving missing elevations…" else "Preparing the course report…")
                 }
@@ -81,12 +85,14 @@ internal fun CourseImportReportDialog(review: DesktopCourseImportReview,
             TextButton(onClick = onCancel, modifier = Modifier.testTag("cancel-course-import")) { Text(if (review.analyzeIofCourses) "Reject Import" else "Cancel") }
         },
         confirmButton = {
-            Button(enabled = prepared != null && error == null,
-                modifier = Modifier.testTag("apply-course-import"), onClick = {
-                    try { onApply(requireNotNull(prepared)) } catch (failure: Exception) {
-                        error = failure.message ?: "The course import could not be applied."
-                    }
-                }) { Text(if (review.analyzeIofCourses) "Accept Import" else "Apply Import") }
+            DisabledReasonTooltip(restriction ?: error) {
+                Button(enabled = prepared != null && error == null && restriction == null,
+                    modifier = Modifier.testTag("apply-course-import"), onClick = {
+                        try { onApply(requireNotNull(prepared)) } catch (failure: Exception) {
+                            error = failure.message ?: "The course import could not be applied."
+                        }
+                    }) { Text(if (review.analyzeIofCourses) "Accept Import" else "Apply Import") }
+            }
         }
     )
 }

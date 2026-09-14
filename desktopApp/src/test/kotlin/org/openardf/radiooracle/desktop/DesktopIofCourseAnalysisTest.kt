@@ -116,6 +116,27 @@ class DesktopIofCourseAnalysisTest {
         assertTrue(result.project.raceData.courseMappings.first().category.courseInfo!!.route.all { it.elevationMeters != null })
     }
 
+    @Test fun straightLineToleranceIncludesThreeMetersInBothDirectionsAndRetainsXmlValues() {
+        val original = project()
+        val parsed = IofXmlImports.courseData(xml(), original.raceData.race).parsedData
+        val info = parsed.categories.first().category.courseInfo!!
+        val leg = info.suppliedLegLengths.single()
+        val from = info.courseObjects.single { it.id == leg.fromId }
+        val to = info.courseObjects.single { it.id == leg.toId }
+        val direct = CourseGeoPoint(from.latitude, from.longitude).distanceMetersTo(CourseGeoPoint(to.latitude, to.longitude))
+        for (difference in listOf(-3.01, -3.0, -2.0, 0.0, 2.0, 3.0, 3.01)) {
+            val changed = info.copy(suppliedLegLengths = listOf(leg.copy(lengthMeters = direct + difference)))
+            assertEquals("difference=$difference", kotlin.math.abs(difference) > 3.0, DesktopIofCourseAnalysis.legWarnings(changed).isNotEmpty())
+            assertEquals(direct + difference, changed.suppliedLegLengths.single().lengthMeters, 0.0)
+        }
+        val closeXml = xml().replace("1500", (direct + 2.0).toString())
+        val imported = EventProjectEditor.importIofCourseData(original, IofXmlImports.courseData(closeXml, original.raceData.race).parsedData).projectFile
+        val result = DesktopIofCourseAnalysis.prepare(imported, imported.raceData.courseMappings.map { it.category.id }.toSet(), null, elevationLookup = { 100.0 })
+        assertTrue(result.reports.single().legWarnings.isEmpty())
+        assertFalse(result.reports.single().notice!!.contains("unknown detours"))
+        assertEquals(direct + 2.0, result.project.raceData.courseMappings.first().category.courseInfo!!.suppliedLegLengths.single().lengthMeters, 0.0)
+    }
+
     private fun project() = EventProjectFactory.createEmptyProject("race", "Import test", "2026-09-14T09:00")
 
     internal fun xml() = """<CourseData xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0"><Event><Name>Import test</Name></Event><RaceCourseData>

@@ -7,6 +7,7 @@ import org.openardf.radiooracle.shared.event.*
 
 /** All work stays in an immutable candidate until the import transaction is accepted. */
 internal object DesktopIofCourseAnalysis {
+    const val StraightLineToleranceMeters = 3.0
     data class Result(val project: EventProjectFile, val reports: List<DesktopCourseBriefReport>)
 
     suspend fun fetchCandidateElevations(project: EventProjectFile, categoryIds: Set<String>, password: String?,
@@ -80,7 +81,7 @@ internal object DesktopIofCourseAnalysis {
                 idealOrder = (candidate.raceData.categories + candidate.raceData.courseMappings)
                     .single { it.category.id == data.category.id }.category.storedCourseInfo(storagePassword)!!.courseObjects.map { it.label },
                 // The analyzer's timing uses drawn geometry; it cannot time an unknown detour shape.
-                estimatedIdealSeconds = baseReport.estimatedIdealSeconds.takeIf { original.suppliedLegLengths.isEmpty() },
+                estimatedIdealSeconds = baseReport.estimatedIdealSeconds.takeIf { legWarnings(original).isEmpty() },
                 notice = calculated.notice,
                 routeMap = baseReport.routeMap?.copy(title = "Calculated ideal route"), legWarnings = legWarnings(original))
         }
@@ -136,7 +137,7 @@ internal object DesktopIofCourseAnalysis {
         val notice = buildList {
             add(if (useElevation) "Route selected by effective length (horizontal length + 10 × climb)." else "Route selected by horizontal length because elevation coverage is incomplete. Climb is unknown where heights are missing.")
             if (foxes.size > 8) add("Large course: a heuristic search was used; a global optimum is not guaranteed.")
-            if (info.suppliedLegLengths.isNotEmpty()) add("XML distances are retained and used for matching legs in either direction. Other legs use straight-line distance. Drawn lines and elevation profiles do not describe unknown detours; climb is an estimate and the route needs a terrain check.")
+            if (legWarnings(info).isNotEmpty()) add("XML distances are retained and used for matching legs in either direction. Other legs use straight-line distance. Drawn lines and elevation profiles do not describe unknown detours; climb is an estimate and the route needs a terrain check.")
         }.joinToString(" ")
         return Calculated(info.copy(idealOrder = order, lengthMeters = horizontal, climbMeters = climb,
             courseObjects = ordered.map { it.copy(elevationMeters = sampling.elevation(it.geo()) ?: it.elevationMeters) },
@@ -153,7 +154,7 @@ internal object DesktopIofCourseAnalysis {
             val label = "${from?.label ?: leg.fromId} → ${to?.label ?: leg.toId}"
             if (from == null || to == null) return@mapNotNull "$label: XML ${leg.lengthMeters} m retained; straight-line comparison unavailable."
             val direct = from.geo().distanceMetersTo(to.geo())
-            if (abs(leg.lengthMeters - direct) <= 1.0) null
+            if (abs(leg.lengthMeters - direct) <= StraightLineToleranceMeters) null
             else "$label: XML ${leg.lengthMeters} m; straight line ${direct.roundToInt()} m; difference ${if (leg.lengthMeters > direct) "+" else ""}${(leg.lengthMeters - direct).roundToInt()} m. " +
                 if (leg.lengthMeters > direct) "May avoid uncrossable terrain or a keep-out region." else "XML distance is shorter; check the source data."
         }
