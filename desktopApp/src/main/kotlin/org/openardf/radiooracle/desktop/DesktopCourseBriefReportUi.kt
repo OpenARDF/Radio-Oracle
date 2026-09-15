@@ -50,7 +50,9 @@ internal fun CourseBriefReportSection(report: DesktopCourseBriefReport, imported
         Text("Total climb: ${DesktopCourseAnalyzer.summaryClimbText(report.climbMeters)}")
         Text("Effective length: ${DesktopCourseAnalyzer.summaryLengthText(report.effectiveLengthMeters)}")
         Text("${if (importedRoute) "Imported order" else "Ideal order"}: ${report.idealOrder.takeIf { it.isNotEmpty() }?.joinToString(" → ") ?: "Unavailable"}")
-        Text("${if (importedRoute) "Estimated time" else "Estimated ideal time"}: ${DesktopCourseAnalyzer.summaryDurationText(report.estimatedIdealSeconds)}")
+        report.estimatedIdealSeconds?.let { seconds ->
+            Text("${if (importedRoute) "Estimated time" else "Estimated ideal time"}: ${DesktopCourseAnalyzer.summaryDurationText(seconds)}")
+        }
         report.legWarnings.forEach { Text(it, color = DesktopPalette.Warning) }
         report.notice?.let { Text(it, color = DesktopPalette.Disconnected) }
         report.routeMap?.let { map ->
