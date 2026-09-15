@@ -40,6 +40,9 @@ class DesktopIofCourseAnalysisTest {
             val route = requireNotNull(summary.calculatedRouteSection)
             assertNotNull(route.estimatedIdealSeconds)
             assertEquals(listOf("S", "Fox 1", "B", "F"), route.routeOrder)
+            assertTrue(summary.missingElements.toString(), summary.missingElements.none {
+                it.contains("Route geometry") || it.contains("Start coordinates") || it.contains("Finish coordinates")
+            })
         }
         val beforeReport = EventProjectFileJson.encode(updated)
         val report = DesktopCourseBriefReports.build(updated, emptyMap()).single()

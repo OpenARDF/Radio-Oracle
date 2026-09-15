@@ -1910,11 +1910,29 @@ class DesktopCourseAnalyzerTest {
         )
 
         assertTrue(summary.missingElements.any { it.contains("Route data is locked") })
-        assertTrue(summary.missingElements.any { it.contains("Route geometry") })
+        assertTrue(summary.missingElements.contains("Start coordinates are missing."))
+        assertTrue(summary.missingElements.contains("Finish coordinates are missing."))
         assertEquals(null, summary.providedRouteSection)
         assertEquals(null, summary.calculatedRouteSection)
         assertEquals(0, summary.calculatedRouteCount)
         assertEquals(null, summary.estimatedIdealSeconds)
+    }
+
+    @Test
+    fun missingEndpointWarningsIdentifyOnlyTheAbsentCoordinates() {
+        val project = projectFile(foxCount = 3)
+        for ((type, name, other) in listOf(
+            Triple(ProtectedCourseObjectType.START, "Start", "Finish"),
+            Triple(ProtectedCourseObjectType.FINISH, "Finish", "Start")
+        )) {
+            val source = protectedInfo(foxCount = 3)
+            val info = source.copy(route = emptyList(), courseObjects = source.courseObjects.filterNot { it.type == type })
+            val summary = DesktopCourseAnalyzer.analyze(project, CATEGORY_ID, info, null,
+                elevationLookup = { 100.0 }, allowFoxRenumbering = false, magneticDeclinationProvider = { null })
+            assertTrue(summary.missingElements.toString(), summary.missingElements.contains("$name coordinates are missing."))
+            assertFalse(summary.missingElements.toString(), summary.missingElements.contains("$other coordinates are missing."))
+            assertNull(summary.calculatedRouteSection)
+        }
     }
 
     @Test

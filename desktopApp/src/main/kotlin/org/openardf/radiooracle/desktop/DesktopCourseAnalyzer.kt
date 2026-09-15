@@ -592,9 +592,6 @@ object DesktopCourseAnalyzer {
         val sampling = DesktopCourseAnalysisSampling(storedRoute, elevationLookup)
         val analysisElevationLookup: (CourseGeoPoint) -> Double? = sampling::elevation
         val route = sampling.appliedRoute(courseObjectPoints.map { it.toGeoPoint() })
-        if (route.size < 2) {
-            missing += "Route geometry with start and finish points is missing."
-        }
         val hasMissingRouteElevations = route.any { it.elevationMeters == null } ||
             storedRoute.any { it.elevationMeters == null && elevationLookup(it) == null }
         if (hasMissingRouteElevations) {
@@ -651,12 +648,18 @@ object DesktopCourseAnalyzer {
             missing += "Location latitude/longitude is missing for control ${it.control.publicDisplayLabel()}."
         }
 
-        val start = route.firstOrNull() ?: courseObjectPoints
+        // A role edit clears the saved route but retains its control and endpoint locations.
+        // Diagnose missing endpoints only after trying those locations; a single route point
+        // cannot supply both Start and Finish on its own.
+        val savedEndpoints = route.takeIf { it.size >= 2 }
+        val start = savedEndpoints?.first() ?: courseObjectPoints
             .firstOrNull { it.type == ProtectedCourseObjectType.START }
             ?.toGeoPoint()
-        val finish = route.lastOrNull() ?: courseObjectPoints
+        val finish = savedEndpoints?.last() ?: courseObjectPoints
             .firstOrNull { it.type == ProtectedCourseObjectType.FINISH }
             ?.toGeoPoint()
+        if (start == null) missing += "Start coordinates are missing."
+        if (finish == null) missing += "Finish coordinates are missing."
         val foxes = controlsWithPoints
             .filter { it.control.type == ControlPointType.CONTROL && it.point != null }
         val spectator = controlsWithPoints
