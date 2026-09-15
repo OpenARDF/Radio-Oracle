@@ -88,7 +88,29 @@ internal object DesktopIofCourseAnalysis {
         return Result(candidate, reports)
     }
 
-    private data class Calculated(val info: ProtectedCourseInfo, val notice: String)
+    data class Calculated(val info: ProtectedCourseInfo, val notice: String)
+
+    /** Rebuilds report geometry in memory; never applies a design or changes the race. */
+    fun recalculateForReport(project: EventProjectFile, data: EventCategoryData, info: ProtectedCourseInfo,
+                             elevationLookup: (CourseGeoPoint) -> Double?, checkCancelled: () -> Unit): Calculated {
+        val ids = info.appliedBindings!!.controls.associate { it.placementId to it.controlId }
+        val projected = ResolvedCourseProjection.courseInfo(project.raceData, data.category.id, info).let { current ->
+            current.copy(suppliedLegLengths = current.suppliedLegLengths.map { leg ->
+                leg.copy(fromId = ids[leg.fromId] ?: leg.fromId, toId = ids[leg.toId] ?: leg.toId)
+            })
+        }
+        require(projected.courseObjects.count { it.type == ProtectedCourseObjectType.START } == 1 &&
+            projected.courseObjects.count { it.type == ProtectedCourseObjectType.FINISH } == 1) {
+            "Start or Finish coordinates are missing."
+        }
+        val calculated = calculate(projected, data.category.effectiveRaceType(project.raceData.race),
+            project.raceData.controls, elevationLookup, checkCancelled)
+        val refreshed = CourseDesignBindings.prepare(calculated.info, project.raceData.controls,
+            projected.appliedBindings!!.controls.associate { it.placementId to it.controlId },
+            calculated.info.courseObjects.map { it.id }, "course-report")
+        return calculated.copy(info = refreshed)
+    }
+
     private data class Leg(val points: List<CourseGeoPoint>, val horizontal: Double, val climb: Double?)
 
     private fun calculate(info: ProtectedCourseInfo, type: RaceType, controls: List<EventControl>,

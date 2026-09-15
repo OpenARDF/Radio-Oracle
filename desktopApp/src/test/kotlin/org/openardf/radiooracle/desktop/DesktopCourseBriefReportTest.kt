@@ -7,6 +7,49 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.*
 
 class DesktopCourseBriefReportTest {
+    @Test fun correctedIofReportsRecalculateWithElevationAndRetainedDetoursWithoutChangingTheRace() {
+        val direct = correctedIofCourseReportFixture(false)
+        val detour = correctedIofCourseReportFixture(true)
+        val before = EventProjectFileJson.encode(detour)
+        val directReports = DesktopCourseBriefReports.build(direct, emptyMap(), elevationLookup = { 100.0 })
+        val detourReports = DesktopCourseBriefReports.build(detour, emptyMap(), elevationLookup = { 100.0 })
+        assertEquals(2, detourReports.size)
+        detourReports.zip(directReports).forEach { (report, straight) ->
+            assertNotNull(report.routeMap)
+            assertEquals(listOf("S", "Fox 1", "B", "F"), report.idealOrder)
+            assertTrue(report.horizontalLengthMeters!! > straight.horizontalLengthMeters!! + 1000)
+            assertEquals(0, report.climbMeters)
+            assertEquals(report.horizontalLengthMeters, report.effectiveLengthMeters)
+            assertEquals(1, report.legWarnings.size)
+            assertTrue(report.legWarnings.single().contains("1500"))
+            assertNull(report.estimatedIdealSeconds) // Unknown detour geometry still prevents timing.
+            assertNotNull(straight.estimatedIdealSeconds)
+            assertTrue(report.notice.orEmpty().contains("XML distances are retained"))
+        }
+        assertEquals(before, EventProjectFileJson.encode(detour))
+        assertEquals(detourReports, DesktopCourseBriefReports.build(detour, emptyMap(), elevationLookup = { 100.0 }))
+        val withoutElevations = DesktopCourseBriefReports.build(direct, emptyMap(), elevationLookup = { null })
+        assertTrue(withoutElevations.all { it.routeMap != null && it.estimatedIdealSeconds != null })
+    }
+
+    @Test fun correctedIofReportsRespectProtectionAndCancellation() {
+        val source = correctedIofCourseReportFixture(false)
+        val infos = source.raceData.categories.associate { it.category.id to it.category.courseInfo!! }
+        val locked = source.copy(raceData = source.raceData.copy(categories = source.raceData.categories.map { data ->
+            data.copy(category = data.category.copy(courseInfo = null, encryptedCourseInfo = "locked-fixture"))
+        }))
+        assertTrue(DesktopCourseBriefReports.build(locked, emptyMap()).all { it.isLocked && it.routeMap == null })
+        assertTrue(DesktopCourseBriefReports.build(locked, infos).all { !it.isLocked && it.routeMap != null })
+        assertTrue(locked.raceData.categories.all { it.category.courseInfo == null })
+        var checks = 0
+        assertThrows(kotlinx.coroutines.CancellationException::class.java) {
+            DesktopCourseBriefReports.build(source, emptyMap(), checkCancelled = {
+                if (++checks == 3) throw kotlinx.coroutines.CancellationException("Canceled during route search")
+            })
+        }
+        assertEquals(3, checks)
+    }
+
     @Test fun activeAndImportReportsUseMagneticNorthWithoutCallerConfiguration() {
         val project = courseReportFixture()
         val reports = DesktopCourseBriefReports.build(project, emptyMap()) +
@@ -173,6 +216,22 @@ class DesktopCourseBriefReportTest {
         assertNotNull(report.horizontalLengthMeters)
         assertTrue(report.notice!!.contains("Elevation"))
     }
+}
+
+internal fun correctedIofCourseReportFixture(withDetour: Boolean): EventProjectFile {
+    val original = EventProjectFactory.createEmptyProject("race", "Corrected IOF report", "2026-09-14T09:00")
+    val xml = DesktopIofCourseAnalysisTest().xml().replace("32", "79").let {
+        if (withDetour) it else it.replace("<LegLength>1500</LegLength>", "")
+    }
+    val imported = EventProjectEditor.importIofCourseData(original,
+        org.openardf.radiooracle.shared.files.IofXmlImports.courseData(xml, original.raceData.race).parsedData).projectFile
+    var project = DesktopIofCourseAnalysis.prepare(imported,
+        imported.raceData.categories.map { it.category.id }.toSet(), null, elevationLookup = { null }).project
+    val fox = project.raceData.controls.single { it.siCode == 31 }
+    val beacon = project.raceData.controls.single { it.siCode == 79 }
+    project = EventProjectEditor.updateControl(project, fox.id, fox.label, "31", ControlPointType.CONTROL, true, "Fox 1", "")
+    project = EventProjectEditor.updateControl(project, beacon.id, "", "79", ControlPointType.BEACON, false, "Beacon", "")
+    return EventProjectFileJson.decode(EventProjectFileJson.encode(project))
 }
 
 internal fun boundCourseReportFixture(): EventProjectFile {

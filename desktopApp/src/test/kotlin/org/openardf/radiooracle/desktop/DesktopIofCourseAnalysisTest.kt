@@ -41,7 +41,13 @@ class DesktopIofCourseAnalysisTest {
             assertNotNull(route.estimatedIdealSeconds)
             assertEquals(listOf("S", "Fox 1", "B", "F"), route.routeOrder)
         }
-        assertTrue(DesktopCourseBriefReports.build(updated, emptyMap()).single().notice!!.contains("Run Course Analyzer"))
+        val beforeReport = EventProjectFileJson.encode(updated)
+        val report = DesktopCourseBriefReports.build(updated, emptyMap()).single()
+        assertNotNull(report.routeMap)
+        assertEquals(listOf("S", "Fox 1", "B", "F"), report.idealOrder)
+        assertNotNull(report.estimatedIdealSeconds)
+        assertFalse(report.notice.orEmpty().contains("Run Course Analyzer"))
+        assertEquals(beforeReport, EventProjectFileJson.encode(updated))
     }
 
     @Test fun importsPositionsClassAssignmentsAndLegsIntoOneReviewedCourseWithoutChangingRace() {

@@ -26,7 +26,7 @@ internal object DesktopCourseBriefReports {
         (project.raceData.categories + project.raceData.courseMappings).filter { it.category.id in categoryIds }.map { data ->
             checkCancelled()
             report(project, data, data.category.storedCourseInfo(password), data.category.storedIdealOrder(password),
-                DesktopVenueElevationCache::elevationMeters, importedRoute = true)
+                DesktopVenueElevationCache::elevationMeters, importedRoute = true, checkCancelled = checkCancelled)
         }
 
     fun build(
@@ -40,12 +40,12 @@ internal object DesktopCourseBriefReports {
         val category = data.category
         val info = courseInfos[category.id] ?: category.courseInfo.takeIf { category.encryptedCourseInfo == null }
         val order = idealOrders[category.id] ?: category.idealOrder.takeIf { category.encryptedIdealOrder == null }
-        report(project, data, info, order, elevationLookup)
+        report(project, data, info, order, elevationLookup, checkCancelled = checkCancelled)
     }
 
     private fun report(
         project: EventProjectFile, data: EventCategoryData, info: ProtectedCourseInfo?, order: String?,
-        elevationLookup: (CourseGeoPoint) -> Double?, importedRoute: Boolean = false
+        elevationLookup: (CourseGeoPoint) -> Double?, importedRoute: Boolean = false, checkCancelled: () -> Unit = {}
     ): DesktopCourseBriefReport {
         val category = data.category
         val fallback = DesktopCourseBriefReport(
@@ -60,11 +60,16 @@ internal object DesktopCourseBriefReports {
                 else "Import course locations and route data to calculate the ideal order and graphic."
         )
         val reviewedIof = info.sourceName.startsWith("IOF CourseData:") && info.appliedBindings != null
-        if (reviewedIof && info.route.isEmpty()) return fallback.copy(
-            notice = "Control roles or assignments have changed. Run Course Analyzer and apply the updated design to refresh this report.",
-            legWarnings = DesktopIofCourseAnalysis.legWarnings(info)
-        )
         return try {
+            if (reviewedIof && info.route.isEmpty()) {
+                val calculated = DesktopIofCourseAnalysis.recalculateForReport(project, data, info, elevationLookup, checkCancelled)
+                return report(project, data, calculated.info, calculated.info.idealOrder, elevationLookup,
+                    importedRoute, checkCancelled).let { refreshed ->
+                    refreshed.copy(notice = listOfNotNull(calculated.notice,
+                        refreshed.notice.takeIf { refreshed.routeMap == null }).joinToString(" "),
+                        routeMap = refreshed.routeMap?.copy(title = "Calculated ideal route"))
+                }
+            }
             val summary = DesktopCourseAnalyzer.analyze(
                 project, category.id, info, order,
                 elevationLookup = elevationLookup,

@@ -21,6 +21,30 @@ import org.junit.Test
 class DesktopCourseBriefReportUiTest {
     @get:Rule val rule = createComposeRule()
 
+    @Test fun correctedIofCoursesDisplayDiagramsWithoutApplyingAnotherDesign() {
+        val project = correctedIofCourseReportFixture(false)
+        rule.setContent {
+            MaterialTheme {
+                Surface(Modifier.fillMaxSize()) {
+                    DesktopWorkspaceScroll(Modifier.fillMaxSize()) {
+                        CourseReportPanel(project, emptyMap(), emptyMap(), { false })
+                    }
+                }
+            }
+        }
+        rule.waitUntil(30_000) {
+            rule.onAllNodesWithText("Calculated ideal route").fetchSemanticsNodes().size == 2
+        }
+        rule.onNodeWithText("Course graphic unavailable.").assertDoesNotExist()
+        rule.onNodeWithText("Run Course Analyzer", substring = true).assertDoesNotExist()
+        rule.onAllNodesWithText("Calculated ideal route")[0].performScrollTo().assertIsDisplayed()
+        val image = org.jetbrains.skia.Image.makeFromBitmap(rule.onRoot().captureToImage().asSkiaBitmap())
+        val output = Path.of("build/reports/course-report/corrected-iof-courses.png")
+        Files.createDirectories(output.parent)
+        Files.write(output, image.encodeToData()!!.bytes)
+        rule.onAllNodesWithText("Calculated ideal route")[1].performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun activeReportsAndTheirGraphicsAreReachableAndCsvExportRemainsAvailable() {
         val project = courseReportFixture()
         rule.setContent {
