@@ -73,7 +73,7 @@ internal fun CourseImportReportDialog(review: DesktopCourseImportReview,
                 }
                 reports?.forEach { report ->
                     if (review.importedProject.raceData.categories.none { it.category.id == report.categoryId }) {
-                        Text("${report.courseName}: imported course mapping; not assigned to an active race category.")
+                        Text("${report.courseName}: unassigned course. After acceptance, open Setup → Courses to assign it to categories or delete it.")
                     }
                     CourseBriefReportSection(report, importedRoute = !review.analyzeIofCourses)
                 }

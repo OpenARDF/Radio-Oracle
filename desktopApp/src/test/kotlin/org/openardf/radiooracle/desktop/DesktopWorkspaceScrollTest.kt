@@ -43,12 +43,14 @@ class DesktopWorkspaceScrollTest {
 
     @Test fun breadcrumbsReturnToAncestorsWithoutReplayingCommandsAndKeepDirtyGuard() {
         val root = DesktopNavState()
-        val controls = root.enter(DesktopNavigation.itemById(root.workflow, "setup.controls")!!)
+        val courses = root.enter(DesktopNavigation.itemById(root.workflow, "setup.courses")!!)
+        val controls = courses.enter(DesktopNavigation.itemById(root.workflow, "setup.controls")!!)
         val elevation = controls.enter(DesktopNavigation.itemById(root.workflow, "setup.controls.elevation-cache")!!)
         val trail = DesktopNavigation.breadcrumbStates(elevation)
-        assertEquals(listOf("Setup", "Controls", "Elevation Data"), trail.map { it.first })
+        assertEquals(listOf("Setup", "Courses", "Controls", "Elevation Data"), trail.map { it.first })
         assertEquals(root, trail.first().second)
-        assertEquals(controls, trail[1].second)
+        assertEquals(courses, trail[1].second)
+        assertEquals(controls, trail[2].second)
         assertEquals(elevation, trail.last().second)
         assertTrue(DesktopNavigation.shouldGuardDirtySubmenuExit(elevation, trail[1].second, true))
         assertFalse(DesktopNavigation.shouldGuardDirtySubmenuExit(elevation, trail[1].second, false))

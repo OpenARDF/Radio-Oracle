@@ -264,7 +264,7 @@ object DesktopCourseKmlImporter {
         if (requireRoutes && courseData.routes.isEmpty()) {
             throw DesktopCourseKmlMissingRouteException(
                 "Course imports require at least one route LineString or GPX route/track. " +
-                    "Import control-only files from Setup > Controls > Import."
+                    "Import control-only files from Setup > Courses > Controls > Import."
             )
         }
         val missingCategoryNames = missingRouteCategoryNames(

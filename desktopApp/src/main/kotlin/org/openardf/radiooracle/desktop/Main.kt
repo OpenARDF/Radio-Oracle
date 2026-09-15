@@ -4729,8 +4729,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 recentImportReport = DesktopImportReport(
                     title = "Categories CSV: ${review.path.fileName}",
                     lines = withRollbackBackupLine(listOf(
-                        "$importedRows course mappings added.",
-                        "$updatedRows course mappings updated by name.",
+                        "$importedRows unassigned courses added.",
+                        "$updatedRows courses updated by name.",
                         "${review.invalidLineCount} invalid rows skipped.",
                         "${review.preview.affectedCompetitorCount} competitors are in updated categories.",
                         "${review.preview.categoriesWithAssignedControlsReplacedCount} existing assigned-control lists replaced.",
@@ -4739,7 +4739,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                         review.preview.eventTypeWarnings)
                 )
                 projectStatusText =
-                    "Imported ${review.path.fileName}: $importedRows course mappings added, $updatedRows updated, ${review.invalidLineCount} invalid."
+                    "Imported ${review.path.fileName}: $importedRows unassigned courses added, $updatedRows updated, ${review.invalidLineCount} invalid."
             }.onFailure { error ->
                 projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
             }
@@ -5547,6 +5547,19 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 isImportingEventRegCompetitors = false
             }
         }
+
+        fun applyCourseLibraryEdit(edit: DesktopCourseLibraryEdit): String? = runCatching {
+            projectFile = projectSession.updateCurrentProject { current ->
+                DesktopCourseLibrary.apply(current, edit, protectedCoursePassword)
+            }
+            if (projectFile?.hasEncryptedCategoryData() == true && protectedCoursePassword == null) {
+                protectedCourseInfoByCategoryId = emptyMap()
+                protectedIdealOrderByCategoryId = emptyMap()
+            } else syncProtectedCourseState(requireNotNull(projectFile), protectedCoursePassword)
+            hasUnsavedChanges = projectSession.hasUnsavedChanges
+            projectStatusText = "Course list updated. Save Race to keep these changes."
+            null
+        }.getOrElse { it.message ?: "The course could not be updated." }
 
         fun applyCategoryListEdit(edit: DesktopCategoryListEdit): Boolean {
             return when (
@@ -7178,7 +7191,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
                 pendingAuthoritativeCourseImport = null
                 courseDesignUi.analysisSource = DesktopCourseRouteSource.Applied
-                projectStatusText = "Applied ${review.sourceName}. Reviewed courses are active. Save Race to write the changes to disk."
+                val unassignedCount = requireNotNull(projectFile).raceData.courseMappings.size
+                projectStatusText = "Applied ${review.sourceName}. Courses and category assignments are available in Setup → Courses. " +
+                    "$unassignedCount unassigned course(s). Save Race to write the changes to disk."
                 recentImportReport = DesktopImportReport("Course import: ${review.sourceName}",
                     withRollbackBackupLine(listOf("Applied imported course data directly to the race.") + review.notes))
                 recordActivity("Applied authoritative course import ${review.sourceName}.")
@@ -7633,6 +7648,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 }
             },
             onEditCategories = ::applyCategoryListEdit,
+            onCourseLibraryEdit = ::applyCourseLibraryEdit,
             onRemoveCategory = { categoryId, deleteCompetitors ->
                 runCatching {
                     var removalResult: DesktopCategoryRemovalResult? = null
@@ -8606,7 +8622,7 @@ internal fun controlsOnlyImportWarningLines(
     }
     val noun = if (unassignedControlCount == 1) "control is" else "controls are"
     return listOf(
-        "$unassignedControlCount $noun not assigned to any category; those controls will show red in Setup > Controls until category control lists are updated."
+        "$unassignedControlCount $noun not assigned to any category; those controls will show red in Setup > Courses > Controls until category control lists are updated."
     )
 }
 
@@ -8930,7 +8946,7 @@ private fun CourseRouteImportMissingControlListChanges(
         return
     }
     if (summary.missingCategoryNames.isNotEmpty()) {
-        Text("New Course Mappings Found In $formatLabel:")
+        Text("New Courses Found In $formatLabel:")
         summary.missingCategoryNames.forEach { categoryName ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -8975,7 +8991,7 @@ private fun CourseRouteImportMissingControlListChanges(
                 checked = createMissingControls,
                 onCheckedChange = onCreateMissingControlsChange
             )
-            Text("Create Missing Controls In Setup > Controls")
+            Text("Create Missing Controls In Setup > Courses > Controls")
         }
         Text(
             "When selected, imported controls that do not already match Race File controls are added to the controls list.",
@@ -9198,7 +9214,7 @@ private fun CategoriesCsvImportReviewDialog(
                     )
                 }
                 if (review.newCourseMappingNames.isNotEmpty()) {
-                    Text("New Course Mappings Found:")
+                    Text("New Courses Found:")
                     review.newCourseMappingNames.forEach { categoryName ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -9226,8 +9242,8 @@ private fun CategoriesCsvImportReviewDialog(
                         }
                     }
                 }
-                Text("Course Mappings To Add: ${selectedNewCourseMappingNames.size}")
-                Text("Course Mappings To Update: ${preview.updatedCount}")
+                Text("Unassigned courses to add: ${selectedNewCourseMappingNames.size}")
+                Text("Courses to update: ${preview.updatedCount}")
                 if (review.invalidLineCount > 0) {
                     Text(
                         text = "Invalid rows skipped: ${review.invalidLineCount}",
@@ -9378,7 +9394,7 @@ private fun IofCourseDataImportReviewDialog(
 ) {
     val preview = review.preview
     var selectedNewCourseMappingNames by remember(review.path, review.newCourseMappingNames) {
-        mutableStateOf(review.newCourseMappingNames.filter(::defaultImportMissingCourseMapping).toSet())
+        mutableStateOf(review.newCourseMappingNames.toSet())
     }
     DesktopAlertDialog(
         onDismissRequest = onCancel,
@@ -9396,7 +9412,8 @@ private fun IofCourseDataImportReviewDialog(
                     )
                 }
                 if (review.newCourseMappingNames.isNotEmpty()) {
-                    Text("New Course Mappings Found:")
+                    Text("New categories and courses:")
+                    Text("XML category assignments create categories automatically. Courses without assignments will be listed in Setup → Courses.")
                     review.newCourseMappingNames.forEach { categoryName ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -9412,20 +9429,15 @@ private fun IofCourseDataImportReviewDialog(
                                     }
                                 }
                             )
-                            Text(
-                                "$categoryName${
-                                    if (defaultImportMissingCourseMapping(categoryName)) {
-                                        " (standard)"
-                                    } else {
-                                        " (nonstandard)"
-                                    }
-                                }"
-                            )
+                            val isCategory = review.courseData.categories.any {
+                                it.category.name == categoryName && it.category.id in review.courseData.assignedCategoryIds
+                            }
+                            Text("$categoryName — ${if (isCategory) "category" else "unassigned course"}")
                         }
                     }
                 }
-                Text("Course Mappings To Add: ${selectedNewCourseMappingNames.size}")
-                Text("Course Mappings To Update: ${preview.updatedCount}")
+                Text("Selected new categories/courses: ${selectedNewCourseMappingNames.size}")
+                Text("Existing categories/courses to update: ${preview.updatedCount}")
                 if (preview.affectedCompetitorCount > 0) {
                     Text("Updated categories currently include ${preview.affectedCompetitorCount} competitor${if (preview.affectedCompetitorCount == 1) "" else "s"}.")
                 }
@@ -12008,6 +12020,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit = { _, _, _ -> },
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit = { _, _, _ -> },
     onEditCategories: (DesktopCategoryListEdit) -> Boolean = { false },
+    onCourseLibraryEdit: (DesktopCourseLibraryEdit) -> String? = { "No race is open." },
     onRemoveCategory: (String, Boolean) -> Unit = { _, _ -> },
     onRenameCompetitor: (String, String, String) -> Unit = { _, _, _ -> },
     onUpdateCompetitorNumbers: (String, String, String) -> Unit = { _, _, _ -> },
@@ -12335,6 +12348,7 @@ private fun RadioOManagerDesktopApp(
                                     onUpdateCategoryControlPoints = onUpdateCategoryControlPoints,
                                     onUpdateCategoryPhysicalStats = onUpdateCategoryPhysicalStats,
                                     onEditCategories = onEditCategories,
+                                    onCourseLibraryEdit = onCourseLibraryEdit,
                                     onRemoveCategory = onRemoveCategory,
                                     onRenameCompetitor = onRenameCompetitor,
                                     onUpdateCompetitorNumbers = onUpdateCompetitorNumbers,
@@ -13607,6 +13621,7 @@ private fun SectionWorkspace(
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onEditCategories: (DesktopCategoryListEdit) -> Boolean,
+    onCourseLibraryEdit: (DesktopCourseLibraryEdit) -> String?,
     onRemoveCategory: (String, Boolean) -> Unit,
     onRenameCompetitor: (String, String, String) -> Unit,
     onUpdateCompetitorNumbers: (String, String, String) -> Unit,
@@ -13888,6 +13903,10 @@ private fun SectionWorkspace(
                 protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                 onDownloadCache = onDownloadVenueElevationCache
             )
+        }
+        if (section == DesktopSection.Courses && projectFile != null) {
+            DesktopCoursesPanel(projectFile, isProtectedCourseOrderUnlocked,
+                onUnlockProtectedCourseOrder, onCourseLibraryEdit)
         }
         if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
             ControlsRouteKmlImportPanel(onSelectFile = onImportControlsRouteKmlKmz,

@@ -95,6 +95,7 @@ enum class DesktopSection(val label: String) {
     SeriesCompetitorMatching("Series Competitor Matching"),
     SeriesValidation("Series Validation"),
     SeriesSettings("Series Settings"),
+    Courses("Courses"),
     Controls("Controls"),
     CourseAnalysis("Course Analyzer"),
     CourseReport("Course Report"),

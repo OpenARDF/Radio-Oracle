@@ -13,7 +13,7 @@ class DesktopIofCourseAnalysisTest {
         val parsed = IofXmlImports.validatedCourseData(xml(), IofXmlSchemaResource.loadBundledSchema(), original.raceData.race)
         assertEquals(listOf("W21", "M21"), parsed.parsedData.categories.map { it.category.name })
         val temporary = EventProjectEditor.importIofCourseData(transaction.baseProject, parsed.parsedData).projectFile
-        val ids = temporary.raceData.courseMappings.map { it.category.id }.toSet()
+        val ids = temporary.raceData.categories.map { it.category.id }.toSet()
         val result = DesktopIofCourseAnalysis.prepare(temporary, ids, null, elevationLookup = { 100.0 })
         assertEquals(before, EventProjectFileJson.encode(original)) // Reject is simply discarding result.
         assertEquals(1, result.reports.size)
@@ -24,8 +24,9 @@ class DesktopIofCourseAnalysisTest {
         assertEquals(report.horizontalLengthMeters, report.effectiveLengthMeters)
         assertTrue(report.legWarnings.single().contains("keep-out"))
         val applied = EventProjectFileJson.decode(EventProjectFileJson.encode(transaction.applyTo(original) { result.project }))
-        assertTrue(applied.raceData.categories.isEmpty())
-        applied.raceData.courseMappings.forEach { data ->
+        assertEquals(setOf("W21", "M21"), applied.raceData.categories.map { it.category.name }.toSet())
+        assertTrue(applied.raceData.courseMappings.isEmpty())
+        applied.raceData.categories.forEach { data ->
             val info = data.category.courseInfo!!
             assertEquals(1500.0, info.suppliedLegLengths.single().lengthMeters, 0.0)
             assertEquals(report.horizontalLengthMeters, info.lengthMeters)
@@ -38,7 +39,7 @@ class DesktopIofCourseAnalysisTest {
         fun analyze(input: String): DesktopIofCourseAnalysis.Result {
             val original = project()
             val imported = EventProjectEditor.importIofCourseData(original, IofXmlImports.courseData(input, original.raceData.race).parsedData).projectFile
-            return DesktopIofCourseAnalysis.prepare(imported, imported.raceData.courseMappings.map { it.category.id }.toSet(), null,
+            return DesktopIofCourseAnalysis.prepare(imported, imported.raceData.categories.map { it.category.id }.toSet(), null,
                 elevationLookup = { null })
         }
         val direct = analyze(xml().replace("<LegLength>1500</LegLength>", ""))
@@ -47,26 +48,26 @@ class DesktopIofCourseAnalysisTest {
         assertNull(detour.reports.single().climbMeters)
         assertNull(detour.reports.single().effectiveLengthMeters)
         assertTrue(detour.reports.single().notice!!.contains("horizontal length"))
-        assertEquals(1500.0, detour.project.raceData.courseMappings.first().category.courseInfo!!.suppliedLegLengths.single().lengthMeters, 0.0)
+        assertEquals(1500.0, detour.project.raceData.categories.first().category.courseInfo!!.suppliedLegLengths.single().lengthMeters, 0.0)
     }
 
     @Test fun missingCoordinatesCanBeAcceptedWithoutInventingAnOrderOrClimb() {
         val original = project()
         val imported = EventProjectEditor.importIofCourseData(original,
             IofXmlImports.courseData(xml().replace(Regex("<Position[^>]*/>"), ""), original.raceData.race).parsedData).projectFile
-        val result = DesktopIofCourseAnalysis.prepare(imported, imported.raceData.courseMappings.map { it.category.id }.toSet(), null)
+        val result = DesktopIofCourseAnalysis.prepare(imported, imported.raceData.categories.map { it.category.id }.toSet(), null)
         assertNull(result.reports.single().horizontalLengthMeters)
         assertNull(result.reports.single().climbMeters)
         assertTrue(result.reports.single().idealOrder.isEmpty())
         assertTrue(result.reports.single().legWarnings.single().contains("comparison unavailable"))
         val applied = DesktopCourseImportTransaction.prepare(original).applyTo(original) { result.project }
-        assertEquals(2, applied.raceData.courseMappings.first().controlPoints.size)
+        assertEquals(2, applied.raceData.categories.first().controlPoints.size)
     }
 
     @Test fun incompleteCoverageUsesOneHorizontalObjectiveForAllPermutations() {
         val original = project()
         val imported = EventProjectEditor.importIofCourseData(original, IofXmlImports.courseData(xml(), original.raceData.race).parsedData).projectFile
-        val ids = imported.raceData.courseMappings.map { it.category.id }.toSet()
+        val ids = imported.raceData.categories.map { it.category.id }.toSet()
         val result = DesktopIofCourseAnalysis.prepare(imported, ids, null,
             elevationLookup = { point -> if (point.longitude > -78.998) null else 100.0 })
         assertTrue(result.reports.single().notice!!.contains("Route selected by horizontal length"))
@@ -77,7 +78,7 @@ class DesktopIofCourseAnalysisTest {
         val input = xml().replace("<LegLength>1500</LegLength>", "")
             .replace("lat=\"35.0\" lng=\"-78.999\"", "lat=\"35.001\" lng=\"-78.999\"")
         val imported = EventProjectEditor.importIofCourseData(original, IofXmlImports.courseData(input, original.raceData.race).parsedData).projectFile
-        val ids = imported.raceData.courseMappings.map { it.category.id }.toSet()
+        val ids = imported.raceData.categories.map { it.category.id }.toSet()
         val horizontal = DesktopIofCourseAnalysis.prepare(imported, ids, null, elevationLookup = { null })
         val effective = DesktopIofCourseAnalysis.prepare(imported, ids, null,
             elevationLookup = { if (it.longitude < -78.9995 && it.latitude > 35.0001) 200.0 else 0.0 })
@@ -95,8 +96,8 @@ class DesktopIofCourseAnalysisTest {
     @Test fun encryptedAcceptanceProtectsNewGeometryAndRetainsLegLengths() {
         val original = project()
         val imported = EventProjectEditor.importIofCourseData(original, IofXmlImports.courseData(xml(), original.raceData.race).parsedData).projectFile
-        val result = DesktopIofCourseAnalysis.prepare(imported, imported.raceData.courseMappings.map { it.category.id }.toSet(), "fixture-password", elevationLookup = { 100.0 })
-        val data = result.project.raceData.courseMappings.first().category
+        val result = DesktopIofCourseAnalysis.prepare(imported, imported.raceData.categories.map { it.category.id }.toSet(), "fixture-password", elevationLookup = { 100.0 })
+        val data = result.project.raceData.categories.first().category
         assertNull(data.courseInfo)
         assertNotNull(data.encryptedCourseInfo)
         assertEquals(1500.0, data.storedCourseInfo("fixture-password")!!.suppliedLegLengths.single().lengthMeters, 0.0)
@@ -105,7 +106,7 @@ class DesktopIofCourseAnalysisTest {
     @Test fun downloadedCandidateElevationsAreUsedAndSaved() = kotlinx.coroutines.runBlocking {
         val original = project()
         val imported = EventProjectEditor.importIofCourseData(original, IofXmlImports.courseData(xml(), original.raceData.race).parsedData).projectFile
-        val ids = imported.raceData.courseMappings.map { it.category.id }.toSet()
+        val ids = imported.raceData.categories.map { it.category.id }.toSet()
         var requests = 0
         val lookup = DesktopIofCourseAnalysis.fetchCandidateElevations(imported, ids, null,
             provider = { points -> requests++; points.map { 100.0 + (it.longitude + 79) * 10000 } }, local = { null })
@@ -113,7 +114,7 @@ class DesktopIofCourseAnalysisTest {
         val result = DesktopIofCourseAnalysis.prepare(imported, ids, null, elevationLookup = lookup)
         assertTrue(result.reports.single().notice!!.contains("Route selected by effective length"))
         assertTrue(result.reports.single().climbMeters!! > 0)
-        assertTrue(result.project.raceData.courseMappings.first().category.courseInfo!!.route.all { it.elevationMeters != null })
+        assertTrue(result.project.raceData.categories.first().category.courseInfo!!.route.all { it.elevationMeters != null })
     }
 
     @Test fun straightLineToleranceIncludesThreeMetersInBothDirectionsAndRetainsXmlValues() {
@@ -131,10 +132,10 @@ class DesktopIofCourseAnalysisTest {
         }
         val closeXml = xml().replace("1500", (direct + 2.0).toString())
         val imported = EventProjectEditor.importIofCourseData(original, IofXmlImports.courseData(closeXml, original.raceData.race).parsedData).projectFile
-        val result = DesktopIofCourseAnalysis.prepare(imported, imported.raceData.courseMappings.map { it.category.id }.toSet(), null, elevationLookup = { 100.0 })
+        val result = DesktopIofCourseAnalysis.prepare(imported, imported.raceData.categories.map { it.category.id }.toSet(), null, elevationLookup = { 100.0 })
         assertTrue(result.reports.single().legWarnings.isEmpty())
         assertFalse(result.reports.single().notice!!.contains("unknown detours"))
-        assertEquals(direct + 2.0, result.project.raceData.courseMappings.first().category.courseInfo!!.suppliedLegLengths.single().lengthMeters, 0.0)
+        assertEquals(direct + 2.0, result.project.raceData.categories.first().category.courseInfo!!.suppliedLegLengths.single().lengthMeters, 0.0)
     }
 
     private fun project() = EventProjectFactory.createEmptyProject("race", "Import test", "2026-09-14T09:00")

@@ -161,7 +161,7 @@ class DesktopControlSuspicionTest {
 
         assertEquals(
             listOf(
-                "2 controls are not assigned to any category; those controls will show red in Setup > Controls until category control lists are updated."
+                "2 controls are not assigned to any category; those controls will show red in Setup > Courses > Controls until category control lists are updated."
             ),
             controlsOnlyImportWarningLines(project, controlsOnlySummary(controlPointCount = 2))
         )

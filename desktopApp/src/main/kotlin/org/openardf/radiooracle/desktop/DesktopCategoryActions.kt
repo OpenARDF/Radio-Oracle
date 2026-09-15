@@ -191,14 +191,14 @@ object DesktopCategoryActions {
             "Created category without course data. Add assigned controls or import KML/KMZ or GPX course data before Race Ops."
         } else {
             buildString {
-                append("Activated the existing $activatedName course mapping: ")
+                append("Assigned the stored course to $activatedName: ")
                 append("${activatedCategory.lengthMeters} m length, ${activatedCategory.climbMeters} m climb, ")
                 append("and ${outcome.assignedControlCount} assigned control")
                 append(if (outcome.assignedControlCount == 1) "." else "s.")
                 if (outcome.unavailableControlCount > 0) {
                     append(" ${outcome.unavailableControlCount} stored control")
                     append(if (outcome.unavailableControlCount == 1) " was" else "s were")
-                    append(" no longer present in Setup > Controls.")
+                    append(" no longer present in Setup > Courses > Controls.")
                 }
                 append(" Unsaved changes.")
             }

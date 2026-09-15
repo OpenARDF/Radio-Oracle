@@ -46,6 +46,7 @@ class DesktopPaletteTest {
                 "Series Competitor Matching",
                 "Series Validation",
                 "Series Settings",
+                "Courses",
                 "Controls",
                 "Course Analyzer",
                 "Course Report",

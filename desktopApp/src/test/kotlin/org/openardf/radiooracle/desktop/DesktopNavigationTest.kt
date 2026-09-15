@@ -200,7 +200,7 @@ class DesktopNavigationTest {
     @Test
     fun placesCurrentDesktopSectionsUnderWorkflowGroups() {
         assertEquals(
-            listOf("Race File", "Controls", "Competitors", "Categories", "Start List", "More..."),
+            listOf("Race File", "Courses", "Competitors", "Categories", "Start List", "More..."),
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).map { it.label }
         )
         assertEquals(
@@ -351,7 +351,7 @@ class DesktopNavigationTest {
         assertFalse(
             DesktopNavigation.usesToolsNavigationColor(
                 rootState,
-                DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Controls" }
+                DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Courses" }
             )
         )
     }
@@ -464,7 +464,8 @@ class DesktopNavigationTest {
         assertTrue(
             DesktopNavigation.showsMenuIndicator(
                 DesktopNavigation.rootItems(DesktopWorkflow.Setup)
-                    .first { it.label == "Controls" }
+                    .first { it.label == "Courses" }
+                    .children.single { it.label == "Controls" }
                     .children
                     .first { it.label == "Elevation Data" }
             )
@@ -759,7 +760,7 @@ class DesktopNavigationTest {
         val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
 
         assertFalse(setupItems.first { it.label == "Race File" }.requiresEventFile)
-        assertTrue(setupItems.first { it.label == "Controls" }.requiresEventFile)
+        assertTrue(setupItems.first { it.label == "Courses" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Categories" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Competitors" }.requiresEventFile)
         assertTrue(setupItems.first { it.label == "Start List" }.requiresEventFile)
@@ -769,7 +770,7 @@ class DesktopNavigationTest {
     @Test
     fun setupMenusAreEnabledInWorkflowOrder() {
         val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
-        val controls = setupItems.first { it.label == "Controls" }
+        val controls = setupItems.first { it.label == "Courses" }
         val categories = setupItems.first { it.label == "Categories" }
         val competitors = setupItems.first { it.label == "Competitors" }
         val startList = setupItems.first { it.label == "Start List" }
@@ -969,7 +970,11 @@ class DesktopNavigationTest {
     @Test
     fun controlsCategoriesAndCompetitorCsvActionsLiveUnderTheirSetupSections() {
         val setupItems = DesktopNavigation.rootItems(DesktopWorkflow.Setup)
-        val controlItems = setupItems.first { it.label == "Controls" }.children
+        val courses = setupItems.first { it.label == "Courses" }
+        assertEquals(DesktopSection.Courses, courses.section)
+        val controls = courses.children.single { it.label == "Controls" }
+        assertEquals(DesktopSection.Controls, controls.section)
+        val controlItems = controls.children
         val categoryItems = setupItems.first { it.label == "Categories" }.children
         val competitorItems = setupItems.first { it.label == "Competitors" }.children
 

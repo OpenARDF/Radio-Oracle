@@ -38,7 +38,7 @@ class DesktopIofCourseImportUiTest {
         val imported = EventProjectEditor.importIofCourseData(original,
             IofXmlImports.courseData(DesktopIofCourseAnalysisTest().xml(), original.raceData.race).parsedData).projectFile
         val review = DesktopCourseImportReview("courses.xml", DesktopCourseImportTransaction.prepare(original), imported,
-            imported.raceData.courseMappings.map { it.category.id }.toSet(), null, analyzeIofCourses = true)
+            imported.raceData.categories.map { it.category.id }.toSet(), null, analyzeIofCourses = true)
         var current by mutableStateOf(original)
         var accepted = false
         var rejected = false
@@ -59,7 +59,7 @@ class DesktopIofCourseImportUiTest {
         val imported = EventProjectEditor.importIofCourseData(original,
             IofXmlImports.courseData(DesktopIofCourseAnalysisTest().xml(), original.raceData.race).parsedData).projectFile
         val review = DesktopCourseImportReview("courses.xml", DesktopCourseImportTransaction.prepare(original), imported,
-            imported.raceData.courseMappings.map { it.category.id }.toSet(), null, analyzeIofCourses = true)
+            imported.raceData.categories.map { it.category.id }.toSet(), null, analyzeIofCourses = true)
         var accepted: EventProjectFile? = null
         var rejected = false
         rule.setContent { MaterialTheme {
@@ -77,8 +77,8 @@ class DesktopIofCourseImportUiTest {
         rule.onNodeWithText("Accept Import").performClick()
         rule.runOnIdle {
             assertNotNull(accepted)
-            assertTrue(original.raceData.courseMappings.isEmpty())
-            assertEquals(2, accepted!!.raceData.courseMappings.size)
+            assertTrue(original.raceData.categories.isEmpty())
+            assertEquals(2, accepted!!.raceData.categories.size)
         }
     }
 }

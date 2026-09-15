@@ -63,7 +63,9 @@ data class IofCourseDataPreview(
     val eventName: String?,
     val startDate: String?,
     val startTime: String?,
-    val categories: List<EventCategoryData>
+    val categories: List<EventCategoryData>,
+    /** Entries backed by explicit XML ClassCourseAssignment elements become race categories. */
+    val assignedCategoryIds: Set<String> = emptySet()
 )
 
 typealias IofCourseDataImportResult = IofXmlImportResult<IofCourseDataPreview>
@@ -225,14 +227,15 @@ object IofXmlImports {
                 definitions = definitions
             )
         }
-        val categories = assignedCourses(raceCourseData, courseNodes, courses, idFactory, warnings)
+        val (categories, assignedCategoryIds) = assignedCourses(raceCourseData, courseNodes, courses, idFactory, warnings)
 
         return IofXmlImportResult(
             parsedData = IofCourseDataPreview(
                 eventName = event?.childText("Name"),
                 startDate = startTime?.childText("Date"),
                 startTime = startTime?.childText("Time"),
-                categories = categories
+                categories = categories,
+                assignedCategoryIds = assignedCategoryIds
             ),
             unsupportedItems = warnings
         )
@@ -438,13 +441,13 @@ object IofXmlImports {
     }
 
     private fun assignedCourses(root: XmlNode, nodes: List<XmlNode>, courses: List<EventCategoryData>,
-                                idFactory: (String) -> String, warnings: MutableList<IofXmlUnsupportedItem>): List<EventCategoryData> {
+                                idFactory: (String) -> String, warnings: MutableList<IofXmlUnsupportedItem>): Pair<List<EventCategoryData>, Set<String>> {
         val assignments = root.children("ClassCourseAssignment")
-        if (assignments.isEmpty()) return courses
+        if (assignments.isEmpty()) return courses to emptySet()
         if (assignments.groupBy { it.childText("ClassName") }.any { it.value.size > 1 }) {
             warnings += IofXmlUnsupportedItem("CourseData", "/CourseData/RaceCourseData/ClassCourseAssignment",
                 "Class-course assignments offer multiple courses for one class. Named courses are retained as separate mappings; class assignments need manual review.", IofXmlImportSeverity.UNSUPPORTED)
-            return courses
+            return courses to emptySet()
         }
         val used = mutableSetOf<Int>()
         val assigned = assignments.map { assignment ->
@@ -464,7 +467,7 @@ object IofXmlImports {
             data.copy(category = data.category.copy(id = id, name = name),
                 controlPoints = data.controlPoints.map { it.copy(id = "$id-${it.id}", categoryId = id) })
         }
-        return assigned + courses.filterIndexed { index, _ -> index !in used }
+        return (assigned + courses.filterIndexed { index, _ -> index !in used }) to assigned.map { it.category.id }.toSet()
     }
 
     private fun XmlNode.toCategoryData(

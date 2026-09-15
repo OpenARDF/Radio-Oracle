@@ -1818,7 +1818,7 @@ object EventProjectEditor {
         }
 
         var nextCategoryOrder = (projectFile.raceData.categories.maxOfOrNull { it.category.order } ?: -1) + 1
-        val activeIds = projectFile.raceData.categories.map { it.category.id }.toSet()
+        val activeIds = projectFile.raceData.categories.map { it.category.id }.toMutableSet()
         val categories = (projectFile.raceData.categories + projectFile.raceData.courseMappings).toMutableList()
         val importedControls = mutableListOf<EventControl>()
         var importedCount = 0
@@ -1829,6 +1829,7 @@ object EventProjectEditor {
             val existingIndex = categories.indexOfCategoryImportName(imported.category.name)
             val existingCategoryData = existingIndex.takeIf { it >= 0 }?.let(categories::get)
             val categoryId = existingCategoryData?.category?.id ?: imported.category.id
+            if (imported.category.id in preview.assignedCategoryIds) activeIds += categoryId
             val categoryOrder = existingCategoryData?.category?.order ?: nextCategoryOrder++
             val controlPoints = imported.controlPoints.mapIndexed { index, controlPoint ->
                 val definition = ControlPointDefinition(controlPoint.siCode, controlPoint.type, controlPoint.order)
