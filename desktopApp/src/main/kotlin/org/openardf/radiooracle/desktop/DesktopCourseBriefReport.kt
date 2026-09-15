@@ -17,7 +17,8 @@ internal data class DesktopCourseBriefReport(
     val routeMap: DesktopCourseRouteMap? = null,
     val notice: String? = null,
     val isLocked: Boolean = false,
-    val legWarnings: List<String> = emptyList()
+    val legWarnings: List<String> = emptyList(),
+    val assumedPaceMinutesPerKm: Double? = null
 )
 
 /** A read-only summary of active courses, independent of the CSV's control-set grouping. */
@@ -99,7 +100,8 @@ internal object DesktopCourseBriefReports {
                     summary.hasMissingCalculatedRouteElevationData -> "Some route elevations are estimated between known points."
                     else -> null
                 },
-                legWarnings = if (reviewedIof) DesktopIofCourseAnalysis.legWarnings(info) else emptyList()
+                legWarnings = if (reviewedIof) DesktopIofCourseAnalysis.legWarnings(info) else emptyList(),
+                assumedPaceMinutesPerKm = 1000.0 / (60.0 * summary.speedModel.effectiveSpeedMetersPerSecond)
             )
         } catch (error: Exception) {
             if (error is CancellationException) throw error

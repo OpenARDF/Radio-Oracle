@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -51,7 +52,8 @@ internal fun CourseBriefReportSection(report: DesktopCourseBriefReport, imported
         Text("Effective length: ${DesktopCourseAnalyzer.summaryLengthText(report.effectiveLengthMeters)}")
         Text("${if (importedRoute) "Imported order" else "Ideal order"}: ${report.idealOrder.takeIf { it.isNotEmpty() }?.joinToString(" → ") ?: "Unavailable"}")
         report.estimatedIdealSeconds?.let { seconds ->
-            Text("${if (importedRoute) "Estimated time" else "Estimated ideal time"}: ${DesktopCourseAnalyzer.summaryDurationText(seconds)}")
+            val pace = report.assumedPaceMinutesPerKm?.let { " (${String.format(Locale.ROOT, "%.1f", it)} min/km)" }.orEmpty()
+            Text("${if (importedRoute) "Estimated time" else "Estimated ideal time"}: ${DesktopCourseAnalyzer.summaryDurationText(seconds)}$pace")
         }
         report.legWarnings.forEach { Text(it, color = DesktopPalette.Warning) }
         report.notice?.let { Text(it, color = DesktopPalette.Disconnected) }

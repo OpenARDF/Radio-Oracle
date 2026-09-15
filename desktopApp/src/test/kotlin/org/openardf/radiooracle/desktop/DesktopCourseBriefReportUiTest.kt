@@ -36,6 +36,7 @@ class DesktopCourseBriefReportUiTest {
             rule.onAllNodesWithText("Calculated ideal route").fetchSemanticsNodes().size == 2
         }
         rule.onNodeWithText("Course graphic unavailable.").assertDoesNotExist()
+        rule.onAllNodesWithText(" min/km)", substring = true).assertCountEquals(2)
         rule.onNodeWithText("Run Course Analyzer", substring = true).assertDoesNotExist()
         rule.onAllNodesWithText("Calculated ideal route")[0].performScrollTo().assertIsDisplayed()
         val image = org.jetbrains.skia.Image.makeFromBitmap(rule.onRoot().captureToImage().asSkiaBitmap())
@@ -65,6 +66,7 @@ class DesktopCourseBriefReportUiTest {
             assertEquals(label, 2, rule.onAllNodesWithText(label, substring = true).fetchSemanticsNodes().size)
         }
         rule.onNodeWithText("M21").performScrollTo().assertIsDisplayed()
+        rule.onAllNodesWithText(" min/km)", substring = true).assertCountEquals(2)
         rule.onAllNodesWithText("Ideal order", substring = false)[0].performScrollTo().assertIsDisplayed()
         val scroll = rule.onNodeWithTag("workspace-scroll")
         scroll.performSemanticsAction(SemanticsActions.RequestFocus)

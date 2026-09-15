@@ -150,6 +150,8 @@ class DesktopCourseBriefReportTest {
         assertEquals(section.climbMeters, report.climbMeters)
         assertEquals(section.effectiveLengthMeters, report.effectiveLengthMeters)
         assertEquals(section.estimatedIdealSeconds, report.estimatedIdealSeconds)
+        assertEquals(1000.0 / (60.0 * analysis.speedModel.effectiveSpeedMetersPerSecond),
+            report.assumedPaceMinutesPerKm!!, 0.000001)
         assertEquals(section.routeOrder, report.idealOrder)
         assertEquals(section.routeMap!!.copy(title = "Ideal order"), report.routeMap)
         assertEquals(setOf("Fox1", "Fox2"), report.routeMap!!.points.filter { it.type == DesktopCourseRouteMapPointType.Control }.map { it.label }.toSet())
