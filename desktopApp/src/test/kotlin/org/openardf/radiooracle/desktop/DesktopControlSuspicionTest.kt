@@ -39,6 +39,17 @@ import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 
 class DesktopControlSuspicionTest {
+    @Test fun editingLabelsDoesNotRepeatAnExistingFoxCountWarning() {
+        val controls = (71..76).map { EventControl("control-$it", "race", "$it", it, ControlPointType.CONTROL) }
+        val relabeled = controls.map { if (it.siCode == 71) it.copy(publicLabel = "Fox 1") else it }
+        assertTrue(controlCourseRuleWarning(controls, RaceType.CLASSIC, ControlPointType.CONTROL) != null)
+        assertEquals(null, controlCourseRuleWarning(relabeled, RaceType.CLASSIC, ControlPointType.CONTROL, controls))
+        assertTrue(controlCourseRuleWarning(controls, RaceType.CLASSIC, ControlPointType.CONTROL, controls.take(5)) != null)
+        val corrected = controls.map { if (it.siCode == 76) it.copy(type = ControlPointType.BEACON) else it }
+        assertEquals(null, controlCourseRuleWarning(corrected, RaceType.CLASSIC, ControlPointType.BEACON, controls))
+        assertEquals(null, controlCourseRuleWarning(corrected, RaceType.CLASSIC, ControlPointType.CONTROL))
+    }
+
     @Test
     fun flagsUnusedMissingAndDuplicatePublicLabels() {
         val fox1 = control("fox1", 31, "Fox 1")

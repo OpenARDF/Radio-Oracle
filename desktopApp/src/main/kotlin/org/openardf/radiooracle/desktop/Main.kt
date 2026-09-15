@@ -8009,15 +8009,25 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                         )
                         roleWarning = combinedControlRoleWarning(
                             controlRoleMismatchWarning(type, publicLabel),
-                            duplicateControlRoleWarning(updatedProject.raceData.controls, type),
+                            duplicateControlRoleWarning(updatedProject.raceData.controls, type)
+                                .takeUnless { it == duplicateControlRoleWarning(currentProject.raceData.controls, type) },
                             controlCourseRuleWarning(
                                 controls = updatedProject.raceData.controls,
                                 raceType = updatedProject.raceData.race.raceType,
-                                changedRole = type
+                                changedRole = type,
+                                previousControls = currentProject.raceData.controls
                             )
                         )
                         updatedProject
                     }
+                    // Analyzer must see the refreshed roles and bindings immediately, including
+                    // when unrelated courses in the same race remain encrypted.
+                    val plainCategories = projectFile!!.let { it.raceData.categories + it.raceData.courseMappings }
+                        .filter { it.category.encryptedCourseInfo == null }
+                    protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId - plainCategories.map { it.category.id }.toSet() +
+                        plainCategories.mapNotNull { data -> data.category.courseInfo?.let { data.category.id to it } }.toMap()
+                    protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + plainCategories
+                        .filter { it.category.encryptedIdealOrder == null }.associate { it.category.id to it.category.idealOrder.orEmpty() }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     projectStatusText = if (identityChanged) {
                         recordActivity("Updated control identity.")
@@ -22770,16 +22780,17 @@ private fun duplicateControlRoleWarning(controls: List<EventControl>, changedRol
     }
 }
 
-private fun controlCourseRuleWarning(
+internal fun controlCourseRuleWarning(
     controls: List<EventControl>,
     raceType: RaceType,
-    changedRole: ControlPointType
+    changedRole: ControlPointType,
+    previousControls: List<EventControl>? = null
 ): String? {
     if (changedRole != ControlPointType.CONTROL) {
         return null
     }
     val details = controls.map { it.toControlDetails() }
-    return when (raceType) {
+    val warning = when (raceType) {
         RaceType.SPRINT -> {
             val groups = SprintLoopControlGroups.from(details)
             listOfNotNull(
@@ -22799,6 +22810,7 @@ private fun controlCourseRuleWarning(
         RaceType.FOXORING,
         RaceType.ORIENTEERING -> null
     }
+    return warning.takeUnless { previousControls != null && it == controlCourseRuleWarning(previousControls, raceType, changedRole) }
 }
 
 private fun sprintLoopFoxLimitWarning(loopLabel: String, foxes: Int): String? =

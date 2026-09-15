@@ -860,9 +860,12 @@ object EventProjectEditor {
             val updated = data.withUpdatedControlDefinition(updatedControl)
             val info = updated.category.courseInfo ?: return updated
             if (info.appliedBindings?.controls?.none { it.controlId == controlId } != false) return updated
-            val refreshed = AppliedCourseEdits.refreshCatalog(info, controls)
+            val roleChanged = info.appliedBindings.controls.any { bound -> controls.any { it.id == bound.controlId && it.type != bound.type } }
+            val refreshed = AppliedCourseEdits.refreshCatalog(info, controls, allowRoleChanges = true)
             return updated.copy(category = updated.category.copy(courseInfo = refreshed,
-                idealOrder = if (refreshed != info) refreshed.idealOrder else updated.category.idealOrder))
+                idealOrder = if (roleChanged) null else if (refreshed != info) refreshed.idealOrder.takeIf { it.isNotBlank() } else updated.category.idealOrder,
+                lengthMeters = if (roleChanged) 0 else updated.category.lengthMeters,
+                climbMeters = if (roleChanged) 0 else updated.category.climbMeters))
         }
         val categories = projectFile.raceData.categories.map { categoryData ->
             updateCourse(categoryData)

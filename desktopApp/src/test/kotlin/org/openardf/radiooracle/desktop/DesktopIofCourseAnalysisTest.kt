@@ -2,10 +2,48 @@ package org.openardf.radiooracle.desktop
 
 import org.junit.Assert.*
 import org.junit.Test
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.*
 import org.openardf.radiooracle.shared.files.*
 
 class DesktopIofCourseAnalysisTest {
+    @Test fun importedFoxCanBeCorrectedToBeaconAndAnalyzedAfterSavingAndReopening() {
+        val original = project()
+        val input = xml().replace("32", "79").replace("<LegLength>1500</LegLength>", "")
+        val imported = EventProjectEditor.importIofCourseData(original,
+            IofXmlImports.courseData(input, original.raceData.race).parsedData).projectFile
+        val prepared = DesktopIofCourseAnalysis.prepare(imported,
+            imported.raceData.categories.map { it.category.id }.toSet(), null, elevationLookup = { 100.0 }).project
+        val stored = prepared.raceData.categories.last()
+        var updated = prepared.copy(raceData = prepared.raceData.copy(
+            categories = prepared.raceData.categories.dropLast(1), courseMappings = listOf(stored)))
+        val beacon = updated.raceData.controls.single { it.siCode == 79 }
+        val fox = updated.raceData.controls.single { it.siCode == 31 }
+        updated = EventProjectEditor.updateControl(updated, fox.id, fox.label, "31", ControlPointType.CONTROL, true, "Fox 1", "")
+        updated = EventProjectEditor.updateControl(updated, beacon.id, "", "79", ControlPointType.BEACON, false, "", "")
+        updated = EventProjectEditor.updateControl(updated, beacon.id, "", "79", ControlPointType.BEACON, false, "Beacon", "")
+        updated = EventProjectFileJson.decode(EventProjectFileJson.encode(updated))
+        (updated.raceData.categories + updated.raceData.courseMappings).forEach { data ->
+            val info = data.category.courseInfo!!
+            assertEquals(ControlPointType.BEACON, data.controlPoints.single { it.controlId == beacon.id }.type)
+            assertEquals(ProtectedCourseObjectType.BEACON, info.courseObjects.single { it.id == beacon.id }.type)
+            assertNull(CourseDesignBindings.validationError(info))
+            assertEquals(0, data.category.lengthMeters)
+            assertEquals(0, data.category.climbMeters)
+            assertNull(data.category.idealOrder)
+            val before = prepared.raceData.categories.single { it.category.id == data.category.id }.category.courseInfo!!
+            assertEquals(before.courseObjects.map { it.id to (it.latitude to it.longitude) },
+                info.courseObjects.map { it.id to (it.latitude to it.longitude) })
+            val summary = DesktopCourseAnalyzer.analyze(updated, data.category.id, info, data.category.idealOrder,
+                elevationLookup = { 100.0 }, controlIdentityMode = DesktopCourseControlIdentityMode.RESULT_CONTROLS,
+                allowFoxRenumbering = false, magneticDeclinationProvider = { null })
+            val route = requireNotNull(summary.calculatedRouteSection)
+            assertNotNull(route.estimatedIdealSeconds)
+            assertEquals(listOf("S", "Fox 1", "B", "F"), route.routeOrder)
+        }
+        assertTrue(DesktopCourseBriefReports.build(updated, emptyMap()).single().notice!!.contains("Run Course Analyzer"))
+    }
+
     @Test fun importsPositionsClassAssignmentsAndLegsIntoOneReviewedCourseWithoutChangingRace() {
         val original = project()
         val before = EventProjectFileJson.encode(original)

@@ -1,23 +1,39 @@
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.domain.ControlPointType
+
 /** Keeps accepted geometry attached to control IDs when catalog details or course membership change. */
 object AppliedCourseEdits {
-    fun refreshCatalog(info: ProtectedCourseInfo, controls: List<EventControl>): ProtectedCourseInfo {
+    fun refreshCatalog(info: ProtectedCourseInfo, controls: List<EventControl>, allowRoleChanges: Boolean = false): ProtectedCourseInfo {
         val binding = info.appliedBindings ?: return info
         require(CourseDesignBindings.validationError(info) == null) { CourseDesignBindings.validationError(info).orEmpty() }
         val byId = controls.associateBy { it.id }
         val byPlacement = binding.controls.associate { bound ->
             val control = requireNotNull(byId[bound.controlId]) { "An applied course control is missing." }
-            require(bound.type == control.type) { "Reapply the course design before changing the role of ${control.label}." }
+            require(allowRoleChanges || bound.type == control.type) { "Reapply the course design before changing the role of SI code ${control.siCode}." }
             bound.placementId to control
         }
         if (binding.controls.all { bound -> byPlacement.getValue(bound.placementId).let {
-            bound.siCode == it.siCode && bound.label == (it.publicLabel ?: it.label)
+            bound.siCode == it.siCode && bound.label == (it.publicLabel ?: it.label) && bound.type == it.type
         } }) return info
+        val roleChanged = binding.controls.any { it.type != byPlacement.getValue(it.placementId).type }
         val renamed = info.copy(
-            idealOrder = ProtectedIdealOrderRules.formatControlIds(binding.orderedControlIds, controls),
-            controlPoints = info.controlPoints.map { point -> point.copy(label = byPlacement.getValue(point.controlId).let { it.publicLabel ?: it.label }) },
-            courseObjects = info.courseObjects.map { point -> byPlacement[point.id]?.let { point.copy(label = it.publicLabel ?: it.label) } ?: point },
+            idealOrder = if (roleChanged || info.idealOrder.isBlank()) "" else ProtectedIdealOrderRules.formatControlIds(binding.orderedControlIds, controls),
+            controlPoints = info.controlPoints.map { point -> byPlacement.getValue(point.controlId).let {
+                point.copy(label = it.publicLabel ?: it.label, type = it.type)
+            } },
+            courseObjects = info.courseObjects.map { point -> byPlacement[point.id]?.let {
+                point.copy(label = it.publicLabel ?: it.label, type = when (it.type) {
+                    ControlPointType.CONTROL -> ProtectedCourseObjectType.CONTROL
+                    ControlPointType.BEACON -> ProtectedCourseObjectType.BEACON
+                    ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
+                })
+            } ?: point },
+            // Roles constrain route order. Retain locations and supplied leg lengths, but require new analysis.
+            route = if (roleChanged) emptyList() else info.route,
+            lengthMeters = if (roleChanged) null else info.lengthMeters,
+            climbMeters = if (roleChanged) null else info.climbMeters,
+            sampledPointCount = if (roleChanged) 0 else info.sampledPointCount,
             resultControlLabelsById = emptyMap()
         )
         return prepare(renamed, controls, binding.controls.associate { it.placementId to it.controlId }, binding.orderedPlacementIds)

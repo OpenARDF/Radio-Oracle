@@ -67,6 +67,36 @@ class AppliedCourseBindingsTest {
             ControlPointType.CONTROL, true, "", "") }
     }
 
+    @Test fun explicitRoleCorrectionRetainsPlacementsAndLegLengthsAndClearsOldAnalysis() {
+        val source = applied().let { info -> CourseDesignBindings.prepare(info.copy(
+            courseObjects = info.controlPoints.map { ProtectedCourseObjectPoint(it.controlId, it.label,
+                ProtectedCourseObjectType.CONTROL, it.latitude, it.longitude) },
+            route = listOf(ProtectedCourseRoutePoint(40.0, -75.0), ProtectedCourseRoutePoint(41.0, -76.0)),
+            lengthMeters = 1500, climbMeters = 20, sampledPointCount = 2,
+            suppliedLegLengths = listOf(ProtectedCourseLegLength("old-fox1", "old-fox2", 1500.0))
+        ), controls, info.appliedBindings!!.controls.associate { it.placementId to it.controlId },
+            info.appliedBindings.orderedPlacementIds, "fixture") }
+        val revised = controls.map { if (it.id == "race-1") it.copy(siCode = 79, label = "79B",
+            publicLabel = "Beacon", type = ControlPointType.BEACON) else it }
+        val error = assertFailsWith<IllegalArgumentException> { AppliedCourseEdits.refreshCatalog(source, revised) }
+        assertTrue(error.message.orEmpty().contains("SI code 79"))
+        assertFalse(error.message.orEmpty().contains("79B"))
+        val updated = AppliedCourseEdits.refreshCatalog(source, revised, allowRoleChanges = true)
+        assertNull(CourseDesignBindings.validationError(updated))
+        assertEquals(source.suppliedLegLengths, updated.suppliedLegLengths)
+        assertEquals(source.appliedBindings!!.orderedPlacementIds, updated.appliedBindings!!.orderedPlacementIds)
+        assertEquals(41.0, CourseControlResolver.resolve(revised.first(), listOf(updated)).location!!.latitude)
+        assertEquals(ControlPointType.BEACON, updated.controlPoints.last().type)
+        assertEquals(ProtectedCourseObjectType.BEACON, updated.courseObjects.last().type)
+        assertEquals("Beacon", updated.courseObjects.last().label)
+        assertTrue(updated.route.isEmpty())
+        assertTrue(updated.idealOrder.isEmpty())
+        assertNull(updated.lengthMeters)
+        assertNull(updated.climbMeters)
+        assertEquals(0, updated.sampledPointCount)
+        assertEquals(updated, Json.decodeFromString<ProtectedCourseInfo>(Json.encodeToString(updated)))
+    }
+
     @Test fun fingerprintIgnoresSourceNamesAndGeneratedIdsButIncludesBindingLocation() {
         val saved = applied()
         val renamed = saved.copy(sourceName = "renamed.kml", sourceSha256 = "new-file-bytes", sampledPointCount = 123,

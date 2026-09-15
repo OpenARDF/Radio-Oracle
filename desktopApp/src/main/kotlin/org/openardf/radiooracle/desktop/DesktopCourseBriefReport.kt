@@ -60,6 +60,10 @@ internal object DesktopCourseBriefReports {
                 else "Import course locations and route data to calculate the ideal order and graphic."
         )
         val reviewedIof = info.sourceName.startsWith("IOF CourseData:") && info.appliedBindings != null
+        if (reviewedIof && info.route.isEmpty()) return fallback.copy(
+            notice = "Control roles or assignments have changed. Run Course Analyzer and apply the updated design to refresh this report.",
+            legWarnings = DesktopIofCourseAnalysis.legWarnings(info)
+        )
         return try {
             val summary = DesktopCourseAnalyzer.analyze(
                 project, category.id, info, order,
