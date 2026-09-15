@@ -337,96 +337,6 @@ object DesktopNavigation {
                             "Controls",
                             workflow,
                             listOf(
-                                group(
-                                    "setup.controls.elevation-cache",
-                                    "Elevation Data",
-                                    workflow,
-                                    listOf(
-                                        item(
-                                            "setup.controls.elevation-cache.import",
-                                            "Import Elevation Data",
-                                            workflow,
-                                            DesktopSection.ElevationCacheImport
-                                        ),
-                                        action(
-                                            "setup.controls.elevation-cache.import-dem",
-                                            "Import DEM File...",
-                                            workflow,
-                                            DesktopNavAction.ImportDemFile
-                                        )
-                                    ),
-                                    DesktopSection.ElevationCache
-                                ),
-                                group(
-                                    "setup.controls.import",
-                                    "Import",
-                                    workflow,
-                                    listOf(
-                                        action(
-                                            "setup.controls.import-controls",
-                                            "Import Controls CSV...",
-                                            workflow,
-                                            DesktopNavAction.ImportControlsCsv
-                                        ),
-                                        action(
-                                            "setup.controls.import-kml-kmz",
-                                            "Import Controls KML/KMZ...",
-                                            workflow,
-                                            DesktopNavAction.ImportControlsKmlKmz
-                                        ),
-                                        action(
-                                            "setup.controls.import-gpx",
-                                            "Import Controls GPX...",
-                                            workflow,
-                                            DesktopNavAction.ImportControlsGpx
-                                        ),
-                                        action(
-                                            "setup.controls.import-iof-course-data",
-                                            "Import IOF CourseData XML...",
-                                            workflow,
-                                            DesktopNavAction.ImportIofCourseDataXml
-                                        )
-                                    ),
-                                    DesktopSection.ControlsImportExport
-                                ),
-                                group(
-                                    "setup.controls.export",
-                                    "Export",
-                                    workflow,
-                                    listOf(
-                                        action(
-                                            "setup.controls.export-controls",
-                                            "Export Controls CSV...",
-                                            workflow,
-                                            DesktopNavAction.ExportControlsCsv
-                                        ),
-                                        action(
-                                            "setup.controls.export-kml-kmz",
-                                            "Export Controls KML/KMZ...",
-                                            workflow,
-                                            DesktopNavAction.ExportCourseKmlKmz
-                                        ),
-                                        action(
-                                            "setup.controls.export-gpx",
-                                            "Export Controls GPX...",
-                                            workflow,
-                                            DesktopNavAction.ExportCourseGpx
-                                        ),
-                                        action(
-                                            "setup.controls.export-iof-course-data",
-                                            "Export IOF CourseData XML...",
-                                            workflow,
-                                            DesktopNavAction.ExportIofCourseDataXml
-                                        ),
-                                        action(
-                                            "setup.controls.export-course-overlays",
-                                            "Export Course Overlays...",
-                                            workflow,
-                                            DesktopNavAction.ExportCourseOverlays
-                                        )
-                                    ),
-                                    DesktopSection.ControlsImportExport
-                                ),
                                 action(
                                     "setup.controls.delete-all",
                                     "Delete All Controls...",
@@ -435,6 +345,96 @@ object DesktopNavigation {
                                 )
                             ),
                             DesktopSection.Controls
+                        ),
+                        group(
+                            "setup.controls.elevation-cache",
+                            "Elevation Data",
+                            workflow,
+                            listOf(
+                                item(
+                                    "setup.controls.elevation-cache.import",
+                                    "Import Elevation Data",
+                                    workflow,
+                                    DesktopSection.ElevationCacheImport
+                                ),
+                                action(
+                                    "setup.controls.elevation-cache.import-dem",
+                                    "Import DEM File...",
+                                    workflow,
+                                    DesktopNavAction.ImportDemFile
+                                )
+                            ),
+                            DesktopSection.ElevationCache
+                        ),
+                        group(
+                            "setup.controls.import",
+                            "Import",
+                            workflow,
+                            listOf(
+                                action(
+                                    "setup.controls.import-controls",
+                                    "Import Controls CSV...",
+                                    workflow,
+                                    DesktopNavAction.ImportControlsCsv
+                                ),
+                                action(
+                                    "setup.controls.import-kml-kmz",
+                                    "Import KML/KMZ...",
+                                    workflow,
+                                    DesktopNavAction.ImportControlsKmlKmz
+                                ),
+                                action(
+                                    "setup.controls.import-gpx",
+                                    "Import GPX...",
+                                    workflow,
+                                    DesktopNavAction.ImportControlsGpx
+                                ),
+                                action(
+                                    "setup.controls.import-iof-course-data",
+                                    "Import IOF CourseData XML...",
+                                    workflow,
+                                    DesktopNavAction.ImportIofCourseDataXml
+                                )
+                            ),
+                            DesktopSection.ControlsImportExport
+                        ),
+                        group(
+                            "setup.controls.export",
+                            "Export",
+                            workflow,
+                            listOf(
+                                action(
+                                    "setup.controls.export-controls",
+                                    "Export Controls CSV...",
+                                    workflow,
+                                    DesktopNavAction.ExportControlsCsv
+                                ),
+                                action(
+                                    "setup.controls.export-kml-kmz",
+                                    "Export KML/KMZ...",
+                                    workflow,
+                                    DesktopNavAction.ExportCourseKmlKmz
+                                ),
+                                action(
+                                    "setup.controls.export-gpx",
+                                    "Export GPX...",
+                                    workflow,
+                                    DesktopNavAction.ExportCourseGpx
+                                ),
+                                action(
+                                    "setup.controls.export-iof-course-data",
+                                    "Export IOF CourseData XML...",
+                                    workflow,
+                                    DesktopNavAction.ExportIofCourseDataXml
+                                ),
+                                action(
+                                    "setup.controls.export-course-overlays",
+                                    "Export Course Overlays...",
+                                    workflow,
+                                    DesktopNavAction.ExportCourseOverlays
+                                )
+                            ),
+                            DesktopSection.ControlsImportExport
                         ),
                     ),
                     DesktopSection.Courses
@@ -1374,9 +1374,9 @@ object DesktopNavigation {
         "setup.event-file" to
             "Use Race File to create, open, import, save, close, and inspect race files, including Race Password protection and series protection when a series is open.",
         "setup.courses" to
-            "Review all courses in this race, assign unassigned courses to categories, or create categories from them. Open Controls to edit the shared control list and use the existing import and export tools.",
+            "Review all courses in this race, assign unassigned courses to categories, or create categories from them. Manage control definitions in Controls, retrieve elevation data, and import or export course and control files here.",
         "setup.controls" to
-            "Use Controls to manually enter controls, import controls and courses from supported file types, analyze courses with appropriate elevation data applied, and import elevation DEMs.",
+            "Use Controls to add, edit, or remove the shared control definitions used by courses. Course imports, exports, and elevation data are available one level up in Courses.",
         "setup.controls.elevation-cache" to
             "Use Elevation Data to inspect cached venue elevation files used for stored course routes, climb estimates, and course-analysis calculations.",
         "setup.controls.elevation-cache.import" to
@@ -1390,15 +1390,15 @@ object DesktopNavigation {
         "setup.controls.import-controls" to
             "Use Import Controls CSV to review and apply additions or updates to the race control catalog.",
         "setup.controls.import-kml-kmz" to
-            "Use Import Controls KML/KMZ to import control locations and category route geometry from mapping files.",
+            "Use Import KML/KMZ to import courses and control locations. Files containing only controls are also supported.",
         "setup.controls.import-gpx" to
-            "Use Import Controls GPX to import control waypoints and category route geometry from GPX files.",
+            "Use Import GPX to import courses and control waypoints. Files containing only controls are also supported.",
         "setup.controls.export-controls" to
             "Use Export Controls CSV to write the current control catalog for review, backup, or editing outside the app.",
         "setup.controls.export-kml-kmz" to
-            "Use Export Controls KML/KMZ to export control and route geometry. A password-locked ZIP is used only when the Race File is encrypted.",
+            "Use Export KML/KMZ to export control and route geometry. A password-locked ZIP is used only when the Race File is encrypted.",
         "setup.controls.export-gpx" to
-            "Use Export Controls GPX to export control and route geometry as standard GPX. A password-locked ZIP is used only when the Race File is encrypted.",
+            "Use Export GPX to export control and route geometry as standard GPX. A password-locked ZIP is used only when the Race File is encrypted.",
         "setup.controls.import-iof-course-data" to
             "Use Import IOF CourseData XML to import schema-valid IOF CourseData controls, courses, and course assignments.",
         "setup.controls.export-iof-course-data" to

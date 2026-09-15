@@ -62,7 +62,7 @@ class DesktopPaletteTest {
                 "Create Course",
                 "2D Graphic",
                 "Route Generator",
-                "Control Files",
+                "Course Files",
                 "Import Controls KML/KMZ",
                 "Readouts",
                 "SI Readout Settings",

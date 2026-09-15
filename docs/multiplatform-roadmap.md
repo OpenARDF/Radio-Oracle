@@ -309,9 +309,8 @@ These are deliberate limits in the current app, not necessarily defects.
 - Add a first-class visual Course Designer for placing controls, creating
   category routes and simple graphics, editing KML-compatible appearance, and
   applying the result to a Race File or exporting only the authored overlays.
-- Make `Course Design` a primary item under `Setup`. Develop it alongside the
-  current `Controls` group, then replace that group only after the designer also
-  exposes the controls table, imports, exports, elevation data, review,
+- Develop the visual designer within `Setup > Courses`, retaining the existing
+  `Controls` editor, course imports and exports, elevation data, review,
   protection, and destructive actions operators currently rely on.
 - Start with offline JPG/PNG maps using world files, explicit coordinates, or
   manual calibration. Add GeoTIFF and broad CRS handling after the coordinate
@@ -331,6 +330,45 @@ These are deliberate limits in the current app, not necessarily defects.
 - Follow the complete workflow, architecture, component/licensing assessment,
   staged implementation, compatibility rules, risks, and acceptance criteria in
   [`course-designer-plan.md`](course-designer-plan.md).
+
+#### Manual Course Entry Parity
+
+Manual category control assignments currently define a scoring course, but do
+not assemble geographic course data or automatically calculate an ideal route
+for a new category. Add a coordinate-based entry workflow within `Setup >
+Courses` that reaches the same accepted course state as an analyzed import;
+this work need not wait for the full visual map editor.
+
+- Extend `Controls` to enter and edit latitude/longitude for starts, foxes,
+  beacons, finishes, and other supported course points. Reuse canonical control
+  identities and protected location storage; editing coordinates must preserve
+  Race Password protection rather than expose locations in public fields.
+- Add `New Course` with a course-name field and selection of existing controls,
+  start, beacon, finish, and any required intermediate points. Permit courses
+  to select different starts and finishes. Support building courses after an
+  import that supplied only controls, without requiring a KML/XML round trip.
+- Provide `Analyze Course`, reusing the import analysis and elevation pipeline
+  to calculate ideal order, total horizontal length, total climb, and effective
+  length. Use effective length when sufficient elevation data exists; otherwise
+  optimize horizontal length and clearly show unavailable climb/effective
+  length rather than inventing values.
+- Present the course report before `Add Course` accepts the result. Keep the
+  candidate temporary until acceptance, and discard it on rejection. Offer
+  assignment to existing categories or creation of a same-named category;
+  courses left unassigned must remain visible and manageable in Courses.
+- Make accepted manual courses available to Course Report, Course Analyzer,
+  category assignment, scoring, persistence, and export through the same course
+  model as accepted imports. Do not introduce a separate manual-course store
+  or route optimizer.
+- When shared coordinates or course membership change, identify every affected
+  course, invalidate its prior calculations, and provide recalculation. Preserve
+  existing restrictions on replacing designs with recorded readouts, and make
+  blocked actions explain how to proceed.
+- Validate coordinates, required point roles, and location availability before
+  analysis. Add parity tests demonstrating that equivalent manual and imported
+  inputs produce equivalent routes, metrics, reports, and saved course data,
+  including missing elevation, shared-control edits, protected races, and
+  cancellation without changing the accepted race.
 
 ### Course Analyzer And Route Intelligence
 
