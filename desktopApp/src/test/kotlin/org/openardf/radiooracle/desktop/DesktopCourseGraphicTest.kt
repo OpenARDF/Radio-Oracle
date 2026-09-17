@@ -59,7 +59,7 @@ class DesktopCourseGraphicTest {
     }
 
     @Test
-    fun resultsHideWaypointMarkersAndLabelsWithoutShortcuttingTheRoute() {
+    fun allGraphicsHideWaypointMarkersAndLabelsWithoutShortcuttingTheRoute() {
         val stops = listOf(
             DesktopCourseRouteMapPoint("S", 0.1, 0.85, DesktopCourseRouteMapPointType.Start),
             DesktopCourseRouteMapPoint("Mandatory corner", 0.5, 0.15, DesktopCourseRouteMapPointType.Waypoint),
@@ -74,12 +74,17 @@ class DesktopCourseGraphicTest {
         DesktopCourseGraphic.writeWebPng(expected, map.copy(points = listOf(stops[0], stops[2]), routePointIndexes = listOf(0, 1)))
         for (simplify in listOf(false, true)) {
             val path = directory.resolve("results-$simplify.png")
-            DesktopCourseGraphic.writeWebPng(path, map, simplifyRouteToStops = simplify, showWaypointMarkers = false)
+            DesktopCourseGraphic.writeWebPng(path, map, simplifyRouteToStops = simplify)
             org.junit.Assert.assertArrayEquals(Files.readAllBytes(expected), Files.readAllBytes(path))
         }
         val review = directory.resolve("review.png")
         DesktopCourseGraphic.writeWebPng(review, map)
-        assertFalse("Review graphics still show the mandatory point", Files.readAllBytes(expected).contentEquals(Files.readAllBytes(review)))
+        org.junit.Assert.assertArrayEquals(Files.readAllBytes(expected), Files.readAllBytes(review))
+        val standalone = directory.resolve("standalone.png")
+        val standaloneExpected = directory.resolve("standalone-expected.png")
+        DesktopCourseGraphic.writePng(standalone, map)
+        DesktopCourseGraphic.writePng(standaloneExpected, map.copy(points = listOf(stops[0], stops[2]), routePointIndexes = listOf(0, 1)))
+        org.junit.Assert.assertArrayEquals(Files.readAllBytes(standaloneExpected), Files.readAllBytes(standalone))
     }
 
     @Test
@@ -91,7 +96,11 @@ class DesktopCourseGraphicTest {
             <Placemark><name>Route</name><styleUrl>#route</styleUrl><LineString><coordinates>
             -75.002,40.0,100 -75.0,40.003,100 -74.998,40.0,100
             </coordinates></LineString></Placemark></Document></kml>""")
-        val result = DesktopCourseGraphic.generate(path)
+        val mandatoryPlacemark = """<Placemark><name>Mandatory corner</name>
+            <Point><coordinates>-75.0,40.003,100</coordinates></Point></Placemark>"""
+        val withoutWaypoint = Files.readString(path)
+        Files.writeString(path, withoutWaypoint.replace("</Document>", "$mandatoryPlacemark</Document>"))
+        val result = DesktopCourseGraphic.generate(path, magneticDeclinationProvider = { null })
         val vertices = result.routeMap.lineStrings.single().points
         assertEquals(3, vertices.size)
         val corner = vertices[1]
@@ -107,6 +116,11 @@ class DesktopCourseGraphicTest {
                 54 + 684 * vertex.xFraction, 54 + 450 * (1 - vertex.yFraction), if (index == 0) "m" else "l")
             assertTrue("PDF must draw vertex $index: $command", pdf.contains(command))
         }
+        assertFalse(pdf.contains("Mandatory corner"))
+        // The corner has no point symbol; both raster formats paint only the black route.
+        val waypointCircle = String.format(java.util.Locale.ROOT, "%.2f %.2f m",
+            54 + 684 * corner.xFraction + 6.5, 54 + 450 * (1 - corner.yFraction))
+        assertFalse("PDF must not draw a waypoint circle", pdf.contains(waypointCircle))
     }
 
     @Test
@@ -271,7 +285,7 @@ class DesktopCourseGraphicTest {
             magneticDeclinationProvider = { DesktopMagneticDeclinationResult(12.3, usesExpiredCoefficients = false) }
         )
 
-        assertEquals(4, result.visiblePointCount)
+        assertEquals(3, result.visiblePointCount)
         assertEquals(3, result.visibleLineStringCount)
         assertEquals(1, result.visiblePolygonCount)
         assertEquals(2, result.hiddenObjectCount)

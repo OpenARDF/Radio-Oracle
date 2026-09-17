@@ -25,6 +25,23 @@ import org.junit.Test
 class DesktopCourseBriefReportUiTest {
     @get:Rule val rule = createComposeRule()
 
+    @Test fun routeMapShowsControlsButHidesMandatoryAndPhantomLabels() {
+        val points = listOf(
+            DesktopCourseRouteMapPoint("Start", 0.1, 0.9, DesktopCourseRouteMapPointType.Start),
+            DesktopCourseRouteMapPoint("Mandatory bend", 0.4, 0.1, DesktopCourseRouteMapPointType.Waypoint),
+            DesktopCourseRouteMapPoint("900", 0.7, 0.2, DesktopCourseRouteMapPointType.Waypoint),
+            DesktopCourseRouteMapPoint("Fox 1", 0.8, 0.8, DesktopCourseRouteMapPointType.Control),
+            DesktopCourseRouteMapPoint("Finish", 0.9, 0.9, DesktopCourseRouteMapPointType.Finish)
+        )
+        val map = DesktopCourseRouteMap("Course", points, routeLabels = points.map { it.label }, routePointIndexes = points.indices.toList())
+        rule.setContent { MaterialTheme { Surface { CourseAnalysisRouteMap(map) } } }
+        listOf("Start", "Fox 1", "Finish").forEach { rule.onNodeWithText(it).assertExists() }
+        listOf("Mandatory bend", "900").forEach { rule.onNodeWithText(it).assertDoesNotExist() }
+        assertEquals(points.map { DesktopCourseRouteMapLinePoint(it.xFraction, it.yFraction) },
+            map.routeLinesForDrawing().single().points)
+        saveScreenshot("hidden-mandatory-and-phantom-points")
+    }
+
     @Test fun coursesScreenShowsReportsWithPairedDiagramsAndControlMarkers() {
         val project = courseReportFixture()
         val before = org.openardf.radiooracle.shared.event.EventProjectFileJson.encode(project)

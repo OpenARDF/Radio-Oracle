@@ -90,7 +90,7 @@ class DesktopMandatoryCoursePresentationTest {
         // The Foxoring web path must preserve the full ordered polyline too.
         assertEquals(DesktopCourseGraphic.webRouteMap(map), DesktopCourseGraphic.webRouteMap(map, simplifyRouteToStops = true))
         val expectedPng = folder.resolve("expected-course.png")
-        DesktopCourseGraphic.writeWebPng(expectedPng, map.copy(title = "M21 course"), showWaypointMarkers = false)
+        DesktopCourseGraphic.writeWebPng(expectedPng, map.copy(title = "M21 course"))
         assertArrayEquals(Files.readAllBytes(expectedPng), Files.readAllBytes(png))
         val race = project.raceData
         for (text in listOf(EventCsvExports.results(race, routeLengths = lengths),
@@ -141,6 +141,8 @@ class DesktopMandatoryCoursePresentationTest {
             val pdf = Files.readAllBytes(path).toString(Charsets.ISO_8859_1)
             assertTrue(pdf.contains("166.50 553.00 m 99.00 516.00 l S"))
             assertTrue(pdf.contains("99.00 516.00 m 166.50 553.00 l S"))
+            assertFalse(pdf.contains("(Corner)"))
+            assertFalse("PDF must not paint a waypoint marker", pdf.contains("0.55 0.24 0.75 rg"))
         } finally { Files.deleteIfExists(path) }
     }
 
@@ -152,11 +154,12 @@ class DesktopMandatoryCoursePresentationTest {
         val svg = rendered.files.getValue(rendered.courseGraphics.single()).decodeToString()
         val polyline = Regex("<polyline points=\"([^\"]+)\"").find(svg)!!.groupValues[1].split(" ")
         assertEquals(info.route.size, polyline.size)
-        // Results hide waypoint symbols and labels, while retaining exactly the same route bends.
+        // Both review and public diagrams hide waypoints and retain exactly the same route bends.
         val reviewSvg = CourseDiagramSvg.render("Review", info)
         val reviewPolyline = Regex("<polyline points=\"([^\"]+)\"").find(reviewSvg)!!.groupValues[1]
         assertEquals(reviewPolyline, polyline.joinToString(" "))
-        assertTrue(reviewSvg.contains("Mandatory point A"))
+        assertFalse(reviewSvg.contains("Mandatory point"))
+        assertFalse(reviewSvg.contains("width=\"28\""))
         assertFalse(svg.contains("Mandatory point"))
         assertFalse(svg.contains("width=\"28\""))
         val directory = Path.of("build/reports/mandatory-course-presentation")

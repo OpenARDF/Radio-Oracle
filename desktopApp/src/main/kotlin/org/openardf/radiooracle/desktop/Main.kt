@@ -20005,7 +20005,6 @@ private fun Kml2dGraphicPanel() {
                 routeMap = routeMap,
                 mapWidth = 620.dp,
                 mapHeight = 420.dp,
-                showWaypointLabels = true,
                 showLineStringLabels = true
             )
         }
@@ -22003,7 +22002,6 @@ internal fun CourseAnalysisRouteMap(
     routeMap: DesktopCourseRouteMap,
     mapWidth: Dp = 300.dp,
     mapHeight: Dp = 190.dp,
-    showWaypointLabels: Boolean = false,
     showLineStringLabels: Boolean = false
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -22026,7 +22024,7 @@ internal fun CourseAnalysisRouteMap(
                 .padding(8.dp)
         ) {
             CourseRouteMapCanvas(routeMap)
-            CourseRouteMapLabels(routeMap, mapWidth, mapHeight, showWaypointLabels, showLineStringLabels)
+            CourseRouteMapLabels(routeMap, mapWidth, mapHeight, showLineStringLabels)
         }
     }
 }
@@ -22053,7 +22051,7 @@ private fun CourseRouteMapCanvas(routeMap: DesktopCourseRouteMap) {
             drawPath(path, DesktopCourseRouteMapStyle.polygonComposeColor())
         }
         drawRouteMapLineStrings(routeMap, ::xLine, ::yLine)
-        routeMap.points.forEach { point ->
+        routeMap.pointsForDrawing().forEach { point ->
             if (routeMap.routeLabels.isEmpty()) {
                 drawCourseGraphicMarker(point.type, Offset(xPoint(point), yPoint(point)))
             } else {
@@ -22168,7 +22166,6 @@ private fun CourseRouteMapLabels(
     routeMap: DesktopCourseRouteMap,
     mapWidth: Dp,
     mapHeight: Dp,
-    showWaypointLabels: Boolean,
     showLineStringLabels: Boolean
 ) {
     routeMap.polygons.forEach { polygon ->
@@ -22176,10 +22173,8 @@ private fun CourseRouteMapLabels(
             CourseRouteMapTextLabel(polygon.label, point.xFraction, point.yFraction, mapWidth, mapHeight)
         }
     }
-    routeMap.points.filter { it.label.isNotEmpty() }.forEach { point ->
-        if (showWaypointLabels || point.type != DesktopCourseRouteMapPointType.Waypoint) {
-            CourseRouteMapTextLabel(point.label, point.xFraction, point.yFraction, mapWidth, mapHeight)
-        }
+    routeMap.pointsForDrawing().filter { it.label.isNotEmpty() }.forEach { point ->
+        CourseRouteMapTextLabel(point.label, point.xFraction, point.yFraction, mapWidth, mapHeight)
     }
     if (showLineStringLabels) {
         routeMap.lineStrings.filter { it.label.isNotEmpty() }.forEach { line ->

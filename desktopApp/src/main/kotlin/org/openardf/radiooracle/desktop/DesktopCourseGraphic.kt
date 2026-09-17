@@ -72,13 +72,9 @@ private data class ImageRenderStyle(
     val markerScale: Double,
     val labelFontSize: Int,
     val labelFontStyle: Int,
-    val pointLabelGap: Double,
-    val showWaypointMarkers: Boolean = true
+    val pointLabelGap: Double
 ) {
     val markerRadius: Int = (14.0 * markerScale).toInt()
-
-    fun visiblePoints(routeMap: DesktopCourseRouteMap): List<DesktopCourseRouteMapPoint> =
-        routeMap.points.filter { showWaypointMarkers || it.type != DesktopCourseRouteMapPointType.Waypoint }
 }
 
 private enum class GraphicLabelKind {
@@ -149,7 +145,7 @@ object DesktopCourseGraphic {
         writePdf(outputPaths.pdfPath, routeMap)
         return DesktopCourseGraphicResult(
             routeMap = routeMap,
-            visiblePointCount = courseData.controls.count { it.isVisible },
+            visiblePointCount = routeMap.pointsForDrawing().size,
             visibleLineStringCount = courseData.routes.count { it.isVisible },
             visiblePolygonCount = courseData.polygons.count { it.isVisible },
             hiddenObjectCount = courseData.controls.count { !it.isVisible } +
@@ -266,13 +262,12 @@ object DesktopCourseGraphic {
     internal fun writeWebPng(
         path: Path,
         routeMap: DesktopCourseRouteMap,
-        simplifyRouteToStops: Boolean = false,
-        showWaypointMarkers: Boolean = true
+        simplifyRouteToStops: Boolean = false
     ) {
         path.parent?.let(Files::createDirectories)
         ImageIO.write(
             renderImage(webRouteMap(routeMap, simplifyRouteToStops), "png",
-                WebImageStyle.copy(showWaypointMarkers = showWaypointMarkers)),
+                WebImageStyle),
             "png",
             path.toFile()
         )
@@ -355,7 +350,7 @@ object DesktopCourseGraphic {
         routeMap: DesktopCourseRouteMap,
         imageStyle: ImageRenderStyle
     ) {
-        imageStyle.visiblePoints(routeMap).forEach { point ->
+        routeMap.pointsForDrawing().forEach { point ->
             drawImageMarkerIcon(graphics, point.type, imageX(point), imageY(point), imageStyle.markerScale)
         }
     }
@@ -449,7 +444,7 @@ object DesktopCourseGraphic {
         val metrics = graphics.fontMetrics
         val labelHeight = metrics.height.toDouble()
         val requests = buildList {
-            imageStyle.visiblePoints(routeMap).filter { it.label.isNotEmpty() }.forEach { point ->
+            routeMap.pointsForDrawing().filter { it.label.isNotEmpty() }.forEach { point ->
                 add(
                     GraphicLabelRequest(
                         label = point.label,
@@ -507,7 +502,7 @@ object DesktopCourseGraphic {
             occupied = listOf(
                 Rectangle(ImageMapLeft + ImageMapWidth - 106, ImageMapTop + 10, 96, 126),
                 Rectangle(ImageMapLeft, ImageHeight - 72, 220, 66)
-            ) + imageStyle.visiblePoints(routeMap).imagePointMarkerBounds(imageStyle.markerRadius)
+            ) + routeMap.pointsForDrawing().imagePointMarkerBounds(imageStyle.markerRadius)
         )
     }
 
@@ -567,7 +562,7 @@ object DesktopCourseGraphic {
     }
 
     private fun StringBuilder.appendPdfPoints(routeMap: DesktopCourseRouteMap) {
-        routeMap.points.forEach { point ->
+        routeMap.pointsForDrawing().forEach { point ->
             appendPdfMarkerIcon(point.type, pdfX(point), pdfY(point))
         }
     }
@@ -636,7 +631,7 @@ object DesktopCourseGraphic {
         val fontSize = 8.0
         val labelHeight = 10.0
         val requests = buildList {
-            routeMap.points.filter { it.label.isNotEmpty() }.forEach { point ->
+            routeMap.pointsForDrawing().filter { it.label.isNotEmpty() }.forEach { point ->
                 add(
                     GraphicLabelRequest(
                         label = point.label,
@@ -1062,7 +1057,7 @@ object DesktopCourseGraphic {
         }
 
     private fun DesktopCourseRouteMap.pdfPointMarkerBounds(): List<Rectangle> =
-        points.map { point ->
+        pointsForDrawing().map { point ->
             val x = pdfScreenX(point).toInt()
             val y = pdfScreenY(point).toInt()
             Rectangle(x - 10, y - 10, 20, 20)

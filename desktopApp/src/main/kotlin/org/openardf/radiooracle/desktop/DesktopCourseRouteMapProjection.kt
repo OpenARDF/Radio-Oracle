@@ -28,6 +28,10 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 
+/** Mandatory points and imported Phantom bends shape the route, but have no 2D marker or label. */
+internal fun DesktopCourseRouteMap.pointsForDrawing(): List<DesktopCourseRouteMapPoint> =
+    points.filter { it.type != DesktopCourseRouteMapPointType.Waypoint }
+
 /** Screen, raster and PDF renderers share one geometry source, retaining repeated visits. */
 internal fun DesktopCourseRouteMap.routeLinesForDrawing(): List<DesktopCourseRouteMapLine> {
     val storedLines = lineStrings.filter { it.points.size >= 2 }

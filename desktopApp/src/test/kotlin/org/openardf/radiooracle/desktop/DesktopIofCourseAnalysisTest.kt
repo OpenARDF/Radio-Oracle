@@ -27,6 +27,14 @@ class DesktopIofCourseAnalysisTest {
         val summary = DesktopCourseAnalyzer.analyze(prepared, prepared.raceData.categories.first().category.id, info, info.idealOrder,
             elevationLookup = { 100.0 }, allowFoxRenumbering = false)
         assertTrue(summary.kmlFolders.any { folder -> folder.courseObjects.any { it.type == DesktopCourseKmlExportPointType.WAYPOINT } })
+        summary.routeMaps.forEach { map ->
+            val bend = map.points.single { it.type == DesktopCourseRouteMapPointType.Waypoint }
+            assertFalse(map.pointsForDrawing().contains(bend))
+            assertTrue(map.routeLinesForDrawing().any { line -> line.points.any {
+                it.xFraction == bend.xFraction && it.yFraction == bend.yFraction
+            } })
+        }
+
         EventControlCatalog.requireCanonical(EventProjectFileJson.decode(EventProjectFileJson.encode(prepared)))
         val missing = IofXmlImports.courseData(input.replace("<Position lat=\"35.0001\" lng=\"-78.9985\"/>", ""), original.raceData.race).parsedData
         assertThrows(IllegalArgumentException::class.java) { missing.withCondesRouteBends() }

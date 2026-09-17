@@ -218,7 +218,7 @@ private fun DesktopCourseApplyFlow(
                                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                                     val map = remember(preview) { runCatching { courseStationPreviewMap(preview) }.getOrNull() }
                                     if (map != null) CourseAnalysisRouteMap(map, mapWidth = maxWidth,
-                                        mapHeight = 220.dp, showWaypointLabels = false)
+                                        mapHeight = 220.dp)
                                     else Text("Use the KML export to view this location on a map.")
                                 }
 

@@ -740,13 +740,11 @@ object DesktopCourseAnalysisExports {
                 appendLine("${pdfNumber(fromX)} ${pdfNumber(fromY)} m ${pdfNumber(toX)} ${pdfNumber(toY)} l S")
             }
         }
-        routeMap.points.forEach { point ->
+        routeMap.pointsForDrawing().forEach { point ->
             val (red, green, blue) = routeMapPointRgb(point.type)
             appendLine("${pdfNumber(red)} ${pdfNumber(green)} ${pdfNumber(blue)} rg")
             appendCircle(x(point), y(point), 4.0, fill = true)
-            if (point.type != DesktopCourseRouteMapPointType.Waypoint) {
-                appendText(x(point) + 5.0, y(point) + 5.0, 8, point.label)
-            }
+            appendText(x(point) + 5.0, y(point) + 5.0, 8, point.label)
         }
     }
 

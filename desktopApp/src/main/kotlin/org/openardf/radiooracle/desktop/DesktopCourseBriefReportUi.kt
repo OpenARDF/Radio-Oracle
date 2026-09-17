@@ -86,7 +86,7 @@ private fun CourseBriefReportGraphics(report: DesktopCourseBriefReport) {
             report.routeMap?.let {
                 // The shared map renderer places scale labels below its frame.
                 Box(Modifier.width(width).padding(bottom = 24.dp).testTag("course-report-map-${report.categoryId}")) {
-                    CourseAnalysisRouteMap(it, mapWidth = width, mapHeight = 200.dp, showWaypointLabels = true)
+                    CourseAnalysisRouteMap(it, mapWidth = width, mapHeight = 200.dp)
                 }
             } ?: Text("Course graphic unavailable.")
         }
