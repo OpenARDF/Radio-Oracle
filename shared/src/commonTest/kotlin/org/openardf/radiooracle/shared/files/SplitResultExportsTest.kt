@@ -136,10 +136,10 @@ class SplitResultExportsTest {
     fun exportsLongCsvWithCalculatedAndPresentationFields() {
         val csv = SplitResultExports.csv(raceData())
 
-        assertTrue(csv.startsWith("Race;Start;Category;Place;Bib;Competitor;Club;Person ID;SI;Status;Points;Total Time;Transmitters;Split #;From;Control;SI Code;Punch Status;Leg Time;Leg Seconds;Cumulative Time;Cumulative Seconds;Leg Place\n"))
-        assertTrue(csv.contains("Split Test;2026-08-30T10:00;M21;1;12;BRAVO Bob;BOK;B;100002;OK;3;00:11:50;Fox 1, Fox 3, Fox 2;1;Start;Fox 1;31;OK;00:01:30;90;00:01:30;90;1"))
-        assertTrue(csv.contains(";3;Fox 3;Fox 2;32;OK;00:03:40;220;00:07:10;430;1"))
-        assertTrue(csv.contains(";4;Fox 2;Finish;;OK;00:04:40;280;00:11:50;710;1"))
+        assertTrue(csv.startsWith("Race,Start,Category,Place,Bib,Competitor,Club,Person ID,SI,Status,Points,Total Time,Transmitters,Split #,From,Control,SI Code,Punch Status,Leg Time,Leg Seconds,Cumulative Time,Cumulative Seconds,Leg Place\n"))
+        assertTrue(csv.contains("Split Test,2026-08-30T10:00,M21,1,12,BRAVO Bob,BOK,B,100002,OK,3,00:11:50,\"Fox 1, Fox 3, Fox 2\",1,Start,Fox 1,31,OK,00:01:30,90,00:01:30,90,1"))
+        assertTrue(csv.contains(",3,Fox 3,Fox 2,32,OK,00:03:40,220,00:07:10,430,1"))
+        assertTrue(csv.contains(",4,Fox 2,Finish,,OK,00:04:40,280,00:11:50,710,1"))
     }
 
     @Test

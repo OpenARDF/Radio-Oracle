@@ -196,11 +196,11 @@ class EventModelMappersTest {
         assertEquals(raceId, room.race.id)
         assertEquals(Duration.ofHours(2), room.race.timeLimit)
         assertEquals(null, room.categories.single().category.timeLimit)
-        assertEquals("M21;1;99;5000;100;1;;;", room.categories.single().category.toCSVString())
+        assertEquals("M21,1,99,5000,100,1,,,", room.categories.single().category.toCSVString())
         assertEquals("31", room.categories.single().controlPoints.single().toCsvString())
-        assertEquals("123456;31;10:15:00,0,0", room.competitorData.single().readoutData!!.punches.single().punch.toCsvString())
+        assertEquals("123456,31,\"10:15:00,0,0\"", room.competitorData.single().readoutData!!.punches.single().punch.toCsvString())
         assertEquals(
-            "123456;09:30:00;10:00:00;10:45:00;1;31;10:15:00",
+            "123456,09:30:00,10:00:00,10:45:00,1,31,10:15:00",
             ResultData(
                 result = room.competitorData.single().readoutData!!.result,
                 punches = room.competitorData.single().readoutData!!.punches,
@@ -448,9 +448,9 @@ class EventModelMappersTest {
 
         assertEquals("KOLSKY Pavel", competitor.getFullName())
         assertEquals("KOLSKY Pavel (42)", competitor.getNameWithStartNumber())
-        assertEquals(";42;Pavel;Kolsky;M21;0;;OK;OK001;;0;;;SWL;;;;", competitor.toSimpleCsvString("M21"))
+        assertEquals(",42,Pavel,Kolsky,M21,0,,OK,OK001,,0,,,SWL,,,,", competitor.toSimpleCsvString("M21"))
         assertEquals(
-            "42;Kolsky;Pavel;M21;;;OK001;;OK;;",
+            "42,Kolsky,Pavel,M21,,,OK001,,OK,,",
             competitor.toStartCsvString("M21", LocalDateTime.of(2026, 5, 30, 10, 0))
         )
     }

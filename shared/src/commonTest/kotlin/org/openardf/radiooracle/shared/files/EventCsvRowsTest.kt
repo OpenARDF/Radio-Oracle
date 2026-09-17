@@ -49,7 +49,7 @@ class EventCsvRowsTest {
             controlPointsString = "31 32"
         )
 
-        assertEquals("M21;1;99;5000;100;1;;;", EventCsvRows.categoryRow(category))
+        assertEquals("M21,1,99,5000,100,1,,,", EventCsvRows.categoryRow(category))
     }
 
     @Test
@@ -57,7 +57,7 @@ class EventCsvRowsTest {
         val category = EventCategory(
             id = "category",
             raceId = "race",
-            name = "M;21",
+            name = "M,21",
             isMan = true,
             maxAge = null,
             lengthMeters = 5_000,
@@ -70,7 +70,7 @@ class EventCsvRowsTest {
             controlPointsString = "31 32"
         )
 
-        assertEquals("\"M;21\";1;99;5000;100;1;;;", EventCsvRows.categoryRow(category))
+        assertEquals("\"M,21\",1,99,5000,100,1,,,", EventCsvRows.categoryRow(category))
     }
 
     @Test
@@ -93,7 +93,7 @@ class EventCsvRowsTest {
         )
 
         assertEquals(
-            "123456;42;Pavel;Kolsky;M21;0;1980;OK;OK001;;0;2;;SWL;;;;",
+            "123456,42,Pavel,Kolsky,M21,0,1980,OK,OK001,,0,2,,SWL,,,,",
             EventCsvRows.competitorRow(competitor, "M21")
         )
     }
@@ -106,7 +106,7 @@ class EventCsvRowsTest {
             categoryId = null,
             firstName = "Pa\"vel",
             lastName = "Kolsky",
-            club = "OK; East",
+            club = "OK, East",
             index = "OK001",
             isMan = true,
             birthYear = null,
@@ -118,11 +118,11 @@ class EventCsvRowsTest {
 
         val row = EventCsvRows.competitorRow(competitor, "")
 
-        assertEquals(";42;\"Pa\"\"vel\";Kolsky;;0;;\"OK; East\";OK001;10:00;1;;;SWL;;;;", row)
+        assertEquals(",42,\"Pa\"\"vel\",Kolsky,,0,,\"OK, East\",OK001,10:00,1,,,SWL,,,,", row)
         val parsed = EventCsvImports.parseAndroidCompetitorRows(row)
         assertEquals(emptyList(), parsed.invalidLines)
         assertEquals("Pa\"vel", parsed.rows.single().firstName)
-        assertEquals("OK; East", parsed.rows.single().club)
+        assertEquals("OK, East", parsed.rows.single().club)
         assertEquals("", parsed.rows.single().categoryName)
         assertEquals("10:00", parsed.rows.single().startTimeText)
     }
@@ -145,8 +145,8 @@ class EventCsvRowsTest {
             drawnStartTimeSeconds = null
         )
 
-        assertEquals(";;Pavel;Kolsky;;0;;OK;OK001;;0;;;SWL;;;;", EventCsvRows.competitorRow(competitor, ""))
-        assertEquals(";Kolsky;Pavel;;;;OK001;;OK;;", EventCsvRows.competitorStartRow(competitor, "", null))
+        assertEquals(",,Pavel,Kolsky,,0,,OK,OK001,,0,,,SWL,,,,", EventCsvRows.competitorRow(competitor, ""))
+        assertEquals(",Kolsky,Pavel,,,,OK001,,OK,,", EventCsvRows.competitorStartRow(competitor, "", null))
     }
 
     @Test
@@ -169,11 +169,11 @@ class EventCsvRowsTest {
         )
 
         assertEquals(
-            "42;Kolsky;Pavel;M21;;10:10;OK001;;OK;123456;East2",
+            "42,Kolsky,Pavel,M21,,10:10,OK001,,OK,123456,East2",
             EventCsvRows.competitorStartRow(competitor, "M21", "10:10")
         )
         assertEquals(
-            "42;Kolsky;Pavel;M21;;;OK001;;OK;123456;East2",
+            "42,Kolsky,Pavel,M21,,,OK001,,OK,123456,East2",
             EventCsvRows.competitorStartRow(competitor, "M21", null)
         )
     }
@@ -185,8 +185,8 @@ class EventCsvRowsTest {
             raceId = "race",
             categoryId = "category",
             firstName = "Pa\"vel",
-            lastName = "Kol;sky",
-            club = "OK; East",
+            lastName = "Kol,sky",
+            club = "OK, East",
             index = "OK001",
             isMan = true,
             birthYear = 1980,
@@ -197,18 +197,18 @@ class EventCsvRowsTest {
         )
 
         assertEquals(
-            "42;\"Kol;sky\";\"Pa\"\"vel\";\"M;21\";;10:10;OK001;;\"OK; East\";123456;",
-            EventCsvRows.competitorStartRow(competitor, "M;21", "10:10")
+            "42,\"Kol,sky\",\"Pa\"\"vel\",\"M,21\",,10:10,OK001,,\"OK, East\",123456,",
+            EventCsvRows.competitorStartRow(competitor, "M,21", "10:10")
         )
     }
 
     @Test
     fun formatsResultRowsWithQuotedFields() {
         assertEquals(
-            "1;\"RUNNER; Test\";OK;2;00:10:00",
+            "1,\"RUNNER, Test\",OK,2,00:10:00",
             EventCsvRows.resultRow(
                 placeText = "1",
-                competitorName = "RUNNER; Test",
+                competitorName = "RUNNER, Test",
                 statusLabel = "OK",
                 pointsText = "2",
                 runTimeText = "00:10:00"
@@ -218,8 +218,8 @@ class EventCsvRowsTest {
 
     @Test
     fun formatsPunchRows() {
-        assertEquals("123456;31;10:15:00", EventCsvRows.punchRow(123456, 31, "10:15:00"))
-        assertEquals(";31;10:15:00", EventCsvRows.punchRow(null, 31, "10:15:00"))
+        assertEquals("123456,31,10:15:00", EventCsvRows.punchRow(123456, 31, "10:15:00"))
+        assertEquals(",31,10:15:00", EventCsvRows.punchRow(null, 31, "10:15:00"))
     }
 
     @Test
@@ -230,7 +230,7 @@ class EventCsvRowsTest {
         )
 
         assertEquals(
-            "123456;09:30:00;10:00:00;10:45:00;2;31;10:15:00;32;10:20:00",
+            "123456,09:30:00,10:00:00,10:45:00,2,31,10:15:00,32,10:20:00",
             EventCsvRows.readoutRow(
                 siNumber = 123456,
                 checkTimeText = "09:30:00",
@@ -244,7 +244,7 @@ class EventCsvRowsTest {
     @Test
     fun formatsReadoutRowsWithoutPunches() {
         assertEquals(
-            ";09:30:00;;;0",
+            ",09:30:00,,,0",
             EventCsvRows.readoutRow(
                 siNumber = null,
                 checkTimeText = "09:30:00",

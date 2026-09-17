@@ -26,7 +26,7 @@ package org.openardf.radiooracle.shared.files
 
 /** Shared CSV contract for formats supported by both Android and desktop. */
 object EventCsvFormat {
-    const val DELIMITER = ';'
+    const val DELIMITER = ','
     const val CONTROL_POINT_DELIMITER = ','
 
     object Category {
@@ -46,10 +46,18 @@ object EventCsvFormat {
         const val EXPORTED_CONTROL_POINTS = 10
         const val ENCRYPTED_IDEAL_ORDER = 11
 
+        val HEADER = listOf("category", "is_man", "max_age", "length_m", "climb_m",
+            "follows_race_presets", "race_type", "time_limit_min", "race_band", "control_count", "controls")
+        fun header(includeEncryptedIdealOrder: Boolean = false): String =
+            CsvCodec.row(HEADER + if (includeEncryptedIdealOrder) listOf("encrypted_ideal_order") else emptyList())
+        fun isHeader(fields: List<String>): Boolean = fields.map { it.trim().lowercase() }.let {
+            it == HEADER || it == HEADER + "encrypted_ideal_order"
+        }
+
         fun controlPointsFrom(fields: List<String>): String {
             val exportedControlPoints = fields[EXPORTED_CONTROL_POINTS].trim()
             val importedControlPoints = fields[ANDROID_IMPORT_CONTROL_POINTS].trim()
-            return (exportedControlPoints.takeIf { it.isNotEmpty() } ?: importedControlPoints)
+            return (exportedControlPoints.takeIf { it.isNotEmpty() } ?: importedControlPoints.takeUnless { it == "0" }.orEmpty())
                 .replace(CONTROL_POINT_DELIMITER, ' ')
                 .trim()
         }
@@ -141,6 +149,14 @@ object EventCsvFormat {
         const val EXPORTED_BIB_NUMBER = 7
         const val EXPORTED_SI_NUMBER = 9
         const val EXPORTED_CORRIDOR = 10
+        val HEADER = listOf("start_number", "last_name", "first_name", "category", "reserved",
+            "start_time", "person_id", "bib_number", "club", "si_number", "corridor")
+        val HEADER_ROW = CsvCodec.row(HEADER)
+        fun isHeader(fields: List<String>): Boolean = fields.map { it.trim().lowercase() }.let {
+            it == HEADER || it == HEADER.dropLast(1) ||
+                it == listOf("start_number", "start_time", "si_number") ||
+                it == listOf("start_number", "start_time", "si_number", "corridor")
+        }
     }
 
     object Control {

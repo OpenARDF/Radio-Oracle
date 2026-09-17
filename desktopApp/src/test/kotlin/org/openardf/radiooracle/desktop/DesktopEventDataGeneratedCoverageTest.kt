@@ -204,7 +204,7 @@ class DesktopEventDataGeneratedCoverageTest {
             .withCategory("M50")
 
         val csv = """
-            ${org.openardf.radiooracle.shared.files.EventCsvFormat.Competitor.HEADER_ROW}
+            ${org.openardf.radiooracle.shared.files.EventCsvFormat.Competitor.HEADER.joinToString(";")}
             123456;101;Alice;Runner;W21;1;1985;OKC;REG001;;0;1;B101;ALR
             123457;102;Bob;Climber;M21;0;1979;OKC;REG002;12:00;0;2;B102;BOB
             ;103;Casey;NoCard;M50;0;1965;TUL;REG003;;1;3;B103;CAS

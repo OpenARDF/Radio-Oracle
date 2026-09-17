@@ -31,6 +31,65 @@ import kotlin.test.assertTrue
 
 class EventCsvImportsTest {
     @Test
+    fun importsCommaHeadersAndQuotedMultilineFieldsForEveryImportProfile() {
+        val competitors = EventCsvImports.parseAndroidCompetitorRows(
+            "\uFEFF\n" + EventCsvFormat.Competitor.HEADER_ROW + "\r\n" +
+                CsvCodec.row(listOf("123456", "7", "Jane, Jo", "O\"Neil", "Open", "1", "1980", "Club; East\r\nTeam", "ID,1")))
+        assertEquals(emptyList(), competitors.invalidLines)
+        assertEquals("Jane, Jo", competitors.rows.single().firstName)
+        assertEquals("O\"Neil", competitors.rows.single().lastName)
+        assertEquals("Club; East\r\nTeam", competitors.rows.single().club)
+        assertEquals("ID,1", competitors.rows.single().personId)
+
+        val categories = EventCsvImports.parseAndroidCategoryRows(
+            EventCsvFormat.Category.header() + "\nOpen,1,99,0,0,1,,,,0,\n")
+        assertEquals(emptyList(), categories.invalidLines)
+        assertEquals(0, categories.rows.single().lengthMeters)
+        assertEquals("", categories.rows.single().controlPointsText)
+
+        val starts = EventCsvImports.parseAndroidCompetitorStartRows(
+            "start_number,start_time,si_number,corridor\r\n7,10:00,123456,East2\r\n")
+        assertEquals(emptyList(), starts.invalidLines)
+        assertEquals("East2", starts.rows.single().corridor)
+
+        val controls = EventCsvImports.parseControlRows("\uFEFF\n" + EventCsvFormat.Control.HEADER_ROW + "\n" +
+            CsvCodec.row(listOf(71, "Fox", 1, "Fox, one", "near \"oak\"\nacross creek; east")))
+        assertEquals(emptyList(), controls.invalidLines)
+        assertEquals("near \"oak\"\nacross creek; east", controls.rows.single().notes)
+
+        val registration = EventCsvImports.parseAndroidCompetitorRows(
+            "Jmeno,Prijmeni,Registrace,SI,Kategorie\n\"Jane, Jo\",Runner,ID1,123456,W21\n")
+        assertEquals(emptyList(), registration.invalidLines)
+        assertEquals("Jane, Jo", registration.rows.single().firstName)
+    }
+
+    @Test
+    fun detectsLegacyCategoryDialectWithMoreControlCommasThanColumnSemicolons() {
+        val codes = (31..60).joinToString(",")
+        val result = EventCsvImports.parseAndroidCategoryRows("Open;1;99;5000;100;1;;;;30;$codes")
+        assertEquals(emptyList(), result.invalidLines)
+        assertEquals((31..60).joinToString(" "), result.rows.single().controlPointsText)
+    }
+
+    @Test
+    fun malformedRowsAfterMultilineFieldsKeepPhysicalLineNumbers() {
+        val result = EventCsvImports.parseControlRows(EventCsvFormat.Control.HEADER_ROW + "\r\n" +
+            "71,Fox,1,F1,\"line 1\r\nline 2\"\r\n" +
+            "bad,Fox,1,F2,notes\r\n72,Fox,1,F2,notes\r\n")
+        assertEquals(listOf(71, 72), result.rows.map { it.siCode })
+        assertEquals(3, result.invalidLines.single().lineIndex)
+    }
+
+    @Test
+    fun commaHeaderDoesNotSilentlyAcceptSemicolonDataOrSwallowAnInvalidFirstRow() {
+        val result = EventCsvImports.parseAndroidCompetitorRows(EventCsvFormat.Competitor.HEADER_ROW + "\n" +
+            "123456;7;Jane;Runner;W21;1\n123456,7,Jane,Runner,W21,1\n")
+        assertEquals(1, result.invalidLines.size)
+        assertEquals(1, result.invalidLines.single().lineIndex)
+        assertEquals(1, result.rows.size)
+    }
+
+    @Test
     fun parsesAndroidCategoryImportRows() {
         val result = EventCsvImports.parseAndroidCategoryRows(
             "M21;1;99;5000;100;0;SPRINT;45;80m;31 32 90B;"
@@ -241,7 +300,7 @@ class EventCsvImportsTest {
     fun skipsOptionalCompetitorHeaderRow() {
         val result = EventCsvImports.parseAndroidCompetitorRows(
             """
-            ${EventCsvFormat.Competitor.HEADER_ROW}
+            ${EventCsvFormat.Competitor.HEADER.joinToString(";")}
             123456;42;Pavel;Kolsky;M21;0;1980;OK Lokomotiva;OK001;10:00;1;2
             """.trimIndent()
         )

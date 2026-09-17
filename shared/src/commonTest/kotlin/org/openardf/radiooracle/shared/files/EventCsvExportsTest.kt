@@ -46,12 +46,55 @@ import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class EventCsvExportsTest {
     @Test
+    fun standardExportsHaveHeadersAndConsistentRecordWidthsIncludingEmptyFiles() {
+        val populated = raceData()
+        val empty = populated.copy(categories = emptyList(), controls = emptyList(), competitorData = emptyList(), unmatchedReadoutData = emptyList())
+        for (data in listOf(populated, empty)) {
+            val files = listOf(EventCsvExports.categories(data), EventCsvExports.competitors(data),
+                EventCsvExports.controls(data), EventCsvExports.competitorStarts(data),
+                EventCsvExports.competitorStartsByCategory(data), EventCsvExports.competitorStartsByMinute(data),
+                EventCsvExports.readouts(data), EventCsvExports.results(data), SplitResultExports.csv(data))
+            files.forEach { csv ->
+                val records = CsvCodec.records(csv)
+                assertTrue(records.isNotEmpty(), csv)
+                assertTrue(records.all { it.error == null }, csv)
+                assertTrue(records.all { it.fields.size == records.first().fields.size }, csv)
+                if (data === empty) assertEquals(1, records.size, csv)
+            }
+        }
+    }
+
+    @Test
+    fun readoutExportPadsShorterRowsToMatchItsHeader() {
+        val data = raceData()
+        val readout = requireNotNull(data.competitorData.first().readoutData)
+        val csv = EventCsvExports.readouts(listOf(readout, readout.copy(punches = emptyList())))
+        val records = CsvCodec.records(csv)
+        assertEquals(3, records.size)
+        assertTrue(records.all { it.fields.size == 9 })
+        assertEquals(listOf("0", "", "", "", ""), records.last().fields.drop(4))
+    }
+
+    @Test
+    fun externalCompatibilityProfilesStillQuoteTheirOwnDelimiter() {
+        val competitor = raceData().competitorData.first().competitorCategory.competitor.copy(lastName = "Doe; West", firstName = "Jane, Jo")
+        val robis = EventCsvRows.robisStartListRow(competitor, "Open; A", "10:00")
+        val fields = CsvCodec.records(robis, ';').single().fields
+        assertEquals("Doe; West", fields[1])
+        assertEquals("Jane, Jo", fields[2])
+        assertEquals("Open; A", fields[3])
+        val ardf = EventCsvRows.ardfEventResultRow("Open; A", "1", "Doe; Jane", "ID", "10:00", "5", "OK", "31 32")
+        assertEquals("Open; A", CsvCodec.records(ardf, ';').single().fields[0])
+    }
+
+    @Test
     fun exportsPortableCategoryRows() {
         assertEquals(
-            "M21;1;99;5000;100;1;;;;2;31,32\n",
+            EventCsvFormat.Category.header() + "\n" + "M21,1,99,5000,100,1,,,,2,\"31,32\"\n",
             EventCsvExports.categories(raceData())
         )
     }
@@ -71,16 +114,16 @@ class EventCsvExportsTest {
         val baseRaceData = raceData()
         val raceData = baseRaceData.copy(
             categories = baseRaceData.categories.map { categoryData ->
-                categoryData.copy(category = categoryData.category.copy(name = "M;21"))
+                categoryData.copy(category = categoryData.category.copy(name = "M,21"))
             }
         )
 
         val exported = EventCsvExports.categories(raceData)
         val result = EventCsvImports.parseAndroidCategoryRows(exported)
 
-        assertEquals("\"M;21\";1;99;5000;100;1;;;;2;31,32\n", exported)
+        assertEquals(EventCsvFormat.Category.header() + "\n" + "\"M,21\",1,99,5000,100,1,,,,2,\"31,32\"\n", exported)
         assertEquals(emptyList(), result.invalidLines)
-        assertEquals("M;21", result.rows.single().name)
+        assertEquals("M,21", result.rows.single().name)
         assertEquals("31 32", result.rows.single().controlPointsText)
     }
 
@@ -89,7 +132,7 @@ class EventCsvExportsTest {
         val raceData = raceData().withEncryptedIdealOrder("ro-ideal-v1:test")
 
         assertEquals(
-            "M21;1;99;5000;100;1;;;;2;31,32\n",
+            EventCsvFormat.Category.header() + "\n" + "M21,1,99,5000,100,1,,,,2,\"31,32\"\n",
             EventCsvExports.categories(raceData)
         )
     }
@@ -99,7 +142,7 @@ class EventCsvExportsTest {
         val raceData = raceData().withEncryptedIdealOrder("ro-ideal-v1:test")
 
         assertEquals(
-            "M21;1;99;5000;100;1;;;;2;31,32;ro-ideal-v1:test\n",
+            EventCsvFormat.Category.header(true) + "\n" + "M21,1,99,5000,100,1,,,,2,\"31,32\",ro-ideal-v1:test\n",
             EventCsvExports.categories(raceData, includeEncryptedIdealOrder = true)
         )
     }
@@ -118,8 +161,8 @@ class EventCsvExportsTest {
     fun exportsPortableCompetitorRows() {
         assertEquals(
             """
-            si_number;start_number;first_name;last_name;category;gender;birth_year;club;person_id;start_time;si_rent;preferred_start_group;bib_number;call_sign;email;cell_phone;national_champ_eligible;regional_champ_eligible
-            123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0;;;SWL;;;;
+            si_number,start_number,first_name,last_name,category,gender,birth_year,club,person_id,start_time,si_rent,preferred_start_group,bib_number,call_sign,email,cell_phone,national_champ_eligible,regional_champ_eligible
+            123456,7,Test,Runner,M21,0,1985,OK Test,OK001,10:00,0,,,SWL,,,,
             """.trimIndent() + "\n",
             EventCsvExports.competitors(raceData())
         )
@@ -171,8 +214,8 @@ class EventCsvExportsTest {
 
         assertEquals(
             """
-            si_code;role;fox;public_label;notes
-            31;Fox;1;F1;first fox
+            si_code,role,fox,public_label,notes
+            31,Fox,1,F1,first fox
             """.trimIndent() + "\n",
             EventCsvExports.controls(raceData)
         )
@@ -238,7 +281,7 @@ class EventCsvExportsTest {
     @Test
     fun exportsPortableCompetitorStartRows() {
         assertEquals(
-            "7;Runner;Test;M21;;10:00;OK001;;OK Test;123456;\n",
+            EventCsvFormat.CompetitorStart.HEADER_ROW + "\n" + "7,Runner,Test,M21,,10:00,OK001,,OK Test,123456,\n",
             EventCsvExports.competitorStarts(raceData())
         )
     }
@@ -316,10 +359,11 @@ class EventCsvExportsTest {
     fun exportsCompetitorStartRowsByCategory() {
         assertEquals(
             """
-            3;Gamma;Carol;M21;;12:00;OK003;;OK Test;333333;
-            4;NoTime;Dave;M21;;;OK004;;OK Test;444444;
-            2;Beta;Bob;W21;;11:00;OK002;;OK Test;222222;
-            1;Alpha;Alice;W21;;13:00;OK001;;OK Test;111111;
+            ${EventCsvFormat.CompetitorStart.HEADER_ROW}
+            3,Gamma,Carol,M21,,12:00,OK003,,OK Test,333333,
+            4,NoTime,Dave,M21,,,OK004,,OK Test,444444,
+            2,Beta,Bob,W21,,11:00,OK002,,OK Test,222222,
+            1,Alpha,Alice,W21,,13:00,OK001,,OK Test,111111,
             """.trimIndent() + "\n",
             EventCsvExports.competitorStartsByCategory(startVariantRaceData())
         )
@@ -329,10 +373,11 @@ class EventCsvExportsTest {
     fun exportsCompetitorStartRowsByMinute() {
         assertEquals(
             """
-            2;Beta;Bob;W21;;11:00;OK002;;OK Test;222222;
-            3;Gamma;Carol;M21;;12:00;OK003;;OK Test;333333;
-            1;Alpha;Alice;W21;;13:00;OK001;;OK Test;111111;
-            4;NoTime;Dave;M21;;;OK004;;OK Test;444444;
+            ${EventCsvFormat.CompetitorStart.HEADER_ROW}
+            2,Beta,Bob,W21,,11:00,OK002,,OK Test,222222,
+            3,Gamma,Carol,M21,,12:00,OK003,,OK Test,333333,
+            1,Alpha,Alice,W21,,13:00,OK001,,OK Test,111111,
+            4,NoTime,Dave,M21,,,OK004,,OK Test,444444,
             """.trimIndent() + "\n",
             EventCsvExports.competitorStartsByMinute(startVariantRaceData())
         )
@@ -354,7 +399,7 @@ class EventCsvExportsTest {
     @Test
     fun exportsPortableReadoutRows() {
         assertEquals(
-            "123456;00:01:40;00:10:00;00:20:00;2;31;00:12:00;32;00:15:00\n",
+            "si_number,check_time,start_time,finish_time,control_count,control_1_code,control_1_time,control_2_code,control_2_time\n123456,00:01:40,00:10:00,00:20:00,2,31,00:12:00,32,00:15:00\n",
             EventCsvExports.readouts(raceData())
         )
     }
@@ -362,7 +407,7 @@ class EventCsvExportsTest {
     @Test
     fun exportsPortableResultRows() {
         assertEquals(
-            "1;RUNNER Test;OK;2;00:10:00\n",
+            "Place,Competitor,Status,Points,Run time\n1,RUNNER Test,OK,2,00:10:00\n",
             EventCsvExports.results(raceData())
         )
     }

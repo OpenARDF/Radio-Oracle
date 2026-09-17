@@ -236,7 +236,7 @@ class DesktopProjectFilesTest {
 
         DesktopProjectFiles.exportResultsCsv(path, EventProjectFile(raceData = raceData()))
 
-        assertEquals("", Files.readString(path))
+        assertEquals("Place,Competitor,Status,Points,Run time\n", Files.readString(path))
     }
 
     @Test
@@ -251,9 +251,9 @@ class DesktopProjectFilesTest {
 
         val csv = Files.readString(csvPath)
         val pdf = Files.readString(pdfPath)
-        assertTrue(csv.contains("Split #;From;Control;SI Code;Punch Status;Leg Time"))
-        assertTrue(csv.contains(";Start;31;31;OK;00:05:00;300;"))
-        assertTrue(csv.contains(";31;Finish;;OK;00:15:00;900;"))
+        assertTrue(csv.contains("Split #,From,Control,SI Code,Punch Status,Leg Time"))
+        assertTrue(csv.contains(",Start,31,31,OK,00:05:00,300,"))
+        assertTrue(csv.contains(",31,Finish,,OK,00:15:00,900,"))
         assertTrue(pdf.startsWith("%PDF-1.4"))
         assertTrue(pdf.contains("Desktop File Race"))
         assertTrue(pdf.contains("RUNNER Alice"))

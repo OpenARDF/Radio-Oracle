@@ -1,11 +1,11 @@
 # Competitor CSV
 
-Radio-Oracle imports and exports competitor registration data as semicolon-delimited CSV.
+Radio-Oracle exports comma-separated CSV with a header row and standard double-quote escaping. Imports accept both this format and existing semicolon-delimited files. See [CSV format](csv-format.md) for the app-wide rules.
 
 The canonical header is:
 
 ```text
-si_number;start_number;first_name;last_name;category;gender;birth_year;club;person_id;start_time;si_rent;preferred_start_group;bib_number;call_sign
+si_number,start_number,first_name,last_name,category,gender,birth_year,club,person_id,start_time,si_rent,preferred_start_group,bib_number,call_sign,email,cell_phone,national_champ_eligible,regional_champ_eligible
 ```
 
 Columns:
@@ -24,16 +24,18 @@ Columns:
 - `preferred_start_group`: Optional start third assignment for championship-style draws. Use `1`, `2`, or `3`; leave blank for no assignment.
 - `bib_number`: Optional visible bib number. Bib Number is a numeric code assigned, often arbitrarily, by race organizers to each individual competitor. Bib numbers uniquely identify competitors and are never shared among competitors. All competitors must be assigned a bib number if bib numbers are used at all. If omitted, Radio-Oracle leaves the bib number blank; it does not fall back to `person_id`, legacy `index`, or `start_number`.
 - `call_sign`: Optional call sign. Duplicate checks are case-insensitive.
+- `email`, `cell_phone`: Optional contact information.
+- `national_champ_eligible`, `regional_champ_eligible`: Optional eligibility flags (`1`, `0`, or blank). Legacy `usa_champ_eligible` and `region2_champ_eligible` headings remain accepted.
 
 Example:
 
 ```text
-si_number;start_number;first_name;last_name;category;gender;birth_year;club;person_id;start_time;si_rent;preferred_start_group;bib_number;call_sign
-123456;7;Test;Runner;M21;0;1985;OK Test;OK001;10:00;0;2;B007;RUN
-;8;Practice;Attendee;;1;;Local Club;;;0;;;
+si_number,start_number,first_name,last_name,category,gender,birth_year,club,person_id,start_time,si_rent,preferred_start_group,bib_number,call_sign,email,cell_phone,national_champ_eligible,regional_champ_eligible
+123456,7,Test,Runner,M21,0,1985,OK Test,OK001,10:00,0,2,B007,RUN,,,,
+,8,Practice,Attendee,,1,,Local Club,,,0,,,,,,,
 ```
 
-Fields containing semicolons, quotes, or line breaks are quoted with double quotes. Quotes inside a quoted field are doubled.
+Fields containing commas, quotes, or line breaks are quoted with double quotes. Quotes inside a quoted field are doubled.
 
 ## Compatibility Profiles
 
@@ -72,28 +74,32 @@ incoming SI number belongs to a different competitor, the import is rejected.
 Missing categories create placeholder categories and are reported as warnings;
 empty categories leave competitors category-less and are also reported.
 
+The dedicated **Export ARDFEvent Results CSV** and **Export ROBIS Start List CSV**
+commands retain their existing semicolon compatibility formats. Standard Radio-Oracle
+results and starts exports use commas and headers.
+
 ## Starts CSV
 
 The starts CSV importer accepts the compact three-column start-list format, an
 optional fourth corridor column, and the longer start-list rows exported by
-Radio-Oracle. Neither format includes a header row.
+Radio-Oracle. Exports include a header; imports accept files with or without one.
 
 The compact import field order is:
 
 ```text
-start_number;start_time;si_number
+start_number,start_time,si_number
 ```
 
 When corridor assignments are included, the compact field order is:
 
 ```text
-start_number;start_time;si_number;corridor
+start_number,start_time,si_number,corridor
 ```
 
 The exported field order is:
 
 ```text
-start_number;last_name;first_name;category;reserved;start_time;person_id;bib_number;club;si_number;corridor
+start_number,last_name,first_name,category,reserved,start_time,person_id,bib_number,club,si_number,corridor
 ```
 
 `corridor` is optional, may contain only letters and numbers, and is limited to

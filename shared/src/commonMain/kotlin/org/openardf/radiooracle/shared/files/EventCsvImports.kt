@@ -109,118 +109,64 @@ data class ControlCsvImportRow(
 
 /** Shared parsers for CSV import formats currently accepted by Android and desktop. */
 object EventCsvImports {
-    fun parseAndroidCategoryRows(csvText: String): CsvImportResult<CategoryCsvImportRow> {
-        val rows = mutableListOf<CategoryCsvImportRow>()
-        val invalidLines = mutableListOf<CsvImportError>()
+    fun parseAndroidCategoryRows(csvText: String): CsvImportResult<CategoryCsvImportRow> =
+        parseRows(csvText, EventCsvFormat.Category::isHeader, ::parseAndroidCategoryRow)
 
-        csvText.lineSequence().forEachIndexed { lineIndex, line ->
-            if (line.isBlank()) return@forEachIndexed
+    fun parseAndroidCompetitorRows(csvText: String): CsvImportResult<CompetitorCsvImportRow> =
+        if (detectCompetitorProfile(csvText) == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION)
+            parseArdfEventRegistrationCompetitorRows(csvText)
+        else parseRows(csvText, EventCsvFormat.Competitor::isHeader, ::parseAndroidCompetitorRow)
 
-            try {
-                rows += parseAndroidCategoryRow(parseSemicolonRow(line), lineIndex)
-            } catch (error: IllegalArgumentException) {
-                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid category row")
-            }
-        }
+    fun detectCompetitorProfile(csvText: String): CompetitorCsvImportProfile =
+        if (listOf(',', ';').any { delimiter ->
+            CsvCodec.records(csvText, delimiter).firstOrNull()?.let {
+                it.error == null && EventCsvFormat.ArdfEventRegistration.isHeader(it.fields)
+            } == true
+        }) CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION else CompetitorCsvImportProfile.CANONICAL
 
-        return CsvImportResult(rows, invalidLines)
-    }
+    fun parseArdfEventRegistrationCompetitorRows(csvText: String): CsvImportResult<CompetitorCsvImportRow> =
+        parseRows(csvText, EventCsvFormat.ArdfEventRegistration::isHeader, ::parseArdfEventRegistrationCompetitorRow)
 
-    fun parseAndroidCompetitorRows(csvText: String): CsvImportResult<CompetitorCsvImportRow> {
-        if (detectCompetitorProfile(csvText) == CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION) {
-            return parseArdfEventRegistrationCompetitorRows(csvText)
-        }
-
-        val rows = mutableListOf<CompetitorCsvImportRow>()
-        val invalidLines = mutableListOf<CsvImportError>()
-
-        csvText.lineSequence().forEachIndexed { lineIndex, line ->
-            if (line.isBlank()) return@forEachIndexed
-
-            try {
-                rows += parseAndroidCompetitorRow(parseSemicolonRow(line), lineIndex)
-            } catch (_: HeaderRow) {
-                // Optional exported header row.
-            } catch (error: IllegalArgumentException) {
-                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid competitor row")
-            }
-        }
-
-        return CsvImportResult(rows, invalidLines)
-    }
-
-    fun detectCompetitorProfile(csvText: String): CompetitorCsvImportProfile {
-        val firstFields = csvText.lineSequence()
-            .firstOrNull { it.isNotBlank() }
-            ?.let(::parseSemicolonRow)
-            ?: return CompetitorCsvImportProfile.CANONICAL
-
-        return if (EventCsvFormat.ArdfEventRegistration.isHeader(firstFields)) {
-            CompetitorCsvImportProfile.ARDF_EVENT_REGISTRATION
-        } else {
-            CompetitorCsvImportProfile.CANONICAL
-        }
-    }
-
-    fun parseArdfEventRegistrationCompetitorRows(csvText: String): CsvImportResult<CompetitorCsvImportRow> {
-        val rows = mutableListOf<CompetitorCsvImportRow>()
-        val invalidLines = mutableListOf<CsvImportError>()
-
-        csvText.lineSequence().forEachIndexed { lineIndex, line ->
-            if (line.isBlank()) return@forEachIndexed
-
-            try {
-                val fields = parseSemicolonRow(line)
-                if (EventCsvFormat.ArdfEventRegistration.isHeader(fields)) {
-                    return@forEachIndexed
-                }
-                rows += parseArdfEventRegistrationCompetitorRow(fields, lineIndex)
-            } catch (error: IllegalArgumentException) {
-                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid ARDFEvent competitor row")
-            }
-        }
-
-        return CsvImportResult(rows, invalidLines)
-    }
-
-    fun parseAndroidCompetitorStartRows(csvText: String): CsvImportResult<CompetitorStartCsvImportRow> {
-        val rows = mutableListOf<CompetitorStartCsvImportRow>()
-        val invalidLines = mutableListOf<CsvImportError>()
-
-        csvText.lineSequence().forEachIndexed { lineIndex, line ->
-            if (line.isBlank()) return@forEachIndexed
-
-            try {
-                rows += parseAndroidCompetitorStartRow(parseSemicolonRow(line), lineIndex)
-            } catch (error: IllegalArgumentException) {
-                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid competitor-start row")
-            }
-        }
-
-        return CsvImportResult(rows, invalidLines)
-    }
+    fun parseAndroidCompetitorStartRows(csvText: String): CsvImportResult<CompetitorStartCsvImportRow> =
+        parseRows(csvText, EventCsvFormat.CompetitorStart::isHeader, ::parseAndroidCompetitorStartRow)
 
     fun parseControlRows(csvText: String): CsvImportResult<ControlCsvImportRow> {
-        val rows = mutableListOf<ControlCsvImportRow>()
-        val invalidLines = mutableListOf<CsvImportError>()
-        var usesLegacyMandatoryColumn = false
-
-        csvText.lineSequence().forEachIndexed { lineIndex, line ->
-            if (line.isBlank()) return@forEachIndexed
-
-            try {
-                val fields = parseSemicolonRow(line)
-                if (lineIndex == 0 && EventCsvFormat.Control.isHeader(fields)) {
-                    usesLegacyMandatoryColumn = EventCsvFormat.Control.isLegacyHeader(fields)
-                    return@forEachIndexed
-                }
-                rows += parseControlRow(fields, lineIndex, usesLegacyMandatoryColumn)
-            } catch (error: IllegalArgumentException) {
-                invalidLines += CsvImportError(lineIndex, error.message ?: "Invalid control row")
-            }
+        val legacy = listOf(',', ';').any { delimiter ->
+            CsvCodec.records(csvText, delimiter).firstOrNull()?.let {
+                it.error == null && EventCsvFormat.Control.isLegacyHeader(it.fields)
+            } == true
         }
+        return parseRows(csvText, EventCsvFormat.Control::isHeader) { fields, lineIndex ->
+            parseControlRow(fields, lineIndex, legacy)
+        }
+    }
 
-        return CsvImportResult(rows, invalidLines)
+    /** Detect the dialect once per file using headers and valid rows, never separators inside a list. */
+    private fun <T> parseRows(
+        csvText: String,
+        isHeader: (List<String>) -> Boolean,
+        parseRow: (List<String>, Int) -> T
+    ): CsvImportResult<T> {
+        val candidates = listOf(',', ';').map { delimiter ->
+            val rows = mutableListOf<T>()
+            val errors = mutableListOf<CsvImportError>()
+            val records = CsvCodec.records(csvText, delimiter)
+            val hasHeader = records.firstOrNull()?.let { it.error == null && isHeader(it.fields) } == true
+            records.drop(if (hasHeader) 1 else 0).forEach { record ->
+                try {
+                    require(record.error == null) { record.error.orEmpty() }
+                    rows += parseRow(record.fields, record.lineIndex)
+                } catch (error: IllegalArgumentException) {
+                    errors += CsvImportError(record.lineIndex, error.message ?: "Invalid CSV record")
+                }
+            }
+            Triple(CsvImportResult(rows, errors), hasHeader, records.firstOrNull()?.fields?.size ?: 0)
+        }
+        // A recognized header wins even if every data record is invalid. Otherwise prefer the dialect
+        // that yields valid rows; field count breaks ties for useful errors in malformed headerless files.
+        return candidates.maxWith(compareBy<Triple<CsvImportResult<T>, Boolean, Int>>(
+            { it.second }, { it.first.rows.size }, { -it.first.invalidLines.size }, { it.third }
+        )).first
     }
 
     private fun parseAndroidCategoryRow(fields: List<String>, lineIndex: Int): CategoryCsvImportRow {
@@ -232,7 +178,7 @@ object EventCsvImports {
         val maxAge = fields[EventCsvFormat.Category.MAX_AGE].trim().toInt()
         val lengthMeters = fields[EventCsvFormat.Category.LENGTH_METERS].trim().takeIf { it.isNotEmpty() }?.toInt() ?: 0
         val climbMeters = fields[EventCsvFormat.Category.CLIMB_METERS].trim().takeIf { it.isNotEmpty() }?.toInt() ?: 0
-        require(name.isNotEmpty() && maxAge > 0 && lengthMeters > 0 && climbMeters >= 0) {
+        require(name.isNotEmpty() && maxAge > 0 && lengthMeters >= 0 && climbMeters >= 0) {
             "Invalid category data at line: $lineIndex"
         }
 
@@ -260,10 +206,6 @@ object EventCsvImports {
     }
 
     private fun parseAndroidCompetitorRow(fields: List<String>, lineIndex: Int): CompetitorCsvImportRow {
-        if (lineIndex == 0 && EventCsvFormat.Competitor.isHeader(fields)) {
-            throw HeaderRow
-        }
-
         require(fields.size >= EventCsvFormat.Competitor.REQUIRED_IMPORT_COLUMNS) {
             "Expected at least ${EventCsvFormat.Competitor.REQUIRED_IMPORT_COLUMNS} columns at line: $lineIndex"
         }
@@ -438,37 +380,6 @@ object EventCsvImports {
         RaceBand.entries.firstOrNull { it.name == value || it.toDisplayLabel() == value }
             ?: throw IllegalArgumentException("Unknown race band: $value")
 
-    private fun parseSemicolonRow(line: String): List<String> {
-        val fields = mutableListOf<String>()
-        val current = StringBuilder()
-        var inQuotes = false
-        var index = 0
-
-        while (index < line.length) {
-            val char = line[index]
-            when {
-                char == '"' && inQuotes && line.getOrNull(index + 1) == '"' -> {
-                    current.append('"')
-                    index++
-                }
-                char == '"' -> inQuotes = !inQuotes
-                char == ';' && !inQuotes -> {
-                    fields += current.toString()
-                    current.clear()
-                }
-                else -> current.append(char)
-            }
-            index++
-        }
-
-        require(!inQuotes) {
-            "Unclosed quoted field"
-        }
-
-        fields += current.toString()
-        return fields
-    }
-
     private fun List<String>.optionalTrimmed(index: Int): String =
         getOrNull(index)?.trim() ?: ""
 
@@ -483,5 +394,4 @@ object EventCsvImports {
             else -> null
         }
 
-    private object HeaderRow : IllegalArgumentException()
 }

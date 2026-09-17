@@ -36,7 +36,7 @@ data class TimedPunchCsvField(
 
 /** Shared CSV row formatter for race import/export formats used by Android and desktop. */
 object EventCsvRows {
-    /** Formats a category row in the legacy semicolon-delimited category export shape. */
+    /** Formats a category row in the category export shape. */
     fun categoryRow(category: EventCategory): String {
         return csvRow(
             category.name,
@@ -96,14 +96,20 @@ object EventCsvRows {
         )
     }
 
+    /** Dedicated ROBIS compatibility profile: retain its semicolon dialect and column layout. */
     fun robisStartListRow(
         competitor: EventCompetitor,
         categoryName: String,
         startTimeText: String?
     ): String =
-        "\"\";${competitor.lastName.csvField()};${competitor.firstName.csvField()};" +
-                "${categoryName.csvField()};\"\";${(startTimeText ?: "").csvField()};" +
-                "${competitor.index.csvField()};\"\";\"CZE\";${(competitor.siNumber ?: "").toString().csvField()}"
+        "\"\";${competitor.lastName.legacyCsvField()};${competitor.firstName.legacyCsvField()};" +
+                "${categoryName.legacyCsvField()};\"\";${(startTimeText ?: "").legacyCsvField()};" +
+                "${competitor.index.legacyCsvField()};\"\";\"CZE\";${(competitor.siNumber ?: "").toString().legacyCsvField()}"
+
+    fun readoutHeader(punchColumnCount: Int): String = CsvCodec.row(
+        listOf("si_number", "check_time", "start_time", "finish_time", "control_count") +
+            (1..punchColumnCount).flatMap { listOf("control_${it}_code", "control_${it}_time") }
+    )
 
     /** Formats one raw punch row for readout debugging/export. */
     fun punchRow(cardNumber: Int?, siCode: Int, timeText: String): String {
@@ -116,7 +122,8 @@ object EventCsvRows {
         checkTimeText: String?,
         startTimeText: String?,
         finishTimeText: String?,
-        controlPunches: List<TimedPunchCsvField>
+        controlPunches: List<TimedPunchCsvField>,
+        punchColumnCount: Int = controlPunches.size
     ): String {
         val headerFields: List<Any?> = listOf(
             siNumber ?: "",
@@ -127,7 +134,8 @@ object EventCsvRows {
         )
         val punchFields: List<Any?> = controlPunches.flatMap { punch -> listOf(punch.siCode, punch.timeText) }
 
-        return csvRow(*(headerFields + punchFields).toTypedArray())
+        val padding = List((punchColumnCount - controlPunches.size).coerceAtLeast(0) * 2) { "" }
+        return csvRow(*(headerFields + punchFields + padding).toTypedArray())
     }
 
     /** Formats one ranked result row in the same order as the desktop Results section. */
@@ -148,6 +156,7 @@ object EventCsvRows {
         return csvRow(*fields.toTypedArray())
     }
 
+    /** Dedicated ARDFEvent compatibility profile; standard results use comma-separated CSV. */
     fun ardfEventResultRow(
         categoryName: String,
         placeText: String,
@@ -158,15 +167,9 @@ object EventCsvRows {
         statusLabel: String,
         controlOrderText: String
     ): String =
-        csvRow(categoryName, placeText, competitorName, index, runTimeText, pointsText, statusLabel, controlOrderText)
+        CsvCodec.row(listOf(categoryName, placeText, competitorName, index, runTimeText, pointsText, statusLabel, controlOrderText), ';')
 
-    private fun csvRow(vararg fields: Any?): String =
-        fields.joinToString(EventCsvFormat.DELIMITER.toString()) { (it ?: "").toString().csvField() }
+    private fun csvRow(vararg fields: Any?): String = CsvCodec.row(fields.asList())
 
-    private fun String.csvField(): String =
-        if (any { it == EventCsvFormat.DELIMITER || it == '"' || it == '\n' || it == '\r' }) {
-            "\"" + replace("\"", "\"\"") + "\""
-        } else {
-            this
-        }
+    private fun String.legacyCsvField(): String = CsvCodec.field(this, ';')
 }

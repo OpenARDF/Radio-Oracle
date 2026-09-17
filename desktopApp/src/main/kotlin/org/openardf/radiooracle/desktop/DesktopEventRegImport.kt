@@ -35,6 +35,7 @@ import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
+import org.openardf.radiooracle.shared.files.CsvCodec
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import java.io.ByteArrayInputStream
 import java.io.StringReader
@@ -715,45 +716,11 @@ object DesktopEventRegSpreadsheetParser {
         }
     }
 
-    private fun parseCommaRows(csvText: String): List<List<String>> {
-        val rows = mutableListOf<List<String>>()
-        val row = mutableListOf<String>()
-        val cell = StringBuilder()
-        var inQuotes = false
-        var index = 0
-        while (index < csvText.length) {
-            val ch = csvText[index]
-            when {
-                ch == '"' && inQuotes && index + 1 < csvText.length && csvText[index + 1] == '"' -> {
-                    cell.append('"')
-                    index++
-                }
-                ch == '"' -> inQuotes = !inQuotes
-                ch == ',' && !inQuotes -> {
-                    row += cell.toString().trim()
-                    cell.clear()
-                }
-                (ch == '\n' || ch == '\r') && !inQuotes -> {
-                    if (ch == '\r' && index + 1 < csvText.length && csvText[index + 1] == '\n') {
-                        index++
-                    }
-                    row += cell.toString().trim()
-                    cell.clear()
-                    if (row.any { it.isNotBlank() }) {
-                        rows += row.toList()
-                    }
-                    row.clear()
-                }
-                else -> cell.append(ch)
-            }
-            index++
+    private fun parseCommaRows(csvText: String): List<List<String>> =
+        CsvCodec.records(csvText).map { record ->
+            require(record.error == null) { "CSV line ${record.lineIndex + 1}: ${record.error}" }
+            record.fields.map(String::trim)
         }
-        row += cell.toString().trim()
-        if (row.any { it.isNotBlank() }) {
-            rows += row.toList()
-        }
-        return rows
-    }
 
     private fun List<List<List<String>>>.bestRegistrationRows(): List<List<String>> {
         require(isNotEmpty()) {

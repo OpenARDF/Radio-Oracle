@@ -31,6 +31,7 @@ import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.toDisplayLabel
+import org.openardf.radiooracle.shared.files.CsvCodec
 import java.math.BigDecimal
 import kotlin.math.roundToInt
 
@@ -160,13 +161,8 @@ object DesktopCourseReportCsv {
     private fun kilometersText(lengthMeters: Int): String =
         BigDecimal.valueOf(lengthMeters.toLong(), 3).stripTrailingZeros().toPlainString()
 
-    private fun List<String>.toCsvLine(): String = joinToString(",") { value ->
-        if (value.any { it == ',' || it == '"' || it == '\r' || it == '\n' }) {
-            "\"${value.replace("\"", "\"\"")}\""
-        } else {
-            value
-        }
-    }
+    private fun List<String>.toCsvLine(): String = CsvCodec.row(this)
+
 }
 
 private data class DesktopCourseReportCandidate(

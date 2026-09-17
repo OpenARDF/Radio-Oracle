@@ -362,16 +362,10 @@ object SplitResultExports {
     }
 
     private fun StringBuilder.appendCsvRow(vararg fields: Any?) {
-        append(fields.joinToString(EventCsvFormat.DELIMITER.toString()) { (it ?: "").toString().csvField() })
+        append(CsvCodec.row(fields.asList()))
         append('\n')
     }
 
-    private fun String.csvField(): String =
-        if (any { it == EventCsvFormat.DELIMITER || it == '"' || it == '\n' || it == '\r' }) {
-            "\"" + replace("\"", "\"\"") + "\""
-        } else {
-            this
-        }
 }
 
 private fun PunchStatus.splitReportLabel(): String =

@@ -48,6 +48,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.EventCsvFormat
+import org.openardf.radiooracle.shared.files.EventCsvExports
+import org.openardf.radiooracle.backend.shared.toEventCategoryData
+import org.openardf.radiooracle.backend.shared.toEventReadoutData
+import org.openardf.radiooracle.backend.sportident.SITime
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.SplitResultExports
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
@@ -57,7 +61,7 @@ import java.io.OutputStream
 import java.time.Duration
 import java.util.UUID
 
-/** Import/export processor for Radio-Oracle's semicolon-delimited CSV formats. */
+/** Comma-delimited CSV exports with support for legacy semicolon imports. */
 object CsvProcessor : FormatProcessor {
 
     /** Imports the requested CSV data type into transient aggregates for validation and persistence. */
@@ -98,7 +102,7 @@ object CsvProcessor : FormatProcessor {
         return DataImportWrapper(emptyList(), emptyList(), ArrayList())
     }
 
-    /** Exports the requested data type in the app's legacy CSV shape. */
+    /** Exports the requested data type with headers and standard CSV quoting. */
     override suspend fun exportData(
         outStream: OutputStream,
         dataType: DataType,
@@ -410,32 +414,13 @@ object CsvProcessor : FormatProcessor {
         )
     }
 
-
-    // TODO: Finish lower-priority CSV export variants that are currently only partially implemented.
-
-    /** Exports categories with the compact control-point list used by legacy CSV consumers. */
+    /** Exports categories with the compact control-point list in one quoted field. */
     @Throws(IOException::class)
     suspend fun exportCategories(outStream: OutputStream, categories: List<CategoryData>) {
 
         withContext(Dispatchers.IO) {
             val writer = outStream.bufferedWriter()
-            for (data in categories) {
-
-                writer.write(data.category.toCSVString())
-                writer.write(";")
-                writer.write(data.controlPoints.size.toString())
-                writer.write(";")
-
-                // Control points are stored as a comma-separated list inside the final CSV column.
-                for (cp in data.controlPoints.withIndex()) {
-                    writer.write(cp.value.toCsvString())
-
-                    if (cp.index < data.controlPoints.size - 1) {
-                        writer.write(",")
-                    }
-                }
-                writer.newLine()
-            }
+            writer.write(EventCsvExports.categories(categories.map { it.toEventCategoryData() }))
             writer.flush()
         }
     }
@@ -472,6 +457,8 @@ object CsvProcessor : FormatProcessor {
     ) {
         val writer = outStream.bufferedWriter()
         withContext(Dispatchers.IO) {
+            writer.write(EventCsvFormat.CompetitorStart.HEADER_ROW)
+            writer.newLine()
             for (com in competitorData) {
                 val category = com.competitorCategory.category
                 writer.write(
@@ -489,12 +476,12 @@ object CsvProcessor : FormatProcessor {
     /** Exports raw readout rows for downstream processing or troubleshooting. */
     @Throws(IOException::class)
     suspend fun exportReadoutData(outStream: OutputStream, readoutData: List<ResultData>) {
-        val writer = outStream.bufferedWriter()
         withContext(Dispatchers.IO) {
-            for (rd in readoutData) {
-                writer.write(rd.toReadoutCSVString())
-                writer.newLine()
-            }
+            val writer = outStream.bufferedWriter()
+            // Retain Android's clock-time presentation even when SI times include a day/week.
+            writer.write(EventCsvExports.readouts(readoutData.map { it.toEventReadoutData() }) {
+                SITime(it).getTimeString()
+            })
             writer.flush()
         }
     }

@@ -36,17 +36,23 @@ import org.openardf.radiooracle.shared.event.EventControlDetails
 import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventReadoutData
 import org.openardf.radiooracle.shared.event.EventResultDetails
 import org.openardf.radiooracle.shared.event.toDisplayLabel
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
-/** Shared semicolon-delimited CSV export builders for portable Race Files. */
+/** Shared comma-delimited CSV export builders for portable Race Files. */
 object EventCsvExports {
     fun categories(raceData: EventRaceData, includeEncryptedIdealOrder: Boolean = false): String =
-        raceData.categories
+        categories(raceData.categories, raceData.controls, includeEncryptedIdealOrder)
+
+    fun categories(categories: List<EventCategoryData>, controls: List<EventControl> = emptyList(),
+        includeEncryptedIdealOrder: Boolean = false): String =
+        EventCsvFormat.Category.header(includeEncryptedIdealOrder) + "\n" + categories
             .sortedWith(compareBy({ it.category.order }, { it.category.name }))
             .joinRows { categoryData ->
-                val controlsById = raceData.controls.associateBy { it.id }
+                val controlsById = controls.associateBy { it.id }
                 val exportControlPoints = if (categoryData.publicControlIds.isNotEmpty()) {
                     categoryData.publicControlIds.mapNotNull { controlId ->
                         controlsById[controlId]?.let { control ->
@@ -64,9 +70,9 @@ object EventCsvExports {
                     .map { ControlPointRules.formatControlPoints(listOf(it)) }
                     .joinToString(EventCsvFormat.CONTROL_POINT_DELIMITER.toString())
                 val publicFields = "${EventCsvRows.categoryRow(categoryData.category)}${EventCsvFormat.DELIMITER}" +
-                        "${exportControlPoints.size}${EventCsvFormat.DELIMITER}$controlPoints"
+                        "${exportControlPoints.size}${EventCsvFormat.DELIMITER}${CsvCodec.field(controlPoints)}"
                 if (includeEncryptedIdealOrder) {
-                    "$publicFields${EventCsvFormat.DELIMITER}${categoryData.category.encryptedIdealOrder ?: ""}"
+                    "$publicFields${EventCsvFormat.DELIMITER}${CsvCodec.field(categoryData.category.encryptedIdealOrder)}"
                 } else {
                     publicFields
                 }
@@ -147,26 +153,24 @@ object EventCsvExports {
             }
 
     fun readouts(raceData: EventRaceData): String =
-        (raceData.competitorData.mapNotNull { it.readoutData } + raceData.unmatchedReadoutData)
-            .sortedWith(compareBy({ it.result.siNumber ?: Int.MAX_VALUE }, { it.result.id }))
-            .joinRows { readoutData ->
-                EventCsvRows.readoutRow(
-                    siNumber = readoutData.result.siNumber,
-                    checkTimeText = readoutData.result.checkTimeSeconds?.asSiTimeText(),
-                    startTimeText = readoutData.result.startTimeSeconds?.asSiTimeText(),
-                    finishTimeText = readoutData.result.finishTimeSeconds?.asSiTimeText(),
-                    controlPunches = readoutData.punches
-                        .map { it.punch }
-                        .filter { it.punchType == SIRecordType.CONTROL }
-                        .sortedBy { it.order }
-                        .map {
-                            TimedPunchCsvField(
-                                siCode = it.siCode,
-                                timeText = it.siTimeSeconds.asSiTimeText()
-                            )
-                        }
-                )
-            }
+        readouts(raceData.competitorData.mapNotNull { it.readoutData } + raceData.unmatchedReadoutData)
+
+    fun readouts(data: List<EventReadoutData>, formatTime: (Long) -> String = { it.asSiTimeText() }): String {
+        val readouts = data.sortedWith(compareBy({ it.result.siNumber ?: Int.MAX_VALUE }, { it.result.id }))
+        val maxPunches = readouts.maxOfOrNull { data -> data.punches.count { it.punch.punchType == SIRecordType.CONTROL } } ?: 0
+        return EventCsvRows.readoutHeader(maxPunches) + "\n" + readouts.joinRows { readoutData ->
+            EventCsvRows.readoutRow(
+                siNumber = readoutData.result.siNumber,
+                checkTimeText = readoutData.result.checkTimeSeconds?.let(formatTime),
+                startTimeText = readoutData.result.startTimeSeconds?.let(formatTime),
+                finishTimeText = readoutData.result.finishTimeSeconds?.let(formatTime),
+                controlPunches = readoutData.punches.map { it.punch }
+                    .filter { it.punchType == SIRecordType.CONTROL }.sortedBy { it.order }
+                    .map { TimedPunchCsvField(it.siCode, formatTime(it.siTimeSeconds)) },
+                punchColumnCount = maxPunches
+            )
+        }
+    }
 
     fun results(
         raceData: EventRaceData,
@@ -180,9 +184,9 @@ object EventCsvExports {
         val region2AwardByResultId = awards.categories
             .flatMap { it.region2Awards }
             .associate { it.resultId to it.awardText }
-        val header = if (routeLengths.isEmpty()) "" else "Place;Competitor;Status;Points;Run time" +
-            (if (awards.hasAwards) ";USA award;Region 2 award" else "") +
-            ";Estimated effective route length (m);Analysis ideal effective length (m);Route comparison\n"
+        val header = CsvCodec.row(listOf("Place", "Competitor", "Status", "Points", "Run time") +
+            (if (awards.hasAwards) listOf("USA award", "Region 2 award") else emptyList()) +
+            (if (routeLengths.isNotEmpty()) listOf("Estimated effective route length (m)", "Analysis ideal effective length (m)", "Route comparison") else emptyList())) + "\n"
         return header + EventResultDetails.from(raceData)
             .joinRows { result ->
                 EventCsvRows.resultRow(
@@ -191,11 +195,11 @@ object EventCsvExports {
                     statusLabel = result.statusLabel,
                     pointsText = result.pointsText,
                     runTimeText = result.runTimeText,
-                    usaAwardText = if (routeLengths.isNotEmpty() && awards.hasAwards) usaAwardByResultId[result.id].orEmpty() else usaAwardByResultId[result.id].takeIf { awards.hasAwards },
-                    region2AwardText = if (routeLengths.isNotEmpty() && awards.hasAwards) region2AwardByResultId[result.id].orEmpty() else region2AwardByResultId[result.id].takeIf { awards.hasAwards }
+                    usaAwardText = if (awards.hasAwards) usaAwardByResultId[result.id].orEmpty() else null,
+                    region2AwardText = if (awards.hasAwards) region2AwardByResultId[result.id].orEmpty() else null
                 ) + if (routeLengths.isEmpty()) "" else {
                     val length = routeLengths[result.id]
-                    ";${length?.effectiveMeters ?: ""};${length?.idealEffectiveMeters ?: ""};\"${length?.comparison.orEmpty().replace("\"", "\"\"")}\""
+                    "," + CsvCodec.row(listOf(length?.effectiveMeters, length?.idealEffectiveMeters, length?.comparison))
                 }
             }
     }
@@ -234,7 +238,7 @@ object EventCsvExports {
         joinToString(separator = "\n", postfix = if (isEmpty()) "" else "\n", transform = row)
 
     private fun List<EventCompetitorData>.joinCompetitorStartRows(raceData: EventRaceData): String =
-        joinRows { competitorData ->
+        EventCsvFormat.CompetitorStart.HEADER_ROW + "\n" + joinRows { competitorData ->
             val competitorCategory = competitorData.competitorCategory
             EventCsvRows.competitorStartRow(
                 competitor = competitorCategory.competitor,
@@ -254,10 +258,5 @@ object EventCsvExports {
     private fun Long.asSiTimeText(): String =
         DurationFormatter.secondsToFormattedString(this, useMinutes = false)
 
-    private fun String.csvField(): String =
-        if (any { it == EventCsvFormat.DELIMITER || it == '"' || it == '\n' || it == '\r' }) {
-            "\"" + replace("\"", "\"\"") + "\""
-        } else {
-            this
-        }
+    private fun String.csvField(): String = CsvCodec.field(this)
 }

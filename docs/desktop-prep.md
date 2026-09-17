@@ -973,7 +973,9 @@ repeatable package validation.
    category, competitor, ARDFEvent registration, start-list CSV, and
    race-backup JSON files; export
    categories, competitors, starts, starts-by-category, starts-by-minute, readouts, and
-   results as semicolon-delimited CSV files using shared formatters; export
+   results as comma-separated CSV files with headers and shared quoting; import
+   existing semicolon files as well. The dedicated compatibility exports retain
+   their previous dialects. Export
    ROBIS start-list CSV, ARDFEvent-style results CSV, result TXT/HTML, IOF
    start/result-list XML, Android-shaped race-backup, live-result, and
    final-result JSON, and standards-facing ARDF JSON. A sample
