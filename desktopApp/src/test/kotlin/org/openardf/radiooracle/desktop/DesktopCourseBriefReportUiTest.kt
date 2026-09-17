@@ -1,9 +1,11 @@
 package org.openardf.radiooracle.desktop
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.input.key.Key
@@ -12,14 +14,81 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import java.nio.file.Files
 import java.nio.file.Path
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
 class DesktopCourseBriefReportUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun coursesScreenShowsReportsWithPairedDiagramsAndControlMarkers() {
+        val project = courseReportFixture()
+        val before = org.openardf.radiooracle.shared.event.EventProjectFileJson.encode(project)
+        rule.setContent {
+            MaterialTheme { Surface(Modifier.width(820.dp)) {
+                DesktopWorkspaceScroll(Modifier.fillMaxSize()) {
+                    DesktopCoursesPanel(project, true, { true }, { error("Reports must not edit the race") })
+                }
+            } }
+        }
+        rule.waitUntil(30_000) { rule.onAllNodesWithTag("course-report-profile-inactive").fetchSemanticsNodes().isNotEmpty() }
+        listOf("inactive", "m21", "w40").forEach { id ->
+            rule.onNodeWithTag("course-report-$id").assertExists()
+            rule.onNodeWithTag("course-report-graphics-row-$id").assertExists()
+            val map = rule.onNodeWithTag("course-report-map-$id").fetchSemanticsNode().boundsInRoot
+            val profile = rule.onNodeWithTag("course-report-profile-$id").fetchSemanticsNode().boundsInRoot
+            assertEquals(map.top, profile.top, 1f)
+            assertTrue(profile.left >= map.right)
+            assertTrue(profile.width <= 360f)
+        }
+        rule.onAllNodesWithText("Fox1 0.", substring = true).assertCountEquals(3)
+        rule.onNodeWithTag("assign-course-inactive").assertExists()
+        rule.onNodeWithTag("delete-course-inactive").assertExists()
+        rule.onNodeWithTag("course-report-profile-inactive").performScrollTo().assertIsDisplayed()
+        saveScreenshot("paired-diagrams")
+        assertEquals(before, org.openardf.radiooracle.shared.event.EventProjectFileJson.encode(project))
+    }
+
+    @Test fun narrowReportsStackDiagramsAndKeepControlMarkersVisible() {
+        val report = DesktopCourseBriefReports.build(courseReportFixture(), emptyMap()).first()
+        rule.setContent { MaterialTheme { Surface(Modifier.width(390.dp)) {
+            DesktopWorkspaceScroll(Modifier.fillMaxSize()) { CourseBriefReportSection(report) }
+        } } }
+        rule.onNodeWithTag("course-report-graphics-column-m21").assertExists()
+        val map = rule.onNodeWithTag("course-report-map-m21").fetchSemanticsNode().boundsInRoot
+        val profile = rule.onNodeWithTag("course-report-profile-m21").fetchSemanticsNode().boundsInRoot
+        assertTrue(profile.top >= map.bottom)
+        rule.onNodeWithText("Fox1 0.", substring = true).performScrollTo().assertIsDisplayed()
+        saveScreenshot("stacked-diagrams")
+    }
+
+    @Test fun lockingClearsBothGraphicsAndMissingElevationKeepsTheMap() {
+        val source = DesktopCourseBriefReports.build(courseReportFixture(), emptyMap()).first()
+        val report = mutableStateOf(source)
+        rule.setContent { MaterialTheme { Surface(Modifier.width(820.dp)) {
+            DesktopWorkspaceScroll(Modifier.fillMaxSize()) { CourseBriefReportSection(report.value) }
+        } } }
+        rule.onNodeWithTag("course-report-profile-m21").assertExists()
+        rule.runOnIdle { report.value = source.copy(elevationProfile = null) }
+        rule.onNodeWithTag("course-report-map-m21").assertExists()
+        rule.onNodeWithTag("course-report-profile-m21").assertDoesNotExist()
+        rule.onNodeWithText("Elevation profile unavailable:", substring = true).assertExists()
+        rule.runOnIdle { report.value = source.copy(isLocked = true, routeMap = null, elevationProfile = null) }
+        rule.onNodeWithTag("course-report-map-m21").assertDoesNotExist()
+        rule.onNodeWithTag("course-report-profile-m21").assertDoesNotExist()
+        rule.onNodeWithText("Course graphic unavailable.").assertExists()
+    }
+
+    private fun saveScreenshot(name: String) {
+        val image = org.jetbrains.skia.Image.makeFromBitmap(rule.onRoot().captureToImage().asSkiaBitmap())
+        val output = Path.of("build/reports/course-report/$name.png")
+        Files.createDirectories(output.parent)
+        Files.write(output, image.encodeToData()!!.bytes)
+    }
 
     @Test fun correctedIofCoursesDisplayDiagramsWithoutApplyingAnotherDesign() {
         val project = correctedIofCourseReportFixture(false)

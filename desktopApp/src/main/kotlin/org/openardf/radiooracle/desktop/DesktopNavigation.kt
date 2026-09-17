@@ -1374,7 +1374,7 @@ object DesktopNavigation {
         "setup.event-file" to
             "Use Race File to create, open, import, save, close, and inspect race files, including Race Password protection and series protection when a series is open.",
         "setup.courses" to
-            "Review all courses in this race, assign unassigned courses to categories, or create categories from them. Manage control definitions in Controls, retrieve elevation data, and import or export course and control files here.",
+            "Review assigned and unassigned course reports, including 2D routes and elevation profiles with control markers. Assign unassigned courses to categories or create categories from them. Manage control definitions in Controls, retrieve elevation data, and import or export course and control files here.",
         "setup.controls" to
             "Use Controls to add, edit, or remove the shared control definitions used by courses. Course imports, exports, and elevation data are available one level up in Courses.",
         "setup.controls.elevation-cache" to
@@ -1480,7 +1480,7 @@ object DesktopNavigation {
         "setup.tools.course-tools.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
         "setup.tools.course-tools.course-report" to
-            "Use Course Report to view each active course’s length, climb, effective length, ideal order, estimated time, and 2D graphic, or export the existing CSV of unique control sets.",
+            "Use Course Report to view each active course’s length, climb, effective length, ideal order, estimated time, 2D graphic, and elevation profile with control markers, or export the existing CSV of unique control sets.",
         "setup.tools.course-tools.course-analysis.import-kml-kmz" to
             "Use Import Course KML/KMZ to bring in control placemarks and required category route lines for course analysis and category course assignments.",
         "setup.tools.course-tools.course-analysis.import-gpx" to

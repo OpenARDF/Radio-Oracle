@@ -151,7 +151,8 @@ data class DesktopCourseAnalysisSection(
     val waitRenumbering: DesktopCourseWaitRenumbering?,
     val ruleChecks: List<DesktopCourseGoodnessMetric> = emptyList(),
     val elevationProfile: List<DesktopCourseElevationProfilePoint>,
-    val routeMap: DesktopCourseRouteMap?
+    val routeMap: DesktopCourseRouteMap?,
+    val elevationMarkers: List<DesktopCourseElevationProfileMarker> = emptyList()
 )
 
 data class DesktopCourseElevationProfileSummary(
@@ -969,6 +970,12 @@ object DesktopCourseAnalyzer {
                     waitRenumbering = calculatedWaitRenumbering,
                     ruleChecks = calculatedRuleChecks,
                     elevationProfile = calculatedRouteAnalysis?.elevationProfile.orEmpty(),
+                    elevationMarkers = elevationMarkers(
+                        calculatedRouteAnalysis?.routePoints.orEmpty(),
+                        calculatedRouteAnalysis?.elevationProfile.orEmpty(),
+                        routeCandidate.controls.map { it.control }, routeCandidate.controls,
+                        calculatedLabelOverrides
+                    ),
                     routeMap = routeMap(
                         title = "Calculated route (calculated fox numbering)",
                         start = start,
@@ -1012,6 +1019,7 @@ object DesktopCourseAnalyzer {
                 waitRenumbering = waitRenumbering,
                 ruleChecks = providedRuleChecks,
                 elevationProfile = analysis.elevationProfile,
+                elevationMarkers = elevationMarkers(route, analysis.elevationProfile, providedControls, controlsWithPoints),
                 routeMap = routeMap(
                     title = routeSource.routeLabel,
                     start = start,
@@ -1056,7 +1064,7 @@ object DesktopCourseAnalyzer {
                     DesktopCourseElevationProfileSummary(
                         title = routeSource.routeLabel,
                         profile = it.elevationProfile,
-                        markers = elevationMarkers(route, it.elevationProfile, providedControls, controlsWithPoints)
+                        markers = it.elevationMarkers
                     )
                 )
             }
@@ -1065,13 +1073,7 @@ object DesktopCourseAnalyzer {
                     DesktopCourseElevationProfileSummary(
                         title = "Calculated route (calculated fox numbering)",
                         profile = it.elevationProfile,
-                        markers = elevationMarkers(
-                            route = calculatedRouteAnalysis?.routePoints.orEmpty(),
-                            profile = it.elevationProfile,
-                            controls = calculatedRoute?.controls.orEmpty().map { point -> point.control },
-                            controlsWithPoints = calculatedRoute?.controls.orEmpty(),
-                            labelOverrides = calculatedLabelOverrides
-                        )
+                        markers = it.elevationMarkers
                     )
                 )
             }

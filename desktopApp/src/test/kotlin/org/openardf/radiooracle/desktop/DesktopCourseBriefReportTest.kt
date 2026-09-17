@@ -130,6 +130,29 @@ class DesktopCourseBriefReportTest {
         assertTrue(DesktopCourseBriefReports.build(project.copy(raceData = project.raceData.copy(categories = emptyList())), emptyMap()).isEmpty())
     }
 
+    @Test fun coursesScreenIncludesUnassignedReportsWithoutChangingActiveReportsOrTheRace() {
+        val project = courseReportFixture()
+        val before = EventProjectFileJson.encode(project)
+        val reports = DesktopCourseBriefReports.build(project, emptyMap(), includeUnassigned = true)
+        assertEquals(setOf("m21", "w40", "inactive"), reports.map { it.categoryId }.toSet())
+        val unassigned = reports.single { it.categoryId == "inactive" }
+        assertNotNull(unassigned.routeMap)
+        assertNotNull(unassigned.elevationProfile)
+        assertEquals(listOf("M21", "W40"), DesktopCourseBriefReports.build(project, emptyMap()).map { it.courseName })
+        assertEquals(before, EventProjectFileJson.encode(project))
+        val data = project.raceData.courseMappings.single()
+        val locked = project.copy(raceData = project.raceData.copy(courseMappings = listOf(data.copy(
+            category = data.category.copy(courseInfo = null, idealOrder = null, encryptedCourseInfo = "locked-fixture")))))
+        val lockedReport = DesktopCourseBriefReports.build(locked, emptyMap(), includeUnassigned = true).single { it.categoryId == "inactive" }
+        assertTrue(lockedReport.isLocked)
+        assertNull(lockedReport.elevationProfile)
+        assertNull(lockedReport.routeMap)
+        val unlocked = DesktopCourseBriefReports.build(locked, mapOf("inactive" to data.category.courseInfo!!), includeUnassigned = true)
+            .single { it.categoryId == "inactive" }
+        assertFalse(unlocked.isLocked)
+        assertNotNull(unlocked.elevationProfile)
+    }
+
     @Test fun anIncompleteCourseDoesNotPreventReportingTheOtherActiveCourse() {
         val project = courseReportFixture()
         val reports = DesktopCourseBriefReports.build(project, mapOf("m21" to ProtectedCourseInfo()))
@@ -152,6 +175,12 @@ class DesktopCourseBriefReportTest {
         assertEquals(section.estimatedIdealSeconds, report.estimatedIdealSeconds)
         assertEquals(1000.0 / (60.0 * analysis.speedModel.effectiveSpeedMetersPerSecond),
             report.assumedPaceMinutesPerKm!!, 0.000001)
+        assertEquals(section.elevationProfile, report.elevationProfile!!.profile)
+        assertEquals(section.elevationMarkers, report.elevationProfile.markers)
+        assertEquals(setOf("Fox1", "Fox2"), report.elevationProfile.markers.map { it.label }.toSet())
+        assertTrue(report.elevationProfile.markers.all { marker -> report.elevationProfile.profile.any {
+            it.distanceMeters == marker.distanceMeters && it.elevationMeters == marker.elevationMeters
+        } })
         assertEquals(section.routeOrder, report.idealOrder)
         assertEquals(section.routeMap!!.copy(title = "Ideal order"), report.routeMap)
         assertEquals(setOf("Fox1", "Fox2"), report.routeMap!!.points.filter { it.type == DesktopCourseRouteMapPointType.Control }.map { it.label }.toSet())
@@ -168,7 +197,7 @@ class DesktopCourseBriefReportTest {
         val locked = DesktopCourseBriefReports.build(project, emptyMap())
         assertEquals(2, locked.size)
         assertTrue(locked.first().isLocked)
-        assertTrue(locked.all { it.routeMap == null && it.idealOrder.isEmpty() && it.estimatedIdealSeconds == null })
+        assertTrue(locked.all { it.routeMap == null && it.elevationProfile == null && it.idealOrder.isEmpty() && it.estimatedIdealSeconds == null })
         val unlocked = DesktopCourseBriefReports.build(project, mapOf("m21" to info))
         assertFalse(unlocked.first().isLocked)
         assertNotNull(unlocked.first().routeMap)
@@ -191,6 +220,8 @@ class DesktopCourseBriefReportTest {
         assertEquals(calculated.routeOrder, report.idealOrder)
         assertNotEquals(analysis.providedRouteSection!!.routeOrder, report.idealOrder)
         assertEquals(calculated.effectiveLengthMeters, report.effectiveLengthMeters)
+        assertEquals(calculated.elevationProfile, report.elevationProfile!!.profile)
+        assertEquals(calculated.elevationMarkers, report.elevationProfile.markers)
         assertEquals(calculated.routeMap!!.copy(title = "Ideal order"), report.routeMap)
         assertEquals(report.idealOrder, report.routeMap!!.routeLabels)
     }
@@ -213,6 +244,7 @@ class DesktopCourseBriefReportTest {
                 courseObjects = info.courseObjects.map { it.copy(elevationMeters = null) })
         } }
         val report = DesktopCourseBriefReports.build(project, infos).first()
+        assertNull(report.elevationProfile)
         assertNull(report.climbMeters)
         assertNull(report.effectiveLengthMeters)
         assertNotNull(report.horizontalLengthMeters)

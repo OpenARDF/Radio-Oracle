@@ -55,11 +55,15 @@ internal fun DesktopCategoryCourseAssignment(project: EventProjectFile, isUnlock
 
 @Composable
 internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
-    onUnlock: (String) -> Boolean, onEdit: (DesktopCourseLibraryEdit) -> String?) {
+    onUnlock: (String) -> Boolean, onEdit: (DesktopCourseLibraryEdit) -> String?,
+    courseInfos: Map<String, ProtectedCourseInfo> = emptyMap(),
+    idealOrders: Map<String, String> = emptyMap()) {
     var password by remember(project.raceData.race.id) { mutableStateOf("") }
     var selectedId by remember(project.raceData.race.id) { mutableStateOf<String?>(null) }
     var deletingId by remember(project.raceData.race.id) { mutableStateOf<String?>(null) }
     var message by remember(project.raceData.race.id) { mutableStateOf<String?>(null) }
+    val reports = courseReports(project, courseInfos, idealOrders, includeUnassigned = true)
+    val reportsById = reports?.associateBy { it.categoryId }.orEmpty()
     val unassigned = project.raceData.courseMappings.sortedWith(EventCategorySort.byDisplayName)
     val locked = project.hasEncryptedCategoryData() && !isUnlocked
     val restriction = DesktopCourseLibrary.disabledReason(project)
@@ -73,6 +77,7 @@ internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
             TextButton(onClick = { if (onUnlock(password)) password = "" else message = "Unable to unlock course data. Check the Race Password." }) { Text("Unlock course data") }
         }
+        Text("Reports use the current control labels and Course Analyzer speed settings. Times are estimates.")
         Text("Unassigned courses (${unassigned.size})", style = MaterialTheme.typography.subtitle1)
         if (unassigned.isEmpty()) Text("No unassigned courses.")
         unassigned.forEach { course ->
@@ -91,13 +96,22 @@ internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
                                 modifier = Modifier.testTag("delete-course-${course.category.id}")) { Text("Delete course…") }
                         }
                     }
+                    reportsById[course.category.id]?.let { CourseBriefReportSection(it, showHeading = false) }
+                    if (reports == null) Text("Calculating course report…")
                 }
             }
         }
         Text("Category courses (${project.raceData.categories.size})", style = MaterialTheme.typography.subtitle1)
         if (project.raceData.categories.isEmpty()) Text("No categories yet. Assign a course above or add a category in Setup → Categories.")
         project.raceData.categories.sortedWith(EventCategorySort.byDisplayName).forEach { data ->
-            Text("${data.category.name} — ${data.controlPoints.size} assigned controls")
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(data.category.name, style = MaterialTheme.typography.h6)
+                    Text("${data.controlPoints.size} assigned controls")
+                    reportsById[data.category.id]?.let { CourseBriefReportSection(it, showHeading = false) }
+                    if (reports == null) Text("Calculating course report…")
+                }
+            }
         }
     }
     unassigned.singleOrNull { it.category.id == selectedId }?.let { source ->

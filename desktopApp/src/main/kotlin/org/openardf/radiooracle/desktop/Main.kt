@@ -13949,7 +13949,8 @@ private fun SectionWorkspace(
         }
         if (section == DesktopSection.Courses && projectFile != null) {
             DesktopCoursesPanel(projectFile, isProtectedCourseOrderUnlocked,
-                onUnlockProtectedCourseOrder, onCourseLibraryEdit)
+                onUnlockProtectedCourseOrder, onCourseLibraryEdit,
+                protectedCourseInfoByCategoryId, protectedIdealOrderByCategoryId)
         }
         if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
             ControlsRouteKmlImportPanel(onSelectFile = onImportControlsRouteKmlKmz,
@@ -21973,107 +21974,6 @@ private fun CourseAnalysisProfileComparison(
 }
 
 @Composable
-private fun CourseAnalysisElevationProfile(
-    title: String,
-    profile: List<DesktopCourseElevationProfilePoint>,
-    markers: List<DesktopCourseElevationProfileMarker>,
-    modifier: Modifier = Modifier.width(620.dp)
-) {
-    if (profile.isEmpty()) {
-        return
-    }
-    val minElevation = profile.minOf { it.elevationMeters }
-    val maxElevation = profile.maxOf { it.elevationMeters }
-    val totalDistanceMeters = profile.lastOrNull()?.distanceMeters ?: 0
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = title,
-            color = DesktopPalette.Black,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "0.00 km to ${twoDecimalText(totalDistanceMeters / 1000.0)} km, " +
-                "${minElevation.roundToInt()} m to ${maxElevation.roundToInt()} m",
-            color = DesktopPalette.Black,
-            fontSize = 13.sp
-        )
-        Canvas(
-            modifier = Modifier
-                .then(modifier)
-                .height(180.dp)
-                .border(1.dp, DesktopPalette.LightGrey)
-                .padding(8.dp)
-        ) {
-            val leftPadding = 36f
-            val rightPadding = 10f
-            val topPadding = 12f
-            val bottomPadding = 24f
-            val chartWidth = size.width - leftPadding - rightPadding
-            val chartHeight = size.height - topPadding - bottomPadding
-            if (chartWidth <= 0f || chartHeight <= 0f) {
-                return@Canvas
-            }
-            val elevationRange = max(1.0, maxElevation - minElevation)
-            val distanceRange = max(1.0, totalDistanceMeters.toDouble())
-            fun xFor(distanceMeters: Int): Float =
-                leftPadding + (distanceMeters / distanceRange).toFloat() * chartWidth
-            fun yFor(elevationMeters: Double): Float =
-                topPadding + ((maxElevation - elevationMeters) / elevationRange).toFloat() * chartHeight
-
-            repeat(4) { index ->
-                val fraction = index / 3f
-                val y = topPadding + fraction * chartHeight
-                drawLine(
-                    color = DesktopPalette.LightGrey,
-                    start = Offset(leftPadding, y),
-                    end = Offset(leftPadding + chartWidth, y),
-                    strokeWidth = 1f
-                )
-            }
-            drawLine(
-                color = DesktopPalette.Disconnected,
-                start = Offset(leftPadding, topPadding),
-                end = Offset(leftPadding, topPadding + chartHeight),
-                strokeWidth = 1.5f
-            )
-            drawLine(
-                color = DesktopPalette.Disconnected,
-                start = Offset(leftPadding, topPadding + chartHeight),
-                end = Offset(leftPadding + chartWidth, topPadding + chartHeight),
-                strokeWidth = 1.5f
-            )
-            profile.zipWithNext().forEach { (start, end) ->
-                drawLine(
-                    color = DesktopPalette.Primary,
-                    start = Offset(xFor(start.distanceMeters), yFor(start.elevationMeters)),
-                    end = Offset(xFor(end.distanceMeters), yFor(end.elevationMeters)),
-                    strokeWidth = 3f
-                )
-            }
-            markers.forEach { marker ->
-                drawCircle(
-                    color = DesktopPalette.Warning,
-                    radius = 4.5f,
-                    center = Offset(xFor(marker.distanceMeters), yFor(marker.elevationMeters))
-                )
-            }
-        }
-        val markerText = markers.takeIf { it.isNotEmpty() }
-            ?.joinToString("  ") { "${it.label} ${twoDecimalText(it.distanceMeters / 1000.0)} km" }
-        markerText?.let {
-            Text(
-                text = it,
-                color = DesktopPalette.Black,
-                fontSize = 11.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
 private fun CourseAnalysisRouteMaps(routeMaps: List<DesktopCourseRouteMap>) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -22498,7 +22398,7 @@ private fun compactSecondsText(value: Int): String {
     }
 }
 
-private fun twoDecimalText(value: Double): String =
+internal fun twoDecimalText(value: Double): String =
     (value * 100.0).roundToInt().let { "${it / 100}.${(abs(it % 100)).toString().padStart(2, '0')}" }
 
 @Composable

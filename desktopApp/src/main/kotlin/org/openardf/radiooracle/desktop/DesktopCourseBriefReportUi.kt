@@ -22,15 +22,7 @@ internal fun ActiveCourseReports(
     idealOrders: Map<String, String>,
     onUnlock: () -> Unit
 ) {
-    val reports by produceState<List<DesktopCourseBriefReport>?>(null, project, courseInfos, idealOrders) {
-        value = null
-        value = withContext(Dispatchers.Default) {
-            val context = currentCoroutineContext()
-            DesktopCourseBriefReports.build(project, courseInfos, idealOrders,
-                elevationLookup = DesktopVenueElevationCache::elevationMeters,
-                checkCancelled = { context.ensureActive() })
-        }
-    }
+    val reports = courseReports(project, courseInfos, idealOrders)
     val ready = reports
     if (ready == null) Text("Calculating active course reports…")
     else if (ready.isEmpty()) Text("No active courses. Activate a category for this race to include its course here.")
@@ -41,12 +33,36 @@ internal fun ActiveCourseReports(
     }
 }
 
+/** Shared asynchronous, cancelable report calculation for both report entry points. */
 @Composable
-internal fun CourseBriefReportSection(report: DesktopCourseBriefReport, importedRoute: Boolean = false) {
+internal fun courseReports(
+    project: EventProjectFile,
+    courseInfos: Map<String, ProtectedCourseInfo>,
+    idealOrders: Map<String, String>,
+    includeUnassigned: Boolean = false
+): List<DesktopCourseBriefReport>? = key(project, courseInfos, idealOrders, includeUnassigned) {
+    // Reset immediately when the course or protection state changes; never show a stale unlocked report.
+    val reports by produceState<List<DesktopCourseBriefReport>?>(null) {
+        value = null
+        value = withContext(Dispatchers.Default) {
+            val context = currentCoroutineContext()
+            DesktopCourseBriefReports.build(project, courseInfos, idealOrders,
+                elevationLookup = DesktopVenueElevationCache::elevationMeters,
+                checkCancelled = { context.ensureActive() }, includeUnassigned = includeUnassigned)
+        }
+    }
+    reports
+}
+
+@Composable
+internal fun CourseBriefReportSection(report: DesktopCourseBriefReport, importedRoute: Boolean = false,
+    showHeading: Boolean = true) {
     Column(Modifier.fillMaxWidth().testTag("course-report-${report.categoryId}"),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Divider()
-        Text(report.courseName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.h6)
+        if (showHeading) {
+            Divider()
+            Text(report.courseName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.h6)
+        }
         Text("Horizontal length: ${DesktopCourseAnalyzer.summaryLengthText(report.horizontalLengthMeters)}")
         Text("Total climb: ${DesktopCourseAnalyzer.summaryClimbText(report.climbMeters)}")
         Text("Effective length: ${DesktopCourseAnalyzer.summaryLengthText(report.effectiveLengthMeters)}")
@@ -57,11 +73,33 @@ internal fun CourseBriefReportSection(report: DesktopCourseBriefReport, imported
         }
         report.legWarnings.forEach { Text(it, color = DesktopPalette.Warning) }
         report.notice?.let { Text(it, color = DesktopPalette.Disconnected) }
-        report.routeMap?.let { map ->
-            // Leave room for the existing map renderer's scale labels below the map frame.
-            Box(Modifier.padding(bottom = 24.dp)) {
-                CourseAnalysisRouteMap(map, mapWidth = 420.dp, mapHeight = 260.dp, showWaypointLabels = true)
-            }
-        } ?: Text("Course graphic unavailable.")
+        CourseBriefReportGraphics(report)
+    }
+}
+
+@Composable
+private fun CourseBriefReportGraphics(report: DesktopCourseBriefReport) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val sideBySide = maxWidth >= 620.dp && report.routeMap != null && report.elevationProfile != null
+        val width = if (sideBySide) minOf((maxWidth - 16.dp) / 2, 360.dp) else minOf(maxWidth, 420.dp)
+        val map: @Composable () -> Unit = {
+            report.routeMap?.let {
+                // The shared map renderer places scale labels below its frame.
+                Box(Modifier.width(width).padding(bottom = 24.dp).testTag("course-report-map-${report.categoryId}")) {
+                    CourseAnalysisRouteMap(it, mapWidth = width, mapHeight = 200.dp, showWaypointLabels = true)
+                }
+            } ?: Text("Course graphic unavailable.")
+        }
+        val profile: @Composable () -> Unit = {
+            report.elevationProfile?.let {
+                CourseAnalysisElevationProfile(it.title, it.profile, it.markers,
+                    Modifier.width(width).testTag("course-report-profile-${report.categoryId}"),
+                    chartHeight = 200.dp, markerMaxLines = Int.MAX_VALUE)
+            } ?: Text("Elevation profile unavailable: route elevation data is incomplete.")
+        }
+        if (sideBySide) Row(Modifier.testTag("course-report-graphics-row-${report.categoryId}"),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)) { map(); profile() }
+        else Column(Modifier.testTag("course-report-graphics-column-${report.categoryId}"),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) { map(); profile() }
     }
 }

@@ -18,7 +18,8 @@ internal data class DesktopCourseBriefReport(
     val notice: String? = null,
     val isLocked: Boolean = false,
     val legWarnings: List<String> = emptyList(),
-    val assumedPaceMinutesPerKm: Double? = null
+    val assumedPaceMinutesPerKm: Double? = null,
+    val elevationProfile: DesktopCourseElevationProfileSummary? = null
 )
 
 /** A read-only summary of active courses, independent of the CSV's control-set grouping. */
@@ -35,8 +36,10 @@ internal object DesktopCourseBriefReports {
         courseInfos: Map<String, ProtectedCourseInfo>,
         idealOrders: Map<String, String> = emptyMap(),
         elevationLookup: (CourseGeoPoint) -> Double? = { null },
-        checkCancelled: () -> Unit = {}
-    ): List<DesktopCourseBriefReport> = project.raceData.categories.sortedBy { it.category.order }.map { data ->
+        checkCancelled: () -> Unit = {},
+        includeUnassigned: Boolean = false
+    ): List<DesktopCourseBriefReport> = (project.raceData.categories +
+        if (includeUnassigned) project.raceData.courseMappings else emptyList()).sortedBy { it.category.order }.map { data ->
         checkCancelled()
         val category = data.category
         val info = courseInfos[category.id] ?: category.courseInfo.takeIf { category.encryptedCourseInfo == null }
@@ -101,7 +104,10 @@ internal object DesktopCourseBriefReports {
                     else -> null
                 },
                 legWarnings = if (reviewedIof) DesktopIofCourseAnalysis.legWarnings(info) else emptyList(),
-                assumedPaceMinutesPerKm = 1000.0 / (60.0 * summary.speedModel.effectiveSpeedMetersPerSecond)
+                assumedPaceMinutesPerKm = 1000.0 / (60.0 * summary.speedModel.effectiveSpeedMetersPerSecond),
+                elevationProfile = section.elevationProfile.takeIf { it.isNotEmpty() }?.let {
+                    DesktopCourseElevationProfileSummary("Elevation profile", it, section.elevationMarkers)
+                }
             )
         } catch (error: Exception) {
             if (error is CancellationException) throw error
