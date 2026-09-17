@@ -979,7 +979,7 @@ class DesktopNavigationTest {
         val competitorItems = setupItems.first { it.label == "Competitors" }.children
 
         assertEquals(
-            listOf("Controls", "Elevation Data", "Import", "Export"),
+            listOf("Controls", "Elevation Data", "Import", "Export", "Course Tools"),
             controlItems.map { it.label }
         )
         assertEquals(
@@ -1108,15 +1108,21 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun setupToolsOwnCourseToolsAndCourseAnalyzer() {
+    fun setupCoursesOwnCourseToolsAndCourseAnalyzer() {
         val tools = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "More..." }
-        val courseTools = tools.children.first { it.label == "Course Tools" }
+        val courses = DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Courses" }
+        val courseTools = courses.children.first { it.label == "Course Tools" }
         val courseAnalyzer = courseTools.children.first { it.label == "Course Analyzer" }
 
         assertEquals(DesktopSection.Tools, tools.section)
         assertEquals(DesktopSection.KmlTools, courseTools.section)
         assertFalse(tools.requiresEventFile)
         assertFalse(courseTools.requiresEventFile)
+        val coursesState = DesktopNavState().enter(courses)
+        assertTrue(DesktopNavigation.usesToolsNavigationColor(coursesState, courseTools))
+        val courseToolsState = coursesState.enter(courseTools)
+        assertTrue(courseTools.children.all { DesktopNavigation.usesToolsNavigationColor(courseToolsState, it) })
+        assertFalse(DesktopNavigation.usesToolsNavigationColor(coursesState, courses.children.first { it.label == "Export" }))
         assertEquals(
             listOf(
                 "Course Analyzer",
@@ -1129,7 +1135,7 @@ class DesktopNavigationTest {
             courseTools.children.map { it.label }
         )
         assertEquals(
-            listOf("Race Validator", "Course Tools", "SPORTident", "Send Diagnostic Logs...", "About"),
+            listOf("Race Validator", "SPORTident", "Send Diagnostic Logs...", "About"),
             tools.children.map { it.label }
         )
         val about = tools.children.first { it.label == "About" }
@@ -1143,14 +1149,14 @@ class DesktopNavigationTest {
             courseAnalyzer.children.map { it.label }
         )
         val courseAnalyzerState = DesktopNavState()
-            .enter(tools)
+            .enter(courses)
             .enter(courseTools)
             .enter(courseAnalyzer)
         assertEquals(
             listOf(
-                "setup.tools",
-                "setup.tools.course-tools",
-                "setup.tools.course-tools.course-analysis"
+                "setup.courses",
+                "setup.courses.course-tools",
+                "setup.courses.course-tools.course-analysis"
             ),
             courseAnalyzerState.submenuStack
         )

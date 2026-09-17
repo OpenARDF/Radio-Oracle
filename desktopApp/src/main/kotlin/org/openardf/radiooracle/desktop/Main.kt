@@ -9974,7 +9974,7 @@ private fun CourseAnalysisEntryDirtyEventDialog(
             }
         },
         dismissButton = {
-            DisabledReasonTooltip("Do not enter Course Analyzer. Return to Setup > More... > Course Tools with the current Race File changes still in memory.") {
+            DisabledReasonTooltip("Do not enter Course Analyzer. Return to Setup > Courses > Course Tools with the current Race File changes still in memory.") {
                 Button(onClick = onCancel) {
                     Text("Cancel")
                 }
@@ -10944,9 +10944,9 @@ private sealed interface DesktopPendingNavigation {
 private fun courseToolsMenuNavState(): DesktopNavState =
     DesktopNavState(
         workflow = DesktopWorkflow.Setup,
-        submenuStack = listOf("setup.tools", "setup.tools.course-tools"),
-        selectedSection = DesktopSection.Tools,
-        selectedItemId = "setup.tools.course-tools"
+        submenuStack = listOf("setup.courses", "setup.courses.course-tools"),
+        selectedSection = DesktopSection.KmlTools,
+        selectedItemId = "setup.courses.course-tools"
     )
 
 private data class BypassedDisabledNavigation(

@@ -45,9 +45,9 @@ class DesktopCsvFormatGuidesTest {
     }
 
     @Test fun mixedFormatGuidesFollowTheirActualMenuActions() {
-        for (id in listOf("setup.controls.import", "setup.controls.export", "setup.tools.course-tools.course-analysis")) {
+        for (id in listOf("setup.controls.import", "setup.controls.export", "setup.courses.course-tools.course-analysis")) {
             val state = DesktopNavState(submenuStack = if (id.startsWith("setup.controls")) listOf("setup.courses", id)
-                else listOf("setup.tools", "setup.tools.course-tools", id), selectedItemId = id)
+                else listOf("setup.courses", "setup.courses.course-tools", id), selectedItemId = id)
             val menuActions = DesktopNavigation.menuItemsForStack(state.workflow, state.submenuStack).mapNotNull { it.action }
             val expected = menuActions.filter { DesktopCsvFormatGuides.supports(it) || DesktopFileFormatGuides.kmlForAction(it) != null }
             val guides = DesktopFileFormatGuides.forNavigation(state, null, false, EventAwardDisplayMode.FIRST_TO_THIRD)

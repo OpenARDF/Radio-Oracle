@@ -312,6 +312,7 @@ data class DesktopNavState(
 object DesktopNavigation {
     private const val EventSeriesSettingsMenuId = "setup.event-file.series-settings"
     private const val ToolsMenuId = "setup.tools"
+    private const val CourseToolsMenuId = "setup.courses.course-tools"
 
     val roots: Map<DesktopWorkflow, List<DesktopNavItem>> =
         DesktopWorkflow.entries.associateWith(::rootItems)
@@ -435,6 +436,69 @@ object DesktopNavigation {
                                 )
                             ),
                             DesktopSection.ControlsImportExport
+                        ),
+                        group(
+                            "setup.courses.course-tools",
+                            "Course Tools",
+                            workflow,
+                            listOf(
+                                group(
+                                    "setup.courses.course-tools.course-analysis",
+                                    "Course Analyzer",
+                                    workflow,
+                                    listOf(
+                                        action(
+                                            "setup.courses.course-tools.course-analysis.import-kml-kmz",
+                                            "Import Course KML/KMZ...",
+                                            workflow,
+                                            DesktopNavAction.ImportCourseKmlKmz
+                                        ),
+                                        action(
+                                            "setup.courses.course-tools.course-analysis.import-gpx",
+                                            "Import Course GPX...",
+                                            workflow,
+                                            DesktopNavAction.ImportCourseGpx
+                                        )
+                                    ),
+                                    DesktopSection.CourseAnalysis
+                                ),
+                                item(
+                                    "setup.courses.course-tools.course-report",
+                                    "Course Report",
+                                    workflow,
+                                    DesktopSection.CourseReport
+                                ),
+                                item(
+                                    "setup.courses.course-tools.move-course",
+                                    "Move Course",
+                                    workflow,
+                                    DesktopSection.KmlMoveCourse,
+                                    requiresEventFile = false
+                                ),
+                                item(
+                                    "setup.courses.course-tools.create-course",
+                                    "Create Course",
+                                    workflow,
+                                    DesktopSection.KmlCreateCourse,
+                                    requiresEventFile = false
+                                ),
+                                item(
+                                    "setup.courses.course-tools.2d-graphic",
+                                    "2D Graphic",
+                                    workflow,
+                                    DesktopSection.Kml2dGraphic,
+                                    requiresEventFile = false
+                                ),
+                                item(
+                                    "setup.courses.course-tools.route-generator",
+                                    "Route Generator",
+                                    workflow,
+                                    DesktopSection.KmlRouteGenerator,
+                                    requiresEventFile = false
+                                )
+                            ),
+                            DesktopSection.KmlTools,
+                            requiresEventFile = false
                         ),
                     ),
                     DesktopSection.Courses
@@ -618,69 +682,6 @@ object DesktopNavigation {
                             "Race Validator",
                             workflow,
                             DesktopSection.EventValidator
-                        ),
-                        group(
-                            "setup.tools.course-tools",
-                            "Course Tools",
-                            workflow,
-                            listOf(
-                                group(
-                                    "setup.tools.course-tools.course-analysis",
-                                    "Course Analyzer",
-                                    workflow,
-                                    listOf(
-                                        action(
-                                            "setup.tools.course-tools.course-analysis.import-kml-kmz",
-                                            "Import Course KML/KMZ...",
-                                            workflow,
-                                            DesktopNavAction.ImportCourseKmlKmz
-                                        ),
-                                        action(
-                                            "setup.tools.course-tools.course-analysis.import-gpx",
-                                            "Import Course GPX...",
-                                            workflow,
-                                            DesktopNavAction.ImportCourseGpx
-                                        )
-                                    ),
-                                    DesktopSection.CourseAnalysis
-                                ),
-                                item(
-                                    "setup.tools.course-tools.course-report",
-                                    "Course Report",
-                                    workflow,
-                                    DesktopSection.CourseReport
-                                ),
-                                item(
-                                    "setup.tools.course-tools.move-course",
-                                    "Move Course",
-                                    workflow,
-                                    DesktopSection.KmlMoveCourse,
-                                    requiresEventFile = false
-                                ),
-                                item(
-                                    "setup.tools.course-tools.create-course",
-                                    "Create Course",
-                                    workflow,
-                                    DesktopSection.KmlCreateCourse,
-                                    requiresEventFile = false
-                                ),
-                                item(
-                                    "setup.tools.course-tools.2d-graphic",
-                                    "2D Graphic",
-                                    workflow,
-                                    DesktopSection.Kml2dGraphic,
-                                    requiresEventFile = false
-                                ),
-                                item(
-                                    "setup.tools.course-tools.route-generator",
-                                    "Route Generator",
-                                    workflow,
-                                    DesktopSection.KmlRouteGenerator,
-                                    requiresEventFile = false
-                                )
-                            ),
-                            DesktopSection.KmlTools,
-                            requiresEventFile = false
                         ),
                         group(
                             "setup.tools.sportident",
@@ -1011,7 +1012,12 @@ object DesktopNavigation {
     fun usesToolsNavigationColor(state: DesktopNavState, item: DesktopNavItem): Boolean =
         item.id == ToolsMenuId ||
             item.id.startsWith("$ToolsMenuId.") ||
-            state.submenuStack.any { it == ToolsMenuId || it.startsWith("$ToolsMenuId.") }
+            item.id == CourseToolsMenuId ||
+            item.id.startsWith("$CourseToolsMenuId.") ||
+            state.submenuStack.any {
+                it == ToolsMenuId || it.startsWith("$ToolsMenuId.") ||
+                    it == CourseToolsMenuId || it.startsWith("$CourseToolsMenuId.")
+            }
 
     fun menuItemsForStack(workflow: DesktopWorkflow, submenuStack: List<String>): List<DesktopNavItem> =
         submenuStack.fold(roots.getValue(workflow)) { items, id ->
@@ -1469,7 +1475,7 @@ object DesktopNavigation {
             "Use Race Validator to check whether the current Race File is internally consistent before race-day workflows.",
         "setup.tools.about" to
             "Use About to view the app version, build date, platform, project, license, and update information.",
-        "setup.tools.course-tools" to
+        "setup.courses.course-tools" to
             "Use Course Tools to analyze or modify course-related files and course data.",
         "setup.tools.sportident" to
             "Use SPORTident tools for station preparation tasks that are not tied to one Race File.",
@@ -1477,21 +1483,21 @@ object DesktopNavigation {
             "Use Punch History to read and search a coupled field station's stored SI-Card visits without changing it.",
         "setup.tools.sportident.time-sync" to
             "Use Time Sync to inspect the attached SPORTident station before station-clock synchronization.",
-        "setup.tools.course-tools.course-analysis" to
+        "setup.courses.course-tools.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
-        "setup.tools.course-tools.course-report" to
+        "setup.courses.course-tools.course-report" to
             "Use Course Report to view each active course’s length, climb, effective length, ideal order, estimated time, 2D graphic, and elevation profile with control markers, or export the existing CSV of unique control sets.",
-        "setup.tools.course-tools.course-analysis.import-kml-kmz" to
+        "setup.courses.course-tools.course-analysis.import-kml-kmz" to
             "Use Import Course KML/KMZ to bring in control placemarks and required category route lines for course analysis and category course assignments.",
-        "setup.tools.course-tools.course-analysis.import-gpx" to
+        "setup.courses.course-tools.course-analysis.import-gpx" to
             "Use Import Course GPX to bring in control waypoints and required category routes or tracks for course analysis and category course assignments.",
-        "setup.tools.course-tools.move-course" to
+        "setup.courses.course-tools.move-course" to
             "Use Move Course to create a translated KML/KMZ copy where the Start point is moved to a new latitude and longitude and all other coordinates move by the same offset.",
-        "setup.tools.course-tools.create-course" to
+        "setup.courses.course-tools.create-course" to
             "Use Create Course to write a starter KML for a Classic, Sprint, or Foxoring course near a supplied latitude and longitude.",
-        "setup.tools.course-tools.2d-graphic" to
+        "setup.courses.course-tools.2d-graphic" to
             "Use 2D Graphic to turn visible KML/KMZ points and LineStrings into magnetic-north oriented PNG, JPG, and PDF course graphics.",
-        "setup.tools.course-tools.route-generator" to
+        "setup.courses.course-tools.route-generator" to
             "Use Route Generator to read a KML/KMZ course-points file, identify or choose Classic, Foxoring, or Sprint, and list ideal route combinations with category matches.",
         "race.readouts" to
             "Use Readouts to download, review, match, edit, remove, print, and manually add SI-card readouts during race operations.",
