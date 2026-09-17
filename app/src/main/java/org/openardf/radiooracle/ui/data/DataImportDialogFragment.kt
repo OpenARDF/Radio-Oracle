@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.ui.data
 
+import kotlinx.coroutines.launch
 import android.app.Activity
 import android.content.Intent
 import android.content.res.Resources
@@ -37,6 +38,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.RecyclerView
@@ -67,6 +69,28 @@ class DataImportDialogFragment : DialogFragment() {
     private lateinit var importButton: Button
     private lateinit var okButton: Button
     private lateinit var cancelButton: Button
+    private lateinit var csvFormatPanel: CsvFormatPanel
+    private var pendingCsvTemplate: org.openardf.radiooracle.shared.files.CsvFormatGuide? = null
+    private val createCsvTemplate = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        val guide = pendingCsvTemplate
+        pendingCsvTemplate = null
+        if (uri != null && guide != null) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                runCatching {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(guide.template) }
+                            ?: error("Could not open template file")
+                    }
+                }.onSuccess {
+                    android.widget.Toast.makeText(requireContext(), "Saved header-only template; add your data rows before importing.", android.widget.Toast.LENGTH_LONG).show()
+                }.onFailure {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
+                    errorView.text = it.message ?: "Could not save CSV template"
+                }
+            }
+        }
+    }
+
 
     private val getResult = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -112,6 +136,7 @@ class DataImportDialogFragment : DialogFragment() {
         errorView = view.findViewById(R.id.data_import_error)
         okButton = view.findViewById(R.id.data_import_ok)
         cancelButton = view.findViewById(R.id.data_import_cancel)
+        csvFormatPanel = view.findViewById(R.id.csv_format_panel)
 
         dataTypePicker.setText(getString(R.string.data_type_categories), false)
 
@@ -131,9 +156,12 @@ class DataImportDialogFragment : DialogFragment() {
             resources.getStringArray(items).firstOrNull()?.let { firstFormat ->
                 dataFormatPicker.setText(firstFormat, false)
             }
+            updateCsvFormatGuide()
         }
 
         dataFormatPicker.setText(getString(R.string.data_format_csv), false)
+        dataFormatPicker.setOnItemClickListener { _, _, _, _ -> updateCsvFormatGuide() }
+        updateCsvFormatGuide()
 
         importButton.setOnClickListener {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -149,6 +177,19 @@ class DataImportDialogFragment : DialogFragment() {
 
         cancelButton.setOnClickListener {
             dialog?.cancel()
+        }
+    }
+
+    private fun updateCsvFormatGuide() {
+        val guide = if (getCurrentFormat() != DataFormat.CSV) null else when (getCurrentType()) {
+            DataType.CATEGORIES -> org.openardf.radiooracle.shared.files.CsvFormatGuides.categories(true)
+            DataType.COMPETITORS -> org.openardf.radiooracle.shared.files.CsvFormatGuides.competitors(true)
+            DataType.COMPETITOR_STARTS -> org.openardf.radiooracle.shared.files.CsvFormatGuides.starts(true)
+            else -> null
+        }
+        csvFormatPanel.showGuide(guide) { selected ->
+            pendingCsvTemplate = selected
+            createCsvTemplate.launch("${selected.id}-template.csv")
         }
     }
 

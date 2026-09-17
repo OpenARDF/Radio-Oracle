@@ -106,10 +106,11 @@ object EventCsvRows {
                 "${categoryName.legacyCsvField()};\"\";${(startTimeText ?: "").legacyCsvField()};" +
                 "${competitor.index.legacyCsvField()};\"\";\"CZE\";${(competitor.siNumber ?: "").toString().legacyCsvField()}"
 
-    fun readoutHeader(punchColumnCount: Int): String = CsvCodec.row(
+    fun readoutColumns(punchColumnCount: Int): List<String> =
         listOf("si_number", "check_time", "start_time", "finish_time", "control_count") +
             (1..punchColumnCount).flatMap { listOf("control_${it}_code", "control_${it}_time") }
-    )
+
+    fun readoutHeader(punchColumnCount: Int): String = CsvCodec.row(readoutColumns(punchColumnCount))
 
     /** Formats one raw punch row for readout debugging/export. */
     fun punchRow(cardNumber: Int?, siCode: Int, timeText: String): String {

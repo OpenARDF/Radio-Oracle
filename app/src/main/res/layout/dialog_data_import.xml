@@ -95,6 +95,13 @@
 
         </LinearLayout>
 
+        <org.openardf.radiooracle.ui.data.CsvFormatPanel
+            android:id="@+id/csv_format_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/data_import_format_layout" />
+
         <Button
             android:id="@+id/data_import_import_btn"
             android:layout_width="wrap_content"
@@ -102,7 +109,7 @@
             android:layout_marginEnd="8dp"
             android:text="@string/data_import"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/data_import_format_layout" />
+            app:layout_constraintTop_toBottomOf="@id/csv_format_panel" />
 
         <LinearLayout
             android:id="@+id/linearLayout"

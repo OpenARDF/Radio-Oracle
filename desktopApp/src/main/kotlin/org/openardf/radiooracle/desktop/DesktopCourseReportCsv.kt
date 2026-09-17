@@ -43,6 +43,9 @@ data class DesktopCourseReportRow(
 )
 
 object DesktopCourseReportCsv {
+    fun columns(controlColumnCount: Int): List<String> =
+        listOf("Course", "km", "m") + (1..controlColumnCount).map { "C$it" }
+
     fun rows(
         projectFile: EventProjectFile,
         protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap()
@@ -117,12 +120,7 @@ object DesktopCourseReportCsv {
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
         )
         val controlColumnCount = rows.maxOfOrNull { it.siControlCodes.size } ?: 0
-        val header = buildList {
-            add("Course")
-            add("km")
-            add("m")
-            repeat(controlColumnCount) { index -> add("C${index + 1}") }
-        }
+        val header = columns(controlColumnCount)
         return buildList {
             add(header.toCsvLine())
             rows.forEach { row ->

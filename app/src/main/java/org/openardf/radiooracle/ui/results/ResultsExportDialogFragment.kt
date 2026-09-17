@@ -35,6 +35,11 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
+import org.openardf.radiooracle.backend.shared.toEventReadoutData
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -54,6 +59,8 @@ class ResultsExportDialogFragment : DialogFragment() {
     private lateinit var errorText: TextView
     private lateinit var exportButton: Button
     private lateinit var cancelButton: Button
+    private lateinit var csvFormatPanel: org.openardf.radiooracle.ui.data.CsvFormatPanel
+    private var csvGuideJob: kotlinx.coroutines.Job? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -87,6 +94,7 @@ class ResultsExportDialogFragment : DialogFragment() {
 
         exportButton = view.findViewById(R.id.results_file_export_button)
         cancelButton = view.findViewById(R.id.results_file_cancel)
+        csvFormatPanel = view.findViewById(R.id.csv_format_panel)
 
         setButtons()
     }
@@ -113,7 +121,11 @@ class ResultsExportDialogFragment : DialogFragment() {
                     //safeguard against unsupported types
                 }
             }
+            updateCsvFormatGuide()
         }
+
+        dataFormatPicker.setOnItemClickListener { _, _, _, _ -> updateCsvFormatGuide() }
+        updateCsvFormatGuide()
 
         exportButton.setOnClickListener {
             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
@@ -162,6 +174,28 @@ class ResultsExportDialogFragment : DialogFragment() {
                 intent.type = "text/html"
                 intent.putExtra(Intent.EXTRA_TITLE, "results.html")
             }
+        }
+    }
+
+    private fun updateCsvFormatGuide() {
+        csvGuideJob?.cancel()
+        csvFormatPanel.showGuide(null)
+        if (getCurrentFormat() != DataFormat.CSV) return
+        val type = getCurrentType()
+        val race = selectedRaceViewModel.getCurrentRace() ?: return
+        csvGuideJob = viewLifecycleOwner.lifecycleScope.launch {
+            val guide = runCatching {
+                if (type == DataType.READOUT_DATA) {
+                    val readouts = dataProcessor.getResultDataFlowByRace(race.id).first().map { it.toEventReadoutData() }
+                    org.openardf.radiooracle.shared.files.CsvFormatGuides.readouts(
+                        org.openardf.radiooracle.shared.files.EventCsvExports.readoutPunchColumnCount(readouts))
+                } else org.openardf.radiooracle.shared.files.CsvFormatGuides.splits()
+            }.getOrElse {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                errorText.text = "Could not show CSV format: ${it.message}"
+                null
+            }
+            if (isActive) csvFormatPanel.showGuide(guide)
         }
     }
 

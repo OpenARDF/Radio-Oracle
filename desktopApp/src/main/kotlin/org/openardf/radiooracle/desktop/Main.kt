@@ -7412,6 +7412,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }) {
         RadioOManagerDesktopApp(
             projectFile = projectFile,
+            csvExportProjectFile = classicRouteAnalysis.exportSnapshot,
             eventFilePath = projectSession.currentPath,
             eventFileWorkingFolder = currentEventFileWorkingFolder(),
             eventSeriesUiContext = eventSeriesUiContext,
@@ -12007,6 +12008,12 @@ private fun updateCompetitorIdentityOrRental(
         )
     }
 
+/** Preview entry point using the production shell and navigation with caller-owned file actions. */
+@Composable
+internal fun DesktopAppShellPreview(projectFile: EventProjectFile?, onNavAction: (DesktopNavAction) -> Unit) {
+    RadioOManagerDesktopApp(projectFile = projectFile, isNavActionEnabled = { true }, onNavAction = onNavAction)
+}
+
 /**
  * Builds the launchable desktop app shell.
  *
@@ -12017,6 +12024,7 @@ private fun updateCompetitorIdentityOrRental(
 @Composable
 private fun RadioOManagerDesktopApp(
     projectFile: EventProjectFile? = null,
+    csvExportProjectFile: EventProjectFile? = null,
     eventFilePath: Path? = null,
     eventFileWorkingFolder: Path = DesktopEventFileLocations.preferredEventFileDirectory(),
     eventSeriesUiContext: EventSeriesUiContext? = null,
@@ -12249,7 +12257,7 @@ private fun RadioOManagerDesktopApp(
                 onLockProtectedCourseOrder()
             }
             var appliedState = nextState
-            action?.let {
+            action?.takeUnless(DesktopCsvFormatGuides::supports)?.let {
                 val changedResultCount = if (it == DesktopNavAction.RecalculateResults) {
                     onRecalculateResults()
                 } else {
@@ -12363,6 +12371,11 @@ private fun RadioOManagerDesktopApp(
                                     breadcrumb = DesktopNavigation.breadcrumbStates(navState).map { it.first },
                                     onBreadcrumbClick = { requestNavigation(DesktopPendingNavigation.Ancestor(it)) },
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
+                                    csvAction = DesktopCsvFormatGuides.selectedAction(navState),
+                                    csvGuides = remember(navState, projectFile, csvExportProjectFile, isProtectedCourseOrderUnlocked, awardDisplayMode) {
+                                        DesktopCsvFormatGuides.forNavigation(navState, csvExportProjectFile ?: projectFile,
+                                            isProtectedCourseOrderUnlocked, awardDisplayMode)
+                                    },
                 projectFile = projectFile,
                 eventFilePath = eventFilePath,
                 eventFileWorkingFolder = eventFileWorkingFolder,
@@ -13636,6 +13649,8 @@ private fun SectionWorkspace(
     breadcrumb: List<String>,
     onBreadcrumbClick: (Int) -> Unit,
     menuDescription: String,
+    csvGuides: List<org.openardf.radiooracle.shared.files.CsvFormatGuide>,
+    csvAction: DesktopNavAction?,
     projectFile: EventProjectFile?,
     eventFilePath: Path?,
     eventFileWorkingFolder: Path,
@@ -13770,6 +13785,17 @@ private fun SectionWorkspace(
             title = title,
             menuDescription = menuDescription
         )
+        csvGuides.forEach { DesktopCsvFormatPanel(it, ::saveDesktopCsvTemplate) }
+        if (csvAction != null) {
+            DisabledReasonTooltip(disabledNavActionReason(csvAction)) {
+                Button(onClick = { onNavAction(csvAction) }, enabled = isNavActionEnabled(csvAction)) {
+                    ButtonLabel(if (csvAction in DesktopCsvFormatGuides.importActions) "Choose CSV file…" else "Export CSV…")
+                }
+            }
+            SectionWorkspaceFooter(section, projectFile, projectStatusText)
+            return@DesktopWorkspaceScroll
+        }
+
         if (section == DesktopSection.WorkflowHome) {
             WorkflowHomePanel(workflow)
         }
@@ -19630,6 +19656,9 @@ internal fun CourseReportPanel(
             projectFile = projectFile,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId
         )
+        DesktopCsvFormatPanel(org.openardf.radiooracle.shared.files.CsvFormatGuides.courseReport(
+            DesktopCourseReportCsv.columns(reportRows.maxOfOrNull { it.siControlCodes.size } ?: 0)))
+
         if (reportRows.isEmpty()) {
             Text(
                 text = "Assign SI controls to at least one category before exporting a Course Report.",

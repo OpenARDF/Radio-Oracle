@@ -48,8 +48,10 @@ object EventCsvFormat {
 
         val HEADER = listOf("category", "is_man", "max_age", "length_m", "climb_m",
             "follows_race_presets", "race_type", "time_limit_min", "race_band", "control_count", "controls")
+        fun columns(includeEncryptedIdealOrder: Boolean = false): List<String> =
+            HEADER + if (includeEncryptedIdealOrder) listOf("encrypted_ideal_order") else emptyList()
         fun header(includeEncryptedIdealOrder: Boolean = false): String =
-            CsvCodec.row(HEADER + if (includeEncryptedIdealOrder) listOf("encrypted_ideal_order") else emptyList())
+            CsvCodec.row(columns(includeEncryptedIdealOrder))
         fun isHeader(fields: List<String>): Boolean = fields.map { it.trim().lowercase() }.let {
             it == HEADER || it == HEADER + "encrypted_ideal_order"
         }

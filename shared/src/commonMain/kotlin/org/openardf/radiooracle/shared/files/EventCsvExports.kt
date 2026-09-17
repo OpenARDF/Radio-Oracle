@@ -152,12 +152,15 @@ object EventCsvExports {
                 )
             }
 
+    fun readoutPunchColumnCount(data: List<EventReadoutData>): Int =
+        data.maxOfOrNull { readout -> readout.punches.count { it.punch.punchType == SIRecordType.CONTROL } } ?: 0
+
     fun readouts(raceData: EventRaceData): String =
         readouts(raceData.competitorData.mapNotNull { it.readoutData } + raceData.unmatchedReadoutData)
 
     fun readouts(data: List<EventReadoutData>, formatTime: (Long) -> String = { it.asSiTimeText() }): String {
         val readouts = data.sortedWith(compareBy({ it.result.siNumber ?: Int.MAX_VALUE }, { it.result.id }))
-        val maxPunches = readouts.maxOfOrNull { data -> data.punches.count { it.punch.punchType == SIRecordType.CONTROL } } ?: 0
+        val maxPunches = readoutPunchColumnCount(readouts)
         return EventCsvRows.readoutHeader(maxPunches) + "\n" + readouts.joinRows { readoutData ->
             EventCsvRows.readoutRow(
                 siNumber = readoutData.result.siNumber,
@@ -172,6 +175,13 @@ object EventCsvExports {
         }
     }
 
+    fun resultColumns(hasAwards: Boolean, hasRouteLengths: Boolean): List<String> =
+        listOf("Place", "Competitor", "Status", "Points", "Run time") +
+            (if (hasAwards) listOf("USA award", "Region 2 award") else emptyList()) +
+            (if (hasRouteLengths) listOf("Estimated effective route length (m)", "Analysis ideal effective length (m)", "Route comparison") else emptyList())
+
+    val ARDF_EVENT_COLUMNS = listOf("Kategorie", "Pořadí", "Jméno", "Person ID", "Čas", "TX", "Status", "Kontroly")
+
     fun results(
         raceData: EventRaceData,
         awardDisplayMode: EventAwardDisplayMode = EventAwardDisplayMode.FIRST_TO_THIRD,
@@ -184,9 +194,7 @@ object EventCsvExports {
         val region2AwardByResultId = awards.categories
             .flatMap { it.region2Awards }
             .associate { it.resultId to it.awardText }
-        val header = CsvCodec.row(listOf("Place", "Competitor", "Status", "Points", "Run time") +
-            (if (awards.hasAwards) listOf("USA award", "Region 2 award") else emptyList()) +
-            (if (routeLengths.isNotEmpty()) listOf("Estimated effective route length (m)", "Analysis ideal effective length (m)", "Route comparison") else emptyList())) + "\n"
+        val header = CsvCodec.row(resultColumns(awards.hasAwards, routeLengths.isNotEmpty())) + "\n"
         return header + EventResultDetails.from(raceData)
             .joinRows { result ->
                 EventCsvRows.resultRow(
@@ -208,7 +216,7 @@ object EventCsvExports {
         val competitorDataByResultId = raceData.resultCompetitorData().mapNotNull { competitorData ->
             competitorData.readoutData?.result?.id?.let { resultId -> resultId to competitorData }
         }.toMap()
-        return "Kategorie;Pořadí;Jméno;Person ID;Čas;TX;Status;Kontroly\n" +
+        return ARDF_EVENT_COLUMNS.joinToString(";") + "\n" +
             EventResultDetails.from(raceData)
                 .mapNotNull { resultDetails ->
                     val competitorData = competitorDataByResultId[resultDetails.id] ?: return@mapNotNull null

@@ -179,33 +179,19 @@ object SplitResultExports {
         routeLengths: Map<String, ResultRouteLength> = emptyMap()
     ): String = csv(model(raceData, awardDisplayMode, publicationStatus, routeLengths))
 
+    fun hasRouteLengthColumns(report: SplitResultReport): Boolean =
+        report.resultsById.values.any { it.routeLength != null }
+
+    fun csvColumns(hasRouteLengths: Boolean = false): List<String> =
+        listOf(
+            "Race", "Start", "Category", "Place", "Bib", "Competitor", "Club", "Person ID", "SI",
+            "Status", "Points", "Total Time", "Transmitters", "Split #", "From", "Control", "SI Code",
+            "Punch Status", "Leg Time", "Leg Seconds", "Cumulative Time", "Cumulative Seconds", "Leg Place"
+        ) +
+            if (hasRouteLengths) listOf("Estimated effective route length (m)", "Analysis ideal effective length (m)", "Route comparison") else emptyList()
+
     fun csv(report: SplitResultReport): String = buildString {
-        appendCsvRow(
-            "Race",
-            "Start",
-            "Category",
-            "Place",
-            "Bib",
-            "Competitor",
-            "Club",
-            "Person ID",
-            "SI",
-            "Status",
-            "Points",
-            "Total Time",
-            "Transmitters",
-            "Split #",
-            "From",
-            "Control",
-            "SI Code",
-            "Punch Status",
-            "Leg Time",
-            "Leg Seconds",
-            "Cumulative Time",
-            "Cumulative Seconds",
-            "Leg Place",
-            *if (report.resultsById.values.any { it.routeLength != null }) arrayOf("Estimated effective route length (m)", "Analysis ideal effective length (m)", "Route comparison") else emptyArray()
-        )
+        appendCsvRow(*csvColumns(hasRouteLengthColumns(report)).toTypedArray())
         report.categories.forEach { category ->
             category.results.forEach { result ->
                 if (result.splits.isEmpty()) {
