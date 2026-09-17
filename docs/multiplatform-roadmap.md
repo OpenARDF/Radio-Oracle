@@ -1,6 +1,7 @@
 # Radio-Oracle Multiplatform Roadmap
 
-Status reviewed: 2026-09-02.
+Status reviewed: 2026-09-17 against the current source, regression coverage, and
+release history through 1.0.48. This review does not replace hardware acceptance.
 
 Radio-Oracle is no longer an Android-only app with a hypothetical desktop beta.
 It is a shared Kotlin project with Android race-day workflows, a desktop Race
@@ -43,6 +44,21 @@ publishing behavior, including split reports and award exports. SPORTident
 station tools on both platforms include clock inspection/synchronization and
 read-only field-station Punch History; the Race Series workflow also includes
 explicit competitor matching and reconciliation overrides.
+
+Series validation already runs the shared Race Validator on each member Race
+File before cross-race checks. The validator covers category/control consistency,
+unused controls, missing SI numbers, duplicate labels/codes, and standard-category
+assignment checks. Desktop continuous SPORTident readout already uses a platform
+serial-device boundary, with stop handling, idle-timeout continuation, and a
+post-read removal guard. Developer station diagnostics already measure response
+times and compare system-information settings.
+
+Course tools are grouped under `Setup > Courses`. Course imports and calculated
+design application use reviewed candidate/commit flows; Analyzer distinguishes
+applied courses from drafts and imported geometry from calculated routes.
+Pre-import checkpoints support recovery. General autosave and undo remain future
+work. See [`course-workflow-implementation-status.md`](course-workflow-implementation-status.md)
+for implementation evidence and its separately recorded acceptance limits.
 
 ## Validation Gates
 
@@ -180,6 +196,8 @@ These are deliberate limits in the current app, not necessarily defects.
   details are available.
 - Shared SQL remains deferred; desktop Race Files are still the right storage
   model for the current desktop app.
+- Single-race workflows remain the default; Series and championship tools are
+  opt-in and additive.
 - Course Analyzer still lacks map passability knowledge. It does not know
   out-of-bounds areas, dense vegetation, lakes, uncrossable creeks/rivers,
   cliffs, fences, walls, or other barriers unless those effects are approximated
@@ -224,11 +242,9 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Race Validation And Error Recovery
 
-- Keep expanding Race Validator coverage for setup consistency, import mistakes,
-  category/control mismatches, unused controls, missing SI numbers, duplicate
-  labels/codes, suspicious category assignments, and late-workflow edits.
-- Use validator logic from Series validation so each member Race File can be
-  checked independently before cross-race checks run.
+- Extend the existing Race Validator with additional import-mistake,
+  suspicious-assignment, and late-workflow-edit cases as concrete gaps are
+  identified.
 - Prefer source-of-truth repairs over display-only fixes: Setup > Controls owns
   SI-code-to-public-label mapping, Setup > Categories owns assigned controls,
   and downloaded SI readouts remain definitive evidence of visited station
@@ -236,8 +252,6 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### SPORTident And Hardware
 
-- Harden the desktop continuous SPORTident readout loop into a race-day reader
-  workflow behind a platform device interface.
 - Build a shared, specification-backed SPORTident characterization suite before
   broadening protocol behavior. Cover SI5, SI6, SI6*, SI8, SI9, pCard, tCard,
   SI-Card10/11, and SIAC memory layouts; card-number family boundaries; maximum
@@ -256,11 +270,10 @@ These are deliberate limits in the current app, not necessarily defects.
   documented startup and retry cases. Characterize the double-`STX` wakeup
   sequence, legacy base-protocol station detection, and bounded NAK retry/backoff
   on real expendable hardware before changing the currently proven readout path.
-- Extend the current station inspection tools with response-timing tests and
-  settings comparison tests across known-good and suspect download stations.
-  Diagnostics should warn and log when possible, but only hard-block downloads
-  when the station cannot be opened, cannot answer the protocol, or reports a
-  clearly non-download mode.
+- Complete comparative hardware validation using the existing response-timing
+  and settings-comparison diagnostics on known-good and suspect download
+  stations. Preserve the readout service's existing behavior of allowing flagged
+  download-capable stations and blocking clearly non-download modes.
 - Extend read-only Punch History into a reviewed race-recovery workflow. Detect
   gaps and duplicates, preview candidate recovered readouts, and require an
   explicit selection before importing anything into a Race File. If backup
@@ -291,8 +304,6 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Competition And Series
 
-- Keep current single-race workflows as the default. Series and championship
-  tools should remain opt-in and additive.
 - Move desktop-only Race Series reporting and optimization helpers into shared
   code as they stabilize.
 - Extend Race Series with championship overall scoring, including configurable
@@ -309,9 +320,9 @@ These are deliberate limits in the current app, not necessarily defects.
 - Add a first-class visual Course Designer for placing controls, creating
   category routes and simple graphics, editing KML-compatible appearance, and
   applying the result to a Race File or exporting only the authored overlays.
-- Develop the visual designer within `Setup > Courses`, retaining the existing
-  `Controls` editor, course imports and exports, elevation data, review,
-  protection, and destructive actions operators currently rely on.
+- Build the visual editor into the existing `Setup > Courses` workspace,
+  retaining its controls editor, imports/exports, elevation tools, review,
+  protection, and destructive actions.
 - Start with offline JPG/PNG maps using world files, explicit coordinates, or
   manual calibration. Add GeoTIFF and broad CRS handling after the coordinate
   model is stable, and treat robust GeoPDF support as a later, separately
@@ -339,10 +350,10 @@ for a new category. Add a coordinate-based entry workflow within `Setup >
 Courses` that reaches the same accepted course state as an analyzed import;
 this work need not wait for the full visual map editor.
 
-- Extend `Controls` to enter and edit latitude/longitude for starts, foxes,
-  beacons, finishes, and other supported course points. Reuse canonical control
-  identities and protected location storage; editing coordinates must preserve
-  Race Password protection rather than expose locations in public fields.
+- Extend the existing protected `Update Location` workflow to support initial
+  coordinate entry within `Controls` for starts, foxes, beacons, finishes, and
+  other supported course points. Reuse canonical control identities and
+  protected location storage, preserving Race Password protection.
 - Add `New Course` with a course-name field and selection of existing controls,
   start, beacon, finish, and any required intermediate points. Permit courses
   to select different starts and finishes. Support building courses after an
@@ -386,8 +397,6 @@ this work need not wait for the full visual map editor.
   should be pure route-ordering and shortest-effective-path logic; analyzer
   report context, imported-route comparison, wait timing, and fox renumbering
   should remain layered on top.
-- Continue improving analyzer import UX so saved, imported, calculated, and
-  unsaved analyzer data are always clearly distinguished.
 
 #### Course-File Authoring And KML Boundaries
 
@@ -514,16 +523,16 @@ this work need not wait for the full visual map editor.
 
 ### Race Editing Model
 
-- Add autosave plus transaction/undo as a medium-term workflow improvement.
-- Ordinary single-step edits should eventually autosave immediately and create a
-  one-step undo checkpoint.
-- Multi-step tools and bulk actions, including Course Analyzer, course imports,
-  test-data insertion, calculated-route saves, and fox renumbering, should run
-  inside explicit Race File transactions: stage all intermediate changes, then
-  either discard the whole transaction on exit or commit and autosave it as one
-  atomic change.
-- Undo after a committed transaction should revert the whole transaction, not its
-  internal substeps.
+- Add general autosave and undo on top of the existing course draft/apply,
+  reviewed-import transactions, and pre-import recovery checkpoints.
+- Make ordinary single-step edits autosave immediately and create a one-step
+  undo checkpoint.
+- Extend transaction coverage to remaining multi-step tools and bulk actions,
+  including test-data insertion. Reuse the course workflow's candidate/commit
+  services and add atomic autosave when a transaction is accepted; discard
+  unaccepted changes on cancellation.
+- Add undo that reverts an entire committed transaction, including course
+  imports, calculated-route application, and fox renumbering, as one change.
 
 ### Storage
 
