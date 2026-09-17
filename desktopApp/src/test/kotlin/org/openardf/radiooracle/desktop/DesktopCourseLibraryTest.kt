@@ -6,6 +6,58 @@ import org.openardf.radiooracle.shared.event.*
 import org.openardf.radiooracle.shared.files.IofXmlImports
 
 class DesktopCourseLibraryTest {
+    @Test fun assignedProtectedCoursesRequireThePasswordAndStayProtectedWhenReused() {
+        val initial = unassigned()
+        var project = DesktopCourseLibrary.apply(initial,
+            DesktopCourseLibraryEdit.Assign(initial.raceData.courseMappings.single().category.id, emptySet(), "W21"), null) { "w21" }
+        project = EventProjectEditor.addCategory(project, "w65", "W65")
+        val source = project.raceData.categories.first().category
+        val password = "fixture-password"
+        project = project.withStoredCourseInfo("w21", source.courseInfo, password).withStoredIdealOrder("w21", source.idealOrder, password)
+        val edit = DesktopCourseLibraryEdit.Assign("w21", setOf("w65"))
+        assertThrows(IllegalArgumentException::class.java) { DesktopCourseLibrary.apply(project, edit, null) }
+        val result = DesktopCourseLibrary.apply(project, edit, password)
+        val copied = result.raceData.categories.single { it.category.id == "w65" }.category
+        assertNull(copied.courseInfo)
+        assertEquals(source.courseInfo!!.courseObjects, copied.storedCourseInfo(password)!!.courseObjects)
+        assertEquals(source.idealOrder, copied.storedIdealOrder(password))
+        assertEquals(project.raceData.categories.first(), result.raceData.categories.first())
+    }
+
+    @Test fun controlsOnlyAssignmentDoesNotRequireCourseGeometryOrAnalyzer() {
+        var project = EventProjectFactory.createEmptyProject("race", "Controls only", "2026-09-16T09:00")
+        project = EventProjectEditor.addCategory(project, "w21", "W21")
+        project = EventProjectEditor.updateCategoryControlPoints(project, "w21", "31 32 33 50B") { "point-$it" }
+        project = EventProjectEditor.addCategory(project, "w65", "W65")
+        val result = DesktopCourseLibrary.apply(project, DesktopCourseLibraryEdit.Assign("w21", setOf("w65")), null)
+        assertNull(result.raceData.categories.last().category.courseInfo)
+        assertEquals(result.raceData.categories.first().publicControlIds, result.raceData.categories.last().publicControlIds)
+        EventControlCatalog.requireCanonical(EventProjectFileJson.decode(EventProjectFileJson.encode(result)))
+    }
+
+    @Test fun categoriesReuseAnAssignedCourseWithoutAnalyzerOrChangingItsSource() {
+        val initial = unassigned()
+        val sourceId = initial.raceData.courseMappings.single().category.id
+        var project = DesktopCourseLibrary.apply(initial, DesktopCourseLibraryEdit.Assign(sourceId, emptySet(), "W21"), null) { "w21" }
+        project = EventProjectEditor.addCategory(project, "m70", "M70")
+        project = EventProjectEditor.addCategory(project, "w65", "W65")
+        val source = project.raceData.categories.first { it.category.id == "w21" }
+        val before = EventProjectFileJson.encode(project)
+        assertEquals(listOf("w21"), DesktopCourseLibrary.assignmentSources(project).map { it.category.id })
+        val result = DesktopCourseLibrary.apply(project, DesktopCourseLibraryEdit.Assign("w21", setOf("m70", "w65")), null)
+        assertEquals(source, result.raceData.categories.first { it.category.id == "w21" })
+        assertEquals(project.raceData.controls, result.raceData.controls)
+        result.raceData.categories.forEach { assertCoursePreserved(source, it) }
+        assertEquals(3, DesktopCourseLibrary.assignmentSources(result).size)
+        val infos = result.raceData.categories.associate { it.category.id to requireNotNull(it.category.courseInfo) }
+        assertEquals(setOf("W21", "M70", "W65"), courseAnalysisRouteCategories(result, infos).map { it.category.name }.toSet())
+        assertEquals(before, EventProjectFileJson.encode(project))
+        EventControlCatalog.requireCanonical(EventProjectFileJson.decode(EventProjectFileJson.encode(result)))
+        assertThrows(IllegalArgumentException::class.java) {
+            DesktopCourseLibrary.apply(result, DesktopCourseLibraryEdit.Delete("w21"), null)
+        }
+    }
+
     @Test fun explicitXmlClassesCreateActiveCategoriesAndReimportPromotesLegacyMappings() {
         val base = DesktopCourseImportAvailabilityTest.project()
         val parsed = IofXmlImports.courseData(DesktopIofCourseAnalysisTest().xml(), base.raceData.race).parsedData

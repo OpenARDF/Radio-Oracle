@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.domain.ControlPointType
+
 import org.openardf.radiooracle.shared.alias.AliasRules
 import org.openardf.radiooracle.shared.alias.AliasValidationResult
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
@@ -1836,20 +1838,40 @@ object EventProjectEditor {
             val categoryOrder = existingCategoryData?.category?.order ?: nextCategoryOrder++
             val controlPoints = imported.controlPoints.mapIndexed { index, controlPoint ->
                 val definition = ControlPointDefinition(controlPoint.siCode, controlPoint.type, controlPoint.order)
-                val control = projectFile.raceData.controls.singleOrNull {
-                    it.siCode == definition.siCode && it.type == definition.type
-                } ?: EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
+                val matches = projectFile.raceData.controls.filter { it.siCode == definition.siCode }
+                require(matches.size <= 1) { "SI ${definition.siCode} matches more than one existing control. Review Controls before importing." }
+                val existing = matches.singleOrNull()
+                require(existing == null || existing.type == definition.type ||
+                    (definition.type == ControlPointType.CONTROL && definition.siCode in preview.unspecifiedRoleSiCodes)) {
+                    "SI ${definition.siCode} has a different explicit role in the XML. Review its role in Controls or correct the XML before importing."
+                }
+                val control = existing ?: EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
                 importedControls += control
                 controlPoint.copy(
                     categoryId = categoryId,
                     controlId = control.id,
+                    type = control.type,
                     order = index + 1
                 )
             }
             val idMap = imported.controlPoints.zip(controlPoints).associate { (old, new) -> old.controlId to new.controlId }
+            val resolvedControls = importedControls.associateBy { it.id }
             val info = imported.category.courseInfo?.let { info -> info.copy(
-                controlPoints = info.controlPoints.map { it.copy(controlId = idMap[it.controlId] ?: it.controlId) },
-                courseObjects = info.courseObjects.map { it.copy(id = idMap[it.id] ?: it.id) },
+                controlPoints = info.controlPoints.map { point ->
+                    val id = idMap[point.controlId] ?: point.controlId
+                    val control = resolvedControls[id]
+                    point.copy(controlId = id, type = control?.type ?: point.type, label = control?.label ?: point.label)
+                },
+                courseObjects = info.courseObjects.map { point ->
+                    val id = idMap[point.id] ?: point.id
+                    val control = resolvedControls[id]
+                    point.copy(id = id, label = control?.label ?: point.label, type = when (control?.type) {
+                        ControlPointType.CONTROL -> ProtectedCourseObjectType.CONTROL
+                        ControlPointType.BEACON -> ProtectedCourseObjectType.BEACON
+                        ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
+                        null -> point.type
+                    })
+                },
                 suppliedLegLengths = info.suppliedLegLengths.map { it.copy(fromId = idMap[it.fromId] ?: it.fromId, toId = idMap[it.toId] ?: it.toId) }
             ) }
             val definitions = controlPoints.map { ControlPointDefinition(it.siCode, it.type, it.order) }

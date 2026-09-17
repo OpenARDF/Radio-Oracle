@@ -9,6 +9,51 @@ import androidx.compose.ui.unit.dp
 import org.openardf.radiooracle.shared.event.*
 
 @Composable
+internal fun DesktopCategoryCourseAssignment(project: EventProjectFile, isUnlocked: Boolean,
+    onUnlock: (String) -> Boolean, onEdit: (DesktopCourseLibraryEdit) -> String?) {
+    var choosing by remember(project.raceData.race.id) { mutableStateOf(false) }
+    var sourceId by remember(project.raceData.race.id) { mutableStateOf<String?>(null) }
+    var message by remember(project.raceData.race.id) { mutableStateOf<String?>(null) }
+    var password by remember(project.raceData.race.id) { mutableStateOf("") }
+    val sources = DesktopCourseLibrary.assignmentSources(project)
+    val locked = project.hasEncryptedCategoryData() && !isUnlocked
+    val restriction = DesktopCourseLibrary.disabledReason(project)
+        ?: if (locked) "Unlock course data to assign an existing course." else null
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Assign an existing course to categories here. Course Analyzer is optional.")
+        if (locked) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(password, { password = it }, label = { Text("Race Password") }, singleLine = true,
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+            TextButton(onClick = { if (onUnlock(password)) password = "" else message = "Unable to unlock course data. Check the Race Password." }) { Text("Unlock course data") }
+        }
+        DisabledReasonTooltip(restriction ?: if (sources.isEmpty()) "Import or assign controls to a course first." else null) {
+            Button(onClick = { choosing = true }, enabled = restriction == null && sources.isNotEmpty(),
+                modifier = Modifier.testTag("categories-assign-existing-course")) { Text("Assign Existing Course…") }
+        }
+        message?.let { Text(it) }
+    }
+    if (choosing) DesktopAlertDialog(onDismissRequest = { choosing = false }, title = { Text("Choose an existing course") },
+        text = { Column {
+            sources.forEach { source ->
+                TextButton(onClick = { sourceId = source.category.id; choosing = false },
+                    modifier = Modifier.testTag("existing-course-${source.category.id}")) {
+                    val locations = if (source.category.courseInfo == null && source.category.encryptedCourseInfo.isNullOrBlank()) " (no course locations)" else ""
+                    Text("${source.category.name} — ${source.category.controlPointsString.ifBlank { "${source.controlPoints.size} assigned controls" }}$locations")
+                }
+            }
+        } }, confirmButton = {}, dismissButton = { TextButton(onClick = { choosing = false }) { Text("Cancel") } })
+    sources.singleOrNull { it.category.id == sourceId }?.let { source ->
+        CourseAssignmentDialog(project, source, restriction, onCancel = { sourceId = null }, onAssign = { edit ->
+            onEdit(edit)?.also { message = it } ?: run {
+                sourceId = null
+                message = "Course assigned. Save Race to keep these changes."
+                null
+            }
+        })
+    }
+}
+
+@Composable
 internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
     onUnlock: (String) -> Boolean, onEdit: (DesktopCourseLibraryEdit) -> String?) {
     var password by remember(project.raceData.race.id) { mutableStateOf("") }
@@ -84,11 +129,11 @@ private fun CourseAssignmentDialog(project: EventProjectFile, source: EventCateg
     DesktopAlertDialog(onDismissRequest = onCancel, title = { Text("Assign ${source.category.name}") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Choose existing categories and/or enter a new category name. Their assigned controls and course data will be replaced by this course. Competitors stay in their categories.")
-            project.raceData.categories.sortedWith(EventCategorySort.byDisplayName).forEach { data ->
+            project.raceData.categories.filterNot { it.category.id == source.category.id }.sortedWith(EventCategorySort.byDisplayName).forEach { data ->
                 Row {
                     Checkbox(checked = data.category.id in selected, onCheckedChange = { checked ->
                         selected = if (checked) selected + data.category.id else selected - data.category.id
-                    })
+                    }, modifier = Modifier.testTag("course-target-${data.category.id}"))
                     Text(data.category.name)
                 }
             }

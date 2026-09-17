@@ -645,6 +645,25 @@ class DesktopCourseAnalyzerTest {
         assertTrue(reportText.contains("RULE VIOLATION: Applied route course length"))
     }
 
+    @Test fun sharedExclusionWarningAndItsWrappedContinuationAreRedInPdf() {
+        val summary = DesktopCourseAnalyzer.analyze(projectFile(foxCount = 3), CATEGORY_ID,
+            protectedInfo(foxCount = 3), "31 32 33 Beacon")
+        assertEquals("Review Fox Renumbering", summary.courseRecommendation.actionLabel)
+        assertTrue(summary.courseRecommendation.paragraph.contains("Apply Calculated Course keeps the existing numbering"))
+        val warning = DesktopCourseGoodnessMetric("Classic start exclusion zone",
+            "A fox is too close to Start. " + "Review the minimum separation. ".repeat(8), DesktopCourseMetricStatus.Warning)
+        val report = summary.copy(goodnessMetrics = summary.goodnessMetrics.copy(sharedMetrics = listOf(warning)))
+        assertTrue(DesktopCourseAnalysisExports.reportText(report).contains("RULE VIOLATION: Classic start exclusion zone"))
+        val path = java.nio.file.Path.of("build/reports/exclusion-warning.pdf")
+        java.nio.file.Files.createDirectories(path.parent)
+        DesktopCourseAnalysisExports.exportPdf(path, report)
+        val pdf = java.nio.file.Files.readString(path, Charsets.ISO_8859_1)
+        val blocks = Regex("BT\\n.*?ET", RegexOption.DOT_MATCHES_ALL).findAll(pdf).map { it.value }.toList()
+        val warningBlocks = blocks.filter { it.contains("RULE VIOLATION: Classic start exclusion zone") || it.contains("Review the minimum separation") }
+        assertTrue("Long warning must wrap", warningBlocks.size >= 3)
+        assertTrue(warningBlocks.all { it.contains("0.78 0.10 0.10 rg") })
+    }
+
     @Test
     fun acceptsCloseUsaRulesCategoryNameMatchWithWarning() {
         val summary = DesktopCourseAnalyzer.analyze(
@@ -1338,6 +1357,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.summaryExplanation.contains("see Section 1 for the assignment details"))
         assertEquals("Apply Calculated Course", summary.courseRecommendation.actionLabel)
         assertTrue(summary.courseRecommendation.paragraph.contains("Radio-Oracle recommends Apply Calculated Course"))
+        assertTrue(summary.courseRecommendation.paragraph.contains("Apply Calculated Course keeps the existing fox numbering"))
         assertTrue(DesktopCourseAnalysisExports.reportText(summary).contains("Renumbered wait times"))
         val metricLabels = summary.metrics.map { it.label }
         assertEquals(
@@ -1368,8 +1388,8 @@ class DesktopCourseAnalyzerTest {
         assertNotNull(proposal.sourceSnapshotHash)
         assertFalse(requireNotNull(summary.calculatedRouteSection).summaryOnly)
         assertTrue(summary.calculatedGeometryMatchesSource)
-        assertNull(CourseAnalysisApplyAction.CalculatedRoute.disabledReason(summary))
-        val withoutRenumbering = CourseAnalysisApplyAction.CalculatedWithoutRenumbering
+        assertNull(CourseAnalysisApplyAction.RenumberAndApply.disabledReason(summary))
+        val withoutRenumbering = CourseAnalysisApplyAction.ApplyCourse
         assertTrue(withoutRenumbering.disabledReason(summary)!!.contains("Only the fox numbering differs"))
         assertTrue(runCatching { withoutRenumbering.application(summary) }.isFailure)
     }

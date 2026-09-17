@@ -21,8 +21,8 @@ class DesktopCourseDesignUiTest {
     @Test fun applicationButtonsExplainTheirActionsAndDisableTheNumberingOnlyNoOp() {
         val original = analyze(EventCourseDrafts.candidate(draft()), DesktopCourseRouteSource.Applied)
         assertNotNull(original.calculatedRouteApplication)
-        val primary = CourseAnalysisApplyAction.CalculatedRoute
-        val without = CourseAnalysisApplyAction.CalculatedWithoutRenumbering
+        val primary = CourseAnalysisApplyAction.RenumberAndApply
+        val without = CourseAnalysisApplyAction.ApplyCourse
         var summary by mutableStateOf(original.copy(calculatedGeometryMatchesSource = false))
         var primaryClicks = 0
         var withoutClicks = 0
@@ -62,6 +62,39 @@ class DesktopCourseDesignUiTest {
         // Applying/canceling a draft must not leave the next analysis pointed at a nonexistent draft.
         assertEquals(applied, ui.analysisProject(applied))
         assertEquals(DesktopCourseRouteSource.Applied, ui.routeSource(applied))
+    }
+
+    @Test fun renumberingIsPreparedWithoutMutationAndRequiresAnExplicitReviewDecision() {
+        val draft = draft()
+        val summary = analyze(EventCourseDrafts.candidate(draft))
+        val app = CourseAnalysisApplyAction.RenumberAndApply.application(summary)
+        assertTrue(app.foxAssignments.any { it.originalLabel != it.calculatedLabel })
+        val session = DesktopProjectSession(DesktopProjectFiles).apply { newProject(draft) }
+        val ui = DesktopCourseDesignUi().apply { pendingApplication = app }
+        var current by mutableStateOf(draft)
+        rule.setContent { MaterialTheme {
+            DesktopCourseDesignHost(current, null, session, ui, onChanged = { value, _ -> current = value }) { Text("Fixture") }
+        } }
+        rule.waitUntil(30_000) { rule.onAllNodesWithTag("confirm-course-renumbering").fetchSemanticsNodes().isNotEmpty() }
+        rule.runOnIdle { assertEquals(draft, session.currentProject) }
+        rule.onNodeWithText("Courses updated: M21.").assertExists()
+        app.foxAssignments.filter { it.originalLabel != it.calculatedLabel }.forEach {
+            val controls = EventCourseDrafts.candidate(draft).raceData.controls
+            val from = controls.single { control -> control.id == it.controlId }
+            val to = CourseStationAssignments.foxForLabel(controls, it.calculatedLabel)!!
+            rule.onNodeWithText("${it.originalLabel} (SI ${from.siCode}) → ${it.calculatedLabel} (SI ${to.siCode})").assertExists()
+        }
+        val screenshot = org.jetbrains.skia.Image.makeFromBitmap(rule.onNodeWithTag("course-apply-flow").captureToImage().asSkiaBitmap())
+        val screenshotPath = java.nio.file.Path.of("build/reports/course-renumbering-review.png")
+        Files.createDirectories(screenshotPath.parent)
+        Files.write(screenshotPath, screenshot.encodeToData()!!.bytes)
+        rule.onNodeWithText("Cancel").performClick()
+        rule.runOnIdle { assertEquals(draft, session.currentProject); assertNull(ui.pendingApplication); ui.pendingApplication = app }
+        rule.waitUntil(30_000) { rule.onAllNodesWithTag("confirm-course-renumbering").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("confirm-course-renumbering").performClick()
+        rule.waitUntil(30_000) { ui.pendingApplication == null }
+        assertNull(session.currentProject!!.raceData.courseDraft)
+        assertEquals("passed", CourseWorkflowAudit.audit(session.currentProject!!.raceData).status)
     }
 
     @Test fun appliedAnalysisRemainsAvailableWhenAnUnrelatedDraftExists() {
@@ -208,11 +241,13 @@ class DesktopCourseDesignUiTest {
         return EventCourseDrafts.edit(source) { DesktopCourseKmlImporter.importProtectedCourseInfo(kml, it, null, elevationProvider = { 100.0 }).first }
     }
 
-    @Test fun oneApplyActionCommitsAndPersistsWithoutASecondConfirmation() {
+    @Test fun normalApplyPreservesNumberingAndCommitsWithoutASecondConfirmation() {
         val draft = draft()
         val candidate = EventCourseDrafts.candidate(draft)
         val info = candidate.raceData.categories.single().category.courseInfo!!
-        val app = DesktopCourseAnalyzer.analyze(candidate, "m21", info, info.idealOrder, prepareApplication = true).calculatedRouteApplication!!
+        val summary = DesktopCourseAnalyzer.analyze(candidate, "m21", info, info.idealOrder, prepareApplication = true, routeSource = DesktopCourseRouteSource.Draft)
+        val app = CourseAnalysisApplyAction.ApplyCourse.application(summary)
+        assertTrue(app.foxAssignments.all { it.originalLabel == it.calculatedLabel })
         val session = DesktopProjectSession(DesktopProjectFiles)
         session.newProject(draft)
         val ui = DesktopCourseDesignUi().apply { pendingApplication = app }
@@ -296,7 +331,7 @@ class DesktopCourseDesignUiTest {
         }
         val candidate = EventCourseDrafts.candidate(draft)
         val info = candidate.raceData.categories.single().category.courseInfo!!
-        val app = analyze(candidate).calculatedRouteApplication!!
+        val app = CourseAnalysisApplyAction.ApplyCourse.application(analyze(candidate))
         val choices = courseStationChoices(candidate, mapOf("m21" to info))
         val allBindings = choices.associate { it.placementId to (it.controlId ?: EventCourseDrafts.candidate(original).raceData.categories.single().category.courseInfo!!.controlPoints.first().controlId) }
         DesktopCourseAnalysisApplier.prepareAll(draft, DesktopCourseRouteSelection(info, app, allBindings), mapOf("m21" to allBindings), null)

@@ -65,7 +65,9 @@ data class IofCourseDataPreview(
     val startTime: String?,
     val categories: List<EventCategoryData>,
     /** Entries backed by explicit XML ClassCourseAssignment elements become race categories. */
-    val assignedCategoryIds: Set<String> = emptySet()
+    val assignedCategoryIds: Set<String> = emptySet(),
+    /** Ordinary, unnamed numeric controls carry no explicit ARDF role in IOF XML. */
+    val unspecifiedRoleSiCodes: Set<Int> = emptySet()
 )
 
 typealias IofCourseDataImportResult = IofXmlImportResult<IofCourseDataPreview>
@@ -235,7 +237,12 @@ object IofXmlImports {
                 startDate = startTime?.childText("Date"),
                 startTime = startTime?.childText("Time"),
                 categories = categories,
-                assignedCategoryIds = assignedCategoryIds
+                assignedCategoryIds = assignedCategoryIds,
+                unspecifiedRoleSiCodes = definitions.values.filter {
+                    (it.attribute("type") ?: "Control") == "Control" &&
+                        it.childText("Name").isNullOrBlank() &&
+                        ControlRoleLabelRules.inferredSpecialRole(it.childText("Id").orEmpty()) == null
+                }.mapNotNull { (it.childText("PunchingUnitId") ?: it.childText("Id"))?.toIntOrNull() }.toSet()
             ),
             unsupportedItems = warnings
         )

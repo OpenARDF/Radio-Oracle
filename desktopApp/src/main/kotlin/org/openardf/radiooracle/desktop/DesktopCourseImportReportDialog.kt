@@ -18,6 +18,10 @@ internal fun CourseImportReportDialog(review: DesktopCourseImportReview,
     var reports by remember(review) { mutableStateOf<List<DesktopCourseBriefReport>?>(null) }
     var elevationWarning by remember(review) { mutableStateOf<String?>(null) }
     var error by remember(review) { mutableStateOf<String?>(null) }
+    val cancel = {
+        DesktopDebugLog.info("CourseImport", "Rejected temporary import categories=${review.categoryIds.joinToString()}")
+        onCancel()
+    }
     LaunchedEffect(review, restriction) {
         if (restriction != null) return@LaunchedEffect
         try {
@@ -50,13 +54,15 @@ internal fun CourseImportReportDialog(review: DesktopCourseImportReview,
             prepared = result.first
             reports = result.second
             elevationWarning = result.third
+            DesktopDebugLog.info("CourseImport", "Prepared temporary import categories=${review.categoryIds.joinToString()} reports=${result.second.size}")
         } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
             error = failure.message ?: "The imported course could not be prepared."
+            DesktopDebugLog.warn("CourseImport", "Preparation failed: $error")
         }
     }
     DesktopAlertDialog(
-        onDismissRequest = onCancel,
+        onDismissRequest = cancel,
         title = { Text("Review imported courses", style = MaterialTheme.typography.h6) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -82,14 +88,18 @@ internal fun CourseImportReportDialog(review: DesktopCourseImportReview,
             }
         },
         dismissButton = {
-            TextButton(onClick = onCancel, modifier = Modifier.testTag("cancel-course-import")) { Text(if (review.analyzeIofCourses) "Reject Import" else "Cancel") }
+            TextButton(onClick = cancel, modifier = Modifier.testTag("cancel-course-import")) { Text(if (review.analyzeIofCourses) "Reject Import" else "Cancel") }
         },
         confirmButton = {
             DisabledReasonTooltip(restriction ?: error) {
                 Button(enabled = prepared != null && error == null && restriction == null,
                     modifier = Modifier.testTag("apply-course-import"), onClick = {
-                        try { onApply(requireNotNull(prepared)) } catch (failure: Exception) {
+                        try {
+                            onApply(requireNotNull(prepared))
+                            DesktopDebugLog.info("CourseImport", "Accepted import categories=${review.categoryIds.joinToString()}")
+                        } catch (failure: Exception) {
                             error = failure.message ?: "The course import could not be applied."
+                            DesktopDebugLog.warn("CourseImport", "Acceptance failed: $error")
                         }
                     }) { Text(if (review.analyzeIofCourses) "Accept Import" else "Apply Import") }
             }

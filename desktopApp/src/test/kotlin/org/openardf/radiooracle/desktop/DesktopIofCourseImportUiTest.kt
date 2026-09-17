@@ -18,6 +18,23 @@ import org.openardf.radiooracle.shared.files.IofXmlImports
 class DesktopIofCourseImportUiTest {
     @get:Rule val rule = createComposeRule()
 
+    @Test fun condesRoutePointOptionRequiresAnExplicitSelectionBeforeReportPreparation() {
+        val original = DesktopCourseImportAvailabilityTest.project()
+        val parsed = IofXmlImports.courseData(DesktopIofCourseAnalysisTest().xml().replace("31", "900"), original.raceData.race).parsedData
+        val review = PendingIofCourseDataImportReview(Path.of("route-points.xml"), DesktopCourseImportTransaction.prepare(original), parsed,
+            parsed.categories.map { it.category.name }, DesktopImportPreviews.categoryDataPreview(original, "route-points.xml", parsed.categories),
+            emptyList(), emptyList())
+        val choices = mutableListOf<Boolean>()
+        rule.setContent { MaterialTheme {
+            IofCourseDataImportReviewDialog(review, { _, useBends -> choices += useBends }, {})
+        } }
+        rule.onNodeWithTag("iof-route-bends").assertIsOff()
+        rule.onNodeWithText("Review Course Report").performClick()
+        rule.onNodeWithTag("iof-route-bends").performClick().assertIsOn()
+        rule.onNodeWithText("Review Course Report").performClick()
+        rule.runOnIdle { assertEquals(listOf(false, true), choices); assertTrue(original.raceData.categories.isEmpty()) }
+    }
+
     @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
     @Test fun disabledImportButtonStillShowsTheReadoutTooltip() {
         var clicks = 0

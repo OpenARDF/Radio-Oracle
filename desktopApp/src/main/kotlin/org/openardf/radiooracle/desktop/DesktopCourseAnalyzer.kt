@@ -1888,7 +1888,7 @@ object DesktopCourseAnalyzer {
             )
             return DesktopCourseRecommendation(
                 actionLabel = "Apply Calculated Course",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Calculated Course. $reason$caveats"
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Calculated Course. $reason Apply Calculated Course keeps the existing fox numbering. Use Review Fox Renumbering to inspect and confirm any proposed number changes separately.$caveats"
             )
         }
         val renumbering = waitRenumbering?.takeIf { it.improvesWait }
@@ -1904,8 +1904,8 @@ object DesktopCourseAnalyzer {
                 waitRenumbering = waitRenumbering
             )
             return DesktopCourseRecommendation(
-                actionLabel = "Apply Calculated Course",
-                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Apply Calculated Course. The calculated route matches the ${routeSource.lowerRouteLabel}, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}. Applying the calculated course accepts its proposed fox numbering and updates affected courses.$caveats"
+                actionLabel = "Review Fox Renumbering",
+                paragraph = "If map information or other data do not impact the analysis results, Radio-Oracle recommends Review Fox Renumbering. The calculated route matches the ${routeSource.lowerRouteLabel}, but renumbering the foxes reduces modeled wait time by ${compactDurationText(improvementSeconds)}. Review the proposed fox and SI station changes and affected courses before confirming them. Apply Calculated Course keeps the existing numbering.$caveats"
             )
         }
         val caveats = recommendationCaveats(

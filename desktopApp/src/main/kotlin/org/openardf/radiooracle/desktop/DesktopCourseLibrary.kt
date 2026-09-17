@@ -11,6 +11,12 @@ internal sealed interface DesktopCourseLibraryEdit {
 
 /** Manages stored courses through the same design validation and protection used by imports. */
 internal object DesktopCourseLibrary {
+    /** Both assigned and unassigned courses may be reused without running Course Analyzer. */
+    fun assignmentSources(project: EventProjectFile): List<EventCategoryData> =
+        (project.raceData.categories + project.raceData.courseMappings).filter {
+            it.publicControlIds.isNotEmpty() || it.controlPoints.isNotEmpty()
+        }.sortedWith(EventCategorySort.byDisplayName)
+
     fun disabledReason(project: EventProjectFile): String? =
         DesktopCourseImportAvailability.disabledReason(project)
             ?: if (project.raceData.courseDraft != null) "Apply or discard the pending course draft before assigning or deleting courses." else null
@@ -18,12 +24,16 @@ internal object DesktopCourseLibrary {
     fun apply(project: EventProjectFile, edit: DesktopCourseLibraryEdit, password: String?,
               idFactory: () -> String = { UUID.randomUUID().toString() }): EventProjectFile {
         disabledReason(project)?.let { throw IllegalArgumentException(it) }
-        val source = requireNotNull(project.raceData.courseMappings.singleOrNull { it.category.id == edit.courseId }) {
-            "This unassigned course is no longer available. Reopen the course list."
+        val sources = if (edit is DesktopCourseLibraryEdit.Delete) project.raceData.courseMappings else assignmentSources(project)
+        val source = requireNotNull(sources.singleOrNull { it.category.id == edit.courseId }) {
+            "This course is no longer available. Reopen the course list."
         }
         val transaction = DesktopCourseImportTransaction.prepare(project)
-        if (edit is DesktopCourseLibraryEdit.Delete) return transaction.applyTo(project) { base ->
-            base.copy(raceData = base.raceData.copy(courseMappings = base.raceData.courseMappings.filterNot { it.category.id == edit.courseId }))
+        if (edit is DesktopCourseLibraryEdit.Delete) {
+            require(project.raceData.courseMappings.any { it.category.id == edit.courseId }) { "Only unassigned courses can be deleted here." }
+            return transaction.applyTo(project) { base ->
+                base.copy(raceData = base.raceData.copy(courseMappings = base.raceData.courseMappings.filterNot { it.category.id == edit.courseId }))
+            }
         }
         edit as DesktopCourseLibraryEdit.Assign
         val storagePassword = project.courseDataPassword(password)
@@ -55,7 +65,10 @@ internal object DesktopCourseLibrary {
         }
         candidate = candidate.copy(raceData = candidate.raceData.copy(categories = categories,
             courseMappings = candidate.raceData.courseMappings.filterNot { it.category.id == edit.courseId }))
-        candidate = DesktopAuthoritativeCourseImport.prepare(candidate, targets, storagePassword)
+        val geometryTargets = categories.filter { it.category.id in targets &&
+            it.category.storedCourseInfo(storagePassword) != null }.map { it.category.id }.toSet()
+        if (geometryTargets.isNotEmpty()) candidate = DesktopAuthoritativeCourseImport.prepare(candidate, geometryTargets, storagePassword)
+        EventControlCatalog.requireCanonical(candidate)
         return transaction.applyTo(project) { candidate }
     }
 }

@@ -76,7 +76,10 @@ internal fun DesktopCourseDesignHost(
     val application = ui.pendingApplication
     if (project != null && application != null) {
         DesktopCourseApplyFlow(project, ui.project, ui.courseState, ui.error, application, password,
-            onDismiss = { ui.pendingApplication = null },
+            onDismiss = {
+                DesktopDebugLog.info("CourseApply", "Cancelled course application category=${application.categoryId}")
+                ui.pendingApplication = null
+            },
             onCopy = {
                 val name = "${project.raceData.race.name} revised"
                 val path = DesktopFileDialogs.chooseSaveProject(name)
@@ -112,13 +115,21 @@ private fun DesktopCourseApplyFlow(
     var busy by remember(candidate, application) { mutableStateOf(false) }
     var editBindings by remember(candidate, application) { mutableStateOf(false) }
     var attempt by remember(candidate, application) { mutableStateOf(0) }
+    val numberingChanges = remember(application) { application.foxAssignments.filter { it.originalLabel != it.calculatedLabel } }
+    var review by remember(applied, candidate, application) { mutableStateOf<DesktopPreparedCourseDesign?>(null) }
+    fun numberingReviewLines(): List<String> = numberingChanges.map { change ->
+        val controls = candidate?.raceData?.controls.orEmpty()
+        val from = controls.singleOrNull { it.id == bindings[application.categoryId to change.controlId] }
+        val to = CourseStationAssignments.foxForLabel(controls, change.calculatedLabel)
+        "${change.originalLabel}${from?.let { " (SI ${it.siCode})" }.orEmpty()} → ${change.calculatedLabel}${to?.let { " (SI ${it.siCode})" }.orEmpty()}"
+    }
     val recorded = EventCourseDrafts.hasRecordedActivity(applied.raceData)
     val ready = candidate != null && state != null && loadError == null && choices.isSuccess && !recorded &&
         bindings.isNotEmpty() && bindings.values.none(String::isBlank)
 
-    // The Apply action is authorization. Known bindings require no further review or confirmation.
+    // Normal application preserves numbering. A numbering change must be reviewed after preparation.
     // Cancel/disposal cancels preparation; a late completion cannot commit after cancellation.
-    LaunchedEffect(candidate, state, application, attempt) {
+    LaunchedEffect(applied, candidate, state, application, attempt) {
         if (!ready) return@LaunchedEffect
         busy = true
         error = null
@@ -132,10 +143,12 @@ private fun DesktopCourseApplyFlow(
                     elevationLookup = DesktopVenueElevationCache::elevationMeters, checkCancelled = { ensureActive() })
             }
             ensureActive()
-            onApply(prepared)
+            DesktopDebugLog.info("CourseApply", "Prepared category=${application.categoryId} renumber=${numberingChanges.isNotEmpty()} courses=${prepared.changes.map { it.categoryName }.distinct().joinToString()}")
+            if (numberingChanges.isEmpty()) onApply(prepared) else review = prepared
         } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
             error = failure.message ?: "Course changes could not be applied. Analyze the current draft again."
+            DesktopDebugLog.warn("CourseApply", "Preparation failed category=${application.categoryId}: $error")
         } finally { busy = false }
     }
     val problem = loadError ?: choices.exceptionOrNull()?.message ?: error ?:
@@ -143,12 +156,17 @@ private fun DesktopCourseApplyFlow(
             .takeIf { candidate != null && state != null && rows.isEmpty() }
     val visibleRows = rows.filter { editBindings || it.key in unresolved }
     Dialog(onDismissRequest = onDismiss) {
-        Surface(Modifier.width(720.dp).heightIn(max = if (!recorded && !busy && visibleRows.isNotEmpty()) 720.dp else 300.dp)
+        Surface(Modifier.width(720.dp).heightIn(max = when {
+            review != null -> 480.dp
+            !recorded && !busy && visibleRows.isNotEmpty() -> 720.dp
+            else -> 300.dp
+        })
             .fillMaxHeight(0.9f).testTag("course-apply-flow"),
             shape = MaterialTheme.shapes.medium) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(when {
                     recorded -> "Course changes blocked by readouts"
+                    review != null -> "Review fox number changes"
                     busy -> "Applying course changes"
                     visibleRows.isNotEmpty() -> "Assign stations to course locations"
                     problem != null -> "Course changes could not be applied"
@@ -166,7 +184,15 @@ private fun DesktopCourseApplyFlow(
                     }
                     problem?.let { Text(it, color = MaterialTheme.colors.error) }
                     notice?.let { Text(it) }
-                    if (!recorded && !busy && candidate != null && state != null) {
+                    review?.let { prepared ->
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("At each listed location, the fox number will change as shown. The SI station assigned to that fox number will move with it.")
+                            numberingReviewLines().forEach { Text(it) }
+                            Text("Courses updated: ${prepared.changes.map { it.categoryName }.distinct().joinToString()}.")
+                            Text("The calculated routes and course measurements will also be applied. Cancel to keep the current race.")
+                        }
+                    }
+                    if (!recorded && !busy && candidate != null && state != null && review == null) {
                         if (visibleRows.isNotEmpty()) {
                             Text("Choose the physical SI station for each listed fox. Use the diagram below or export these labeled locations to KML for a map viewer.")
                             if (candidate.hasEncryptedCategoryData()) Text("The exported KML contains unencrypted course locations.")
@@ -206,7 +232,14 @@ private fun DesktopCourseApplyFlow(
                 Row(Modifier.fillMaxWidth().testTag("course-review-actions"),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End)) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
-                    if (!recorded && !busy && (visibleRows.isNotEmpty() || problem != null)) {
+                    if (review != null && !recorded && !busy) {
+                        Button(onClick = {
+                            runCatching {
+                                DesktopDebugLog.info("CourseApply", "Renumbering confirmed category=${application.categoryId} changes=${numberingReviewLines().joinToString()}")
+                                onApply(requireNotNull(review))
+                            }.onFailure { error = it.message; review = null }
+                        }, modifier = Modifier.testTag("confirm-course-renumbering")) { Text("Apply Fox Renumbering and Course") }
+                    } else if (!recorded && !busy && (visibleRows.isNotEmpty() || problem != null)) {
                         Button(onClick = { attempt++ }, enabled = ready, modifier = Modifier.testTag("course-apply-all")) {
                             Text("Apply Calculated Course")
                         }

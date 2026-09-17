@@ -1586,7 +1586,7 @@ object DesktopNavigation {
         "settings.about" to
             "Use About Radio-Oracle to view the app version, project identity, and maintainer information.",
         "setup.event-file.new" to
-            "Use New Race File to create a fresh race setup draft.",
+            "Create a race, import courses, then add or assign categories in Setup → Categories. Course Analyzer is optional.",
         "setup.event-file.open" to
             "Use Load Race File to open a desktop Race File or import an Android Race File by file extension.",
         "setup.event-file.import-eventreg" to

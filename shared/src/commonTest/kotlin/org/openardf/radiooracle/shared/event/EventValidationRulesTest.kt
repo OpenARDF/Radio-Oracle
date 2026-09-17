@@ -37,6 +37,21 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class EventValidationRulesTest {
+    @Test fun practiceFoxCountIsAdvisoryButMissingBeaconStillBlocks() {
+        fun issues(level: RaceLevel, controls: String) = EventValidationRules.validateRaceData(raceData(
+            race = race().copy(raceType = RaceType.CLASSIC, raceLevel = level),
+            categories = listOf(categoryData(name = "M70", controlPointsString = controls))
+        )).filterIsInstance<EventValidationIssue.CategoryCourseRequirementIssue>()
+        val practice = issues(RaceLevel.PRACTICE, "31 32 33 34 35 50B")
+        assertEquals(1, practice.size)
+        assertEquals(EventValidationIssueSeverity.WARNING, EventValidationRules.severity(practice.single()))
+        val missingBeacon = issues(RaceLevel.PRACTICE, "31 32 33 34 35")
+        assertTrue(missingBeacon.any { it.message.contains("finish beacon") && EventValidationRules.severity(it) == EventValidationIssueSeverity.ERROR })
+        RaceLevel.entries.filterNot { it == RaceLevel.PRACTICE }.forEach { level ->
+            assertEquals(EventValidationIssueSeverity.ERROR, EventValidationRules.severity(issues(level, "31 32 33 34 35 50B").single()))
+        }
+    }
+
     @Test
     fun acceptsValidRaceData() {
         assertTrue(EventValidationRules.validateRaceData(raceData()).isEmpty())
@@ -296,7 +311,7 @@ class EventValidationRulesTest {
     fun reportsSprintCategoryFoxCountsOutsideCategoryRequirementRange() {
         val w55Issues = EventValidationRules.validateRaceData(
             raceData(
-                race = race().copy(raceType = RaceType.SPRINT),
+                race = race().copy(raceType = RaceType.SPRINT, raceLevel = RaceLevel.NATIONAL),
                 categories = listOf(
                     categoryData(
                         name = "W55",
@@ -308,7 +323,7 @@ class EventValidationRulesTest {
         )
         val m21Issues = EventValidationRules.validateRaceData(
             raceData(
-                race = race().copy(raceType = RaceType.SPRINT),
+                race = race().copy(raceType = RaceType.SPRINT, raceLevel = RaceLevel.NATIONAL),
                 categories = listOf(
                     categoryData(
                         name = "M21",

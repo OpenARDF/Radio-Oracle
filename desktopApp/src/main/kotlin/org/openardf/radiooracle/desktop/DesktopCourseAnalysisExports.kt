@@ -154,7 +154,8 @@ object DesktopCourseAnalysisExports {
             appendLine(PdfDividerLine)
             appendLine("Goodness metrics")
             result.goodnessMetrics.sharedMetrics.forEach { metric ->
-                appendLine("${metric.label}: ${metric.value} (${metric.status.name})")
+                val prefix = if (metric.isRuleViolationMetric()) "RULE VIOLATION: " else ""
+                appendLine("$prefix${metric.label}: ${metric.value} (${metric.status.name})")
             }
             appendLine()
         }
@@ -497,7 +498,8 @@ object DesktopCourseAnalysisExports {
 
     private data class PdfTextLine(
         val text: String,
-        val style: PdfTextStyle
+        val style: PdfTextStyle,
+        val ruleViolation: Boolean = text.startsWith("RULE VIOLATION:")
     )
 
     private enum class PdfTextStyle(
@@ -614,7 +616,7 @@ object DesktopCourseAnalysisExports {
                 }
                 appendLine("BT")
                 appendLine("${line.style.fontName} ${line.style.fontSize} Tf")
-                if (line.text.startsWith("RULE VIOLATION:")) {
+                if (line.ruleViolation) {
                     appendLine("0.78 0.10 0.10 rg")
                 } else {
                     appendLine("0 0 0 rg")

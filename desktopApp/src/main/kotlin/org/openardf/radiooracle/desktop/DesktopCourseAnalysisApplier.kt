@@ -42,8 +42,11 @@ object DesktopCourseAnalysisApplier {
                    elevationLookup: (CourseGeoPoint) -> Double? = { null }, checkCancelled: () -> Unit = {}): DesktopPreparedCourseDesign =
         prepareAllCourseDesigns(project, accepted, reviewedBindingsByCategoryId, password, elevationLookup, checkCancelled)
 
-    fun commit(project: EventProjectFile, prepared: DesktopPreparedCourseDesign): EventProjectFile =
-        org.openardf.radiooracle.shared.event.EventCourseDrafts.commit(project, prepared.candidate, prepared.expectedCandidateHash)
+    fun commit(project: EventProjectFile, prepared: DesktopPreparedCourseDesign): EventProjectFile {
+        val result = org.openardf.radiooracle.shared.event.EventCourseDrafts.commit(project, prepared.candidate, prepared.expectedCandidateHash)
+        DesktopDebugLog.info("CourseApply", "Committed revision=${prepared.revision} courses=${prepared.changes.map { it.categoryName }.distinct().joinToString()}")
+        return result
+    }
 
     fun applyFoxRenumberingOnly(
         projectFile: EventProjectFile,

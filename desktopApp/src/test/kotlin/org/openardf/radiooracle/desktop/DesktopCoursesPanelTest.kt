@@ -16,9 +16,39 @@ import java.nio.file.Path
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.openardf.radiooracle.shared.event.*
 
 class DesktopCoursesPanelTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun categoriesCanAssignTheSameExistingCourseToM70AndW65WithoutAnalyzer() {
+        val initial = DesktopCourseLibraryTest.unassigned()
+        var base = DesktopCourseLibrary.apply(initial,
+            DesktopCourseLibraryEdit.Assign(initial.raceData.courseMappings.single().category.id, emptySet(), "W21"), null) { "w21" }
+        base = EventProjectEditor.addCategory(base, "m70", "M70")
+        base = EventProjectEditor.addCategory(base, "w65", "W65")
+        var project by mutableStateOf(base)
+        rule.setContent { MaterialTheme { Surface { Column(Modifier.width(850.dp).padding(16.dp)) {
+            DesktopCategoryCourseAssignment(project, true, { true }, { edit ->
+                project = DesktopCourseLibrary.apply(project, edit, null); null
+            })
+        } } } }
+        rule.onNodeWithTag("categories-assign-existing-course").performClick()
+        rule.onNodeWithTag("existing-course-w21").performClick()
+        rule.onNodeWithTag("course-target-m70").performClick()
+        rule.onNodeWithTag("course-target-w65").performClick()
+        val image = rule.onNodeWithTag("desktop-alert").captureToImage()
+        val file = Path.of("build/reports/categories-assign-existing-course.png")
+        Files.createDirectories(file.parent)
+        Files.write(file, org.jetbrains.skia.Image.makeFromBitmap(image.asSkiaBitmap()).encodeToData()!!.bytes)
+        rule.onNodeWithText("Assign course").performClick()
+        rule.runOnIdle {
+            assertEquals(setOf("W21", "M70", "W65"), project.raceData.categories.map { it.category.name }.toSet())
+            assertTrue(project.raceData.categories.all { it.category.courseInfo != null })
+            assertEquals(base.raceData.controls, project.raceData.controls)
+            assertEquals(base.raceData.categories.first(), project.raceData.categories.first())
+        }
+    }
 
     @Test fun existingUnassignedCourseIsVisibleAndCanBecomeCategoryWithoutReimport() {
         var project by mutableStateOf(DesktopCourseLibraryTest.unassigned())

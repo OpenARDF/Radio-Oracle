@@ -24,9 +24,9 @@ class DesktopCourseApplicationTest {
         val summary = DesktopCourseAnalyzer.analyze(source, full.category.id, info, info.idealOrder,
             elevationLookup = { 100.0 }, prepareApplication = true)
         assertFalse(summary.calculatedGeometryMatchesSource)
-        val calculated = CourseAnalysisApplyAction.CalculatedRoute.application(summary)
+        val calculated = CourseAnalysisApplyAction.RenumberAndApply.application(summary)
         assertTrue(calculated.foxAssignments.any { it.originalLabel != it.calculatedLabel })
-        val unchangedNumbering = CourseAnalysisApplyAction.CalculatedWithoutRenumbering.application(summary)
+        val unchangedNumbering = CourseAnalysisApplyAction.ApplyCourse.application(summary)
         assertEquals(calculated.routePoints, unchangedNumbering.routePoints)
         assertEquals(calculated.orderedPlacementIds, unchangedNumbering.orderedPlacementIds)
         assertEquals(calculated.sourceSnapshotHash, unchangedNumbering.sourceSnapshotHash)

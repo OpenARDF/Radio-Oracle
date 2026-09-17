@@ -43,7 +43,9 @@ internal object DesktopIofCourseAnalysis {
             Triple(data.category.storedCourseInfo(storagePassword)?.let { info -> info.copy(
                 sourceName = "", sourceSha256 = "", route = emptyList(), sampledPointCount = 0,
                 lengthMeters = null, climbMeters = null, idealOrder = "",
-                courseObjects = info.courseObjects.sortedBy { it.id }, controlPoints = info.controlPoints.sortedBy { it.controlId },
+                // Waypoint order identifies the constrained leg; identical coordinates can describe different bends.
+                courseObjects = if (info.courseObjects.any { it.type == ProtectedCourseObjectType.WAYPOINT }) info.courseObjects else info.courseObjects.sortedBy { it.id },
+                controlPoints = info.controlPoints.sortedBy { it.controlId },
                 suppliedLegLengths = info.suppliedLegLengths.sortedWith(compareBy({ it.fromId }, { it.toId }, { it.lengthMeters }))) },
                 data.controlPoints.map { it.controlId }.toSet(), data.category.effectiveRaceType(project.raceData.race))
         }
@@ -119,13 +121,28 @@ internal object DesktopIofCourseAnalysis {
         val start = objects.single { it.type == ProtectedCourseObjectType.START }
         val finish = objects.single { it.type == ProtectedCourseObjectType.FINISH }
         val sampling = DesktopCourseAnalysisSampling(info.route.map { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) }, elevationLookup)
+        val bends = DesktopMandatoryCourseLegs.from(info)
+        fun legObjects(from: ProtectedCourseObjectPoint, to: ProtectedCourseObjectPoint): List<ProtectedCourseObjectPoint> =
+            listOf(from) + DesktopMandatoryCourseLegs.between(from.geo(), to.geo(), bends).map { bend ->
+                objects.single { it.type == ProtectedCourseObjectType.WAYPOINT && it.label == bend.label &&
+                    it.latitude == bend.point.latitude && it.longitude == bend.point.longitude }
+            } + to
         val legs = mutableMapOf<Pair<String, String>, Leg>()
-        objects.forEach { from -> objects.filter { it.id != from.id }.forEach { to ->
+        val endpoints = objects.filterNot { it.type == ProtectedCourseObjectType.WAYPOINT }
+        endpoints.forEach { from -> endpoints.filter { it.id != from.id }.forEach { to ->
             checkCancelled()
-            val points = DesktopCourseRouteSampler.sampledStraightLegPoints(from.geo(), to.geo(), sampling::elevation)
-            val declared = info.suppliedLegLengths.firstOrNull { it.fromId == from.id && it.toId == to.id }
-                ?: info.suppliedLegLengths.firstOrNull { it.fromId == to.id && it.toId == from.id }
-            legs[from.id to to.id] = Leg(points, declared?.lengthMeters ?: from.geo().distanceMetersTo(to.geo()),
+            val segments = legObjects(from, to).zipWithNext()
+            val points = segments.flatMapIndexed { index, (a, b) ->
+                DesktopCourseRouteSampler.sampledStraightLegPoints(a.geo(), b.geo(), sampling::elevation).let {
+                    if (index == 0) it else it.drop(1)
+                }
+            }
+            val distance = segments.sumOf { (a, b) ->
+                val declared = info.suppliedLegLengths.firstOrNull { it.fromId == a.id && it.toId == b.id }
+                    ?: info.suppliedLegLengths.firstOrNull { it.fromId == b.id && it.toId == a.id }
+                declared?.lengthMeters ?: a.geo().distanceMetersTo(b.geo())
+            }
+            legs[from.id to to.id] = Leg(points, distance,
                 DesktopCourseRouteMetricsCalculator.climbMetersOrNull(points))
         } }
         val useElevation = legs.values.all { it.climb != null }
@@ -150,6 +167,9 @@ internal object DesktopIofCourseAnalysis {
             select(start, transition, slow) + transition + select(transition, terminal, fast)
         } else select(start, terminal, foxes + listOfNotNull(spectator))
         val ordered = listOf(start) + middle + listOfNotNull(beacon) + finish
+        val orderedWithBends = ordered.zipWithNext().flatMapIndexed { index, (from, to) ->
+            legObjects(from, to).let { if (index == 0) it else it.drop(1) }
+        }
         val chosen = ordered.zipWithNext().map { (from, to) -> leg(from, to) }
         val points = chosen.flatMapIndexed { index, value -> if (index == 0) value.points else value.points.drop(1) }
         val horizontal = chosen.sumOf { it.horizontal }.roundToInt()
@@ -162,7 +182,7 @@ internal object DesktopIofCourseAnalysis {
             if (legWarnings(info).isNotEmpty()) add("XML distances are retained and used for matching legs in either direction. Other legs use straight-line distance. Drawn lines and elevation profiles do not describe unknown detours; climb is an estimate and the route needs a terrain check.")
         }.joinToString(" ")
         return Calculated(info.copy(idealOrder = order, lengthMeters = horizontal, climbMeters = climb,
-            courseObjects = ordered.map { it.copy(elevationMeters = sampling.elevation(it.geo()) ?: it.elevationMeters) },
+            courseObjects = orderedWithBends.map { it.copy(elevationMeters = sampling.elevation(it.geo()) ?: it.elevationMeters) },
             controlPoints = info.controlPoints.map { it.copy(elevationMeters = sampling.elevation(CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)) ?: it.elevationMeters) },
             route = points.map { ProtectedCourseRoutePoint(it.latitude, it.longitude, it.elevationMeters) },
             sampledPointCount = points.size, appliedBindings = null), notice)

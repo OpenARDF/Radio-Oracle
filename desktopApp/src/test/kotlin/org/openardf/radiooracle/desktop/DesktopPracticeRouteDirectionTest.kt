@@ -210,7 +210,7 @@ class DesktopPracticeRouteDirectionTest {
             if (!alternative.summaryOnly) {
                 improvements++
                 assertTrue(alternative.waitRenumbering!!.improvesWait)
-                assertEquals("Apply Calculated Course", evaluated.courseRecommendation.actionLabel)
+                assertEquals("Review Fox Renumbering", evaluated.courseRecommendation.actionLabel)
                 assertEquals(evaluated.waitRenumbering!!.currentTotalWaitSeconds, alternative.waitRenumbering!!.currentTotalWaitSeconds)
                 assertEquals(evaluated.providedRouteSection!!.climbMeters, alternative.climbMeters)
                 assertEquals(evaluated.providedRouteSection!!.effectiveLengthMeters, alternative.effectiveLengthMeters)

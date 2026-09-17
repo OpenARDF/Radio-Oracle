@@ -76,6 +76,8 @@ object EventValidationRules {
     /** Classifies validation issues so UI layers can distinguish blocking errors from review warnings. */
     fun severity(issue: EventValidationIssue): EventValidationIssueSeverity =
         when (issue) {
+            is EventValidationIssue.CategoryCourseRequirementIssue ->
+                if (issue.advisory) EventValidationIssueSeverity.WARNING else EventValidationIssueSeverity.ERROR
             is EventValidationIssue.LegacyIncompatibleAliasCodes,
             is EventValidationIssue.LegacyIncompatibleCategoryControlCodes,
             is EventValidationIssue.LegacyIncompatibleControlCodes,
@@ -161,6 +163,7 @@ object EventValidationRules {
                     validateCategoryCourseRequirements(
                         categoryName = data.category.name,
                         raceType = raceType,
+                        raceLevel = raceData.race.raceLevel,
                         definitions = definitions,
                         issues = this
                     )
@@ -248,6 +251,7 @@ object EventValidationRules {
     private fun validateCategoryCourseRequirements(
         categoryName: String,
         raceType: RaceType,
+        raceLevel: RaceLevel,
         definitions: List<ControlPointDefinition>,
         issues: MutableList<EventValidationIssue>
     ) {
@@ -257,22 +261,27 @@ object EventValidationRules {
         }
         val counts = controlRoleCounts(definitions)
         val categoryFoxRequirementMessage = categoryFoxRequirementMessage(categoryName, raceType, counts.foxes)
+        if (raceLevel == RaceLevel.PRACTICE && categoryFoxRequirementMessage != null) {
+            issues.add(EventValidationIssue.CategoryCourseRequirementIssue(categoryName,
+                "$categoryFoxRequirementMessage Practice races may use a different fox count.", advisory = true))
+        }
+        val blockingFoxRequirement = categoryFoxRequirementMessage.takeUnless { raceLevel == RaceLevel.PRACTICE }
         val message = when (raceType) {
             RaceType.CLASSIC,
             RaceType.SHORT -> when {
-                categoryFoxRequirementMessage != null -> categoryFoxRequirementMessage
+                blockingFoxRequirement != null -> blockingFoxRequirement
                 counts.beacons != 1 -> "Classic category must assign exactly one finish beacon; found ${counts.beacons}."
                 counts.spectators != 0 -> "Classic category must not assign spectator controls; found ${counts.spectators}."
                 else -> null
             }
             RaceType.SPRINT -> when {
-                categoryFoxRequirementMessage != null -> categoryFoxRequirementMessage
+                blockingFoxRequirement != null -> blockingFoxRequirement
                 counts.beacons != 1 -> "Sprint category must assign exactly one finish beacon; found ${counts.beacons}."
                 counts.spectators > 1 -> "Sprint category must assign at most one spectator; found ${counts.spectators}."
                 else -> null
             }
             RaceType.FOXORING -> when {
-                categoryFoxRequirementMessage != null -> categoryFoxRequirementMessage
+                blockingFoxRequirement != null -> blockingFoxRequirement
                 counts.beacons != 1 -> "Foxoring category must assign exactly one finish beacon; found ${counts.beacons}."
                 counts.spectators != 0 -> "Foxoring category must not assign spectator controls; found ${counts.spectators}."
                 else -> null
@@ -509,7 +518,7 @@ sealed interface EventValidationIssue {
         val actualIsMan: Boolean
     ) : EventValidationIssue
     data class MissingCategoryAssignedControls(val categoryName: String) : EventValidationIssue
-    data class CategoryCourseRequirementIssue(val categoryName: String, val message: String) : EventValidationIssue
+    data class CategoryCourseRequirementIssue(val categoryName: String, val message: String, val advisory: Boolean = false) : EventValidationIssue
     data class InvalidCategoryControlPoints(
         val categoryName: String,
         val error: ControlPointValidationError,

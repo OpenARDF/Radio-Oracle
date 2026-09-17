@@ -32,6 +32,11 @@ API keys and other settings are not collected by the exporter.
 Both platforms keep operational breadcrumbs in `debug.log`, `debug.log.1`, and
 `debug.log.2`, with 512 KiB per file. These cover app startup, station connections,
 USB devices, read/store outcomes, and existing import/export/service activity.
+Desktop course diagnostics also record read-only analysis start/completion,
+import preparation/acceptance/rejection, category course assignment, application
+requests and commits, and explicit renumbering confirmation with old/new fox and
+SI labels plus affected courses. These entries do not contain course coordinates
+or passwords. A prepared proposal is not a committed change.
 
 Detailed card-download traffic goes to a separate `sportident.log` and archives
 `.1` through `.3`, with 2 MiB per file (8 MiB total). This keeps packet traffic

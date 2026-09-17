@@ -7,6 +7,71 @@ import org.openardf.radiooracle.shared.event.*
 import org.openardf.radiooracle.shared.files.*
 
 class DesktopIofCourseAnalysisTest {
+    @Test fun optionalCondesRouteBendsStayOffByDefaultAndNeverBecomeScoredStationsWhenSelected() {
+        val original = project()
+        val input = xml().replace("<Control><Id>32</Id>", "<Control><Id>900</Id><Position lat=\"35.0001\" lng=\"-78.9985\"/></Control><Control><Id>32</Id>")
+            .replace("<CourseControl><Control>32</Control>", "<CourseControl><Control>900</Control></CourseControl><CourseControl><Control>32</Control>")
+            .replace("<LegLength>1500</LegLength>", "")
+        val parsed = IofXmlImports.validatedCourseData(input, IofXmlSchemaResource.loadBundledSchema(), original.raceData.race).parsedData
+        assertTrue(parsed.categories.all { it.controlPoints.any { cp -> cp.siCode == 900 } })
+        val bends = parsed.withCondesRouteBends()
+        assertTrue(bends.categories.all { it.controlPoints.none { cp -> cp.siCode == 900 } })
+        val imported = EventProjectEditor.importIofCourseData(original, bends).projectFile
+        val prepared = DesktopIofCourseAnalysis.prepare(imported, imported.raceData.categories.map { it.category.id }.toSet(), null, elevationLookup = { 100.0 }).project
+        assertFalse(prepared.raceData.controls.any { it.siCode == 900 })
+        val info = prepared.raceData.categories.first().category.courseInfo!!
+        assertEquals(1, info.courseObjects.count { it.type == ProtectedCourseObjectType.WAYPOINT })
+        assertTrue(info.route.any { it.latitude == 35.0001 && it.longitude == -78.9985 })
+        assertFalse(info.idealOrder.contains("900"))
+        assertEquals(1, DesktopMandatoryCourseLegs.from(info).size)
+        val summary = DesktopCourseAnalyzer.analyze(prepared, prepared.raceData.categories.first().category.id, info, info.idealOrder,
+            elevationLookup = { 100.0 }, allowFoxRenumbering = false)
+        assertTrue(summary.kmlFolders.any { folder -> folder.courseObjects.any { it.type == DesktopCourseKmlExportPointType.WAYPOINT } })
+        EventControlCatalog.requireCanonical(EventProjectFileJson.decode(EventProjectFileJson.encode(prepared)))
+        val missing = IofXmlImports.courseData(input.replace("<Position lat=\"35.0001\" lng=\"-78.9985\"/>", ""), original.raceData.race).parsedData
+        assertThrows(IllegalArgumentException::class.java) { missing.withCondesRouteBends() }
+        val special = IofXmlImports.courseData(input.replace("<Id>900</Id>", "<Id>900</Id><Name>Beacon</Name>"), original.raceData.race).parsedData
+        assertThrows(IllegalArgumentException::class.java) { special.withCondesRouteBends() }
+        val repeated = IofXmlImports.courseData(input.replace("<CourseControl><Control>900</Control></CourseControl>",
+            "<CourseControl><Control>900</Control></CourseControl><CourseControl><Control>900</Control></CourseControl>"), original.raceData.race).parsedData
+        assertThrows(IllegalArgumentException::class.java) { repeated.withCondesRouteBends() }
+    }
+
+    @Test fun reimportPreservesAnExistingBeaconRoleEverywhereWithoutChangingTheSource() {
+        val original = project()
+        val input = xml().replace("32", "79")
+        val parsed = IofXmlImports.validatedCourseData(input, IofXmlSchemaResource.loadBundledSchema(), original.raceData.race).parsedData
+        val imported = EventProjectEditor.importIofCourseData(original, parsed).projectFile
+        val beacon = imported.raceData.controls.single { it.siCode == 79 }
+        val corrected = EventProjectEditor.updateControl(imported, beacon.id, "", "79", ControlPointType.BEACON, false, "B", "")
+        val source = EventProjectFileJson.decode(EventProjectFileJson.encode(corrected))
+        val before = EventProjectFileJson.encode(source)
+        val transaction = DesktopCourseImportTransaction.prepare(source)
+        val candidate = EventProjectEditor.importIofCourseData(transaction.baseProject, parsed).projectFile
+        val prepared = DesktopIofCourseAnalysis.prepare(candidate, candidate.raceData.categories.map { it.category.id }.toSet(), null,
+            elevationLookup = { 100.0 }).project
+        assertEquals(before, EventProjectFileJson.encode(source))
+        val result = EventProjectFileJson.decode(EventProjectFileJson.encode(transaction.applyTo(source) { prepared }))
+        assertEquals(source.raceData.controls, result.raceData.controls)
+        result.raceData.categories.forEach { data ->
+            val info = data.category.courseInfo!!
+            assertEquals(ControlPointType.BEACON, data.controlPoints.single { it.siCode == 79 }.type)
+            assertEquals(ControlPointType.BEACON, info.controlPoints.single { it.controlId == beacon.id }.type)
+            assertEquals(ProtectedCourseObjectType.BEACON, info.courseObjects.single { it.id == beacon.id }.type)
+            assertEquals(parsed.categories.first().category.courseInfo!!.courseObjects.associate { it.id to (it.latitude to it.longitude) },
+                info.courseObjects.associate { it.id to (it.latitude to it.longitude) })
+            assertNull(CourseDesignBindings.validationError(info))
+        }
+        assertEquals(result, EventProjectEditor.importIofCourseData(result, parsed).projectFile.let { reimport ->
+            DesktopIofCourseAnalysis.prepare(reimport, reimport.raceData.categories.map { it.category.id }.toSet(), null,
+                elevationLookup = { 100.0 }).project
+        })
+        val explicitConflict = IofXmlImports.courseData(input.replace("<Id>79</Id>", "<Id>79</Id><Name>Spectator</Name>"), source.raceData.race).parsedData
+        val error = assertThrows(IllegalArgumentException::class.java) { EventProjectEditor.importIofCourseData(source, explicitConflict) }
+        assertTrue(error.message.orEmpty().contains("SI 79"))
+        assertEquals(before, EventProjectFileJson.encode(source))
+    }
+
     @Test fun importedFoxCanBeCorrectedToBeaconAndAnalyzedAfterSavingAndReopening() {
         val original = project()
         val input = xml().replace("32", "79").replace("<LegLength>1500</LegLength>", "")
