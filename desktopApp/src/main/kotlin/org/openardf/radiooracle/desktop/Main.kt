@@ -4748,9 +4748,14 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun importControlsCsv() {
+            DesktopCourseImportAvailability.disabledReason(projectSession.currentProject)?.let {
+                projectStatusText = it
+                return
+            }
             DesktopFileDialogs.chooseImportCsv("Import Controls CSV")?.let { path ->
                 runCatching {
                     val currentProject = requireNotNull(projectSession.currentProject)
+                    DesktopCourseImportAvailability.requireAvailable(currentProject)
                     val result = EventCsvImports.parseControlRows(Files.readString(path))
                     pendingControlsCsvImportReview = PendingControlsCsvImportReview(
                         path = path,
@@ -4772,6 +4777,10 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun applyControlsCsvImport(review: PendingControlsCsvImportReview, syncMissingControls: Boolean) {
             val currentProjectBeforeImport = projectSession.currentProject
+            DesktopCourseImportAvailability.disabledReason(currentProjectBeforeImport)?.let {
+                projectStatusText = it
+                return
+            }
             if (
                 syncMissingControls &&
                 currentProjectBeforeImport?.hasLockedProtectedCourseData(
@@ -4791,27 +4800,13 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     val importedIdentities = review.rows.mapTo(mutableSetOf()) { it.siCode to it.type }
                     val missingExistingControls = currentProject.raceData.controls
                         .filterNot { it.siCode to it.type in importedIdentities }
-                    val importedProject = EventProjectEditor.importControlRows(
-                        currentProject,
-                        review.rows,
-                        controlIdFactory = { UUID.randomUUID().toString() }
-                    )
-                    if (syncMissingControls) {
-                        val importedControlIds = importedProject.raceData.controls
-                            .filter { it.siCode to it.type in importedIdentities }
-                            .mapTo(mutableSetOf()) { it.id }
-                        val pruneResult = DesktopControlImportPruning.pruneUnmatchedControlsExceedingRaceLimits(
-                            projectFile = importedProject,
-                            importedControlIds = importedControlIds
-                        )
-                        deletedMissingControls = pruneResult.deletedControls.size
-                        deletedMissingControlNames = pruneResult.deletedControlNames
-                        skippedMissingControls = missingExistingControls.size - deletedMissingControls
-                        pruneResult.projectFile
-                    } else {
-                        skippedMissingControls = 0
-                        importedProject
+                    val result = DesktopControlsCsvImport.applyTo(currentProject, review.rows, syncMissingControls) {
+                        UUID.randomUUID().toString()
                     }
+                    deletedMissingControls = result.deletedControls.size
+                    deletedMissingControlNames = result.deletedControlNames
+                    skippedMissingControls = if (syncMissingControls) missingExistingControls.size - deletedMissingControls else 0
+                    result.projectFile
                 }
                 syncProjectState()
                 pendingControlsCsvImportReview = null
@@ -7326,6 +7321,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         pendingControlsCsvImportReview?.let { review ->
             ControlsCsvImportReviewDialog(
                 review = review,
+                disabledReason = DesktopCourseImportAvailability.disabledReason(projectFile),
                 onImport = { syncMissingControls -> applyControlsCsvImport(review, syncMissingControls) },
                 onCancel = {
                     pendingControlsCsvImportReview = null
@@ -9531,6 +9527,7 @@ internal fun IofCourseDataImportReviewDialog(
 @Composable
 private fun ControlsCsvImportReviewDialog(
     review: PendingControlsCsvImportReview,
+    disabledReason: String?,
     onImport: (syncMissingControls: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -9544,6 +9541,7 @@ private fun ControlsCsvImportReviewDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("File: ${review.path.fileName}")
+                disabledReason?.let { Text(it, color = DesktopPalette.Error) }
                 preview.eventTypeWarnings.forEach { warning ->
                     Text(
                         text = warning,
@@ -9608,7 +9606,7 @@ private fun ControlsCsvImportReviewDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onImport(syncMissingControls) }) {
+            Button(onClick = { onImport(syncMissingControls) }, enabled = disabledReason == null) {
                 ButtonLabel("Import Controls")
             }
         },

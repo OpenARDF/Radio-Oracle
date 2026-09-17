@@ -10,7 +10,8 @@ internal object DesktopCourseImportAvailability {
     val designImportActions = setOf(
         DesktopNavAction.ImportIofCourseDataXml,
         DesktopNavAction.ImportCourseKmlKmz, DesktopNavAction.ImportCourseGpx,
-        DesktopNavAction.ImportControlsKmlKmz, DesktopNavAction.ImportControlsGpx
+        DesktopNavAction.ImportControlsKmlKmz, DesktopNavAction.ImportControlsGpx,
+        DesktopNavAction.ImportControlsCsv
     )
 
     fun disabledReason(project: EventProjectFile?): String? = when {

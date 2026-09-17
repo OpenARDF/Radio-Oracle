@@ -6,12 +6,12 @@ import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.event.*
 
 class DesktopCourseImportAvailabilityTest {
-    @Test fun allGeometryImportButtonsExplainReadoutBlockButCsvRemainsAvailable() {
+    @Test fun allControlAndCourseImportButtonsExplainReadoutBlock() {
         fun flatten(items: List<DesktopNavItem>): List<DesktopNavItem> = items.flatMap { listOf(it) + flatten(it.children) }
         val items = flatten(DesktopNavigation.rootItems(DesktopWorkflow.Setup))
         val readiness = DesktopNavigationReadiness.from(withReadout(project()))
         val imports = items.filter { it.action in DesktopCourseImportAvailability.designImportActions }
-        assertEquals(5, imports.size)
+        assertEquals(6, imports.size)
         imports.forEach { item ->
             assertFalse(DesktopNavigation.isItemEnabled(item, readiness))
             assertEquals(DesktopCourseImportAvailability.ReadoutRestriction,
@@ -19,7 +19,9 @@ class DesktopCourseImportAvailabilityTest {
             assertFalse(DesktopNavigation.canLongClickOverrideDisabledMenu(item, readiness))
         }
         val csv = items.single { it.action == DesktopNavAction.ImportControlsCsv }
-        assertTrue(DesktopNavigation.isItemEnabled(csv, readiness))
+        assertFalse(DesktopNavigation.isItemEnabled(csv, readiness))
+        val freshReadiness = DesktopNavigationReadiness.from(project())
+        imports.forEach { assertTrue(it.label, DesktopNavigation.isItemEnabled(it, freshReadiness)) }
     }
 
     @Test fun readoutBlocksPreparationAndLateAcceptanceWithoutChangingRace() {

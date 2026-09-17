@@ -39,6 +39,20 @@ class DesktopCsvFormatUiTest {
         screenshot("categories-export-workspace")
     }
 
+    @Test fun allFourCourseImportButtonsDisableForARaceWithReadouts() {
+        rule.setContent { MaterialTheme { Surface(Modifier.width(1100.dp).height(850.dp)) {
+            DesktopAppShellPreview(DesktopClassicRouteAnalysisTest().fixture()) { error("Blocked imports must not dispatch") }
+        } } }
+        rule.onNodeWithText("Press any key or click to continue.").performClick()
+        rule.onNodeWithText("Courses >").performClick()
+        rule.onNodeWithText("Import >").performClick()
+        listOf("Import Controls CSV...", "Import KML/KMZ...", "Import GPX...", "Import IOF CourseData XML...")
+            .forEach { rule.onNodeWithText(it).assertIsNotEnabled() }
+        rule.onNodeWithTag("csv-format-controls-import").assertExists()
+        rule.onNodeWithTag("kml-format-controls-import").assertExists()
+        screenshot("course-imports-blocked-by-readouts")
+    }
+
     @Test fun courseImportAndExportShowSeparateFormatBoxesInMenuOrder() {
         val actions = mutableListOf<DesktopNavAction>()
         rule.setContent { MaterialTheme { Surface(Modifier.width(1100.dp).height(850.dp)) {
