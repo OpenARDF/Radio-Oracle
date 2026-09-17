@@ -67,7 +67,9 @@ data class IofCourseDataPreview(
     /** Entries backed by explicit XML ClassCourseAssignment elements become race categories. */
     val assignedCategoryIds: Set<String> = emptySet(),
     /** Ordinary, unnamed numeric controls carry no explicit ARDF role in IOF XML. */
-    val unspecifiedRoleSiCodes: Set<Int> = emptySet()
+    val unspecifiedRoleSiCodes: Set<Int> = emptySet(),
+    /** Public names explicitly confirmed in the control-mapping review. */
+    val reviewedControlNames: Map<Int, String> = emptyMap()
 )
 
 typealias IofCourseDataImportResult = IofXmlImportResult<IofCourseDataPreview>
@@ -180,6 +182,62 @@ object IofXmlImports {
         race: EventRace,
         idFactory: (String) -> String = { seed -> seed.stableIofId() }
     ): IofCourseDataImportResult {
+        return parsedCourseData(xml, race, idFactory)
+    }
+
+    /** Uses the existing XML parser and course conversion after a complete mapping review. */
+    fun courseDataWithControlMappings(
+        xml: String,
+        race: EventRace,
+        mappings: List<IofCourseControlMapping>,
+        useRouteBends: Boolean = false,
+        idFactory: (String) -> String = { seed -> seed.stableIofId() }
+    ): IofCourseDataImportResult {
+        val sources = courseControlSources(xml)
+        IofCourseControlMappings.requireValid(sources, mappings, useRouteBends)
+        val resolved = mappings.map { if (IofCourseControlMappings.isRoutePoint(it.sourceId, useRouteBends)) it.copy(siCode = it.sourceId) else it }
+        val parsed = parsedCourseData(xml, race, idFactory, resolved.associateBy { it.sourceId })
+        return if (useRouteBends) parsed.copy(parsedData = parsed.parsedData.withCondesRouteBends()) else parsed
+    }
+
+    /** Inspection does not require an SI assignment, so aliases can reach the review UI. */
+    fun validatedCourseControlSources(xml: String, iofSchema: String): List<IofCourseControlSource> {
+        requireValidImportXml(xml, iofSchema, expectedRoot = "CourseData")
+        return courseControlSources(xml)
+    }
+
+    fun courseControlSources(xml: String): List<IofCourseControlSource> {
+        val root = parseXml(xml)
+        requireRoot(root, "CourseData")
+        val block = root.children("RaceCourseData").firstOrNull()
+            ?: throw IofXmlImportException("CourseData does not contain RaceCourseData.")
+        val definitions = block.children("Control")
+        require(definitions.map { it.childText("Id") }.distinct().size == definitions.size) {
+            "Duplicate control identifiers in IOF CourseData. Correct the XML before importing."
+        }
+        val byId = definitions.associateBy { it.childText("Id").orEmpty() }
+        val visits = block.children("Course").flatMap { it.children("CourseControl") }
+        require(visits.all { it.children("Control").size == 1 }) {
+            "Alternative course controls need a single-course selection before importing."
+        }
+        return visits.groupBy { it.childText("Control").orEmpty().trim() }.map { (id, nodes) ->
+            require(id.isNotBlank()) { "A course control identifier is missing." }
+            val definition = byId[id]
+            val types = nodes.map { it.attribute("type") ?: definition?.attribute("type") ?: "Control" }.distinct()
+            require(types.size == 1) { "XML control $id has conflicting point types across courses." }
+            val type = types.single()
+            require(type in setOf("Start", "Finish", "Control")) { "Unsupported course-control type $type for $id." }
+            IofCourseControlSource(id, type, definition?.children("Name")?.map { it.text.trim() }.orEmpty(),
+                definition?.children("PunchingUnitId")?.map { it.text.trim() }.orEmpty())
+        }
+    }
+
+    private fun parsedCourseData(
+        xml: String,
+        race: EventRace,
+        idFactory: (String) -> String,
+        mappings: Map<String, IofCourseControlMapping>? = null
+    ): IofCourseDataImportResult {
         val root = parseXml(xml)
         requireRoot(root, "CourseData")
         val warnings = mutableListOf<IofXmlUnsupportedItem>()
@@ -226,7 +284,8 @@ object IofXmlImports {
                 index = index,
                 idFactory = idFactory,
                 warnings = warnings,
-                definitions = definitions
+                definitions = definitions,
+                mappings = mappings
             )
         }
         val (categories, assignedCategoryIds) = assignedCourses(raceCourseData, courseNodes, courses, idFactory, warnings)
@@ -242,7 +301,9 @@ object IofXmlImports {
                     (it.attribute("type") ?: "Control") == "Control" &&
                         it.childText("Name").isNullOrBlank() &&
                         ControlRoleLabelRules.inferredSpecialRole(it.childText("Id").orEmpty()) == null
-                }.mapNotNull { (it.childText("PunchingUnitId") ?: it.childText("Id"))?.toIntOrNull() }.toSet()
+                }.mapNotNull { (it.childText("PunchingUnitId") ?: it.childText("Id"))?.toIntOrNull() }.toSet().takeIf { mappings == null }.orEmpty(),
+                reviewedControlNames = mappings.orEmpty().values.filter { it.pointType.controlRole() != null }
+                    .associate { it.siCode.trim().toInt() to it.publicName.trim() }
             ),
             unsupportedItems = warnings
         )
@@ -479,7 +540,8 @@ object IofXmlImports {
 
     private fun XmlNode.toCategoryData(
         race: EventRace, index: Int, idFactory: (String) -> String,
-        warnings: MutableList<IofXmlUnsupportedItem>, definitions: Map<String, XmlNode>
+        warnings: MutableList<IofXmlUnsupportedItem>, definitions: Map<String, XmlNode>,
+        mappings: Map<String, IofCourseControlMapping>? = null
     ): EventCategoryData {
         val courseName = childText("Name")?.takeIf { it.isNotBlank() }
             ?: throw IofXmlImportException("CourseData course name missing at /CourseData/RaceCourseData/Course[${index + 1}].")
@@ -493,9 +555,14 @@ object IofXmlImports {
             require(node.children("Control").size == 1) { "Course $courseName has alternative controls; select a single course before importing." }
             val code = node.childText("Control").orEmpty().trim()
             val definition = definitions[code]
-            val type = node.attribute("type") ?: definition?.attribute("type") ?: "Control"
+            val mapping = mappings?.getValue(code)
+            val type = when (mapping?.pointType) {
+                ProtectedCourseObjectType.START -> "Start"
+                ProtectedCourseObjectType.FINISH -> "Finish"
+                else -> node.attribute("type") ?: definition?.attribute("type") ?: "Control"
+            }.let { if (mapping?.pointType?.controlRole() != null) "Control" else it }
             val name = definition?.childText("Name").orEmpty()
-            val role = ControlRoleLabelRules.inferredSpecialRole(name)
+            val role = mapping?.pointType?.controlRole() ?: ControlRoleLabelRules.inferredSpecialRole(name)
                 ?: ControlRoleLabelRules.inferredSpecialRole(code) ?: ControlPointType.CONTROL
             val objectType = when (type) {
                 "Start" -> ProtectedCourseObjectType.START
@@ -507,7 +574,7 @@ object IofXmlImports {
                 }
                 else -> throw IofXmlImportException("Unsupported course-control type $type in $courseName.")
             }
-            val siCode = (definition?.childText("PunchingUnitId") ?: code).toIntOrNull()
+            val siCode = (mapping?.siCode?.trim() ?: definition?.childText("PunchingUnitId") ?: code).toIntOrNull()
             require(type != "Control" || siCode != null) { "Course $courseName: $code needs a numeric SI code or PunchingUnitId." }
             val control = if (type == "Control") EventControlCatalog.controlForDefinition(race.id,
                 ControlPointDefinition(requireNotNull(siCode), role, visit + 1)) else null
@@ -526,7 +593,7 @@ object IofXmlImports {
             val lat = position?.attribute("lat")?.toDoubleOrNull()
             val lng = position?.attribute("lng")?.toDoubleOrNull()
             if (lat != null && lng != null && lat.isFinite() && lng.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0) {
-                val label = control?.label ?: if (type == "Start") "Start" else "Finish"
+                val label = mapping?.publicName?.trim() ?: control?.label ?: if (type == "Start") "Start" else "Finish"
                 objects += ProtectedCourseObjectPoint(id, label, objectType, lat, lng,
                     position.attribute("alt")?.toDoubleOrNull()?.takeIf { it.isFinite() })
             } else warnings += IofXmlUnsupportedItem("CourseData", "/Course/$courseName/$code",

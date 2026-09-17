@@ -238,6 +238,8 @@ import org.openardf.radiooracle.shared.files.withCondesRouteBends
 import org.openardf.radiooracle.shared.files.IofCourseDataPreview
 import org.openardf.radiooracle.shared.files.IofResultListPreview
 import org.openardf.radiooracle.shared.files.IofStartListPreview
+import org.openardf.radiooracle.shared.files.IofCourseControlMapping
+import org.openardf.radiooracle.shared.files.IofCourseControlMappings
 import org.openardf.radiooracle.shared.files.IofXmlImports
 import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
 import org.openardf.radiooracle.shared.files.IofXmlUnsupportedItem
@@ -920,7 +922,7 @@ private fun EventProjectFile.startDrawSettingsLogText(): String {
         "seed=${settings.options.seed} seriesLock=${settings.lockedForSeriesOptimization}"
 }
 
-private fun iofWarningLines(
+internal fun iofWarningLines(
     unsupportedItems: List<IofXmlUnsupportedItem>,
     outcomeWarnings: List<String> = emptyList()
 ): List<String> =
@@ -1103,6 +1105,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         var pendingCourseKmlKmzImportWarning by remember { mutableStateOf<PendingCourseKmlKmzImportWarning?>(null) }
         var pendingCourseKmlKmzCategoryMapping by remember { mutableStateOf<PendingCourseKmlKmzCategoryMapping?>(null) }
         var pendingCategoriesCsvImportReview by remember { mutableStateOf<PendingCategoriesCsvImportReview?>(null) }
+        var pendingIofControlMappingReview by remember { mutableStateOf<PendingIofControlMappingReview?>(null) }
         var pendingIofCourseDataImportReview by remember { mutableStateOf<PendingIofCourseDataImportReview?>(null) }
         var pendingIofStartListImportReview by remember { mutableStateOf<PendingIofStartListImportReview?>(null) }
         var pendingIofResultListImportReview by remember { mutableStateOf<PendingIofResultListImportReview?>(null) }
@@ -4952,40 +4955,35 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     val transaction = DesktopCourseImportTransaction.prepare(projectSession.currentProject
                         ?: throw IllegalStateException("Open or create a Race File before importing IOF XML."))
                     val currentProject = transaction.baseProject
-                    val parsed = IofXmlImports.validatedCourseData(
-                        Files.readString(path),
-                        IofXmlSchemaResource.loadBundledSchema(),
-                        currentProject.raceData.race
-                    )
-                    val warningLines = iofWarningLines(parsed.unsupportedItems)
-                    val importedSiCodes = parsed.parsedData.categories
-                        .flatMap { categoryData -> categoryData.controlPoints.map { it.siCode } }
-                        .toSet()
-                    val previewImportProject = EventProjectEditor.importIofCourseData(currentProject, parsed.parsedData).projectFile
-                    val previewImportedControlIds = previewImportProject.raceData.controls
-                        .filter { it.siCode in importedSiCodes }
-                        .mapTo(mutableSetOf()) { it.id }
-                    val deletedControlNames = DesktopControlImportPruning
-                        .unmatchedControlsExceedingRaceLimits(previewImportProject, previewImportedControlIds)
-                        .map { it.importDeletedControlDisplayName() }
-                    pendingIofCourseDataImportReview = PendingIofCourseDataImportReview(
-                        path = path,
-                        transaction = transaction,
-                        courseData = parsed.parsedData,
-                        newCourseMappingNames = newIofCourseMappingNames(currentProject, parsed.parsedData.categories),
-                        preview = DesktopImportPreviews.categoryDataPreview(
-                            projectFile = currentProject,
-                            sourceName = path.fileName.toString(),
-                            categories = parsed.parsedData.categories
-                        ),
-                        deletedControlNames = deletedControlNames,
-                        warningLines = warningLines
-                    )
-                    projectStatusText = "Review IOF CourseData import before applying it."
+                    val xml = Files.readString(path)
+                    val sources = IofXmlImports.validatedCourseControlSources(xml, IofXmlSchemaResource.loadBundledSchema())
+                    pendingIofControlMappingReview = PendingIofControlMappingReview(path, transaction, xml, sources,
+                        IofCourseControlMappings.prefill(sources, currentProject))
+                    projectStatusText = "Review XML control names, roles and SI codes before preparing the courses."
                 }.onFailure { error ->
                     projectStatusText = "Import failed: ${error.message ?: error::class.simpleName}"
                     DesktopDebugLog.warn("CourseImport", projectStatusText)
                 }
+            }
+        }
+
+        fun prepareIofControlMappingReview(
+            review: PendingIofControlMappingReview,
+            mappings: List<IofCourseControlMapping>,
+            useRouteBends: Boolean
+        ): String? {
+            return runCatching {
+                review.transaction.disabledReason(projectSession.currentProject)?.let { error(it) }
+                pendingIofCourseDataImportReview = DesktopIofControlMappingReview.prepareCourseReview(review, mappings,
+                    useRouteBends, review.transaction.baseProject.courseDataPassword(protectedCoursePassword))
+                pendingIofControlMappingReview = null
+                projectStatusText = "Review IOF CourseData import before applying it."
+                null
+            }.getOrElse { error ->
+                val message = "Import failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = message
+                DesktopDebugLog.warn("CourseImport", message)
+                message
             }
         }
 
@@ -5005,14 +5003,16 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     )
                 )
                 val outcome = EventProjectEditor.importIofCourseData(currentProject, courseDataToImport)
+                val importedProject = DesktopIofControlMappingReview.refreshSharedNames(currentProject, outcome.projectFile,
+                    courseDataToImport.reviewedControlNames, currentProject.courseDataPassword(protectedCoursePassword))
                 val importedSiCodes = courseDataToImport.categories
                     .flatMap { categoryData -> categoryData.controlPoints.map { it.siCode } }
                     .toSet()
-                val importedControlIds = outcome.projectFile.raceData.controls
+                val importedControlIds = importedProject.raceData.controls
                     .filter { it.siCode in importedSiCodes }
                     .mapTo(mutableSetOf()) { it.id }
                 val pruneResult = DesktopControlImportPruning.pruneUnmatchedControlsExceedingRaceLimits(
-                    projectFile = outcome.projectFile,
+                    projectFile = importedProject,
                     importedControlIds = importedControlIds
                 )
                 val names = courseDataToImport.categories.map { StandardCategoryRules.normalizedCategoryName(it.category.name) }.toSet()
@@ -7286,6 +7286,15 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 }
             )
         }
+        pendingIofControlMappingReview?.let { review ->
+            IofControlMappingReviewDialog(review,
+                disabledReason = review.transaction.disabledReason(projectFile),
+                onReview = { mappings, useRouteBends -> prepareIofControlMappingReview(review, mappings, useRouteBends) },
+                onCancel = {
+                    pendingIofControlMappingReview = null
+                    projectStatusText = "IOF CourseData import canceled. No changes applied."
+                })
+        }
         pendingIofCourseDataImportReview?.let { review ->
             IofCourseDataImportReviewDialog(
                 review = review,
@@ -9413,7 +9422,7 @@ internal fun IofCourseDataImportReviewDialog(
     onImport: (selectedNewCourseMappingNames: Set<String>, useRouteBends: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
-    var useRouteBends by remember(review) { mutableStateOf(false) }
+    var useRouteBends by remember(review) { mutableStateOf(review.useRouteBends) }
     val hasRouteBendCodes = review.courseData.categories.any { data -> data.controlPoints.any { it.siCode in 900..999 } }
     val selectedData = remember(review, useRouteBends) { runCatching {
         if (useRouteBends) review.courseData.withCondesRouteBends() else review.courseData
@@ -11263,7 +11272,7 @@ private fun newCategoryCsvCourseMappingNames(
         .filterNot(projectFile::hasCategoryImportName)
         .distinctBy { it.courseMappingSelectionKey() }
 
-private fun newIofCourseMappingNames(
+internal fun newIofCourseMappingNames(
     projectFile: EventProjectFile,
     categories: List<EventCategoryData>
 ): List<String> =
@@ -11532,7 +11541,8 @@ internal data class PendingIofCourseDataImportReview(
     val newCourseMappingNames: List<String>,
     val preview: DesktopCategoryCsvImportPreview,
     val deletedControlNames: List<String>,
-    val warningLines: List<String>
+    val warningLines: List<String>,
+    val useRouteBends: Boolean = false
 )
 
 private data class PendingStartsCsvImportReview(

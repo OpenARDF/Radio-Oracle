@@ -1845,7 +1845,10 @@ object EventProjectEditor {
                     (definition.type == ControlPointType.CONTROL && definition.siCode in preview.unspecifiedRoleSiCodes)) {
                     "SI ${definition.siCode} has a different explicit role in the XML. Review its role in Controls or correct the XML before importing."
                 }
-                val control = existing ?: EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
+                val baseControl = existing ?: EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
+                val control = preview.reviewedControlNames[definition.siCode]?.let { name ->
+                    baseControl.copy(publicLabel = name)
+                } ?: baseControl
                 importedControls += control
                 controlPoint.copy(
                     categoryId = categoryId,
@@ -1860,12 +1863,12 @@ object EventProjectEditor {
                 controlPoints = info.controlPoints.map { point ->
                     val id = idMap[point.controlId] ?: point.controlId
                     val control = resolvedControls[id]
-                    point.copy(controlId = id, type = control?.type ?: point.type, label = control?.label ?: point.label)
+                    point.copy(controlId = id, type = control?.type ?: point.type, label = preview.reviewedControlNames[control?.siCode] ?: control?.label ?: point.label)
                 },
                 courseObjects = info.courseObjects.map { point ->
                     val id = idMap[point.id] ?: point.id
                     val control = resolvedControls[id]
-                    point.copy(id = id, label = control?.label ?: point.label, type = when (control?.type) {
+                    point.copy(id = id, label = preview.reviewedControlNames[control?.siCode] ?: control?.label ?: point.label, type = when (control?.type) {
                         ControlPointType.CONTROL -> ProtectedCourseObjectType.CONTROL
                         ControlPointType.BEACON -> ProtectedCourseObjectType.BEACON
                         ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
@@ -1910,7 +1913,9 @@ object EventProjectEditor {
                 raceData = projectFile.raceData.copy(
                     categories = categories.filter { it.category.id in activeIds },
                     courseMappings = categories.filter { it.category.id !in activeIds },
-                    controls = EventControlCatalog.mergeControls(projectFile.raceData.controls, importedControls)
+                    controls = EventControlCatalog.mergeControls(projectFile.raceData.controls.map { existing ->
+                        importedControls.firstOrNull { it.id == existing.id } ?: existing
+                    }, importedControls)
                 )
             ),
             importedCount = importedCount,

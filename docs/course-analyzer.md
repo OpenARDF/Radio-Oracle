@@ -169,6 +169,16 @@ Workflow reports use passed/failed/blocked/skipped. Audit and acceptance failure
 For a Race File affected by the earlier station/label renumbering bug, `just course-station-repair <affected-race> <pre-renumbering-reference-race> <new-output-file>` restores the reference catalog's fox/SI pairs and reapplies the existing geometry through the normal application service. It does not recalculate routes or lengths. Recovery requires matching station IDs, SI codes and roles, complete applied bindings, no pending draft and no recorded activity. It writes only a new file; neither input is modified. A reference is required because custom station numbers cannot safely be inferred from fox numbers or internal IDs. Use `just course-export-verify <repaired-race> <new-output-directory>` to regenerate KML, GPX, IOF XML and diagrams.
 
 
+### Desktop XML control mapping review
+
+Desktop IOF CourseData import begins with **Review XML Control Mapping**. Each point referenced by the imported courses appears once, with its original XML identifier, editable alias/public name, role, and SI station code. Every course referencing that identifier uses the reviewed mapping.
+
+A valid numeric `Id` supplies the proposed station code. Identifiers containing letters supply aliases; recognized names suggest Fox, Beacon, Spectator, Start or Finish roles. Explicit XML Start/Finish types and existing race control roles take precedence over name guesses. `PunchingUnitId`, when present, supplies the station code ahead of a numeric `Id`; differing hints, multiple values and conflicting names are shown for review. Source names and existing public names prefill the name field. Existing identities, roles and names are retained on reimport unless the reviewed mapping changes the name.
+
+Review and correct every row. Fox, Beacon and Spectator points require valid, unique station codes in the supported 1–511 range. Start and Finish are course endpoint locations and do not create control station assignments. **Use 900–999 as route points (no punches)** remains an explicit option; those points retain bends and supplied leg lengths without becoming stations or visible 2D markers. The option is off by default.
+
+**Review Courses** continues to the existing category/course selection and course reports. Nothing changes in the race until the final **Accept Import** action. Canceling either review leaves it unchanged. A late readout or changed race design blocks acceptance. Changing a shared public name also refreshes other stored courses using that control, preserving their geometry and password protection; unlock protected data before importing such a change.
+
 ### Replaying a supplied IOF regression
 
 `just gradle :desktopApp:test --tests '*DesktopIofReimportAcceptanceTest' -PiofRegressionRace=/absolute/path/race.json -PiofRegressionXml=/absolute/path/courses.xml` runs a read-only import, analysis and paired PDF/KML export check. It verifies SI-to-location identity, import acceptance isolation and unchanged source bytes. Reports go to `desktopApp/build/reports/iof-reimport-acceptance/`. The test uses synthetic flat elevations so it is deterministic; these reports are verification artifacts, not terrain estimates. Private support attachments are never committed. Without both properties, this opt-in test is explicitly skipped.
