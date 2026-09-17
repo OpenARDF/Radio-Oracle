@@ -39,6 +39,48 @@ class DesktopCsvFormatUiTest {
         screenshot("categories-export-workspace")
     }
 
+    @Test fun courseImportAndExportShowSeparateFormatBoxesInMenuOrder() {
+        val actions = mutableListOf<DesktopNavAction>()
+        rule.setContent { MaterialTheme { Surface(Modifier.width(1100.dp).height(850.dp)) {
+            DesktopAppShellPreview(DesktopClassicRouteAnalysisTest().fixture()) { actions += it }
+        } } }
+        rule.onNodeWithText("Press any key or click to continue.").performClick()
+        rule.onNodeWithText("Courses >").performClick()
+        rule.onNodeWithText("Import >").performClick()
+        assertTrue(actions.isEmpty())
+        assertCsvBeforeKml("import", "controls-import")
+        rule.onNodeWithText("KML/KMZ format").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Show format details").performScrollTo().performClick()
+        rule.onNodeWithText("Route name and geometry", substring = true).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Use a regulation category", substring = true).assertExists()
+        screenshot("courses-import-kml-details")
+        rule.onNodeWithText("< Back").performClick()
+        rule.onNodeWithText("Export >").performClick()
+        assertCsvBeforeKml("export", "course-export")
+        assertTrue(actions.isEmpty())
+        rule.onNodeWithText("KML/KMZ format").performScrollTo().assertIsDisplayed()
+        screenshot("courses-export-formats")
+    }
+
+    @Test fun kmlDetailsRemainReachableInANarrowWindow() {
+        rule.setContent { MaterialTheme { Surface(Modifier.width(390.dp).height(600.dp)) {
+            DesktopWorkspaceScroll(Modifier.fillMaxSize()) {
+                DesktopFileFormatPanels(listOf(DesktopFileFormatGuide.Csv(CsvFormatGuides.controls(true)),
+                    DesktopFileFormatGuide.Kml(KmlFormatGuides.controlsImport())))
+            }
+        } } }
+        assertCsvBeforeKml("import", "controls-import")
+        rule.onNodeWithText("Show format details").performScrollTo().performClick()
+        rule.onNodeWithText("Import and exchange", substring = true).performScrollTo().assertIsDisplayed()
+        screenshot("kml-details-narrow")
+    }
+
+    private fun assertCsvBeforeKml(direction: String, kmlId: String) {
+        val csv = rule.onNodeWithTag("csv-format-controls-$direction").fetchSemanticsNode().boundsInRoot
+        val kml = rule.onNodeWithTag("kml-format-$kmlId").fetchSemanticsNode().boundsInRoot
+        assertTrue("Separate format boxes must follow the menu order", csv.top < kml.top)
+    }
+
     @Test fun importsShowHeaderExampleAndTemplateWithoutStartingAnImport() {
         val guide = CsvFormatGuides.controls(true)
         var saved: CsvFormatGuide? = null

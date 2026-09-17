@@ -1,13 +1,10 @@
 package org.openardf.radiooracle.desktop
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -21,9 +18,7 @@ internal fun DesktopCsvFormatPanel(guide: CsvFormatGuide, onSaveTemplate: ((CsvF
     var details by remember(guide.id) { mutableStateOf(false) }
     var templateStatus by remember(guide.id) { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
-    Column(Modifier.fillMaxWidth().border(1.dp, DesktopPalette.LightGrey).padding(12.dp)
-        .testTag("csv-format-${guide.id}-${if (guide.importable) "import" else "export"}"),
-        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    DesktopFileFormatBox("csv-format-${guide.id}-${if (guide.importable) "import" else "export"}") {
         Text("CSV format — ${guide.title}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
         Text(guide.organization, fontSize = 12.sp)
         Text(guide.orderRule, fontSize = 12.sp)

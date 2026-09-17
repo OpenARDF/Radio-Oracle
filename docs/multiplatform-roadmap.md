@@ -222,6 +222,24 @@ These are deliberate limits in the current app, not necessarily defects.
   accept the same fields and defaults. Cover expiry, replay, tampering,
   incomplete settings, cancellation, and explicit overwrite behavior in tests.
 
+### Import And Export Format Guidance
+
+- Extend the CSV and KML/KMZ format guidance pattern to other supported import
+  and export formats, including GPX and XML. Place basic information beside each
+  corresponding file action on desktop and Android, with expandable details.
+- Explain each format's purpose, accepted file types and versions, expected
+  structure, required names/identifiers, coordinate and elevation conventions,
+  and which data the action imports or exports. Distinguish XML dialects and
+  document types, such as IOF CourseData, EntryList, StartList, and ResultList,
+  instead of presenting XML as a single interchangeable format.
+- Include small examples and explain supported features, omitted data, and
+  round-trip limitations. Link to existing starter files, templates, or
+  documentation where available.
+- Reuse the existing guidance UI and shared metadata wherever practical. Verify
+  guidance against the actual importers and exporters, with representative
+  fixtures, while preserving file formats, compatibility, import review, and
+  protected course-data behavior.
+
 ## Medium-Term Roadmap
 
 ### Shared Race Services

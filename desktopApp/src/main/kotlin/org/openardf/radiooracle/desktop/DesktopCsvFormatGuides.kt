@@ -17,14 +17,8 @@ internal object DesktopCsvFormatGuides {
 
     fun forNavigation(state: DesktopNavState, project: EventProjectFile?, includeEncryptedIdealOrder: Boolean,
         awardDisplayMode: EventAwardDisplayMode): List<CsvFormatGuide> {
-        val items = DesktopNavigation.menuItemsForStack(state.workflow, state.submenuStack)
-        val selected = selectedAction(state)
-        val actions = if (selected != null) listOf(selected) else {
-            val parent = DesktopNavigation.itemById(state.workflow, state.selectedItemId)
-            if (parent?.label !in setOf("Import", "Export", "Result Files")) return emptyList()
-            items.mapNotNull { it.action }
-        }
-        return actions.mapNotNull { forAction(it, project, includeEncryptedIdealOrder, awardDisplayMode) }
+        return DesktopFileFormatGuides.navigationActions(state)
+            .mapNotNull { forAction(it, project, includeEncryptedIdealOrder, awardDisplayMode) }
             .distinctBy { it.id to it.importable }
     }
 

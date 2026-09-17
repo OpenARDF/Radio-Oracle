@@ -12372,8 +12372,8 @@ private fun RadioOManagerDesktopApp(
                                     onBreadcrumbClick = { requestNavigation(DesktopPendingNavigation.Ancestor(it)) },
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
                                     csvAction = DesktopCsvFormatGuides.selectedAction(navState),
-                                    csvGuides = remember(navState, projectFile, csvExportProjectFile, isProtectedCourseOrderUnlocked, awardDisplayMode) {
-                                        DesktopCsvFormatGuides.forNavigation(navState, csvExportProjectFile ?: projectFile,
+                                    fileFormatGuides = remember(navState, projectFile, csvExportProjectFile, isProtectedCourseOrderUnlocked, awardDisplayMode) {
+                                        DesktopFileFormatGuides.forNavigation(navState, csvExportProjectFile ?: projectFile,
                                             isProtectedCourseOrderUnlocked, awardDisplayMode)
                                     },
                 projectFile = projectFile,
@@ -13649,7 +13649,7 @@ private fun SectionWorkspace(
     breadcrumb: List<String>,
     onBreadcrumbClick: (Int) -> Unit,
     menuDescription: String,
-    csvGuides: List<org.openardf.radiooracle.shared.files.CsvFormatGuide>,
+    fileFormatGuides: List<DesktopFileFormatGuide>,
     csvAction: DesktopNavAction?,
     projectFile: EventProjectFile?,
     eventFilePath: Path?,
@@ -13785,7 +13785,7 @@ private fun SectionWorkspace(
             title = title,
             menuDescription = menuDescription
         )
-        csvGuides.forEach { DesktopCsvFormatPanel(it, ::saveDesktopCsvTemplate) }
+        DesktopFileFormatPanels(fileFormatGuides)
         if (csvAction != null) {
             DisabledReasonTooltip(disabledNavActionReason(csvAction)) {
                 Button(onClick = { onNavAction(csvAction) }, enabled = isNavActionEnabled(csvAction)) {
