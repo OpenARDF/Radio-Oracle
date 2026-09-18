@@ -524,7 +524,10 @@ mid-term goal on Android and desktop.
   verify the actual write protocol and capacity, then verify the written name
   by reading it back. The desktop SI-Card8 editor previews names using the
   vendor-validated combined limit of 23 name characters and an ASCII-only
-  preview policy; it does not write cards. See the
+  name policy. An optional, privately configured desktop SDK bridge now provides
+  an explicit write confirmation, pinned card/station identity, and independent
+  read-back verification. Shared Kotlin validates requests, progress ordering,
+  and verification results for later Android reuse. See the
   [SI-Card8 programming investigation](sportident-si8-programming.md) for the
   verified boundary and remaining write-protocol questions. Config+ programming
   and read-back have been verified with the available SI-Card8/BSM8 hardware;
@@ -532,8 +535,10 @@ mid-term goal on Android and desktop.
   through native serial transport on macOS. The Mac SDK write transaction has
   passed verification after reconnecting and reinserting the same card, with
   matching names and preserved compared punch values, feedback bytes, and
-  reported character set. Interruption/recovery validation and packaged app
-  integration remain unfinished.
+  reported character set. The locally packaged desktop app has also completed
+  an explicitly confirmed write with independent read-back on this hardware.
+  Hardware interruption/recovery validation, a supported
+  vendor SDK release, and distributable runtime/license packaging remain unfinished.
   Validate the write transaction on real hardware and preserve card identity
   and unrelated card data. This workflow primarily targets new cards;
   if programming clears existing punches, disclose that consequence before writing.

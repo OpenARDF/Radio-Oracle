@@ -245,6 +245,14 @@ desktop-launch:
     sleep 3
     pgrep -fl Radio-Oracle
 
+# Launch the local desktop prototype with privately configured SDK helper paths.
+desktop-sdk-launch:
+    @test -n "${RADIO_ORACLE_SI_SDK_HELPER_DLL:-}" && test -n "${SPORTIDENT_SDK_LICENSE_FILE:-}" && test -n "${RADIO_ORACLE_DOTNET:-}" || { echo "Configure the private SDK helper, license file, and dotnet paths first." >&2; exit 1; }
+    @if pgrep -x Radio-Oracle >/dev/null; then echo "Save and close Radio-Oracle before launching with SDK support." >&2; exit 1; fi
+    open "{{justfile_directory()}}/{{app_bundle}}" --env "RADIO_ORACLE_SI_SDK_HELPER_DLL=$RADIO_ORACLE_SI_SDK_HELPER_DLL" --env "SPORTIDENT_SDK_LICENSE_FILE=$SPORTIDENT_SDK_LICENSE_FILE" --env "RADIO_ORACLE_DOTNET=$RADIO_ORACLE_DOTNET"
+    sleep 3
+    pgrep -x Radio-Oracle
+
 # Reuse the app's startup-file hook for repeatable UI tests; never closes an existing app.
 desktop-launch-file file:
     @test -f {{quote(file)}} || { echo "Race/series file does not exist." >&2; exit 1; }

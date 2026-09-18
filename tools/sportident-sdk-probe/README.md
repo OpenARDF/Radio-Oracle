@@ -103,6 +103,29 @@ A separately approved return to `Mickey` / `Mouse` passed the complete revised
 transaction with exit zero: 11 control punches before/after, matching captured
 punch values, feedback bytes, and reported character set. Unexposed card data
 was not compared; mid-write removal and recovery have not been tested on hardware.
-This is an investigation tool, separate from the packaged Radio-Oracle application. A
+The optional desktop prototype can invoke this helper as a separate process. A
 supported vendor release, runtime packaging, and license injection into a
 distributed product still need to be resolved.
+
+## Launch the local desktop prototype
+
+After building the helper with the private SDK reference and building the Mac
+app using `just desktop-package`, configure these environment variables locally:
+
+- `RADIO_ORACLE_SI_SDK_HELPER_DLL`: absolute path to the built `SportIdentSdkProbe.dll`.
+- `RADIO_ORACLE_DOTNET`: absolute path to the executable .NET runtime.
+- `SPORTIDENT_SDK_LICENSE_FILE`: absolute path to the privately issued license file.
+
+Save and close the running app, then use `just desktop-sdk-launch`. The SI Card
+page offers Write Names after a fresh native read. Its confirmation requires
+acceptance of possible punch loss; reinsertion is required before writing and
+again for independent read-back. The helper emits versioned JSON progress packets
+for WaitingForCard, Writing, and WaitingForReadBack, followed by its verified result.
+The app rejects missing/reordered phases, unsuccessful exit, or mismatched results.
+Normal desktop launches leave programming unavailable unless all private paths are
+configured. This launch recipe does not copy SDK binaries or credentials into the app.
+
+The packaged local Mac app has also completed a user-confirmed write from `Mickey`
+/ `Mouse` to `Mortimer` / `Mouse` on card 2450662, with independent read-back and
+all 11 control punches, captured punch values, feedback bytes, and reported
+character set preserved. The Race File was unchanged.

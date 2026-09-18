@@ -30,6 +30,7 @@ static class CardWriteProbe
 
             stage = "fresh SI-Card8 read before write";
             var initialRead = session.Arm();
+            ReportPhase("WaitingForCard");
             Console.Error.WriteLine($"Station {request.StationNumber} verified. Remove and insert SI-Card8 {request.CardNumber}; keep it seated (45-second timeout).");
             var original = initialRead.WaitAsync(TimeSpan.FromSeconds(45)).GetAwaiter().GetResult();
             if ((original.PersonalData.FirstName ?? "") != request.ExpectedFirstName ||
@@ -57,6 +58,7 @@ static class CardWriteProbe
             };
 
             stage = "SI-Card8 name write";
+            ReportPhase("Writing");
             Console.Error.WriteLine($"Writing first name '{request.FirstName}', last name '{request.LastName}' to card {request.CardNumber}; possible punch loss was accepted in the request.");
             // There is one SDK write invocation. Removal/failure permanently invalidates this session.
             writeAttempted = true;
@@ -70,6 +72,7 @@ static class CardWriteProbe
             ReadExpectedStation(communication, request.StationNumber);
             stage = "SI-Card8 read-back verification";
             var verificationRead = session.Arm();
+            ReportPhase("WaitingForReadBack");
             Console.Error.WriteLine($"Read-back ready. Remove and reinsert SI-Card8 {request.CardNumber}; keep it seated (45-second timeout). No further write will occur.");
             var readBack = verificationRead.WaitAsync(TimeSpan.FromSeconds(45)).GetAwaiter().GetResult();
             if ((readBack.PersonalData.FirstName ?? "") != request.FirstName ||
@@ -111,6 +114,11 @@ static class CardWriteProbe
         }
         return exitCode;
     }
+
+    static void ReportPhase(string phase) => Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        SchemaVersion = 1, Event = "Phase", Phase = phase,
+    }));
 
     static Communication CreateCommunication(string port) => new()
     {

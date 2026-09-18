@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -15,17 +16,23 @@ import androidx.compose.ui.unit.dp
 import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspection
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameProblem
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerNamePlanner
+import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerNamePreview
 
 @Composable
-internal fun SportIdentSi8OwnerNameEditor(inspection: SportIdentCardOwnerInspection) {
+internal fun SportIdentSi8OwnerNameEditor(
+    inspection: SportIdentCardOwnerInspection,
+    enabled: Boolean = true,
+    canProgram: Boolean = false,
+    onWrite: (SportIdentSi8OwnerNamePreview) -> Unit = {}
+) {
     var firstName by remember(inspection) { mutableStateOf(inspection.holder?.firstName.orEmpty()) }
     var lastName by remember(inspection) { mutableStateOf(inspection.holder?.lastName.orEmpty()) }
     val preview = SportIdentSi8OwnerNamePlanner.preview(inspection, firstName, lastName)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Prepare SI-Card8 Owner Name", fontWeight = FontWeight.Bold)
-        Text("Edit the names to preview a replacement. Nothing is written to the card.")
-        OutlinedTextField(firstName, { firstName = it }, label = { Text("First name") }, singleLine = true)
-        OutlinedTextField(lastName, { lastName = it }, label = { Text("Last name") }, singleLine = true)
+        Text("Edit the names to prepare a replacement.")
+        OutlinedTextField(firstName, { firstName = it }, label = { Text("First name") }, singleLine = true, enabled = enabled)
+        OutlinedTextField(lastName, { lastName = it }, label = { Text("Last name") }, singleLine = true, enabled = enabled)
         Text("First and last names can contain ${SportIdentSi8OwnerNamePlanner.MAX_NAME_CHARACTERS} characters in total.")
         preview.problems.forEach { problem ->
             Text(when (problem) {
@@ -52,6 +59,14 @@ internal fun SportIdentSi8OwnerNameEditor(inspection: SportIdentCardOwnerInspect
                     }
                 }
             }
+        }
+        if (canProgram) {
+            val changed = preview.firstName != inspection.holder?.firstName.orEmpty() ||
+                preview.lastName != inspection.holder?.lastName.orEmpty()
+            Button(enabled = enabled && preview.problems.isEmpty() && changed,
+                onClick = { onWrite(preview) }) { Text("Write Names") }
+        } else {
+            Text("Name programming is unavailable on this desktop. This preview does not change the card.")
         }
     }
 }

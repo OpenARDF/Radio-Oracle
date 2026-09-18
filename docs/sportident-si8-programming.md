@@ -116,8 +116,9 @@ reopens the serial connection, checks the station again, and prompts for a
 fresh insertion to check the card identity and stored names. Immutable
 before/after snapshots compare control-punch values and clear/check/start/finish
 records, including their reserve values, plus the reported clear counter,
-control-punch pointer, feedback bytes, and character set. The helper is separate
-from the desktop app; shared Kotlin name preparation remains reusable by Android.
+control-punch pointer, feedback bytes, and character set. The helper runs as a
+separate process; the optional desktop prototype now invokes it. Shared Kotlin
+name preparation and transaction validation remain reusable by Android.
 
 The writer built without warnings. Eight malformed-request cases were rejected
 before license configuration or serial access. On real hardware, a request for
@@ -146,12 +147,11 @@ This proves the Mac SDK write and independent read-back path on the available
 SI-Card8/BSM8 hardware. The helper does not automatically retry a write after
 timeout, removal, or failure; a write attempt with uncertain outcome requires
 an independent card read before deciding whether to proceed. Mid-write removal
-and interruption recovery still need hardware validation before app integration.
+and interruption recovery still need hardware validation before production use.
 
 The supplied library's API documentation exposes personal-data programming,
 validation, progress, and completion facilities. The Mac SDK transaction now
-establishes a tested integration route on the available hardware; Radio-Oracle
-does not yet invoke the writer. The documentation inspected does not explain
+establishes a tested integration route on the available hardware. The documentation inspected does not explain
 punch preservation guarantees or the raw write
 transaction. The supplied deprecated PC Programmer's Guide describes card
 readout, but does not specify a personal-data write command.
@@ -175,11 +175,43 @@ the .NET runtime/library and injecting a licensed key without adding secrets
 to public source. A desktop bridge would be separate from the shared Kotlin
 planner and would require a separate Android integration later.
 
-Next, integrate an explicit desktop app action targeting the
-freshly read card, followed by read-back verification of its number and names.
-This workflow primarily targets new cards. If writing clears existing punches,
-disclose that before writing. SDK completion alone is insufficient evidence
-that the desired names were stored.
+### Optional desktop programming prototype
+
+The desktop SI Card page can now offer Write Names when launched with privately
+configured SDK helper, runtime, and license-file paths. Normal launches retain
+the native owner-information reader and name preview. No SDK binaries or license
+values are included in the Mac bundle or repository.
+
+A native read captures the card number, station number, and port. The confirmation
+shows the replacement names and requires acceptance of possible punch loss. The
+helper reads that same card again and checks its existing names before writing.
+The app holds its existing SI transport mutex until the helper exits and cleanup
+finishes, preventing station polling or another read from opening the same port.
+It requests reinsertion for independent verification and accepts success only
+after matching identity, names, punch counts, and all preservation flags.
+
+Timeout, cancellation, malformed output, or helper failure clears the editor's
+snapshot and requires a fresh native read. The child process is stopped and its
+temporary request deleted before releasing the mutex. No automatic write retry
+occurs. Shared Kotlin contains the request/result models, name/consent rules,
+progress sequence, and read-back validation; desktop contains process management
+and UI. Android transport integration remains separate.
+
+Five shared transaction tests and seven desktop child-process tests pass,
+including wrong identity, missing/reordered progress, nonzero exit, timeout,
+cancellation during startup and writing, process termination, and request cleanup.
+The local Mac distributable builds and verifies successfully. In the running Mac
+app, Charles entered `Mortimer` / `Mouse` and confirmed the possible-punch-loss
+dialog for card 2450662. After both requested reinsertions, the app reported
+"Names written and verified. 11 control punches preserved." Its owner details
+showed `Mortimer` / `Mouse`; the result also passed feedback, reported character
+set, and captured punch-value preservation checks. The Race File remained clean
+(Save Race disabled). This verifies the app-to-helper transaction on the available
+SI-Card8/BSM8 hardware, without claiming hardware interruption/recovery coverage.
+
+Next, validate hardware interruption/recovery behavior and resolve supported SDK,
+runtime, and licensed distribution packaging. This workflow primarily targets new
+cards. SDK completion alone is insufficient evidence that the desired names were stored.
 
 Vendor archives, extracted API documentation, binaries, and credentials stay
 outside this repository. No binary inspection, decompilation, or serial command
