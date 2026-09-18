@@ -222,6 +222,14 @@ These are deliberate limits in the current app, not necessarily defects.
   accept the same fields and defaults. Cover expiry, replay, tampering,
   incomplete settings, cancellation, and explicit overwrite behavior in tests.
 
+### Elevation Profiles In Results Exports
+
+- Add course elevation profile diagrams to all results exports, with particular
+  priority on the Cloudflare public-results export.
+- Reuse course route geometry and elevation data consistently across Android
+  and desktop exports. Show distance and elevation units clearly, handle missing
+  elevation data explicitly, and honor existing protected course-data rules.
+
 ### Import And Export Format Guidance
 
 - Extend the CSV and KML/KMZ format guidance pattern to other supported import
