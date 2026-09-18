@@ -274,11 +274,23 @@ restores the UI while retaining the pending request. Focused desktop tests and
 Mac packaging pass. The rebuilt app, version 1.0.49j, retained the reminder after
 restart; a fresh native read confirmed `Mortimer` / `Mouse`, and Accept Card Read
 cleared the record and restored the editor. The Race File remained unchanged.
-Corrected GUI stop behavior still needs acceptance on hardware; no further write
-was attempted during this fix, and earlier punch/settings preservation was not verified.
+No further write was attempted during this fix, and earlier punch/settings
+preservation was not verified.
 
-Next, finish corrected GUI stop acceptance, characterize physical interruption,
-and resolve supported SDK, runtime, and licensed distribution packaging. This workflow primarily targets new
+The separately approved corrected GUI retest passed on the same SI-Card8/BSM8
+hardware in version 1.0.49j. The app changed `Mortimer` / `Mouse` to `Daisy` / `Duck`.
+After Write completed appeared, Stop Verification was clicked before reinsertion
+for SDK read-back. The helper exited, the page immediately entered recovery,
+Read Card became enabled, and writing stayed unavailable. A fresh native read
+confirmed card 2450662 with `Daisy` / `Duck` and the requested-name assessment.
+Accept Card Read cleared the persistent record and restored both fields and the
+editor without restarting the app. Save Race stayed disabled. Earlier
+punch/settings preservation was not verified for this deliberately interrupted
+transaction. This completes the GUI stop/recovery hardware acceptance for the
+available desktop prototype, without claiming physical mid-write interruption coverage.
+
+Next, characterize physical interruption and resolve supported SDK, runtime,
+and licensed distribution packaging. This workflow primarily targets new
 cards. SDK completion alone is insufficient evidence that the desired names were stored.
 
 The public [SPORTident developer page](https://www.sportident.com/support/developers)

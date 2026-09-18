@@ -543,13 +543,14 @@ mid-term goal on Android and desktop.
   assessment rules are shared for Android reuse.
   A controlled helper stop after SDK write completion, restart, fresh native
   read, and explicit recovery acknowledgement have passed on the Mac hardware.
-  A GUI stop test exposed a cancellation cleanup bug; the cleanup fix passes
-  its regression test, with corrected GUI hardware acceptance still pending.
-  Physical interruption during writing,
+  A GUI stop test exposed a cancellation cleanup bug; its regression test and
+  corrected GUI hardware retest now pass. Stop Verification releases the helper,
+  enables a fresh native read, and restores the editor after acknowledgement
+  without restarting the app. Physical interruption during writing,
   a supported vendor SDK release, and distributable runtime/license packaging
   remain unfinished.
-  Validate the write transaction on real hardware and preserve card identity
-  and unrelated card data. This workflow primarily targets new cards;
+  Continue characterizing preservation of unrelated card data and physical
+  interruption behavior. This workflow primarily targets new cards;
   if programming clears existing punches, disclose that consequence before writing.
 - Add explicit multi-download-station support so desktop can detect multiple
   connected stations, show their serial numbers/modes/ports, let the user choose

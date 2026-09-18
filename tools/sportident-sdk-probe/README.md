@@ -146,6 +146,15 @@ the reminder. Earlier punch/settings preservation was not verified. This test
 did not exercise clicking the GUI Stop Verification button or removing the card
 during the write.
 
+The corrected GUI Stop Verification flow also passed a separate hardware retest
+in desktop version 1.0.49j. Card 2450662 changed from `Mortimer` / `Mouse` to
+`Daisy` / `Duck`; Stop Verification was clicked after write completion and before
+SDK read-back. The helper exited and the page enabled native Read Card while
+blocking another write. A fresh read confirmed the target card and requested
+names; Accept Card Read cleared the reminder and restored the editor without an
+app restart. Earlier punch/settings preservation was not verified in this test,
+and physical interruption during writing remains untested.
+
 Desktop invocation adds `--supervised` after the request-file argument. It keeps
 the helper's stdin pipe open; pipe closure or any input terminates the helper
 with exit code 15, including after an abrupt app crash. The direct command-line
