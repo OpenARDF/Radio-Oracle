@@ -683,29 +683,7 @@ object DesktopNavigation {
                             workflow,
                             DesktopSection.EventValidator
                         ),
-                        group(
-                            "setup.tools.sportident",
-                            "SPORTident",
-                            workflow,
-                            listOf(
-                                item(
-                                    "setup.tools.sportident.punch-history",
-                                    "Punch History",
-                                    workflow,
-                                    DesktopSection.SportIdentStationBackup,
-                                    requiresEventFile = false
-                                ),
-                                item(
-                                    "setup.tools.sportident.time-sync",
-                                    "Time Sync",
-                                    workflow,
-                                    DesktopSection.SportIdentTimeSync,
-                                    requiresEventFile = false
-                                )
-                            ),
-                            DesktopSection.SportIdentTools,
-                            requiresEventFile = false
-                        ),
+                        sportIdentTools(workflow),
                         action(
                             "setup.tools.logs",
                             "Send Diagnostic Logs...",
@@ -1478,11 +1456,13 @@ object DesktopNavigation {
         "setup.courses.course-tools" to
             "Use Course Tools to analyze or modify course-related files and course data.",
         "setup.tools.sportident" to
-            "Use SPORTident tools for station preparation tasks that are not tied to one Race File.",
+            "Use SPORTident tools to inspect card owner information and prepare stations without opening a Race File.",
         "setup.tools.sportident.punch-history" to
             "Use Punch History to read and search a coupled field station's stored SI-Card visits without changing it.",
         "setup.tools.sportident.time-sync" to
             "Use Time Sync to inspect the attached SPORTident station before station-clock synchronization.",
+        "setup.tools.sportident.si-card" to
+            "Use SI Card to read the inserted card's identity, owner name, and supported club information without changing the card.",
         "setup.courses.course-tools.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
         "setup.courses.course-tools.course-report" to
@@ -1810,6 +1790,19 @@ object DesktopNavigation {
             action("setup.event-file.save", "Save Race", workflow, DesktopNavAction.SaveEventFile),
             action("setup.event-file.close", "Close Race File", workflow, DesktopNavAction.CloseEventFile)
         )
+
+    private fun sportIdentTools(workflow: DesktopWorkflow): DesktopNavItem = group(
+        "setup.tools.sportident", "SPORTident", workflow,
+        listOf(
+            item("setup.tools.sportident.punch-history", "Punch History", workflow,
+                DesktopSection.SportIdentStationBackup, requiresEventFile = false),
+            item("setup.tools.sportident.time-sync", "Time Sync", workflow,
+                DesktopSection.SportIdentTimeSync, requiresEventFile = false),
+            item("setup.tools.sportident.si-card", "SI Card", workflow,
+                DesktopSection.SportIdentCardInspection, requiresEventFile = false)
+        ),
+        DesktopSection.SportIdentTools, requiresEventFile = false
+    )
 
     private fun item(
         id: String,

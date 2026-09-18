@@ -516,9 +516,11 @@ mid-term goal on Android and desktop.
   guarded maintenance phase. A "set attached download box to READOUT" action may
   be added only after the configuration transaction is verified against real
   hardware and has immediate read-back validation.
-- Add an SI card programming tool to the SPORTident tools for writing the
-  owner's name to supported cards. Read and display the existing owner name,
-  identify supported card/station combinations and name encoding/length limits,
+- Extend the desktop SPORTident SI Card owner-information inspector into a
+  programming tool for writing the owner's name to supported cards. Keep card
+  family rules and owner parsing in shared code for later Android reuse;
+  add Android UI and transport integration separately. Identify supported
+  card/station combinations and name encoding/length limits,
   preview the replacement, and verify the written name by reading it back.
   Validate the write transaction on real hardware and preserve card identity,
   punch records, and unrelated card data.

@@ -1181,12 +1181,15 @@ class DesktopNavigationTest {
         val sportIdentTools = tools.children.first { it.label == "SPORTident" }
         val punchHistory = sportIdentTools.children.first { it.label == "Punch History" }
         val timeSync = sportIdentTools.children.first { it.label == "Time Sync" }
+        val siCard = sportIdentTools.children.first { it.label == "SI Card" }
         assertEquals(DesktopSection.SportIdentTools, sportIdentTools.section)
         assertEquals(DesktopSection.SportIdentStationBackup, punchHistory.section)
         assertEquals(DesktopSection.SportIdentTimeSync, timeSync.section)
         assertFalse(sportIdentTools.requiresEventFile)
         assertFalse(punchHistory.requiresEventFile)
         assertFalse(timeSync.requiresEventFile)
+        assertEquals(DesktopSection.SportIdentCardInspection, siCard.section)
+        assertFalse(siCard.requiresEventFile)
     }
 
     @Test

@@ -34,6 +34,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentCardReadFailure
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadRetryPolicy
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
+import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspector
 import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 
@@ -114,7 +115,8 @@ class DesktopSportIdentCardBlockReader(
     private val nowMillis: () -> Long = { System.nanoTime() / 1_000_000L },
     private val cardReadAttemptTimeoutMs: Int = SportIdentCardCommandReader.DEFAULT_ATTEMPT_TIMEOUT_MS,
     private val cardReadRetryDelayMs: Long = SportIdentCardCommandReader.DEFAULT_RETRY_DELAY_MS,
-    private val cardReadMaxAttempts: Int = SportIdentCardReadRetryPolicy.DEFAULT_MAX_ATTEMPTS
+    private val cardReadMaxAttempts: Int = SportIdentCardReadRetryPolicy.DEFAULT_MAX_ATTEMPTS,
+    private val includeOwnerData: Boolean = false
 ) {
     fun readFirstSi8Or9OrSiacBlockAfterInsert(
         port: DesktopSerialPort,
@@ -208,9 +210,22 @@ class DesktopSportIdentCardBlockReader(
                 )
                 else -> null
             } ?: error("Downloaded SI card blocks could not be parsed.")
+            val ownerBlocks = if (includeOwnerData) {
+                SportIdentCardOwnerInspector.additionalBlocks(readout.series)
+                    .filter { number -> blocks.none { it.blockNumber == number } }
+                    .map { number ->
+                        readCardBlockOnOpenPort(
+                            commandReader, number,
+                            if (readout.series == 6) SportIdentProtocol.GET_SI_CARD6
+                            else SportIdentProtocol.GET_SI_CARD8_9_SIAC,
+                            if (readout.series == 6) SportIdentCardBlockParser::si6Block
+                            else SportIdentCardBlockParser::si8Or9OrSiacBlock
+                        )
+                    }
+            } else emptyList()
             writeAck(port, readId)
             DesktopDebugLog.sportIdent("READ_END read=$readId si=${inserted.siNumber} parsed=true")
-            return DesktopSportIdentCardBlockDownload(inserted, blocks, readout)
+            return DesktopSportIdentCardBlockDownload(inserted, blocks + ownerBlocks, readout)
         } catch (error: Exception) {
             DesktopDebugLog.sportIdent("READ_EXCEPTION read=$readId ${error.stackTraceToString().take(8192)}")
             throw error

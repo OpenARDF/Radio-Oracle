@@ -275,11 +275,7 @@ object SportIdentCardReadoutParser {
         byte == NULL || byte == ZERO
 
     private fun ByteArray.toAsciiString(): String? =
-        map { byte -> byte.toUnsignedInt().toChar() }
-            .filterNot { it.isISOControl() || it == '\u007f' }
-            .joinToString("")
-            .trim()
-            .ifBlank { null }
+        toSportIdentOwnerText()
 
     private const val PUNCH_BYTES = 4
     private const val SI5_PUNCH_BYTES = 3
@@ -312,3 +308,10 @@ object SportIdentCardReadoutParser {
 }
 
 private fun Byte.toUnsignedInt(): Int = toInt() and 0xff
+
+/** Common cleanup for fixed-width and delimited card-owner text. */
+internal fun ByteArray.toSportIdentOwnerText(): String? =
+    takeWhile { it != 0.toByte() && it != 0xEE.toByte() }
+        .map { (it.toInt() and 0xff).toChar() }
+        .filterNot { it.isISOControl() || it == '\u007f' }
+        .joinToString("").trim().ifBlank { null }

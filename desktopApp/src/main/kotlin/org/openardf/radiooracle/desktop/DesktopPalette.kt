@@ -107,6 +107,7 @@ enum class DesktopSection(val label: String) {
     SportIdentTools("SPORTident"),
     SportIdentStationBackup("Punch History"),
     SportIdentTimeSync("Time Sync"),
+    SportIdentCardInspection("SI Card"),
     KmlMoveCourse("Move Course"),
     KmlCreateCourse("Create Course"),
     Kml2dGraphic("2D Graphic"),

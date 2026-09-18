@@ -13944,26 +13944,11 @@ private fun SectionWorkspace(
                 }
             }
         }
-        if (section == DesktopSection.SportIdentTools) {
-            SportIdentToolsPanel()
-        }
-        if (section == DesktopSection.SportIdentStationBackup) {
-            SportIdentStationBackupPanel(
-                isReaderConnected = siReaderState.severity == DesktopSiReaderSeverity.CONNECTED,
-                isStationBusy = isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard,
-                siPortMutex = siPortMutex
-            )
-        }
-        if (section == DesktopSection.SportIdentTimeSync) {
-            SportIdentTimeSyncPanel(
-                siReaderState = siReaderState,
-                isStationBusy = isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard,
-                siPortMutex = siPortMutex,
-                raceClockTick = raceClockTick,
-                portDiscoveryMode = sportIdentPortDiscoveryMode,
-                onSetPortDiscoveryMode = onSetSportIdentPortDiscoveryMode
-            )
-        }
+        SportIdentSectionWorkspace(
+            section, siReaderState,
+            isDownloadingSiReadout || isContinuousSiReadoutActive || isReadingCompetitorSiCard,
+            siPortMutex, raceClockTick, sportIdentPortDiscoveryMode, onSetSportIdentPortDiscoveryMode
+        )
         if (section == DesktopSection.EventValidator) {
             EventValidatorPanel(projectFile)
         }
@@ -14364,9 +14349,31 @@ private fun SetupSectionWorkspaceContent(
 
 /** Explains the SPORTident tool group while individual station utilities are added. */
 @Composable
+private fun SportIdentSectionWorkspace(
+    section: DesktopSection,
+    siReaderState: DesktopSiReaderUiState,
+    isStationBusy: Boolean,
+    siPortMutex: Mutex,
+    raceClockTick: Long,
+    portDiscoveryMode: DesktopSportIdentPortDiscoveryMode,
+    onSetPortDiscoveryMode: (DesktopSportIdentPortDiscoveryMode) -> Unit
+) {
+    val connected = siReaderState.severity == DesktopSiReaderSeverity.CONNECTED
+    when (section) {
+        DesktopSection.SportIdentTools -> SportIdentToolsPanel()
+        DesktopSection.SportIdentCardInspection -> SportIdentCardInspectionPanel(connected, isStationBusy, siPortMutex)
+        DesktopSection.SportIdentStationBackup -> SportIdentStationBackupPanel(connected, isStationBusy, siPortMutex)
+        DesktopSection.SportIdentTimeSync -> SportIdentTimeSyncPanel(
+            siReaderState, isStationBusy, siPortMutex, raceClockTick, portDiscoveryMode, onSetPortDiscoveryMode
+        )
+        else -> Unit
+    }
+}
+
+@Composable
 private fun SportIdentToolsPanel() {
     Text(
-        text = "Choose Punch History to search a field station's stored SI-Card visits, or Time Sync to inspect and synchronize its clock.",
+        text = "Choose SI Card to read owner information, Punch History to search a field station's stored SI-Card visits, or Time Sync to inspect and synchronize its clock.",
         color = DesktopPalette.Black,
         fontSize = 14.sp
     )

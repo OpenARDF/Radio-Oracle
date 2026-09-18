@@ -31,8 +31,40 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentUsbDevice
+import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspector
 
 class DesktopSportIdentCardBlockReaderTest {
+    @Test
+    fun ownerInspectionReadsExtraModernBlocksBeforeAckAndPreservesPunchParsing() {
+        val blockOrder = listOf(0, 4, 5, 6, 7, 1, 2, 3)
+        val port = modernPort(blockOrder)
+        val download = reader(includeOwnerData = true).readFirstSupportedCardAfterInsertOnOpenPort(port)
+
+        assertEquals(blockOrder, download.blocks.map { it.blockNumber })
+        assertEquals(listOf(41), download.readout.punches.map { it.siCode })
+        assertEquals("Test Club", SportIdentCardOwnerInspector.inspect(download.readout, download.blocks).holder?.club)
+        assertEquals(blockOrder, port.requestedBlocks())
+        assertEquals(SportIdentProtocol.ACK, port.writtenCommands().last())
+    }
+
+    @Test
+    fun normalRaceDownloadKeepsItsExistingModernBlockSequence() {
+        val blockOrder = listOf(0, 4, 5, 6, 7)
+        val port = modernPort(blockOrder)
+        val download = reader().readFirstSupportedCardAfterInsertOnOpenPort(port)
+        assertEquals(blockOrder, port.requestedBlocks())
+        assertEquals(listOf(41), download.readout.punches.map { it.siCode })
+    }
+
+    @Test
+    fun removalDuringExtraOwnerReadDoesNotAckAnIncompleteInspection() {
+        val port = modernPort(listOf(0, 4, 5, 6, 7), removedFrame(MODERN_CARD_NUMBER))
+        assertThrows(IllegalStateException::class.java) {
+            reader(includeOwnerData = true).readFirstSupportedCardAfterInsertOnOpenPort(port)
+        }
+        assertEquals(0, port.writtenCommands().count { it == SportIdentProtocol.ACK })
+    }
+
     @Test
     fun retriesRejectedSi5RequestAndCompletesDownload() {
         val port = ChunkedPort(
@@ -71,12 +103,13 @@ class DesktopSportIdentCardBlockReaderTest {
         assertEquals(1, port.writtenCommands().count { it == SportIdentProtocol.GET_SI_CARD5 })
     }
 
-    private fun reader(onProgress: (String) -> Unit = {}) =
+    private fun reader(onProgress: (String) -> Unit = {}, includeOwnerData: Boolean = false) =
         DesktopSportIdentCardBlockReader(
             postAckSettleMs = 0,
             onProgress = onProgress,
             sleepMillis = {},
-            nowMillis = advancingClock()
+            nowMillis = advancingClock(),
+            includeOwnerData = includeOwnerData
         )
 
     private class ChunkedPort(chunks: List<ByteArray>) : DesktopSerialPort {
@@ -109,10 +142,41 @@ class DesktopSportIdentCardBlockReaderTest {
                 SportIdentFrameParser.firstFrame(bytes, requireValidCrc = false)?.command
                     ?: bytes.singleOrNull()
             }
+
+        fun requestedBlocks(): List<Int> = writes.mapNotNull { bytes ->
+            SportIdentFrameParser.firstFrame(bytes, requireValidCrc = true)
+                ?.takeIf { it.command == SportIdentProtocol.GET_SI_CARD8_9_SIAC }
+                ?.data?.singleOrNull()?.toInt()
+        }
     }
 
     private companion object {
         const val CARD_NUMBER = 234_567
+        const val MODERN_CARD_NUMBER = 8_000_001
+
+        fun modernPort(blockOrder: List<Int>, afterBlocks: ByteArray? = null): ChunkedPort {
+            val data = ByteArray(1024) { 0xEE.toByte() }
+            data[22] = 1
+            data[24] = 15
+            data[25] = (MODERN_CARD_NUMBER ushr 16).toByte()
+            data[26] = (MODERN_CARD_NUMBER ushr 8).toByte()
+            data[27] = MODERN_CARD_NUMBER.toByte()
+            val ownerText = "A".repeat(70) + ";Runner;F;2000;Test Club;"
+            ownerText.forEachIndexed { index, c -> data[32 + index] = c.code.toByte() }
+            data[447] = 1
+            data[512] = 0
+            data[513] = 41
+            data[514] = 0
+            data[515] = 60
+            val inserted = SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.SI_CARD8_9_SIAC,
+                byteArrayOf(0, 0, 0, data[25], data[26], data[27])).dropWakeup()
+            val replies = blockOrder.map { number ->
+                SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.GET_SI_CARD8_9_SIAC,
+                    byteArrayOf(0, 0, number.toByte()) + data.copyOfRange(number * 128, (number + 1) * 128))
+                    .dropWakeup()
+            }
+            return ChunkedPort(listOf(inserted) + replies + listOfNotNull(afterBlocks))
+        }
 
         fun advancingClock(): () -> Long {
             var now = 0L
