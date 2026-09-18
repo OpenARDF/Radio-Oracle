@@ -328,6 +328,54 @@ These are deliberate limits in the current app, not necessarily defects.
   selected control punches, preserve an auditable before/after trail, and then
   recompute status, score, splits, places, exports, and sent/unsent state.
 
+### Livelox Event Export And Integration
+
+- Add an organizer-facing Livelox export workflow so an event prepared in
+  Radio-Oracle can be used for Livelox tracking and post-race route review.
+  Start with event setup export; participant tracking remains in Livelox's
+  existing workflows. Follow the public
+  [Livelox API documentation](https://www.livelox.com/Documentation/Api) and
+  [event integration workflow](https://www.livelox.com/Documentation/Api/EventIntegration).
+- Use user-delegated OAuth2 Authorization Code with PKCE and the event-import
+  scope. Keep access and refresh tokens in platform-appropriate secure storage,
+  outside Race Files, Series archives, logs, and diagnostics. Provide clear
+  sign-in, cancellation, expired-authorization, and disconnect behavior.
+- Export event name, date/time interval, time zone, organizer/location details,
+  categories, course assignments, and supported course/control data. Reuse
+  shared models and the existing IOF XML 3.0 CourseData exporter. Preserve
+  canonical control identities and make radio-orienteering mapping limitations
+  visible, including unordered fox visits, beacons, spectator controls, and
+  radio-specific extensions that Livelox may not interpret.
+- Require a usable georeferenced map for the initial workflow. Start with a
+  raster image plus world file or coordinate mapping; consider supported KMZ
+  maps after representative-file validation. Review coordinate systems, map
+  coverage, control alignment, and category/course connections before upload.
+  Reuse Course Designer map calibration as it becomes available, while allowing
+  an externally prepared map without requiring the full visual designer.
+- Provide a reviewed export candidate, upload its event package and referenced
+  files, display Livelox validation errors and warnings, then open Livelox for
+  the organizer to complete the import into a new or existing event. Distinguish
+  uploaded data from a completed import, retain non-secret event references for
+  subsequent updates, and handle cancellation, partial uploads, bounded retries,
+  and duplicate-prevention explicitly. Preserve Race Password protection and
+  require an explicit export decision before sharing protected course data.
+- Add start-list and result-list updates as a later stage after verifying the
+  available API operations and reliable asynchronous completion/status feedback.
+  Desktop and Android clients must not depend on receiving inbound webhooks.
+  Show pending, successful, and failed updates accurately, and expose event/class
+  viewer links when available.
+- Keep any later GPX/TCX/FIT participant route upload separate from organizer
+  export, with the participant's authorization and the route-import scope.
+  Do not use user-delegated route import to bulk-upload other participants'
+  tracks. Follow the public
+  [route integration documentation](https://www.livelox.com/Documentation/Api/RouteIntegration).
+- Share payload construction, mapping, validation, and provider interfaces
+  across desktop and Android, with platform-specific authorization and file
+  access. Reuse standards-based exports for other compatible applications;
+  assess each provider's API separately rather than assuming universal support.
+  Validate with representative maps and courses, mocked authorization/upload
+  failures, and an organizer-approved end-to-end Livelox import before release.
+
 ### Live Results Providers
 
 - Add non-ROBIS live-result providers after their network/result-service logic is
