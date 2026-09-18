@@ -15,11 +15,11 @@ CSV exports now use consistent comma-separated columns with headings and correct
 
 ## Release validation
 
-Charles Scharlau authorized the full jDeploy deployment and waived hardware tests only. Physical SPORTident, printer, and device acceptance checks are skipped at his request, not reported as passing. Full regression, course-transfer, schema, packaging, signing, publication, and public-download verification remain required. Completed evidence will be recorded in the deployment verification document.
+Charles Scharlau authorized the full jDeploy deployment and waived hardware tests only. Physical SPORTident, printer, and device acceptance checks were skipped at his request, not reported as passing. Full regression, course-transfer, schema, packaging, signing, publication, and public-download verification completed. See [deployment evidence](release-verification-1.0.49.md).
 
 The full local regression round passed: 703 shared tests on desktop, the same 703 on Android debug and release, 1,056 desktop tests, and 322 Android app tests. Five optional desktop archive fixtures and one Android transfer test without its external input were skipped in the broad run; the Android transfer test subsequently ran and passed in the explicit plain/protected desktop–Android archive-transfer gate. Shared smoke, Android debug build, IOF schema/fixture validation, workflow lint, and secret scanning also passed. Full-suite XML reports were preserved before the filtered transfer checks.
 
-Plain/protected archive transfers and their returned-desktop checks, desktop runtime/distributable verification, jDeploy release preflight and package preview, and local jDeploy installation/launch smoke passed. The signed Android bundle verifies as 1.0.49/code 57 with the previous release signing certificate. Publication and fresh public-artifact verification are recorded separately after release completion.
+Plain/protected archive transfers and their returned-desktop checks, desktop runtime/distributable verification, jDeploy release preflight and package preview, and local jDeploy installation/launch smoke passed. The signed Android bundle verifies as 1.0.49/code 57 with the previous release signing certificate. Both publishing workflows and the immutable-tag course workflow passed. All 14 public GitHub assets matched their published sizes and hashes; both public package archives verified, and the public npm install/launch smoke passed.
 
 Android version name is 1.0.49 and version code is 57. Android store submission is separate from this desktop jDeploy deployment.
 
