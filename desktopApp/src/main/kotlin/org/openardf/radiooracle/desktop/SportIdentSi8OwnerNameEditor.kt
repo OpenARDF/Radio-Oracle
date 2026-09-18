@@ -26,23 +26,24 @@ internal fun SportIdentSi8OwnerNameEditor(inspection: SportIdentCardOwnerInspect
         Text("Edit the names to preview a replacement. Nothing is written to the card.")
         OutlinedTextField(firstName, { firstName = it }, label = { Text("First name") }, singleLine = true)
         OutlinedTextField(lastName, { lastName = it }, label = { Text("Last name") }, singleLine = true)
-        Text("This preview uses a conservative 24-byte limit, including name separators. Final write limits remain to be verified.")
+        Text("First and last names can contain ${SportIdentSi8OwnerNamePlanner.MAX_NAME_CHARACTERS} characters in total.")
         preview.problems.forEach { problem ->
             Text(when (problem) {
                 SportIdentOwnerNameProblem.CARD_NOT_READY -> "Read an SI-Card8 completely before preparing a name."
                 SportIdentOwnerNameProblem.UNSUPPORTED_CHARACTERS ->
                     "Use basic Latin letters, numbers, spaces or punctuation. Semicolons, accented letters and control characters are not supported in this preview."
-                SportIdentOwnerNameProblem.TOO_LONG -> "Shorten the names to fit the draft limit. Names are never truncated automatically."
+                SportIdentOwnerNameProblem.TOO_LONG -> "Shorten the names to fit the combined limit. Names are never truncated automatically."
             }, color = DesktopPalette.Error)
         }
-        preview.byteCount?.let { Text("Owner text: $it / ${SportIdentSi8OwnerNamePlanner.DRAFT_BYTE_LIMIT} bytes") }
+        preview.nameCharacterCount?.let {
+            Text("Name characters: $it / ${SportIdentSi8OwnerNamePlanner.MAX_NAME_CHARACTERS}")
+        }
         if (preview.encodedOwnerText != null) {
             SelectionContainer {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Replacement preview for SI-Card ${preview.siNumber}", fontWeight = FontWeight.Bold)
                     Text("First name: ${preview.firstName.ifEmpty { "Not stored" }}")
                     Text("Last name: ${preview.lastName.ifEmpty { "Not stored" }}")
-                    Text("Owner text: ${preview.firstName};${preview.lastName};")
                     if (preview.firstName.isEmpty() && preview.lastName.isEmpty()) {
                         Text("This draft removes both stored names.")
                     }

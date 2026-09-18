@@ -8,16 +8,17 @@ data class SportIdentSi8OwnerNamePreview(
     val siNumber: Int,
     val firstName: String,
     val lastName: String,
-    val byteCount: Int?,
+    val nameCharacterCount: Int?,
     val problems: Set<SportIdentOwnerNameProblem>,
+    // Parser-compatible preview text, not a write payload or card-memory layout.
     val encodedOwnerText: ByteArray?
 )
 
 /** Prepares owner text only, never a card write command or a replacement memory block. */
 object SportIdentSi8OwnerNamePlanner {
-    // Conservative draft policy from the legacy layout reference, pending write-protocol verification.
-    // The read parser's larger owner region must not be treated as a proven writable capacity.
-    const val DRAFT_BYTE_LIMIT = 24
+    // Verified using the supplied vendor library's documented personal-data validation API.
+    // Its count excludes separators; this does not establish the write payload's byte layout.
+    const val MAX_NAME_CHARACTERS = 23
 
     fun preview(
         inspection: SportIdentCardOwnerInspection,
@@ -33,10 +34,12 @@ object SportIdentSi8OwnerNamePlanner {
         val supported = (first + last).all { it in ' '..'~' && it != ';' }
         if (!supported) problems += SportIdentOwnerNameProblem.UNSUPPORTED_CHARACTERS
         val text = "$first;$last;"
-        val byteCount = if (supported) text.length else null
-        if (byteCount != null && byteCount > DRAFT_BYTE_LIMIT) problems += SportIdentOwnerNameProblem.TOO_LONG
+        val characterCount = if (supported) first.length + last.length else null
+        if (characterCount != null && characterCount > MAX_NAME_CHARACTERS) {
+            problems += SportIdentOwnerNameProblem.TOO_LONG
+        }
         return SportIdentSi8OwnerNamePreview(
-            inspection.siNumber, first, last, byteCount, problems,
+            inspection.siNumber, first, last, characterCount, problems,
             if (problems.isEmpty()) ByteArray(text.length) { text[it].code.toByte() } else null
         )
     }

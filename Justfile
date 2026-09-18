@@ -49,6 +49,10 @@ android-si-status serial="":
         "$ADB" shell am broadcast -a org.openardf.radiooracle.command.SI_STATUS -n org.openardf.radiooracle/.backend.commands.AppCommandReceiver; \
     fi
 
+# Read station information through a privately supplied, licensed SPORTident SDK.
+sportident-sdk-probe port expected_station:
+    dotnet run --project tools/sportident-sdk-probe/SportIdentSdkProbe.csproj -- {{quote(port)}} {{quote(expected_station)}}
+
 android-course-workflow-smoke serial:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug
     ./scripts/android-course-workflow-smoke.sh {{quote(serial)}}

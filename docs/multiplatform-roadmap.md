@@ -522,8 +522,14 @@ mid-term goal on Android and desktop.
   add Android UI and transport integration separately. Identify supported
   card/station combinations and name encoding/length limits,
   verify the actual write protocol and capacity, then verify the written name
-  by reading it back. The desktop SI-Card8 editor now previews owner text using
-  a provisional 24-byte ASCII limit; it does not write cards.
+  by reading it back. The desktop SI-Card8 editor previews names using the
+  vendor-validated combined limit of 23 name characters and an ASCII-only
+  preview policy; it does not write cards. See the
+  [SI-Card8 programming investigation](sportident-si8-programming.md) for the
+  verified boundary and remaining write-protocol questions. Config+ programming
+  and read-back have been verified with the available SI-Card8/BSM8 hardware;
+  the licensed SDK also reads the station through native serial transport on
+  macOS. Mac card writes and packaged app integration remain unfinished.
   Validate the write transaction on real hardware and preserve card identity
   and unrelated card data. This workflow primarily targets new cards;
   if programming clears existing punches, disclose that consequence before writing.
