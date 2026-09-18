@@ -248,7 +248,149 @@ These are deliberate limits in the current app, not necessarily defects.
   fixtures, while preserving file formats, compatibility, import review, and
   protected course-data behavior.
 
+### Manual Control And Course Editing
+
+Manual category control assignments currently define a scoring course, but do
+not assemble geographic course data or automatically calculate an ideal route
+for a new category. Add coordinate-based entry and editing workflows within
+`Setup > Courses` that reach the same accepted course state as an analyzed import;
+this work need not wait for the full visual map editor.
+
+- Extend the existing protected `Update Location` workflow to support initial
+  coordinate entry within `Controls` for starts, foxes, beacons, finishes, and
+  other supported course points. Reuse canonical control identities and
+  protected location storage, preserving Race Password protection.
+- Add `New Course` with a course-name field and selection of existing controls,
+  start, beacon, finish, and any required intermediate points. Permit courses
+  to select different starts and finishes. Support building courses after an
+  import that supplied only controls, without requiring a KML/XML round trip.
+- Extend the existing controls editor for manual control creation and editing,
+  including public labels, SI codes, supported point roles, and coordinates.
+  Add editing of existing course names, point membership/order where applicable,
+  start/finish selection, and category assignments. Preserve stable identities,
+  validate duplicate labels/codes and affected references, and review changes
+  before acceptance using the existing candidate/commit workflow.
+- Provide `Analyze Course`, reusing the import analysis and elevation pipeline
+  to calculate ideal order, total horizontal length, total climb, and effective
+  length. Use effective length when sufficient elevation data exists; otherwise
+  optimize horizontal length and clearly show unavailable climb/effective
+  length rather than inventing values.
+- Present the course report before `Add Course` accepts the result. Keep the
+  candidate temporary until acceptance, and discard it on rejection. Offer
+  assignment to existing categories or creation of a same-named category;
+  courses left unassigned must remain visible and manageable in Courses.
+- Make accepted manual courses available to Course Report, Course Analyzer,
+  category assignment, scoring, persistence, and export through the same course
+  model as accepted imports. Do not introduce a separate manual-course store
+  or route optimizer.
+- When shared coordinates or course membership change, identify every affected
+  course, invalidate its prior calculations, and provide recalculation. Preserve
+  existing restrictions on replacing designs with recorded readouts, and make
+  blocked actions explain how to proceed.
+- Validate coordinates, required point roles, and location availability before
+  analysis. Add parity tests demonstrating that equivalent manual and imported
+  inputs produce equivalent routes, metrics, reports, and saved course data,
+  including missing elevation, shared-control edits, protected races, and
+  cancellation without changing the accepted race.
+
+### Runner Accountability
+
+- Extend the existing In forest and over-limit views with confirmed start,
+  return, and retirement/check-in records. Distinguish a scheduled start from a
+  confirmed departure, and a result/readout from confirmation that a competitor
+  is safely back. Permit return confirmation without a card download and keep
+  whereabouts separate from scoring status.
+- Show competitors whose return is unconfirmed, elapsed time and overdue state,
+  and the evidence/time of the latest confirmation. Support an offline printable
+  accountability list and an explicit end-of-race check that everyone is accounted
+  for; neither missing readouts nor scheduled starts alone establish whereabouts.
+- Preserve an audit trail for manual confirmations/corrections and validate DNS,
+  retirement without readout, late downloads, unscheduled starts, and practice
+  repeat runs. Start with local race-day operation; coordinated updates from
+  multiple operators depend on the later collaboration milestone.
+
+### Crash Recovery And Verified Backups
+
+- Strengthen race-day persistence independently of the long-term general
+  autosave/undo work. Make accepted readouts and explicit saves crash-safe with
+  atomic replacement and clear success/failure reporting; preserve the last
+  known-good Race File or Series archive if a write is interrupted.
+- Reuse existing import checkpoints and backup/archive helpers for rotating,
+  versioned backups. State which accepted data is durable and when the latest
+  recoverable snapshot was taken; preserve protected course data in backups.
+- Provide a reviewed restore workflow that validates file/schema integrity,
+  identifies the saved event and snapshot time, and preserves the current data
+  before replacement. Test interrupted writes, disk-full errors, corrupted
+  files, and restoration of readouts, course data, and Series links.
+- Establish the local backup/restore foundation near-term; validate wider
+  race-day crash and power-loss recovery as a follow-on mid-term acceptance gate.
+  Do not describe backups as verified until representative restore checks pass.
+
 ## Medium-Term Roadmap
+
+### Race Format And Level Cleanup
+
+- Audit the user-facing event choices and retain only the essential, justified
+  set. Review Other, Practice, District, Regional, National, International, and
+  legacy format choices for a clear purpose; consolidate redundant choices and
+  document the behavior of every retained option.
+- Separate course/rule format (such as Classic, Sprint, Foxoring, or traditional
+  Orienteering), practice-versus-competition behavior, and competition/award
+  scope where these represent different decisions. Choose the smallest useful
+  model and consistent desktop/Android labels rather than letting an ambiguous
+  level implicitly select unrelated policies.
+- Define and test a behavior matrix for setup defaults, required controls,
+  validation severity, start/timing handling, repeated card downloads, result
+  matching and scoring, course-edit restrictions, awards/eligibility, Series
+  participation, printing, and publishing. Preserve useful practice workflows
+  and make every retained choice behave logically across those surfaces.
+- Use shared policies for these decisions. Explain unsupported combinations
+  before accepting them; changing an event choice must preview affected data
+  and calculations rather than silently reinterpret existing results.
+- Preserve historical Race Files, Android data, Series archives, and interchange
+  values through explicit compatibility mappings/migrations. Never reuse stored
+  enum values for a different meaning or silently convert unknown legacy choices
+  into Practice. Cover old-file import, save/reopen, and export round trips.
+- Enable the simplified choices only after the retained combinations have
+  platform acceptance coverage; retired choices may remain readable without
+  remaining selectable for new events.
+
+### Traditional Orienteering Support
+
+Traditional orienteering has an existing race type, ordered-control evaluation,
+and some regression coverage, but it is not yet a validated end-to-end workflow.
+Desktop currently displays existing Orienteering Race Files but does not offer
+the format when creating a new event. Complete and validate this support as a
+mid-term goal on Android and desktop.
+
+- Start with individual foot-orienteering events on ordered courses. Audit race
+  creation, controls, courses, category assignments, entries, start lists,
+  SPORTident downloads, finish tickets, splits, places, and public results.
+  Enable new-event selection only when this complete workflow is validated.
+- Preserve the required course order, including repeated visits to the same
+  control and shared controls across different courses. Validate missing,
+  out-of-order, duplicate, and extra punches without applying radio-specific
+  unordered-fox or Sprint-loop rules.
+- Verify sport-appropriate timing, completion/status, ranking, tie handling,
+  and assigned-versus-punched start behavior against the applicable event rules.
+  Keep existing radio-orienteering scoring unchanged and reuse shared services
+  with explicit format policies rather than maintaining a separate evaluator.
+- Use conventional control codes and course terminology throughout setup,
+  readout, reports, printing, and exports. Remove inappropriate fox, beacon,
+  transmitter, band, and schedule requirements from traditional-orienteering
+  workflows while preserving ordinary start and finish handling.
+- Validate IOF XML 3.0 CourseData, EntryList, StartList, and ResultList interchange
+  with representative traditional-orienteering fixtures and external tools.
+  Include Livelox export in the compatibility checks as that integration becomes
+  available. Preserve course/category relationships and state unsupported data
+  clearly during import review.
+- Add shared characterization tests and platform acceptance scenarios covering
+  setup through save/reopen, real-card readout, corrections, printing, and export.
+  Exercise representative club-event data and record field acceptance before
+  describing traditional orienteering as supported for race-day use.
+- Treat score-orienteering, relays, forked courses, and mass/chasing starts as
+  separately scoped extensions after the individual ordered-course foundation
+  is stable; do not imply that the initial milestone supports every discipline.
 
 ### Shared Race Services
 
@@ -276,6 +418,56 @@ These are deliberate limits in the current app, not necessarily defects.
   and downloaded SI readouts remain definitive evidence of visited station
   codes.
 
+### Race Incidents And Adjudication
+
+- Add an organizer-reviewed record of transmitter/station failures, missing or
+  misplaced controls, timing incidents, protests, and supporting evidence.
+  Identify affected categories, courses, competitors, and time intervals without
+  overwriting original readouts or treating every incident as a missing punch.
+- Record organizer/jury decisions, their applicable rules, rationale, and time.
+  Preview affected results before applying an authorized correction, withdrawal,
+  disqualification, or course/category voiding. Available remedies must follow
+  the selected event rules; do not automatically exclude legs or adjust times
+  simply because a failure occurred.
+- Build on existing manual result/status editing and official-publication checks.
+  Recalculate accepted changes consistently across places, splits, awards, Series,
+  and exports; identify previously sent/published outputs needing replacement.
+  Preserve an auditable before/after trail and require review when reopening
+  official results.
+- Export incident and decision records for event reporting. Validate ambiguous
+  evidence, multiple affected competitors, later decision revisions, cancellation,
+  and the boundary between punch recovery and wider fairness decisions.
+
+### Create A Course From A Downloaded Result
+
+- Add a reviewed workflow for deriving a course from a selected competitor's
+  downloaded SPORTident result/readout. Use the recorded station codes and
+  punch sequence as evidence of visited controls, resolving them through the
+  Race File's canonical controls and public labels.
+- Preview the proposed course and flag unknown station codes, repeated punches,
+  missing start/finish information, and controls whose roles or intended course
+  membership are uncertain. Let the organizer select the included points and
+  confirm start, finish, beacon/spectator handling, and course name. An observed
+  visit sequence must not silently become a mandatory order for an unordered
+  radio-orienteering course or be treated as proof of the intended course.
+- Reuse saved control coordinates when available. A card readout supplies punch
+  codes and times, not control locations or the competitor's geographic track;
+  report missing locations explicitly and request coordinate entry before
+  geographic analysis. Do not infer a traveled route, distance, or climb from
+  punch times alone.
+- Keep the derived course temporary until accepted, then use the same course
+  model, analysis, category-assignment, persistence, protection, and export
+  workflows as manual and imported courses. Preserve the source readout and its
+  result; creating a course must not silently change scoring or replace an
+  existing design. Apply existing restrictions for races with recorded readouts
+  and review any subsequent category reassignment or recalculation separately.
+- Cover code-to-control matching, duplicate/unknown punches, missing coordinates,
+  ordered and unordered courses, protected races, and cancellation in shared
+  characterization and parity tests.
+- Keep this distinct from station Punch History recovery: course derivation
+  creates a course from an existing result, while recovery reconstructs missing
+  competitor punches or readouts from station backup records.
+
 ### SPORTident And Hardware
 
 - Build a shared, specification-backed SPORTident characterization suite before
@@ -300,11 +492,22 @@ These are deliberate limits in the current app, not necessarily defects.
   and settings-comparison diagnostics on known-good and suspect download
   stations. Preserve the readout service's existing behavior of allowing flagged
   download-capable stations and blocking clearly non-download modes.
-- Extend read-only Punch History into a reviewed race-recovery workflow. Detect
-  gaps and duplicates, preview candidate recovered readouts, and require an
-  explicit selection before importing anything into a Race File. If backup
-  erase/reset is ever added, keep it as a separate destructive maintenance
-  action with explicit confirmation and immediate read-back verification.
+- Extend the existing read-only Punch History download/viewer into a reviewed
+  race-recovery workflow. For example, when a competitor's card download lacks
+  a punch, inspect the retrieved station's history for the competitor's SI card
+  number, station code, and a plausible timestamp within the event. Flag clock
+  discrepancies, ambiguous matches, gaps, and duplicates; preview recovered
+  punches or readouts and require explicit organizer selection before applying
+  anything to a Race File.
+- After an accepted recovery, recalculate the affected status, score, splits,
+  and placing, refresh derived exports, and mark affected published/sent results
+  as needing an update. Preserve the original card download and an auditable
+  before/after trail with source station identity, backup-record reference, and
+  recovery decision. Cover missing, conflicting, and duplicate records,
+  timestamp ambiguity, and cancellation without changing results in tests.
+  If backup erase/reset is ever added, keep it as a separate destructive
+  maintenance action with explicit confirmation and immediate read-back
+  verification.
 - Treat live trigger/punch record ingestion as a follow-on to backup recovery.
   Preserve station and card identity, subsecond time, and backup-memory record
   addresses so missed auto-send records can be detected, recovered, deduplicated,
@@ -395,6 +598,26 @@ These are deliberate limits in the current app, not necessarily defects.
 - Add a Competition View only after the underlying series metadata,
   reconciliation, scoring, and export behavior is stable.
 
+## Long-Term Roadmap
+
+### Multiple Race-Day Operators
+
+- Support coordinated registration, start, return confirmation, and download
+  operators across desktop and Android while retaining useful offline operation.
+  Define authoritative event ownership, operator responsibilities, and permitted
+  edits before adding synchronization.
+- Preserve stable competitor/control/readout identities and provenance. Detect
+  conflicting assignments or edits, deduplicate repeated downloads, and review
+  reconciliation after disconnected work; do not allow competing saves or
+  last-write-wins behavior to silently discard accepted data.
+- Provide clear connection, pending-update, and conflict status with durable
+  local queues and bounded retries. Separate operator access from public result
+  viewing and protect credentials and pre-event course data.
+- Reuse shared services and existing transfer boundaries. Validate simultaneous
+  edits, disconnect/reconnect, operator/device failure, clock differences, and
+  recovery from divergent snapshots before race-day deployment. Multiple SI
+  stations alone do not constitute a complete multi-operator workflow.
+
 ### Course Designer
 
 - Add a first-class visual Course Designer for placing controls, creating
@@ -421,45 +644,6 @@ These are deliberate limits in the current app, not necessarily defects.
 - Follow the complete workflow, architecture, component/licensing assessment,
   staged implementation, compatibility rules, risks, and acceptance criteria in
   [`course-designer-plan.md`](course-designer-plan.md).
-
-#### Manual Course Entry Parity
-
-Manual category control assignments currently define a scoring course, but do
-not assemble geographic course data or automatically calculate an ideal route
-for a new category. Add a coordinate-based entry workflow within `Setup >
-Courses` that reaches the same accepted course state as an analyzed import;
-this work need not wait for the full visual map editor.
-
-- Extend the existing protected `Update Location` workflow to support initial
-  coordinate entry within `Controls` for starts, foxes, beacons, finishes, and
-  other supported course points. Reuse canonical control identities and
-  protected location storage, preserving Race Password protection.
-- Add `New Course` with a course-name field and selection of existing controls,
-  start, beacon, finish, and any required intermediate points. Permit courses
-  to select different starts and finishes. Support building courses after an
-  import that supplied only controls, without requiring a KML/XML round trip.
-- Provide `Analyze Course`, reusing the import analysis and elevation pipeline
-  to calculate ideal order, total horizontal length, total climb, and effective
-  length. Use effective length when sufficient elevation data exists; otherwise
-  optimize horizontal length and clearly show unavailable climb/effective
-  length rather than inventing values.
-- Present the course report before `Add Course` accepts the result. Keep the
-  candidate temporary until acceptance, and discard it on rejection. Offer
-  assignment to existing categories or creation of a same-named category;
-  courses left unassigned must remain visible and manageable in Courses.
-- Make accepted manual courses available to Course Report, Course Analyzer,
-  category assignment, scoring, persistence, and export through the same course
-  model as accepted imports. Do not introduce a separate manual-course store
-  or route optimizer.
-- When shared coordinates or course membership change, identify every affected
-  course, invalidate its prior calculations, and provide recalculation. Preserve
-  existing restrictions on replacing designs with recorded readouts, and make
-  blocked actions explain how to proceed.
-- Validate coordinates, required point roles, and location availability before
-  analysis. Add parity tests demonstrating that equivalent manual and imported
-  inputs produce equivalent routes, metrics, reports, and saved course data,
-  including missing elevation, shared-control edits, protected races, and
-  cancellation without changing the accepted race.
 
 ### Course Analyzer And Route Intelligence
 
