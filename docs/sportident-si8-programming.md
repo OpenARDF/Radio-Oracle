@@ -95,20 +95,64 @@ insertion, checked the expected SI-Card8 number and family, and called the
 documented `ReadCurrentSiCard(CardsReadMode.ReadCards)` API. Its completion
 reported card 2450662, first name `Mickey`, last name `Mouse`, and 11 control
 punches, matching the Config+ trial. The connection closed successfully. The
-probe emits a versioned JSON read result for a future desktop bridge; no card
-programming or station-configuration method is exposed by the tool.
+probe emits a versioned JSON read result for a future desktop bridge; the
+card-read command has no programming or station-configuration action.
 The updated probe built without warnings. Invalid/zero card arguments,
 missing license, a real station-number mismatch, and the 45-second wait
 without reinsertion all failed as expected; the hardware failures closed
 the connection without emitting a card result. Different-card and
-mid-read removal guards are implemented but have not been exercised on
-hardware in this slice.
+mid-read removal guards were implemented but had not been exercised on
+hardware at that earlier read-only slice.
+
+### Mac SDK write hardware verification
+
+The optional `sportident-sdk-card-write` command now accepts an explicit local
+request tied to a station number, SI-Card8 number, existing first/last names,
+replacement names, and acceptance of possible punch loss. It starts with a
+fresh card read, validates the replacement through the SDK, disables Auto
+apply, leaves feedback editing unset, and calls
+`SetSiCardPersonalDataAndFeedback` once. It waits for SDK completion, then
+reopens the serial connection, checks the station again, and prompts for a
+fresh insertion to check the card identity and stored names. Immutable
+before/after snapshots compare control-punch values and clear/check/start/finish
+records, including their reserve values, plus the reported clear counter,
+control-punch pointer, feedback bytes, and character set. The helper is separate
+from the desktop app; shared Kotlin name preparation remains reusable by Android.
+
+The writer built without warnings. Eight malformed-request cases were rejected
+before license configuration or serial access. On real hardware, a request for
+card 2450663 was refused when the available card 2450662 was inserted, and the
+serial connection closed before any write invocation.
+
+After explicit approval, the Mac SDK programmed `Mickey` / `Mouse` to `Minnie` /
+`Mouse` on card 2450662. The SDK reported write completion, but an immediate
+same-session read-back request timed out. No write retry was made. A separate
+read-only process, after physical removal/reinsertion, confirmed the same card,
+`Minnie` / `Mouse`, and 11 control punches. Individual before/after punch values
+could not be compared in this attempt because its original snapshot was in
+the terminated writer process.
+
+The helper was adjusted to use a separate serial session and fresh insertion
+for read-back while retaining immutable snapshots in memory. After separate
+explicit approval of possible punch loss and a return from `Minnie` / `Mouse`
+to `Mickey` / `Mouse`, the full transaction succeeded with exit code zero.
+The read-back confirmed card 2450662 and the desired names, 11 control punches
+before and after, and matching immutable punch snapshots, feedback bytes, and
+reported character set. Thus the compared individual control-punch values,
+clear/check/start/finish and reserve records, clear counter, and control-punch
+pointer were preserved in this trial. Unexposed card data was not compared.
+
+This proves the Mac SDK write and independent read-back path on the available
+SI-Card8/BSM8 hardware. The helper does not automatically retry a write after
+timeout, removal, or failure; a write attempt with uncertain outcome requires
+an independent card read before deciding whether to proceed. Mid-write removal
+and interruption recovery still need hardware validation before app integration.
 
 The supplied library's API documentation exposes personal-data programming,
-validation, progress, and completion facilities. The Config+ write and Mac
-SDK reads establish an SDK route to investigate next; they do not establish
-a working Mac card-write integration. The documentation inspected does not
-explain punch preservation or the raw write
+validation, progress, and completion facilities. The Mac SDK transaction now
+establishes a tested integration route on the available hardware; Radio-Oracle
+does not yet invoke the writer. The documentation inspected does not explain
+punch preservation guarantees or the raw write
 transaction. The supplied deprecated PC Programmer's Guide describes card
 readout, but does not specify a personal-data write command.
 
@@ -125,13 +169,13 @@ covering:
 - Card removal, timeout, interruption, and retry behavior; a write must never
   silently move to a different card.
 
-If an SDK bridge is used instead of a documented serial command, verify card
-read/write behavior on the Mac and obtain a supported release version. Account for packaging
+If an SDK bridge is used instead of a documented serial command, obtain a
+supported release version and verify interruption behavior. Account for packaging
 the .NET runtime/library and injecting a licensed key without adding secrets
 to public source. A desktop bridge would be separate from the shared Kotlin
 planner and would require a separate Android integration later.
 
-Next, verify a Mac write through the SDK, then implement an explicit app action targeting the
+Next, integrate an explicit desktop app action targeting the
 freshly read card, followed by read-back verification of its number and names.
 This workflow primarily targets new cards. If writing clears existing punches,
 disclose that before writing. SDK completion alone is insufficient evidence

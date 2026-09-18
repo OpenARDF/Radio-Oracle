@@ -1,10 +1,12 @@
-# SPORTident SDK read-only probe
+# SPORTident SDK engineering probe
 
 Optional desktop engineering tool to verify licensed vendor-library station
 communication before implementing card writes. It uses documented SDK APIs,
 reads station information, checks the expected station number, and closes the
-connection. The read waits at most ten seconds. It has no card-programming,
-station-configuration, or firmware-update action.
+connection. The station read waits at most ten seconds. The station/card-read
+commands do not program cards. An explicitly selected write command is
+available for controlled SI-Card8 tests; no command configures stations or
+updates firmware.
 
 The optional card-read command first verifies the station, then waits up to
 45 seconds for a fresh insertion of the specified SI-Card8. It checks the
@@ -42,6 +44,49 @@ and `ControlPunchCount`. Status messages and failures go to standard error.
 The punch count covers the SDK's control-punch list. Treat the result as
 successful only when the process exits zero, including serial close.
 
+## Controlled owner-name write
+
+The optional write command requires a local JSON request. It reads a freshly
+inserted SI-Card8, checks its identity and existing names, validates the new
+ASCII names (23 characters combined), and invokes the documented SDK writer
+once with Auto apply disabled and feedback editing unset. After SDK completion,
+it closes and reopens the serial connection and verifies the station again.
+It then prompts for removal/reinsertion and compares the fresh read's identity,
+names, punch values, feedback bytes,
+and reported character set. A removal, different card, communication failure,
+or timeout invalidates the current session. Removal during the write stops the
+transaction; the separate read-back stage explicitly requires reinsertion and
+cannot make another write. It never retries the write command automatically.
+Each insertion wait is 45 seconds; station reads and write completion each
+have a ten-second limit.
+
+Example request, saved outside the repository:
+
+```json
+{
+  "SchemaVersion": 1,
+  "StationNumber": 593927,
+  "CardNumber": 2450662,
+  "ExpectedFirstName": "Mickey",
+  "ExpectedLastName": "Mouse",
+  "FirstName": "Minnie",
+  "LastName": "Mouse",
+  "AcceptPossiblePunchLoss": true
+}
+```
+
+```sh
+just sportident-sdk-card-write /dev/cu.SLAB_USBtoUART 593927 2450662 /private/test-write.json
+```
+
+This is an actual card-programming action. The request must explicitly accept
+possible punch loss. Successful read-back emits a JSON result including before
+and after control-punch counts and `PunchesPreserved`, `FeedbackPreserved`, and
+`CharacterSetPreserved`. Exit zero also requires those comparisons to match
+and the serial connection to close. A failure after a write attempt leaves
+the outcome uncertain; independently read the card before deciding what to do.
+No-op requests fail before writing because they cannot demonstrate programming.
+
 Exit code zero requires a matching station read and a successful serial close.
 Wrong station, missing license, timeout, or communication failure returns a
 nonzero exit code. The probe uses 38400 baud, as verified with the available
@@ -51,6 +96,13 @@ Verified on macOS ARM64 with .NET runtime 10.0.7 and the privately supplied
 SPORTident library 2.59.0 internal test release dated 2024-05-10. The card-read
 command returned the expected card 2450662,
 stored names `Mickey` / `Mouse`, and 11 control punches on this hardware.
+The write command changed the test names to `Minnie` / `Mouse`, verified by a
+separate read-only process. An immediate same-session read-back had timed out,
+so the transaction now reopens the serial connection and requests reinsertion.
+A separately approved return to `Mickey` / `Mouse` passed the complete revised
+transaction with exit zero: 11 control punches before/after, matching captured
+punch values, feedback bytes, and reported character set. Unexposed card data
+was not compared; mid-write removal and recovery have not been tested on hardware.
 This is an investigation tool, separate from the packaged Radio-Oracle application. A
 supported vendor release, runtime packaging, and license injection into a
 distributed product still need to be resolved.

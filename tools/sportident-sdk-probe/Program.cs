@@ -11,6 +11,8 @@ return Run(args);
 
 static int Run(string[] args)
 {
+    if (args.Length == 5 && args[3] == "--write-request")
+        return CardWriteProbe.Run(args, ConfigureLicense);
     long expectedCard = 0;
     if ((args.Length != 2 && args.Length != 3) || string.IsNullOrWhiteSpace(args[0]) ||
         !uint.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out var expectedStation) ||

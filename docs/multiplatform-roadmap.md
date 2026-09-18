@@ -529,7 +529,10 @@ mid-term goal on Android and desktop.
   verified boundary and remaining write-protocol questions. Config+ programming
   and read-back have been verified with the available SI-Card8/BSM8 hardware;
   the licensed SDK also reads the station and the SI-Card8's stored owner names
-  through native serial transport on macOS. Mac card writes and packaged app
+  through native serial transport on macOS. The Mac SDK write transaction has
+  passed verification after reconnecting and reinserting the same card, with
+  matching names and preserved compared punch values, feedback bytes, and
+  reported character set. Interruption/recovery validation and packaged app
   integration remain unfinished.
   Validate the write transaction on real hardware and preserve card identity
   and unrelated card data. This workflow primarily targets new cards;

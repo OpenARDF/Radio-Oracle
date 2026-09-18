@@ -57,6 +57,10 @@ sportident-sdk-probe port expected_station:
 sportident-sdk-card-read port expected_station expected_card:
     dotnet run --project tools/sportident-sdk-probe/SportIdentSdkProbe.csproj -- {{quote(port)}} {{quote(expected_station)}} {{quote(expected_card)}}
 
+# Program one expected SI-Card8 using an explicit local request, then verify by reading back.
+sportident-sdk-card-write port expected_station expected_card request:
+    dotnet run --project tools/sportident-sdk-probe/SportIdentSdkProbe.csproj -- {{quote(port)}} {{quote(expected_station)}} {{quote(expected_card)}} --write-request {{quote(request)}}
+
 android-course-workflow-smoke serial:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug
     ./scripts/android-course-workflow-smoke.sh {{quote(serial)}}
