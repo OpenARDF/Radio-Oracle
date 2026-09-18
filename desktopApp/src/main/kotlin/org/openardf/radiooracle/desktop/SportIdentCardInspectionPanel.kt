@@ -25,6 +25,7 @@ import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardInspectionServi
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortSelector
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspection
+import org.openardf.radiooracle.shared.sportident.SportIdentCardFamily
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerDataStatus
 
 @Composable
@@ -68,6 +69,8 @@ internal fun SportIdentCardInspectionPanel(
         }) { Text(if (isReading) "Reading Card" else "Read Card") }
         status?.let { Text(it, color = if (failed) DesktopPalette.Error else DesktopPalette.Disconnected) }
         inspection?.let { SportIdentCardOwnerDetails(it) }
+        inspection?.takeIf { it.family == SportIdentCardFamily.SI8 && it.status == SportIdentOwnerDataStatus.READ }
+            ?.let { SportIdentSi8OwnerNameEditor(it) }
     }
 }
 

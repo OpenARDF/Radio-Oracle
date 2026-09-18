@@ -518,12 +518,15 @@ mid-term goal on Android and desktop.
   hardware and has immediate read-back validation.
 - Extend the desktop SPORTident SI Card owner-information inspector into a
   programming tool for writing the owner's name to supported cards. Keep card
-  family rules and owner parsing in shared code for later Android reuse;
+  family rules, owner parsing, and name preparation in shared code for later Android reuse;
   add Android UI and transport integration separately. Identify supported
   card/station combinations and name encoding/length limits,
-  preview the replacement, and verify the written name by reading it back.
-  Validate the write transaction on real hardware and preserve card identity,
-  punch records, and unrelated card data.
+  verify the actual write protocol and capacity, then verify the written name
+  by reading it back. The desktop SI-Card8 editor now previews owner text using
+  a provisional 24-byte ASCII limit; it does not write cards.
+  Validate the write transaction on real hardware and preserve card identity
+  and unrelated card data. This workflow primarily targets new cards;
+  if programming clears existing punches, disclose that consequence before writing.
 - Add explicit multi-download-station support so desktop can detect multiple
   connected stations, show their serial numbers/modes/ports, let the user choose
   or assign active stations, and prevent independent readout loops from fighting
