@@ -102,7 +102,7 @@ so the transaction now reopens the serial connection and requests reinsertion.
 A separately approved return to `Mickey` / `Mouse` passed the complete revised
 transaction with exit zero: 11 control punches before/after, matching captured
 punch values, feedback bytes, and reported character set. Unexposed card data
-was not compared; mid-write removal and recovery have not been tested on hardware.
+was not compared; mid-write removal has not been tested on hardware.
 The optional desktop prototype can invoke this helper as a separate process. A
 supported vendor release, runtime packaging, and license injection into a
 distributed product still need to be resolved.
@@ -129,3 +129,30 @@ The packaged local Mac app has also completed a user-confirmed write from `Micke
 / `Mouse` to `Mortimer` / `Mouse` on card 2450662, with independent read-back and
 all 11 control punches, captured punch values, feedback bytes, and reported
 character set preserved. The Race File was unchanged.
+
+The desktop app offers cancellation during insertion/read-back waits, with the
+button disabled during the SDK write. An incomplete attempt leaves a local
+recovery reminder that survives app restarts. Read the same card, review its
+stored names, and choose Accept Card Read before preparing another write. This
+acknowledges the fresh names; it does not verify preservation of earlier punches
+or settings. The saved request is never replayed automatically.
+
+A controlled hardware recovery test changed card 2450662 from `Mortimer` / `Mouse`
+back to `Mickey` / `Mouse` through a native helper harness, then closed its
+supervision pipe at WaitingForReadBack. The helper exited with code 15 after SDK
+write completion. The restarted app retained the reminder and blocked writing;
+a fresh native read confirmed the requested names, and Accept Card Read cleared
+the reminder. Earlier punch/settings preservation was not verified. This test
+did not exercise clicking the GUI Stop Verification button or removing the card
+during the write.
+
+Desktop invocation adds `--supervised` after the request-file argument. It keeps
+the helper's stdin pipe open; pipe closure or any input terminates the helper
+with exit code 15, including after an abrupt app crash. The direct command-line
+write recipe retains its existing unsupervised behavior. Run
+`just sportident-sdk-supervision-check` for the SDK-free supervision checks;
+this separate .NET project has no proprietary references or serial access.
+
+Rebuilding the local Mac bundle changes its ad hoc code signature. macOS can
+request Documents-folder access again before reopening the saved Race File;
+the app can appear stalled until that system prompt is answered.

@@ -209,8 +209,62 @@ set, and captured punch-value preservation checks. The Race File remained clean
 (Save Race disabled). This verifies the app-to-helper transaction on the available
 SI-Card8/BSM8 hardware, without claiming hardware interruption/recovery coverage.
 
-Next, validate hardware interruption/recovery behavior and resolve supported SDK,
-runtime, and licensed distribution packaging. This workflow primarily targets new
+### Cancellation and recovery slice
+
+The desktop prototype now offers Cancel Programming while waiting for a card and
+Stop Verification while waiting for read-back. Cancellation is disabled during
+the SDK write itself. Page changes and app shutdown also stop the helper; they
+do not trigger another write.
+
+Before starting the SDK process, the app atomically saves the intended station,
+card, original names, and replacement names in local application data. Failure to
+save prevents process startup. A fully verified result clears the record. Any
+incomplete attempt retains it across page changes and app restarts and prevents
+another write until recovery finishes. Corrupt or unreadable records block
+programming rather than disappearing silently.
+
+Recovery uses the existing native Read Card action. Shared Kotlin distinguishes
+the requested names, original names, other stored names, a different card, and an
+incomplete owner read. Only a complete read of the target SI-Card8 enables
+Accept Card Read. This explicit acknowledgement clears the reminder; it does not claim
+preservation of earlier punches or other settings, because the SDK's original
+immutable snapshot is unavailable after an interrupted process. The saved
+request is never replayed, and every later write requires a new confirmation.
+
+The focused gate passes 22 tests: eight shared programming/recovery tests, eight
+desktop child-process tests, and six persistent recovery-store tests. These cover
+recreating the store after an incomplete attempt, refusing another write,
+identity/readiness checks, corrupt records, failed persistence, stale
+acknowledgements, and cancellation while waiting for insertion or read-back.
+The desktop also passes `--supervised` to the helper and keeps its stdin pipe
+open. The helper exits on EOF, unexpected input, or pipe failure, releasing its
+serial handles even if the app terminates without running shutdown hooks. Three
+SDK-free .NET supervision checks pass: an open pipe keeps the child alive, pipe
+closure/input stops it, and abrupt termination of a fixture parent stops its
+child. The private helper rebuild passes with zero warnings/errors.
+
+The approved controlled stop-after-write test passed on SI-Card8 2450662 and
+BSM8 station 593927. A native helper harness changed `Mortimer` / `Mouse` to
+`Mickey` / `Mouse`, then closed the supervision pipe at WaitingForReadBack,
+after SDK write completion. The helper exited with code 15. The intended
+request remained in the recovery store across app restart; programming stayed
+blocked until a fresh native card read showed `Mickey` / `Mouse` and
+Accept Card Read was selected. The acknowledgement removed the saved reminder
+and restored the editor. This validates helper shutdown after writing and app
+recovery, not a manual click on Stop Verification. Earlier punch/settings
+preservation was not verified for this interrupted transaction. An earlier
+attempt that did not complete also retained its reminder; a fresh read still
+showed the original names. Physical interruption during the write remains untested.
+
+The compact desktop UI shows the read/edit/write steps, stored names, both name
+fields side by side, and Write Names without scrolling at the tested 1436 × 768
+window size. Status instructions explain the fresh insertion before writing,
+reinsertion for independent verification, and the distinction between writing
+completion and verified success. The Mac package build and focused desktop
+process/recovery/navigation tests pass; the rebuilt app is running locally.
+
+Next, validate the GUI stop action on hardware, characterize physical interruption,
+and resolve supported SDK, runtime, and licensed distribution packaging. This workflow primarily targets new
 cards. SDK completion alone is insufficient evidence that the desired names were stored.
 
 Vendor archives, extracted API documentation, binaries, and credentials stay

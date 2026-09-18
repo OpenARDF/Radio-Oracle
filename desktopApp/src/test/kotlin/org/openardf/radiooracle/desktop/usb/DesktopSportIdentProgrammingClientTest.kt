@@ -58,6 +58,18 @@ class DesktopSportIdentProgrammingClientTest {
         fixture.assertStoppedAndCleaned()
     }
 
+    @Test fun cancellationWhileWaitingForInsertionOrReadBackStopsTheHelper() = runBlocking {
+        for ((scenario, waitingPhase) in listOf("wait-insertion" to SportIdentOwnerWritePhase.WAITING_FOR_CARD,
+                "wait-read-back" to SportIdentOwnerWritePhase.WAITING_FOR_READ_BACK)) {
+            val fixture = fixture(scenario)
+            val waiting = CompletableDeferred<Unit>()
+            val job = launch { fixture.client.write(snapshot, request) { if (it == waitingPhase) waiting.complete(Unit) } }
+            waiting.await()
+            job.cancelAndJoin()
+            fixture.assertStoppedAndCleaned()
+        }
+    }
+
     @Test fun snapshotMismatchCannotStartAProcess() = runBlocking {
         val fixture = fixture("success")
         failure { fixture.client.write(snapshot.copy(stationNumber = 593928), request) }
@@ -100,7 +112,8 @@ class DesktopSportIdentProgrammingClientTest {
         var child: Process? = null
         var requestFile: Path? = null
         val client = DesktopSportIdentProgrammingClient(DesktopSportIdentSdkConfiguration(prefix, license), timeout) { builder ->
-            requestFile = Path.of(builder.command().last())
+            requestFile = Path.of(builder.command()[builder.command().indexOf("--write-request") + 1])
+            assertEquals("--supervised", builder.command().last())
             assertTrue(Files.isRegularFile(requestFile))
             beforeStart()
             builder.start().also { child = it }
@@ -119,12 +132,14 @@ class DesktopSportIdentProgrammingClientTest {
 object DesktopSportIdentHelperFixture {
     @JvmStatic fun main(args: Array<String>) {
         val scenario = args[0]
-        check(Files.readString(Path.of(args.last())).contains("\"AcceptPossiblePunchLoss\":true"))
+        check(Files.readString(Path.of(args[args.indexOf("--write-request") + 1])).contains("\"AcceptPossiblePunchLoss\":true"))
         if (scenario != "no-phases") {
             phase("WaitingForCard")
+            if (scenario == "wait-insertion") { Thread.sleep(300_000); return }
             phase("Writing")
             if (scenario == "wait") { Thread.sleep(300_000); return }
             phase("WaitingForReadBack")
+            if (scenario == "wait-read-back") { Thread.sleep(300_000); return }
         }
         System.err.println("vendor diagnostic text must not reach the caller")
         if (scenario == "oversized") { println("x".repeat(9000)); return }

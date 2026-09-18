@@ -1462,7 +1462,7 @@ object DesktopNavigation {
         "setup.tools.sportident.time-sync" to
             "Use Time Sync to inspect the attached SPORTident station before station-clock synchronization.",
         "setup.tools.sportident.si-card" to
-            "Use SI Card to read stored owner information and program SI-Card8 first and last names.",
+            "Read a card, edit the owner's names, then write and verify them. Programming supports SI-Card8.",
         "setup.courses.course-tools.course-analysis" to
             "Use Course Analyzer to inspect stored course routes, ideal routes, climb, distance, time estimates, and classic wait-slot behavior.",
         "setup.courses.course-tools.course-report" to

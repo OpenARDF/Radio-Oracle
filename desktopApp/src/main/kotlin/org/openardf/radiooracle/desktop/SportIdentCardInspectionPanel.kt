@@ -3,13 +3,17 @@ package org.openardf.radiooracle.desktop
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.Checkbox
+import androidx.compose.material.Surface
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -34,6 +40,8 @@ import org.openardf.radiooracle.desktop.usb.DesktopSportIdentProgrammingClient
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentSdkConfiguration
 import org.openardf.radiooracle.shared.sportident.SportIdentCardHolder
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameProgramming
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameRecovery
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameRecoveryAssessment
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerWritePhase
 import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspection
 import org.openardf.radiooracle.shared.sportident.SportIdentCardFamily
@@ -48,28 +56,81 @@ internal fun SportIdentCardInspectionPanel(
     var snapshot by remember { mutableStateOf<DesktopSportIdentOwnerSnapshot?>(null) }
     var isReading by remember { mutableStateOf(false) }
     var isProgramming by remember { mutableStateOf(false) }
+    var isCancelling by remember { mutableStateOf(false) }
+    var isFinishingRecovery by remember { mutableStateOf(false) }
+    var programmingJob by remember { mutableStateOf<Job?>(null) }
+    var programmingPhase by remember { mutableStateOf<SportIdentOwnerWritePhase?>(null) }
     var pendingNames by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val recoveryStore = remember { DesktopSportIdentOwnerRecoveryStore() }
+    var recoveryState by remember { mutableStateOf(recoveryStore.load()) }
     val sdkConfiguration = remember { DesktopSportIdentSdkConfiguration.fromEnvironment() }
     var status by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("SI Card Owner Information", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("Choose Read Card, then insert the card into the download station. Keep it seated until the read finishes.")
-        Text("Read Card leaves the card unchanged and does not add a race result.", fontSize = 13.sp)
+        val step = if (isProgramming) 3 else if (snapshot != null) 2 else 1
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            listOf("1  Read card", "2  Edit names", "3  Write and verify").forEachIndexed { index, label ->
+                Text(label, fontWeight = if (index + 1 == step) FontWeight.Bold else FontWeight.Normal,
+                    color = if (index + 1 == step) DesktopPalette.Black else DesktopPalette.Disconnected)
+            }
+        }
+        when (val recovery = recoveryState) {
+            is DesktopSportIdentOwnerRecoveryState.Pending -> if (!isProgramming) {
+                Text("Check interrupted write · SI-Card ${recovery.request.cardNumber}",
+                    fontWeight = FontWeight.Bold, color = DesktopPalette.Error)
+                Text("Read this card to check the names. Earlier punch and settings preservation was not verified.")
+                val assessment = snapshot?.inspection?.let { SportIdentOwnerNameRecovery.assess(recovery.request, it) }
+                assessment?.let { Text(ownerNameRecoveryMessage(it)) }
+                if (assessment in listOf(SportIdentOwnerNameRecoveryAssessment.REQUESTED_NAMES,
+                        SportIdentOwnerNameRecoveryAssessment.ORIGINAL_NAMES, SportIdentOwnerNameRecoveryAssessment.DIFFERENT_NAMES)) {
+                    Text("Accept this fresh read to enable another write. It does not confirm earlier punch preservation.", fontSize = 13.sp)
+                    Button(enabled = !isReading && !isStationBusy && !isFinishingRecovery, onClick = {
+                        val inspection = snapshot?.inspection ?: return@Button
+                        isFinishingRecovery = true
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { recoveryStore.acknowledge(recovery.request, inspection) }
+                                status = "Recovery finished. The freshly read names are shown below; earlier punch preservation was not verified."
+                                failed = false
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                failed = true
+                                status = "The recovery reminder could not be cleared. Programming remains unavailable."
+                            } finally {
+                                recoveryState = withContext(NonCancellable + Dispatchers.IO) { recoveryStore.load() }
+                                isFinishingRecovery = false
+                            }
+                        }
+                    }) { Text("Accept Card Read") }
+                }
+            }
+            DesktopSportIdentOwnerRecoveryState.Unavailable ->
+                Text("The programming recovery record could not be loaded. Programming is unavailable until the record can be recovered.",
+                    color = DesktopPalette.Error)
+            DesktopSportIdentOwnerRecoveryState.Empty -> Unit
+        }
         if (isStationBusy) Text("Stop the active SI readout before reading owner information.")
         else if (!isReaderConnected) Text("Connect a SPORTident download station to read a card.")
-        Button(enabled = isReaderConnected && !isStationBusy && !isReading && !isProgramming, onClick = {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(enabled = isReaderConnected && !isStationBusy && !isReading && !isProgramming && !isFinishingRecovery, onClick = {
             isReading = true
             snapshot = null
             failed = false
-            status = "Waiting for an SI card; keep it seated until the read finishes…"
+            status = "Insert a card to read its number and stored names. Keep it seated until the read finishes."
             scope.launch {
                 try {
                     snapshot = withContext(Dispatchers.IO) {
                         siPortMutex.withLock { desktopCardInspectionService().inspectOneBound() }
                     }
-                    status = "Card read finished. You can remove the card."
+                    status = when {
+                        recoveryState is DesktopSportIdentOwnerRecoveryState.Pending ->
+                            "Card read. Review the stored names below to finish checking the interrupted write."
+                        snapshot?.inspection?.family == SportIdentCardFamily.SI8 && sdkConfiguration != null ->
+                            "Card read. Edit the names below, then choose Write Names. Reading has not changed the card."
+                        else -> "Card read. Its owner information is shown below. Reading has not changed the card."
+                    }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
@@ -81,12 +142,29 @@ internal fun SportIdentCardInspectionPanel(
                 }
             }
         }) { Text(if (isReading) "Reading Card" else "Read Card") }
-        status?.let { Text(it, color = if (failed) DesktopPalette.Error else DesktopPalette.Disconnected) }
-        snapshot?.inspection?.let { SportIdentCardOwnerDetails(it) }
+        if (isProgramming) {
+            Button(enabled = !isCancelling && programmingPhase != SportIdentOwnerWritePhase.WRITING, onClick = {
+                if (!isCancelling && programmingPhase != SportIdentOwnerWritePhase.WRITING) {
+                    isCancelling = true
+                    status = "Stopping programming; wait for the station to be released…"
+                    programmingJob?.cancel()
+                }
+            }) { Text(if (isCancelling) "Stopping…" else if (programmingPhase == SportIdentOwnerWritePhase.WAITING_FOR_READ_BACK)
+                "Stop Verification" else "Cancel Programming") }
+        }
+        }
+        Surface(Modifier.fillMaxWidth(), color = if (failed) DesktopPalette.Error.copy(alpha = 0.08f)
+            else DesktopPalette.Black.copy(alpha = 0.04f)) {
+            Text(status ?: "Choose Read Card, then insert a card to check its stored names. Names change only after you confirm Write Names.",
+                Modifier.padding(10.dp), color = if (failed) DesktopPalette.Error else DesktopPalette.Black)
+        }
+        snapshot?.inspection?.let { SportIdentCardOwnerDetails(it, isProgramming) }
         snapshot?.inspection?.takeIf { it.family == SportIdentCardFamily.SI8 && it.status == SportIdentOwnerDataStatus.READ }
+            ?.takeIf { recoveryState == DesktopSportIdentOwnerRecoveryState.Empty }
             ?.let { inspection ->
                 SportIdentSi8OwnerNameEditor(inspection,
-                    enabled = isReaderConnected && !isStationBusy && !isReading && !isProgramming,
+                    enabled = isReaderConnected && !isStationBusy && !isReading && !isProgramming && !isFinishingRecovery &&
+                        recoveryState == DesktopSportIdentOwnerRecoveryState.Empty,
                     canProgram = sdkConfiguration != null,
                     onWrite = { pendingNames = it.firstName to it.lastName })
             }
@@ -100,7 +178,8 @@ internal fun SportIdentCardInspectionPanel(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("First name: ${names.first.ifEmpty { "Not stored" }}")
                     Text("Last name: ${names.second.ifEmpty { "Not stored" }}")
-                    Text("Programming may erase existing punches. Keep the card seated during writing. You will be asked to reinsert it for verification.")
+                    Text("After confirming, remove and insert this card to start writing. Keep it seated during the write, then reinsert it again so the app can check the stored names and compare its punches.")
+                    Text("Programming may erase existing punches.")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = accepted, onCheckedChange = { accepted = it })
                         Text("I accept possible loss of existing punches.")
@@ -112,35 +191,59 @@ internal fun SportIdentCardInspectionPanel(
                     onClick = {
                         pendingNames = null
                         isProgramming = true
+                        isCancelling = false
+                        programmingPhase = null
                         failed = false
                         status = "Checking the station before programming…"
-                        scope.launch {
+                        programmingJob = scope.launch {
                             try {
                                 val request = SportIdentOwnerNameProgramming.prepare(target.inspection,
                                     target.stationNumber, names.first, names.second, true)
                                 val result = siPortMutex.withLock {
+                                    withContext(Dispatchers.IO) { recoveryStore.begin(request) }
                                     DesktopSportIdentProgrammingClient(checkNotNull(sdkConfiguration)).write(target, request) { phase ->
+                                        programmingPhase = phase
                                         status = when (phase) {
                                             SportIdentOwnerWritePhase.WAITING_FOR_CARD ->
-                                                "Remove and insert SI-Card ${request.cardNumber}; keep it seated for writing…"
-                                            SportIdentOwnerWritePhase.WRITING -> "Writing names; keep the card seated…"
+                                                "Remove and insert SI-Card ${request.cardNumber} to start writing. A fresh insertion confirms the target card; this step waits up to 45 seconds."
+                                            SportIdentOwnerWritePhase.WRITING -> "Writing names to SI-Card ${request.cardNumber}. Keep the card seated…"
                                             SportIdentOwnerWritePhase.WAITING_FOR_READ_BACK ->
-                                                "Names written. Remove and reinsert SI-Card ${request.cardNumber} for verification…"
+                                                "Write completed. Reinsert SI-Card ${request.cardNumber} to check its stored names and compare punches. Success is not confirmed yet; this step waits up to 45 seconds."
                                         }
                                     }
                                 }
+                                withContext(Dispatchers.IO) { recoveryStore.completeVerified(request, result) }
                                 snapshot = target.copy(inspection = target.inspection.copy(holder = SportIdentCardHolder(
                                     result.firstName.ifEmpty { null }, result.lastName.ifEmpty { null }, null)))
-                                status = "Names written and verified. ${result.controlPunchCountAfter} control punches preserved. You can remove the card."
+                                val punches = if (result.controlPunchCountAfter == 1) "control punch" else "control punches"
+                                status = "Names written and verified. ${result.controlPunchCountAfter} $punches preserved. You can remove the card."
                             } catch (cancelled: CancellationException) {
                                 snapshot = null
+                                failed = true
+                                status = if (programmingPhase == SportIdentOwnerWritePhase.WAITING_FOR_READ_BACK)
+                                    "Verification stopped after writing. Read SI-Card ${target.inspection.siNumber} to check its stored names. Earlier punch preservation was not verified."
+                                else "Programming stopped. Read SI-Card ${target.inspection.siNumber} again to check its stored names."
                                 throw cancelled
                             } catch (error: Exception) {
                                 snapshot = null
                                 failed = true
-                                status = "The write could not be verified. Read the card again before trying another write."
+                                status = when (programmingPhase) {
+                                    SportIdentOwnerWritePhase.WAITING_FOR_CARD ->
+                                        "The target card could not be confirmed for writing. Choose Read Card to check its stored names before trying again."
+                                    SportIdentOwnerWritePhase.WRITING ->
+                                        "Write completion was not confirmed. Choose Read Card to check its stored names before trying again."
+                                    SportIdentOwnerWritePhase.WAITING_FOR_READ_BACK ->
+                                        "Writing completed, but verification did not finish. Choose Read Card to check the stored names. Earlier punch preservation was not verified."
+                                    null -> "Programming did not finish. Choose Read Card to check what is stored before trying another write."
+                                }
                                 DesktopDebugLog.error("SI", status.orEmpty())
-                            } finally { isProgramming = false }
+                            } finally {
+                                recoveryState = withContext(NonCancellable + Dispatchers.IO) { recoveryStore.load() }
+                                isProgramming = false
+                                isCancelling = false
+                                programmingPhase = null
+                                programmingJob = null
+                            }
                         }
                     }) { Text("Write Names") }
             },
@@ -148,21 +251,29 @@ internal fun SportIdentCardInspectionPanel(
     }
 }
 
+private fun ownerNameRecoveryMessage(assessment: SportIdentOwnerNameRecoveryAssessment): String = when (assessment) {
+    SportIdentOwnerNameRecoveryAssessment.NOT_TARGET_CARD -> "This is a different card. Read the card from the interrupted attempt."
+    SportIdentOwnerNameRecoveryAssessment.UNREADABLE -> "The target card's owner information is incomplete or unsupported. Read it again."
+    SportIdentOwnerNameRecoveryAssessment.REQUESTED_NAMES -> "The requested names are stored on the card."
+    SportIdentOwnerNameRecoveryAssessment.ORIGINAL_NAMES -> "The card still has its original names."
+    SportIdentOwnerNameRecoveryAssessment.DIFFERENT_NAMES -> "The stored names differ from both the original and requested names. Review them below."
+}
+
 @Composable
-private fun SportIdentCardOwnerDetails(inspection: SportIdentCardOwnerInspection) {
+private fun SportIdentCardOwnerDetails(inspection: SportIdentCardOwnerInspection, isProgramming: Boolean) {
     SelectionContainer {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("SI-Card number: ${inspection.siNumber}")
-            Text("Card type: ${inspection.family.label}")
+            Text("${inspection.family.label} · SI-Card ${inspection.siNumber}", fontWeight = FontWeight.Bold)
             if (inspection.status == SportIdentOwnerDataStatus.READ) {
-                Text("First name: ${inspection.holder?.firstName ?: "Not stored"}")
-                Text("Last name: ${inspection.holder?.lastName ?: "Not stored"}")
+                val storedNames = listOfNotNull(inspection.holder?.firstName, inspection.holder?.lastName)
+                    .filter(String::isNotEmpty).joinToString(" ").ifEmpty { "Not stored" }
+                Text("${if (isProgramming) "Before write" else "Stored names"}: $storedNames")
                 if (inspection.family.supportsClub) {
                     Text("Club: ${inspection.holder?.club ?: "Not stored"}")
                 }
             }
-            Text(when (inspection.status) {
-                SportIdentOwnerDataStatus.READ -> "Owner information read successfully."
+            if (inspection.status != SportIdentOwnerDataStatus.READ) Text(when (inspection.status) {
+                SportIdentOwnerDataStatus.READ -> ""
                 SportIdentOwnerDataStatus.NOT_SUPPORTED -> "This card type does not store owner information."
                 SportIdentOwnerDataStatus.INCOMPLETE -> "Owner information could not be read completely."
                 SportIdentOwnerDataStatus.UNSUPPORTED_ENCODING ->

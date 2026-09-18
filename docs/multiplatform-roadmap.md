@@ -537,8 +537,15 @@ mid-term goal on Android and desktop.
   matching names and preserved compared punch values, feedback bytes, and
   reported character set. The locally packaged desktop app has also completed
   an explicitly confirmed write with independent read-back on this hardware.
-  Hardware interruption/recovery validation, a supported
-  vendor SDK release, and distributable runtime/license packaging remain unfinished.
+  Cancellation and persistent recovery reminders are implemented: an incomplete
+  attempt requires a fresh read of the same card and explicit acknowledgement;
+  recovery checks names without claiming earlier punch preservation. These
+  assessment rules are shared for Android reuse.
+  A controlled helper stop after SDK write completion, restart, fresh native
+  read, and explicit recovery acknowledgement have passed on the Mac hardware.
+  GUI stop-action hardware acceptance, physical interruption during writing,
+  a supported vendor SDK release, and distributable runtime/license packaging
+  remain unfinished.
   Validate the write transaction on real hardware and preserve card identity
   and unrelated card data. This workflow primarily targets new cards;
   if programming clears existing punches, disclose that consequence before writing.

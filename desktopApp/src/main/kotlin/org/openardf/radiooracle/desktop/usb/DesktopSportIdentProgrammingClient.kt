@@ -89,7 +89,7 @@ internal class DesktopSportIdentProgrammingClient(
             withContext(Dispatchers.IO) {
                 Files.writeString(file, SportIdentOwnerNameProgramming.json.encodeToString(request))
                 val builder = ProcessBuilder(configuration.commandPrefix + listOf(portPath,
-                    request.stationNumber.toString(), request.cardNumber.toString(), "--write-request", file.toString()))
+                    request.stationNumber.toString(), request.cardNumber.toString(), "--write-request", file.toString(), "--supervised"))
                 builder.environment()["SPORTIDENT_SDK_LICENSE_FILE"] = configuration.licenseFile.toString()
                 builder.environment()["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
                 process = startProcess(builder)

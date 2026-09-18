@@ -61,6 +61,10 @@ sportident-sdk-card-read port expected_station expected_card:
 sportident-sdk-card-write port expected_station expected_card request:
     dotnet run --project tools/sportident-sdk-probe/SportIdentSdkProbe.csproj -- {{quote(port)}} {{quote(expected_station)}} {{quote(expected_card)}} --write-request {{quote(request)}}
 
+# BCL-only parent/child supervision check; never loads the SDK or opens a serial port.
+sportident-sdk-supervision-check:
+    dotnet run --project tools/sportident-sdk-supervision-check/SportIdentSupervisionCheck.csproj
+
 android-course-workflow-smoke serial:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug
     ./scripts/android-course-workflow-smoke.sh {{quote(serial)}}
