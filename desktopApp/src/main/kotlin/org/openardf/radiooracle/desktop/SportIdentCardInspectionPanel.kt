@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -99,8 +98,10 @@ internal fun SportIdentCardInspectionPanel(
                                 failed = true
                                 status = "The recovery reminder could not be cleared. Programming remains unavailable."
                             } finally {
-                                recoveryState = withContext(NonCancellable + Dispatchers.IO) { recoveryStore.load() }
-                                isFinishingRecovery = false
+                                finishDesktopSportIdentOwnerRecovery(recoveryStore) {
+                                    recoveryState = it
+                                    isFinishingRecovery = false
+                                }
                             }
                         }
                     }) { Text("Accept Card Read") }
@@ -238,11 +239,13 @@ internal fun SportIdentCardInspectionPanel(
                                 }
                                 DesktopDebugLog.error("SI", status.orEmpty())
                             } finally {
-                                recoveryState = withContext(NonCancellable + Dispatchers.IO) { recoveryStore.load() }
-                                isProgramming = false
-                                isCancelling = false
-                                programmingPhase = null
-                                programmingJob = null
+                                finishDesktopSportIdentOwnerRecovery(recoveryStore) {
+                                    recoveryState = it
+                                    isProgramming = false
+                                    isCancelling = false
+                                    programmingPhase = null
+                                    programmingJob = null
+                                }
                             }
                         }
                     }) { Text("Write Names") }

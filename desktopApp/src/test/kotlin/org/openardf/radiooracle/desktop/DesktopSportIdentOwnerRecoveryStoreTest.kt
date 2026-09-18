@@ -1,6 +1,11 @@
 package org.openardf.radiooracle.desktop
 
 import java.nio.file.Files
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import org.junit.Assert.*
 import org.junit.Rule
@@ -72,6 +77,30 @@ class DesktopSportIdentOwnerRecoveryStoreTest {
         val store = DesktopSportIdentOwnerRecoveryStore(parent.resolve("recovery.json"))
         refused { store.begin(request) }
         assertFalse(Files.isDirectory(parent))
+    }
+
+    @Test fun cancellationReloadsTheReminderAndResetsTheUiBeforeCleanupReturns() = runBlocking {
+        val store = store()
+        store.begin(request)
+        val started = CompletableDeferred<Unit>()
+        var isProgramming = true
+        var recovered: DesktopSportIdentOwnerRecoveryState? = null
+        val transaction = launch {
+            try {
+                started.complete(Unit)
+                awaitCancellation()
+            } finally {
+                finishDesktopSportIdentOwnerRecovery(store) {
+                    recovered = it
+                    isProgramming = false
+                }
+            }
+        }
+        started.await()
+        transaction.cancelAndJoin()
+        assertFalse(isProgramming)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recovered)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), store.load())
     }
 
     private fun store() = DesktopSportIdentOwnerRecoveryStore(temporary.root.toPath().resolve("recovery.json"))

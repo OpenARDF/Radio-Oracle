@@ -231,8 +231,9 @@ preservation of earlier punches or other settings, because the SDK's original
 immutable snapshot is unavailable after an interrupted process. The saved
 request is never replayed, and every later write requires a new confirmation.
 
-The focused gate passes 22 tests: eight shared programming/recovery tests, eight
-desktop child-process tests, and six persistent recovery-store tests. These cover
+The programming/recovery gate now includes 23 tests: eight shared
+programming/recovery tests, eight desktop child-process tests, and seven
+persistent recovery-store/cleanup tests. These cover
 recreating the store after an incomplete attempt, refusing another write,
 identity/readiness checks, corrupt records, failed persistence, stale
 acknowledgements, and cancellation while waiting for insertion or read-back.
@@ -263,9 +264,29 @@ reinsertion for independent verification, and the distinction between writing
 completion and verified success. The Mac package build and focused desktop
 process/recovery/navigation tests pass; the rebuilt app is running locally.
 
-Next, validate the GUI stop action on hardware, characterize physical interruption,
+An approved GUI test changed card 2450662 back to `Mortimer` / `Mouse` and clicked
+Stop Verification after the app reported write completion. The SDK helper exited,
+but the page stayed on Stopping with Read Card disabled. Cancellation interrupted
+the return from the disk reload before the UI flags could reset. The fix keeps
+the reload and UI reset together inside a non-cancellable context; a regression
+test cancels a suspended transaction and checks that its completion callback
+restores the UI while retaining the pending request. Focused desktop tests and
+Mac packaging pass. The rebuilt app, version 1.0.49j, retained the reminder after
+restart; a fresh native read confirmed `Mortimer` / `Mouse`, and Accept Card Read
+cleared the record and restored the editor. The Race File remained unchanged.
+Corrected GUI stop behavior still needs acceptance on hardware; no further write
+was attempted during this fix, and earlier punch/settings preservation was not verified.
+
+Next, finish corrected GUI stop acceptance, characterize physical interruption,
 and resolve supported SDK, runtime, and licensed distribution packaging. This workflow primarily targets new
 cards. SDK completion alone is insufficient evidence that the desired names were stored.
+
+The public [SPORTident developer page](https://www.sportident.com/support/developers)
+provides the .NET Core Communication library upon request. Before distributing
+this bridge, obtain a supported library version and confirmation of macOS ARM64
+and target-runtime support, binary redistribution requirements, and the approved
+license-provisioning method. The public page does not establish those details;
+the working private test release is not distribution approval.
 
 Vendor archives, extracted API documentation, binaries, and credentials stay
 outside this repository. No binary inspection, decompilation, or serial command

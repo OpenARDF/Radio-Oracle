@@ -3,6 +3,9 @@ package org.openardf.radiooracle.desktop
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameProgramming
@@ -16,6 +19,15 @@ internal sealed interface DesktopSportIdentOwnerRecoveryState {
     data object Empty : DesktopSportIdentOwnerRecoveryState
     data class Pending(val request: SportIdentOwnerNameWriteRequest) : DesktopSportIdentOwnerRecoveryState
     data object Unavailable : DesktopSportIdentOwnerRecoveryState
+}
+
+/** Keep both the disk reload and the UI reset alive when the transaction is cancelled. */
+internal suspend fun finishDesktopSportIdentOwnerRecovery(
+    store: DesktopSportIdentOwnerRecoveryStore,
+    onFinished: (DesktopSportIdentOwnerRecoveryState) -> Unit
+) = withContext(NonCancellable) {
+    val state = withContext(Dispatchers.IO) { store.load() }
+    onFinished(state)
 }
 
 /** Retain an incomplete attempt across page changes and app restarts; never replay it. */

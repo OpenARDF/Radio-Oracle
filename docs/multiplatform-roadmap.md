@@ -543,7 +543,9 @@ mid-term goal on Android and desktop.
   assessment rules are shared for Android reuse.
   A controlled helper stop after SDK write completion, restart, fresh native
   read, and explicit recovery acknowledgement have passed on the Mac hardware.
-  GUI stop-action hardware acceptance, physical interruption during writing,
+  A GUI stop test exposed a cancellation cleanup bug; the cleanup fix passes
+  its regression test, with corrected GUI hardware acceptance still pending.
+  Physical interruption during writing,
   a supported vendor SDK release, and distributable runtime/license packaging
   remain unfinished.
   Validate the write transaction on real hardware and preserve card identity
