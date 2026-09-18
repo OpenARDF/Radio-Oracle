@@ -33,7 +33,6 @@ import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.domain.StandardCategoryType
 import org.openardf.radiooracle.shared.course.ControlPointDisplayToken
 import org.openardf.radiooracle.shared.course.ControlPointRules
-import org.openardf.radiooracle.shared.event.EventAlias
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
@@ -97,14 +96,14 @@ fun main() {
             startTimeText = "10:00:00",
             finishTimeText = "10:45:00",
             controlPunches = listOf(TimedPunchCsvField(31, "10:15:00"))
-        ) == "123456;;10:00:00;10:45:00;1;31;10:15:00"
+        ) == "123456,,10:00:00,10:45:00,1,31,10:15:00"
     )
     check(
         EventCsvRows.competitorStartRow(
             competitor = raceData.competitorData.single().competitorCategory.competitor,
             categoryName = "M21",
             startTimeText = "10:00"
-        ) == "1;Runner;Test;M21;;10:00;;;;123456;"
+        ) == "1,Runner,Test,M21,,10:00,,,,123456,"
     )
     check(
         ControlPointRules.formatDisplayTokens(
@@ -167,7 +166,7 @@ private fun sampleRaceData(): EventRaceData =
                 competitors = emptyList()
             )
         ),
-        aliases = listOf(EventAlias(id = "alias", raceId = "race", siCode = 31, name = "F1")),
+        aliases = emptyList(),
         competitorData = listOf(
             EventCompetitorData(
                 competitorCategory = EventCompetitorCategory(
