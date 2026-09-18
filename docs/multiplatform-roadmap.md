@@ -528,8 +528,9 @@ mid-term goal on Android and desktop.
   [SI-Card8 programming investigation](sportident-si8-programming.md) for the
   verified boundary and remaining write-protocol questions. Config+ programming
   and read-back have been verified with the available SI-Card8/BSM8 hardware;
-  the licensed SDK also reads the station through native serial transport on
-  macOS. Mac card writes and packaged app integration remain unfinished.
+  the licensed SDK also reads the station and the SI-Card8's stored owner names
+  through native serial transport on macOS. Mac card writes and packaged app
+  integration remain unfinished.
   Validate the write transaction on real hardware and preserve card identity
   and unrelated card data. This workflow primarily targets new cards;
   if programming clears existing punches, disclose that consequence before writing.

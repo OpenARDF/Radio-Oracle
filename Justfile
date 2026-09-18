@@ -53,6 +53,10 @@ android-si-status serial="":
 sportident-sdk-probe port expected_station:
     dotnet run --project tools/sportident-sdk-probe/SportIdentSdkProbe.csproj -- {{quote(port)}} {{quote(expected_station)}}
 
+# Read one freshly inserted SI-Card8 through the private SDK; never programs a card.
+sportident-sdk-card-read port expected_station expected_card:
+    dotnet run --project tools/sportident-sdk-probe/SportIdentSdkProbe.csproj -- {{quote(port)}} {{quote(expected_station)}} {{quote(expected_card)}}
+
 android-course-workflow-smoke serial:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug
     ./scripts/android-course-workflow-smoke.sh {{quote(serial)}}

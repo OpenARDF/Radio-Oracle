@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using SPORTident;
 using SPORTident.Communication;
 using SPORTident.Communication.Licensing.Common;
 using SPORTident.Communication.UsbDevice;
@@ -9,11 +11,13 @@ return Run(args);
 
 static int Run(string[] args)
 {
-    if (args.Length != 2 || string.IsNullOrWhiteSpace(args[0]) ||
+    long expectedCard = 0;
+    if ((args.Length != 2 && args.Length != 3) || string.IsNullOrWhiteSpace(args[0]) ||
         !uint.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out var expectedStation) ||
-        expectedStation == 0)
+        expectedStation == 0 || (args.Length == 3 &&
+        (!long.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out expectedCard) || expectedCard <= 0)))
     {
-        Console.Error.WriteLine("Usage: sportident-sdk-probe <serial-port> <expected-station-number>");
+        Console.Error.WriteLine("Usage: sportident-sdk-probe <serial-port> <expected-station-number> [expected-SI-Card8-number]");
         return 1;
     }
 
@@ -35,9 +39,53 @@ static int Run(string[] args)
             SiacMeasureBatteryOnRead = false,
         };
         var stationRead = new TaskCompletionSource<StationRead>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cardRead = new TaskCompletionSource<CardRead>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cardReadArmed = 0;
+        var cardReadStarted = 0;
         communication.StationConfigRead += (_, e) => stationRead.TrySetResult(new StationRead(
             e.Device.SerialNumber.ToString(CultureInfo.InvariantCulture), e.Device.Product.ProductString));
-        communication.CommunicationFailed += (_, _) => stationRead.TrySetException(new IOException());
+        communication.CommunicationFailed += (_, _) =>
+        {
+            stationRead.TrySetException(new IOException());
+            cardRead.TrySetException(new IOException());
+        };
+        communication.SiCardIn += (_, e) =>
+        {
+            if (Volatile.Read(ref cardReadArmed) == 0 ||
+                Interlocked.CompareExchange(ref cardReadStarted, 1, 0) != 0) return;
+            if (e.Card.SiidValue != expectedCard || e.Card.CardType != CardType.Card8)
+            {
+                cardRead.TrySetException(new InvalidDataException());
+                return;
+            }
+            try
+            {
+                communication.ReadCurrentSiCard(CardsReadMode.ReadCards);
+            }
+            catch (Exception)
+            {
+                cardRead.TrySetException(new IOException());
+            }
+        };
+        communication.SiCardOut += (_, _) =>
+        {
+            if (Volatile.Read(ref cardReadStarted) != 0)
+                cardRead.TrySetException(new InvalidDataException());
+        };
+        communication.SiCardReadCompleted += (_, e) =>
+        {
+            if (Volatile.Read(ref cardReadArmed) == 0 || Volatile.Read(ref cardReadStarted) == 0) return;
+            if (e.Cards.Length != 1 || e.Cards[0].SiidValue != expectedCard ||
+                e.Cards[0].CardType != CardType.Card8 || e.Cards[0].PersonalData == null ||
+                e.Cards[0].ControlPunchList == null)
+            {
+                cardRead.TrySetException(new InvalidDataException());
+                return;
+            }
+            var card = e.Cards[0];
+            cardRead.TrySetResult(new CardRead(1, expectedStation, card.SiidValue, "SI-Card8",
+                card.PersonalData.FirstName ?? "", card.PersonalData.LastName ?? "", card.ControlPunchList.Count));
+        };
 
         stage = "serial open";
         communication.Open();
@@ -50,7 +98,15 @@ static int Run(string[] args)
         }
         else
         {
-            Console.WriteLine($"Station read verified: {station.Number} [{station.Product}].");
+            Console.Error.WriteLine($"Station read verified: {station.Number} [{station.Product}].");
+            if (expectedCard != 0)
+            {
+                stage = "SI-Card8 owner information read";
+                Volatile.Write(ref cardReadArmed, 1);
+                Console.Error.WriteLine($"Remove and insert SI-Card8 {expectedCard}; keep it seated until the read finishes (45-second timeout).");
+                var card = cardRead.Task.WaitAsync(TimeSpan.FromSeconds(45)).GetAwaiter().GetResult();
+                Console.WriteLine(JsonSerializer.Serialize(card));
+            }
             exitCode = 0;
         }
     }
@@ -66,7 +122,7 @@ static int Run(string[] args)
             try
             {
                 communication.Close();
-                Console.WriteLine("Serial connection closed.");
+                Console.Error.WriteLine("Serial connection closed.");
             }
             catch (Exception exception)
             {
@@ -98,3 +154,5 @@ static string ReadLicenseAssignment(string text, string field)
 }
 
 sealed record StationRead(string Number, string Product);
+sealed record CardRead(int SchemaVersion, uint StationNumber, long CardNumber, string CardType,
+    string FirstName, string LastName, int ControlPunchCount);

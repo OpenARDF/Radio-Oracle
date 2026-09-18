@@ -89,11 +89,26 @@ connection. Missing-license and invalid-argument cases also returned failure;
 none of these trials exposed license values. The desktop app does not yet
 invoke or package this tool.
 
+The next read-only slice was verified on the same Mac and station. The
+`sportident-sdk-card-read` command verified the station, waited for a fresh
+insertion, checked the expected SI-Card8 number and family, and called the
+documented `ReadCurrentSiCard(CardsReadMode.ReadCards)` API. Its completion
+reported card 2450662, first name `Mickey`, last name `Mouse`, and 11 control
+punches, matching the Config+ trial. The connection closed successfully. The
+probe emits a versioned JSON read result for a future desktop bridge; no card
+programming or station-configuration method is exposed by the tool.
+The updated probe built without warnings. Invalid/zero card arguments,
+missing license, a real station-number mismatch, and the 45-second wait
+without reinsertion all failed as expected; the hardware failures closed
+the connection without emitting a card result. Different-card and
+mid-read removal guards are implemented but have not been exercised on
+hardware in this slice.
+
 The supplied library's API documentation exposes personal-data programming,
-validation, progress, and completion facilities. The Mac station read and
-Config+ card write establish an SDK route to investigate next; they do not
-establish a working Mac card-write integration. The
-documentation inspected does not explain punch preservation or the raw write
+validation, progress, and completion facilities. The Config+ write and Mac
+SDK reads establish an SDK route to investigate next; they do not establish
+a working Mac card-write integration. The documentation inspected does not
+explain punch preservation or the raw write
 transaction. The supplied deprecated PC Programmer's Guide describes card
 readout, but does not specify a personal-data write command.
 
@@ -116,7 +131,7 @@ the .NET runtime/library and injecting a licensed key without adding secrets
 to public source. A desktop bridge would be separate from the shared Kotlin
 planner and would require a separate Android integration later.
 
-Once transport is verified, implement an explicit write action targeting the
+Next, verify a Mac write through the SDK, then implement an explicit app action targeting the
 freshly read card, followed by read-back verification of its number and names.
 This workflow primarily targets new cards. If writing clears existing punches,
 disclose that before writing. SDK completion alone is insufficient evidence
