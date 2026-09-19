@@ -568,21 +568,22 @@ mid-term goal on Android and desktop.
   identifies the three `0xEA` word writes for one successful `Daisy;Duck;` to
   `Donald;Duck;` SI-Card8 transaction. A separate read confirmed the new name
   and all 11 displayed punches. A shared Kotlin offline planner now reproduces
-  those three frames from a validated native card snapshot; it has no hardware
-  sender. A shared offline native-read diff reports every changed byte across
+  those three frames from a validated native card snapshot. A shared offline
+  native-read diff reports every changed byte across
   both SI-Card8 blocks. A paired Mac SDK
   12-to-11-byte name write showed `0xEE` padding in the twelfth owner byte and
   no other block changes; the shared planner reproduces that owner-byte pattern
   offline. Replaying the planned frames into the complete before snapshot now
   matches the independent after snapshot byte for byte for that one Mac SDK
   transaction. A shared offline sequence also matches only the three CRC-valid
-  `0xEA` replies observed in the Config+ trace, in order; it does not interpret
-  their unknown status bytes as write success. A transport-free shared rehearsal
+  `0xEA` replies observed in the Config+ trace, in order, using the connected
+  station's code in place of the captured station code. The reply has no proven
+  write-success status. A transport-free shared rehearsal
   now gates each planned word on its observed reply, stops without retry on
   missing or unfamiliar replies, and requires whole-card read-back comparison.
   An internal desktop serial adapter passes exact planned frames and first
-  replies through that shared sequence and has passed fake-port failure tests;
-  it is not exposed to the UI or CLI and has not written a card.
+  replies through that shared sequence and has passed fake-port failure tests.
+  The experimental CLI now uses it; the app UI does not.
   An internal same-connection preflight now checks the station, fresh SI-Card8
   block read, card identity, current names, and request before any handoff,
   with fake-port tests. An internal read-back verifier now requires target-card
@@ -598,8 +599,15 @@ mid-term goal on Android and desktop.
   feedback, and character set, and a native read matched the prior known-good
   two-block image exactly. The offline recovery command accepted that fresh
   read and cleared the pending intent. The CLI now records each complete word
-  reply for a later controlled trial, without accepting unknown replies as
-  success.
+  reply without accepting unknown replies as success. A read-only probe found
+  code 14 on Mac station 554900, versus code
+  10 on the Config+ capture. A second approved Kotlin attempt changed
+  `Donald;Duck;` to `Daisy;Duck;` on SI-Card8 2450662. All three actual code-14
+  `0xEA` replies matched in order; observed removal/reinsertion led to a fresh
+  two-block read that matched the predicted card image byte for byte, preserving
+  all 11 punches and every non-owner byte. The native recovery record cleared.
+  This validates one complete direct Kotlin transaction on the Mac station;
+  interruption behavior and broader station/card compatibility remain open.
   A read-only same-port block-0 recheck matched SI-Card8 2450662 while seated
   on Mac station 554900 and received a negative acknowledgement after removal.
   The internal transaction now requires that match immediately before its
@@ -617,8 +625,8 @@ mid-term goal on Android and desktop.
   Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before
-  enabling a direct Kotlin writer. SDK read comparison alone does not establish
-  a write protocol.
+  enabling a direct Kotlin writer in the app UI. SDK read comparison alone does
+  not establish a write protocol.
 - Add explicit multi-download-station support so desktop can detect multiple
   connected stations, show their serial numbers/modes/ports, let the user choose
   or assign active stations, and prevent independent readout loops from fighting

@@ -30,8 +30,9 @@ internal class DesktopSportIdentOwnerWritePreflight(
         try {
             val station = connectStation(port).stationInfo
             require(port.isOpen && station.serialNumber == request.stationNumber &&
-                station.extendedMode && station.isDownloadCapableMode == true) {
-                "The connected station does not match the requested extended-mode download station."
+                station.extendedMode && station.isDownloadCapableMode == true &&
+                station.stationCodeNumber?.let { it in 0..255 } == true) {
+                "The connected station does not match the requested extended-mode download station or has no supported code."
             }
             val download = readCard(port)
             require(port.isOpen && download.inserted.cardType == SportIdentProtocol.SI_CARD8_9_SIAC &&
@@ -44,7 +45,8 @@ internal class DesktopSportIdentOwnerWritePreflight(
             require(read.cardNumber == request.cardNumber && read.controlPunchCount == download.readout.punches.size) {
                 "The inserted card and its complete block read do not agree."
             }
-            val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, before)
+            val rehearsal = SportIdentSi8OwnerWriteRehearsal(request,
+                requireNotNull(station.stationCodeNumber), before)
             try {
                 return onReady(port, rehearsal, before)
             } catch (error: Exception) {

@@ -208,7 +208,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             connectStation = { opened ->
                 opened.open(0)
                 DesktopSportIdentStationConnection(38400, byteArrayOf(),
-                    SportIdentStationInfo(request.stationNumber, true, stationModeCode = 8))
+                    SportIdentStationInfo(request.stationNumber, true, stationCodeNumber = 10, stationModeCode = 8))
             },
             readCard = readCard
         )

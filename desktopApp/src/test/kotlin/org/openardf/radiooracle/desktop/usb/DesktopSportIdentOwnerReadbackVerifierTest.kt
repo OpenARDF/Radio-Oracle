@@ -113,7 +113,7 @@ class DesktopSportIdentOwnerReadbackVerifierTest {
         assertThrows(IllegalStateException::class.java) { verifier.verify(FakePort(), rehearsal) }
         assertEquals(SportIdentSi8OwnerWriteStopReason.READBACK_NOT_OBSERVED, rehearsal.stopReason)
 
-        val premature = SportIdentSi8OwnerWriteRehearsal(request, before())
+        val premature = SportIdentSi8OwnerWriteRehearsal(request, 10, before())
         assertThrows(IllegalStateException::class.java) { verifier.verify(FakePort(), premature) }
         assertEquals(SportIdentSi8OwnerWriteStage.READY_FOR_WORD, premature.stage)
     }
@@ -124,7 +124,7 @@ class DesktopSportIdentOwnerReadbackVerifierTest {
             readAfterReinsertion = { download }
         )
 
-    private fun completedRehearsal() = SportIdentSi8OwnerWriteRehearsal(request, before()).also { rehearsal ->
+    private fun completedRehearsal() = SportIdentSi8OwnerWriteRehearsal(request, 10, before()).also { rehearsal ->
         replies.forEach { hex ->
             rehearsal.takeNextWordFrame()
             val frame = requireNotNull(SportIdentFrameParser.firstFrame(hex.bytes()))

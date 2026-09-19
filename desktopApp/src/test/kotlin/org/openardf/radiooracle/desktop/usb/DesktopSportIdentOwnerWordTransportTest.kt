@@ -28,7 +28,7 @@ class DesktopSportIdentOwnerWordTransportTest {
     fun sendsEachPlannedFrameOnceAndStopsForSeparateReadback() {
         val before = fixture()
         val port = FakePort(capturedReplies)
-        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, before)
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, before)
 
         val transport = transport(port)
         transport.exchange(rehearsal)
@@ -45,7 +45,7 @@ class DesktopSportIdentOwnerWordTransportTest {
     @Test
     fun coalescedExtraReplyCannotBeMistakenForTheNextWordsReply() {
         val port = FakePort(listOf(capturedReplies[0] + capturedReplies[1]))
-        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, fixture())
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
 
         transport(port).exchange(rehearsal)
 
@@ -62,7 +62,7 @@ class DesktopSportIdentOwnerWordTransportTest {
         val observed = mutableListOf<ByteArray>()
         var now = 0L
 
-        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, fixture())
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
         DesktopSportIdentOwnerWordTransport(port, readTimeoutMs = 4, nowMillis = { ++now },
             onWordResult = { word, result ->
                 assertEquals(1, word)
@@ -79,7 +79,7 @@ class DesktopSportIdentOwnerWordTransportTest {
     fun extraBytesAfterFinalReplyCannotBeLostBeforeReadback() {
         val port = FakePort(listOf(capturedReplies[0], capturedReplies[1],
             capturedReplies[2] + byteArrayOf(SportIdentProtocol.NAK)))
-        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, fixture())
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
 
         transport(port).exchange(rehearsal)
 
@@ -100,7 +100,7 @@ class DesktopSportIdentOwnerWordTransportTest {
             emptyList<ByteArray>() to SportIdentSi8OwnerWriteStopReason.NO_REPLY
         ).forEach { (chunks, reason) ->
             val port = FakePort(chunks)
-            val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, fixture())
+            val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
             transport(port).exchange(rehearsal)
             assertEquals(1, port.writeRequests.size)
             assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, rehearsal.stage)
@@ -111,13 +111,13 @@ class DesktopSportIdentOwnerWordTransportTest {
     @Test
     fun shortWriteAndTransportExceptionLeaveAnUncertainStoppedAttempt() {
         val shortPort = FakePort(capturedReplies, writeLimit = 3)
-        val shortRehearsal = SportIdentSi8OwnerWriteRehearsal(request, fixture())
+        val shortRehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
         transport(shortPort).exchange(shortRehearsal)
         assertEquals(1, shortPort.writeRequests.size)
         assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, shortRehearsal.stopReason)
 
         val brokenPort = FakePort(capturedReplies, throwOnRead = true)
-        val brokenRehearsal = SportIdentSi8OwnerWriteRehearsal(request, fixture())
+        val brokenRehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
         assertThrows(IllegalStateException::class.java) { transport(brokenPort).exchange(brokenRehearsal) }
         assertEquals(1, brokenPort.writeRequests.size)
         assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, brokenRehearsal.stopReason)

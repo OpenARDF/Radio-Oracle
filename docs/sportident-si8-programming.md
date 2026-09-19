@@ -1,8 +1,10 @@
 # SI-Card8 programming investigation
 
 The desktop inspector and name preview work with SI-Card8. The private Mac SDK
-bridge can write names, but a direct Kotlin card writer is not implemented.
-Name preparation remains in shared Kotlin code for future Android reuse.
+bridge can write names. An experimental direct Kotlin desktop CLI has completed
+one verified SI-Card8 name write on Mac station 554900; it is not exposed in the
+app UI. Name preparation and reply validation live in shared Kotlin code for
+future Android reuse.
 
 ## Verified name limit
 
@@ -409,7 +411,10 @@ implementation. Config+ received one CRC-valid `0xEA` response after each word:
 `02 ea 03 00 0a 08 00 2e 03`,
 `02 ea 03 00 0a 09 01 2e 03`, and
 `02 ea 03 00 0a 0a 02 2e 03`. The response's final data byte echoes the word
-address; the meaning of the preceding two data bytes is not yet established.
+address. The preceding two data bytes are the station code (`00 0a` for this
+Config+ station), consistent with the other extended replies in the capture
+and the independent [`sportident-python` frame parser](https://github.com/OpenARDF/sportident-python/blob/e92c32bb800a2c39ed39db085d834f07150eb650/sireader2.py#L1618-L1624).
+Their presence does not establish whether the word write succeeded.
 No write retry or card-memory erase command appeared in this transaction.
 
 In Config+'s read-only SI-card view, a separate read at 9:10:56 AM displayed
@@ -431,17 +436,17 @@ licensing or distribution question for a replacement implementation.
 
 ### Shared offline word-reply sequence
 
-`SportIdentSi8OwnerWordWriteReplySequence` matches only the three captured
-Config+ replies above. It requires an extended, CRC-valid `0xEA` frame with
-three data bytes: the observed `00 0a` prefix and the next expected word
-address (`08`, `09`, or `0a`). Wrong order, duplicates, changed prefix, wrong
-command or length, and invalid CRC do not advance the sequence. The checker
-has no serial transport, timeout, or retry behavior and is shared with Android.
+`SportIdentSi8OwnerWordWriteReplySequence` matches the three captured Config+
+reply shapes above using the connected station's code. It requires an extended,
+CRC-valid `0xEA` frame with three data bytes: the two-byte station code and the
+next expected word address (`08`, `09`, or `0a`). Wrong order, duplicates, a
+different station code, wrong command or length, and invalid CRC do not advance
+the sequence. The checker has no serial transport, timeout, or retry behavior
+and is shared with Android.
 
-The `00 0a` bytes have not been decoded as a success status; they may include
-station-specific information. Matching all three replies means only that this
-one captured reply pattern was seen. It does not confirm that a card was
-written. A future sender must stop on unknown replies or timeouts, avoid an
+Matching all three replies means only that the observed reply pattern was seen
+from the connected station. It does not confirm that a card was written. The
+sender must stop on unknown replies or timeouts, avoid an
 automatic write retry, and verify card identity, stored names, and preservation
 through a fresh independent read.
 
@@ -504,8 +509,8 @@ captured Config+ exchange and exercise timeout, negative acknowledgement,
 corrupt or out-of-order replies, cancellation, and changed punch bytes.
 
 This is a transport-free sequence check, not an enabled writer. The fixture
-cannot prove read freshness, and the `00 0a` reply bytes still have unknown
-semantics. A future desktop transport must verify the card just before writing,
+cannot prove read freshness, and the reply has no proven write-success status.
+A future desktop transport must verify the card just before writing,
 send each frame at most once, stop on ambiguous outcomes, and obtain a fresh
 independent read before reporting success.
 
@@ -517,9 +522,9 @@ examines the first reply even when its CRC is invalid, and stops on a short
 write, serial exception, timeout, NAK, unfamiliar reply, or extra bytes already
 buffered after a reply. Keeping one frame reader across the three words prevents
 coalesced replies from being mistaken for replies to later writes. Fake-port
-tests cover the captured exchange and these failure paths. No UI, CLI, or live
-card path constructs this adapter yet; the preflight below and independent
-read-back still have to be integrated with it and validated on hardware.
+tests cover the captured exchange and these failure paths. At that stage, no
+UI, CLI, or live card path constructed this adapter; later sections describe
+its integration with preflight, read-back, and the experimental hardware CLI.
 
 ### Same-connection read preflight
 
@@ -532,10 +537,11 @@ and immutable before-read snapshot to a callback. The port stays open through
 the callback and closes on every exit path. Fake-port tests reject mismatched
 stations, cards, names, and incomplete evidence before the callback runs.
 
-No application or CLI path invokes this preflight or the word transport. The
-reader's completed download does not establish continued card presence; a live
+At this stage, no application or CLI path invoked this preflight or the word
+transport. The reader's completed download does not establish continued card
+presence; a live
 writer must handle removal between reading and writing and obtain an independent
-post-write read. There has still been no direct Kotlin hardware write.
+post-write read. Later sections describe the experimental CLI and live trials.
 
 ### Independent Kotlin read-back boundary
 
@@ -559,11 +565,10 @@ one attempted word, and a missing removal event or changed non-owner byte
 cannot report success. Fake-port integration tests exercise the complete order,
 no automatic retry, and port cleanup on preflight rejection or transport failure.
 
-The experimental CLI now invokes this transaction; the application UI does not. Its fake-port tests do not
-establish continued card presence during a write, that the station emits the
-expected removal/reinsertion events after a Kotlin write, or that the observed
-`0xEA` reply prefix denotes success. The first direct Kotlin attempt is
-described below.
+The experimental CLI now invokes this transaction; the application UI does not.
+Its fake-port tests alone do not establish continued card presence during a
+write, post-write removal/reinsertion events, or that an `0xEA` reply proves
+success. The live trials below add evidence for one station/card combination.
 
 ### Read-only pre-write presence recheck
 
@@ -616,6 +621,12 @@ while the card was seated. No card programming or recovery-record write occurred
 This accepts the pre-write sequence on the available hardware; it does not
 validate the Kotlin word exchange or post-write event/read-back behavior.
 
+After the SDK repair, a second read-only check passed for the proposed
+`Donald` / `Duck` to `Daisy` / `Duck` request on the same Mac station and card.
+It read the stored `Donald` / `Duck` name and 11 punches, matched seated block 0,
+and made no owner write or recovery-record change. The frame trace showed
+station code `00 0e` in the probe, insertion event, and card-block reply.
+
 ### Experimental native-write command
 
 `just sportident-owner-native-experiment <request-json>` is an explicit desktop
@@ -629,8 +640,8 @@ independent read and the recovery record is cleared. It never retries. An
 uncertain outcome retains the recovery record and requires a fresh read and
 explicit recovery before any further attempt.
 
-The expected reply bytes came from one observed Config+ transaction; their
-general success/error meaning and behavior under physical interruption are
+The expected reply shape came from one observed Config+ transaction; its
+success/error meaning and behavior under physical interruption are
 still unknown. Run this command only as a controlled hardware experiment with
 the exact target card and names reviewed beforehand.
 
@@ -665,11 +676,27 @@ and last names given on the command line. As in the UI, accepting the read
 resolves the reminder; it does not by itself prove preservation from the
 earlier interrupted attempt.
 
-The first attempt did not record the raw reply bytes. The CLI now prints each
-complete word reply before checking it, so a later separately approved trial
-can distinguish station-dependent reply data from a malformed or negative
-response. Do not relax the reply gate on the basis of this partial write.
-The complete Kotlin word exchange and post-write events remain unverified.
+The first attempt did not record the raw reply bytes. A read-only probe of Mac
+station 554900 returned station code 14 (`00 0e`), whereas the Config+ station
+used code 10 (`00 0a`). The shared reply gate now expects the connected
+station's verified code. The CLI also prints each complete word reply before
+checking it. At this point the mismatch was a hypothesis because the first Mac
+reply had not been recorded. Do not treat a
+matching reply as proof of a write; independent full-card read-back remains
+required.
+
+A separately approved second Kotlin attempt changed the same card from
+`Donald` / `Duck` to `Daisy` / `Duck` on Mac station 554900. Its three raw,
+CRC-valid `0xEA` replies were `02 ea 03 00 0e 08 80 35 03`,
+`02 ea 03 00 0e 09 81 35 03`, and `02 ea 03 00 0e 0a 82 35 03`.
+The code-14 reply gate accepted them in order. After observed removal and
+reinsertion, a fresh two-block read matched the predicted card image byte for
+byte: the new name was present and the 11 punches and all other bytes were
+preserved. The transaction reported verified and cleared its recovery record.
+This confirms the station-code mismatch as the cause of the first reply
+rejection. It establishes one complete Kotlin exchange and read-back on this
+station/card combination; interruption behavior, other stations, and card
+families remain unverified.
 
 ### SDK provenance and licensing
 

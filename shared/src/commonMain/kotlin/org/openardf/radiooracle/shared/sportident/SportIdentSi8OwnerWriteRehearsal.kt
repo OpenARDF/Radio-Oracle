@@ -27,10 +27,11 @@ enum class SportIdentSi8OwnerWriteStopReason {
  */
 class SportIdentSi8OwnerWriteRehearsal(
     private val request: SportIdentOwnerNameWriteRequest,
+    stationCode: Int,
     private val before: SportIdentOwnerReadFixture
 ) {
     private val frames = SportIdentSi8OwnerWordWritePlanner.plan(request, before)
-    private val replies = SportIdentSi8OwnerWordWriteReplySequence()
+    private val replies = SportIdentSi8OwnerWordWriteReplySequence(stationCode)
     private var nextFrameIndex = 0
 
     var stage: SportIdentSi8OwnerWriteStage = SportIdentSi8OwnerWriteStage.READY_FOR_WORD

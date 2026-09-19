@@ -14,10 +14,15 @@ class SportIdentSi8OwnerWordWriteReplySequenceTest {
         "02 ea 03 00 0a 09 01 2e 03",
         "02 ea 03 00 0a 0a 02 2e 03"
     )
+    private val macReplies = listOf(
+        "02 ea 03 00 0e 08 80 35 03",
+        "02 ea 03 00 0e 09 81 35 03",
+        "02 ea 03 00 0e 0a 82 35 03"
+    )
 
     @Test
     fun matchesAllThreeCrcValidConfigPlusRepliesInOrder() {
-        val sequence = SportIdentSi8OwnerWordWriteReplySequence()
+        val sequence = SportIdentSi8OwnerWordWriteReplySequence(10)
         assertEquals(0x08, sequence.nextExpectedWordAddress)
         capturedReplies.forEachIndexed { index, hex ->
             val frame = parse(hex)
@@ -31,11 +36,11 @@ class SportIdentSi8OwnerWordWriteReplySequenceTest {
     }
 
     @Test
-    fun refusesUnknownStatusOutOfOrderDuplicateAndCorruptRepliesWithoutAdvancing() {
-        val sequence = SportIdentSi8OwnerWordWriteReplySequence()
+    fun refusesWrongStationOutOfOrderDuplicateAndCorruptRepliesWithoutAdvancing() {
+        val sequence = SportIdentSi8OwnerWordWriteReplySequence(10)
         val first = parse(capturedReplies[0])
         val second = parse(capturedReplies[1])
-        val unknownStatus = parse(SportIdentProtocol.buildExtendedMessage(
+        val wrongStation = parse(SportIdentProtocol.buildExtendedMessage(
             SportIdentProtocol.WRITE_SI_CARD_WORD, byteArrayOf(1, 0x0a, 0x08)))
         val wrongCommand = parse(SportIdentProtocol.buildExtendedMessage(
             SportIdentProtocol.PROBE_COMMAND, byteArrayOf(0, 0x0a, 0x08)))
@@ -45,7 +50,7 @@ class SportIdentSi8OwnerWordWriteReplySequenceTest {
         val corruptFrame = assertNotNull(SportIdentFrameParser.firstFrame(corrupt, requireValidCrc = false))
         assertFalse(corruptFrame.crcValid ?: true)
 
-        listOf(second, unknownStatus, wrongCommand, wrongLength, corruptFrame).forEach { frame ->
+        listOf(second, wrongStation, wrongCommand, wrongLength, corruptFrame).forEach { frame ->
             assertFailsWith<IllegalArgumentException> { sequence.accept(frame) }
             assertEquals(0x08, sequence.nextExpectedWordAddress)
         }
@@ -53,6 +58,20 @@ class SportIdentSi8OwnerWordWriteReplySequenceTest {
         assertFailsWith<IllegalArgumentException> { sequence.accept(first) }
         assertEquals(0x09, sequence.nextExpectedWordAddress)
         assertFalse(sequence.allObservedRepliesMatched)
+    }
+
+    @Test
+    fun matchesConnectedStationCodeInsteadOfCapturedStationCode() {
+        val station14 = SportIdentSi8OwnerWordWriteReplySequence(14)
+        val station10 = SportIdentSi8OwnerWordWriteReplySequence(10)
+        val reply = parse(macReplies.first())
+
+        assertFailsWith<IllegalArgumentException> { station10.accept(reply) }
+        assertEquals(0x08, station10.nextExpectedWordAddress)
+        station14.accept(reply)
+        assertEquals(0x09, station14.nextExpectedWordAddress)
+        macReplies.drop(1).forEach { station14.accept(parse(it)) }
+        assertTrue(station14.allObservedRepliesMatched)
     }
 
     private fun parse(hex: String): SportIdentFrame = parse(hex.hexBytes())

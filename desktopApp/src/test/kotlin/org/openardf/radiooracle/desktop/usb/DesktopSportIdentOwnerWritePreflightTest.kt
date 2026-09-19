@@ -50,9 +50,25 @@ class DesktopSportIdentOwnerWritePreflightTest {
     }
 
     @Test
+    fun passesConnectedStationCodeToWordReplyGate() {
+        val port = FakePort()
+        preflight(port, station = station(code = 14)).withFreshRead(request) { _, rehearsal, _ ->
+            rehearsal.takeNextWordFrame()
+            val reply = requireNotNull(SportIdentFrameParser.firstFrame(
+                SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.WRITE_SI_CARD_WORD,
+                    byteArrayOf(0, 14, 0x08))))
+            rehearsal.acceptWordResult(SportIdentCommandResult.Reply(reply))
+            assertEquals(SportIdentSi8OwnerWriteStage.READY_FOR_WORD, rehearsal.stage)
+            assertEquals(null, rehearsal.stopReason)
+        }
+        assertEquals(1, port.closeCount)
+    }
+
+    @Test
     fun stationMismatchUnknownModeAndNonextendedStationNeverReadCard() {
         listOf(
-            station(serial = 593928), station(mode = 2), station(mode = null), station(extended = false)
+            station(serial = 593928), station(mode = 2), station(mode = null),
+            station(extended = false), station(code = null), station(code = 256)
         ).forEach { badStation ->
             val port = FakePort()
             var reads = 0
@@ -160,8 +176,9 @@ class DesktopSportIdentOwnerWritePreflightTest {
         )
     }
 
-    private fun station(serial: Int = 593927, mode: Int? = 8, extended: Boolean = true) =
-        SportIdentStationInfo(serial, extended, stationModeCode = mode)
+    private fun station(serial: Int = 593927, mode: Int? = 8, extended: Boolean = true,
+                        code: Int? = 10) =
+        SportIdentStationInfo(serial, extended, stationCodeNumber = code, stationModeCode = mode)
 
     private fun download(owner: String = "Daisy;Duck;"): DesktopSportIdentCardBlockDownload {
         val block0 = ByteArray(128)
