@@ -355,8 +355,9 @@ particular, equal punch counts cannot establish equal punch values. The existing
 Config+ trace ended before a raw post-write read; a later Mac SDK transaction
 provided a paired native capture as described below.
 
-`just sportident-owner-verification-check` covers the shared read comparison
-and desktop verification commands. An end-to-end offline command smoke test
+`just sportident-owner-verification-check` covers the shared read comparison,
+write planner, reply sequence, write rehearsal, and desktop verification
+commands. An end-to-end offline command smoke test
 also passes with synthetic files whose paths contain spaces. These fixtures are
 test data, not new hardware acceptance. The Mac paired capture below adds
 byte-level evidence for one 12-to-11-byte name change. More lengths and
@@ -485,6 +486,25 @@ against the paired Mac native captures returned a match: station 554900, card
 confirms the planned card image for that one transaction, including unchanged
 punch bytes; it does not establish which frames the SDK sent or validate a
 Kotlin hardware write.
+
+### Shared offline write rehearsal
+
+`SportIdentSi8OwnerWriteRehearsal` combines the planner and observed reply
+checker without opening a serial port. It hands out one planned frame at a time
+and will not hand out the next until the expected CRC-valid reply is supplied.
+No reply, a negative acknowledgement, or an unfamiliar reply permanently stops
+the rehearsal, with no automatic resend. Even after all three observed replies,
+its state requires an independent card read. Only a complete read with the
+expected station, card, names, and every predicted byte can mark the rehearsal
+verified. A mismatch or invalid read leaves it stopped. Tests replay the
+captured Config+ exchange and exercise timeout, negative acknowledgement,
+corrupt or out-of-order replies, cancellation, and changed punch bytes.
+
+This is a transport-free sequence check, not an enabled writer. The fixture
+cannot prove read freshness, and the `00 0a` reply bytes still have unknown
+semantics. A future desktop transport must verify the card just before writing,
+send each frame at most once, stop on ambiguous outcomes, and obtain a fresh
+independent read before reporting success.
 
 ### SDK provenance and licensing
 

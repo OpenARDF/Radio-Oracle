@@ -577,7 +577,10 @@ mid-term goal on Android and desktop.
   matches the independent after snapshot byte for byte for that one Mac SDK
   transaction. A shared offline sequence also matches only the three CRC-valid
   `0xEA` replies observed in the Config+ trace, in order; it does not interpret
-  their unknown status bytes as write success. Further short- and long-name encoding,
+  their unknown status bytes as write success. A transport-free shared rehearsal
+  now gates each planned word on its observed reply, stops without retry on
+  missing or unfamiliar replies, and requires whole-card read-back comparison.
+  Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before
   enabling a direct Kotlin writer. SDK read comparison alone does not establish
