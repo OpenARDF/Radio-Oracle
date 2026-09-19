@@ -8,6 +8,8 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
 import org.openardf.radiooracle.shared.sportident.SportIdentCardEvent
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
+import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
@@ -109,6 +111,34 @@ class DesktopSportIdentOwnerWritePreflightTest {
         assertFalse(port.isOpen)
         assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, handedOff?.stage)
         assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, handedOff?.stopReason)
+    }
+
+    @Test
+    fun failureAfterVerificationKeepsItsOriginalCauseAndClosesPort() {
+        val port = FakePort()
+        val replies = listOf(
+            "02 ea 03 00 0a 08 00 2e 03",
+            "02 ea 03 00 0a 09 01 2e 03",
+            "02 ea 03 00 0a 0a 02 2e 03"
+        )
+
+        val failure = assertThrows(IllegalStateException::class.java) {
+            preflight(port).withFreshRead(request) { _, rehearsal, _ ->
+                replies.forEach { hex ->
+                    rehearsal.takeNextWordFrame()
+                    val frame = requireNotNull(SportIdentFrameParser.firstFrame(
+                        hex.split(' ').map { it.toInt(16).toByte() }.toByteArray()))
+                    rehearsal.acceptWordResult(SportIdentCommandResult.Reply(frame))
+                }
+                assertTrue(rehearsal.compareIndependentRead(SportIdentOwnerReadVerification.capture(
+                    request.stationNumber, download(owner = "Donald;Duck;").blocks)).matches)
+                error("Recovery record could not be cleared")
+            }
+        }
+
+        assertEquals("Recovery record could not be cleared", failure.message)
+        assertEquals(1, port.closeCount)
+        assertFalse(port.isOpen)
     }
 
     private fun preflight(

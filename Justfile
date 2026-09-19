@@ -98,7 +98,7 @@ sportident-owner-compare-plan request before_read after_read:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=compare-plan {{quote("-PsiOwnerWriteRequest=" + request)}} {{quote("-PsiOwnerBeforeRead=" + before_read)}} {{quote("-PsiOwnerAfterRead=" + after_read)}}
 
 sportident-owner-verification-check:
-    just gradle :shared:desktopTest --tests '*SportIdentOwnerReadVerificationTest' --tests '*SportIdentSi8OwnerWordWritePlannerTest' --tests '*SportIdentSi8OwnerWordWriteReplySequenceTest' --tests '*SportIdentSi8OwnerWriteRehearsalTest' :desktopApp:test --tests '*DesktopSportIdentOwnerVerificationTest' --tests '*DesktopSportIdentOwnerWordTransportTest' --tests '*DesktopSportIdentOwnerWritePreflightTest' --tests '*DesktopSportIdentOwnerReadbackVerifierTest' --tests '*DesktopSportIdentOwnerWriteTransactionTest' --tests '*DesktopSportIdentCardPresenceProbeTest'
+    just gradle :shared:desktopTest --tests '*SportIdentOwnerReadVerificationTest' --tests '*SportIdentSi8OwnerWordWritePlannerTest' --tests '*SportIdentSi8OwnerWordWriteReplySequenceTest' --tests '*SportIdentSi8OwnerWriteRehearsalTest' :desktopApp:test --tests '*DesktopSportIdentOwnerVerificationTest' --tests '*DesktopSportIdentOwnerWordTransportTest' --tests '*DesktopSportIdentOwnerWritePreflightTest' --tests '*DesktopSportIdentOwnerReadbackVerifierTest' --tests '*DesktopSportIdentOwnerWriteTransactionTest' --tests '*DesktopSportIdentCardPresenceProbeTest' --tests '*DesktopSportIdentOwnerRecoveryStoreTest'
 
 android-course-workflow-smoke serial:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug

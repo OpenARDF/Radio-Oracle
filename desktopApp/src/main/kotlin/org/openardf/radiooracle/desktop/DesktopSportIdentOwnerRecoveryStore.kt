@@ -14,6 +14,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteReques
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteResult
 import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspection
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameRecoveryAssessment
+import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWritePlanComparison
 
 internal sealed interface DesktopSportIdentOwnerRecoveryState {
     data object Empty : DesktopSportIdentOwnerRecoveryState
@@ -56,6 +57,19 @@ internal class DesktopSportIdentOwnerRecoveryStore(
 
     @Synchronized fun completeVerified(request: SportIdentOwnerNameWriteRequest, result: SportIdentOwnerNameWriteResult) {
         SportIdentOwnerNameProgramming.verify(request, result)
+        clear(request)
+    }
+
+    /** Clear a native attempt only after its predicted image matches a fresh complete card read. */
+    @Synchronized fun completeVerifiedNative(request: SportIdentOwnerNameWriteRequest,
+        comparison: SportIdentSi8OwnerWritePlanComparison) {
+        check(comparison.matches)
+        val predicted = comparison.predictedVersusObserved.before
+        val observed = comparison.predictedVersusObserved.after
+        check(predicted.stationNumber == request.stationNumber && observed.stationNumber == request.stationNumber &&
+            predicted.cardNumber == request.cardNumber && observed.cardNumber == request.cardNumber &&
+            predicted.firstName == request.firstName && observed.firstName == request.firstName &&
+            predicted.lastName == request.lastName && observed.lastName == request.lastName)
         clear(request)
     }
 

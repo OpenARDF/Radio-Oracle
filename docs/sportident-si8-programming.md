@@ -561,8 +561,7 @@ no automatic retry, and port cleanup on preflight rejection or transport failure
 No application or CLI path invokes this transaction. Its fake-port tests do not
 establish continued card presence during a write, that the station emits the
 expected removal/reinsertion events after a Kotlin write, or that the observed
-`0xEA` reply prefix denotes success. Interruption recovery must be integrated
-before live use. No direct Kotlin hardware write has occurred.
+`0xEA` reply prefix denotes success. No direct Kotlin hardware write has occurred.
 
 ### Read-only pre-write presence recheck
 
@@ -578,7 +577,26 @@ or changed block stops the shared rehearsal before any owner-write frame. The
 check can establish that the expected card answered at that instant; it cannot
 lock the card in place between the recheck and subsequent words. A removal
 during an attempted word still has an uncertain outcome, and independent
-read-back plus durable interruption recovery remain required before live use.
+read-back plus physical interruption validation remain required before live use.
+
+### Durable native-attempt gate
+
+The internal Kotlin transaction now reuses the desktop SDK prototype's recovery
+record. It refuses to open the station when a pending or unreadable record
+exists. After a fresh read and matching block-0 recheck, it saves the intended
+write atomically before sending the first owner word. If any word reply or
+independent read-back is missing or mismatched, or serial I/O fails, that record
+remains across process restarts and prevents another write. A complete native
+read-back that matches the predicted two-block image, target card, station,
+and requested names clears it. Failure to clear the record remains an error;
+the original disk error is not hidden by port cleanup.
+
+The existing native Read Card and Accept Card Read recovery flow can assess a
+retained request, but it does not prove punch preservation after an interruption.
+The new transaction still has no UI or CLI caller and has not sent a Kotlin
+owner-write command to hardware. Physical mid-write interruption, the timing
+gap after the presence recheck, and the station's post-write event sequence
+remain to be tested before enabling it.
 
 ### SDK provenance and licensing
 

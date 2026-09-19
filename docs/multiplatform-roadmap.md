@@ -594,7 +594,10 @@ mid-term goal on Android and desktop.
   on Mac station 554900 and received a negative acknowledgement after removal.
   The internal transaction now requires that match immediately before its
   first owner word, stopping without a write if the card is not confirmed.
-  Continued card presence between commands, interruption recovery, and
+  The native transaction now reuses the desktop recovery record: it persists
+  intent before the first word, blocks another attempt after uncertain outcomes
+  or restart, and clears only after exact two-block native read-back. Continued
+  card presence between commands, physical interruption behavior, and
   independent live read-back after a Kotlin write remain unverified.
   Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,

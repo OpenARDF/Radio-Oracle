@@ -52,6 +52,24 @@ class DesktopSportIdentOwnerRecoveryStoreTest {
         assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, store.load())
     }
 
+    @Test fun nativeFullBlockMatchClearsOnlyItsOwnVerifiedRequest() {
+        val nativeRequest = SportIdentOwnerNameWriteRequest(1, 593927, 2450662,
+            "Daisy", "Duck", "Donald", "Duck", true)
+        val before = nativeFixture("Daisy;Duck;")
+        val matching = SportIdentSi8OwnerWordWritePlanner.compareToObserved(
+            nativeRequest, before, nativeFixture("Donald;Duck;"))
+        val mismatched = SportIdentSi8OwnerWordWritePlanner.compareToObserved(
+            nativeRequest, before, nativeFixture("Daisy;Duck;"))
+        val store = store()
+        store.begin(nativeRequest)
+
+        refused { store.completeVerifiedNative(nativeRequest, mismatched) }
+        refused { store.completeVerifiedNative(nativeRequest.copy(firstName = "Daisie"), matching) }
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(nativeRequest), store.load())
+        store.completeVerifiedNative(nativeRequest, matching)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, store.load())
+    }
+
     @Test fun anOlderAcknowledgementCannotDeleteAnotherAttempt() {
         val store = store()
         val other = request.copy(firstName = "Mortimer")
@@ -104,6 +122,17 @@ class DesktopSportIdentOwnerRecoveryStoreTest {
     }
 
     private fun store() = DesktopSportIdentOwnerRecoveryStore(temporary.root.toPath().resolve("recovery.json"))
+    private fun nativeFixture(owner: String): SportIdentOwnerReadFixture {
+        val block0 = ByteArray(128)
+        block0[22] = 1
+        block0[24] = 2
+        block0[25] = 0x25
+        block0[26] = 0x64
+        block0[27] = 0xe6.toByte()
+        owner.forEachIndexed { index, char -> block0[32 + index] = char.code.toByte() }
+        return SportIdentOwnerReadVerification.capture(593927,
+            listOf(SportIdentCardBlock(0, block0), SportIdentCardBlock(1, ByteArray(128))))
+    }
     private fun refused(action: () -> Unit) {
         try { action(); fail("Expected recovery refusal") } catch (_: Exception) { }
     }

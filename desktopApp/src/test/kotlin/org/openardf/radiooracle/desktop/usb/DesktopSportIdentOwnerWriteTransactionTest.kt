@@ -6,7 +6,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.openardf.radiooracle.desktop.DesktopSportIdentOwnerRecoveryState
+import org.openardf.radiooracle.desktop.DesktopSportIdentOwnerRecoveryStore
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
 import org.openardf.radiooracle.shared.sportident.SportIdentCardEvent
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
@@ -20,6 +24,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.sportident.SportIdentUsbDevice
 
 class DesktopSportIdentOwnerWriteTransactionTest {
+    @get:Rule val temporary = TemporaryFolder()
     private val request = SportIdentOwnerNameWriteRequest(1, 593927, 2450662,
         "Daisy", "Duck", "Donald", "Duck", true)
     private val replies = listOf(
@@ -67,6 +72,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertEquals(4, port.writeRequests.size)
         assertEquals(1, port.closeCount)
         assertFalse(port.isOpen)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, recoveryStore().load())
     }
 
     @Test
@@ -85,6 +91,12 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertNull(outcome.comparison)
         assertEquals(1, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
+
+        val retryPort = readyPort(replies)
+        assertThrows(IllegalStateException::class.java) { transaction(retryPort).execute(request) }
+        assertTrue(retryPort.writeRequests.isEmpty())
+        assertEquals(0, retryPort.closeCount)
     }
 
     @Test
@@ -101,6 +113,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertEquals(SportIdentSi8OwnerWriteStopReason.READBACK_NOT_OBSERVED, outcome.stopReason)
         assertEquals(3, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
     }
 
     @Test
@@ -118,6 +131,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertEquals(1, requireNotNull(outcome.comparison).predictedVersusObserved.byteChanges.size)
         assertEquals(3, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
     }
 
     @Test
@@ -130,12 +144,14 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         }
         assertTrue(wrongCardPort.writeRequests.isEmpty())
         assertEquals(1, wrongCardPort.closeCount)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, recoveryStore().load())
 
         val brokenPort = readyPort(replies, failAfterReads = 1)
         assertThrows(IllegalStateException::class.java) { transaction(brokenPort).execute(request) }
         assertEquals(1, brokenPort.ownerWordWrites.size)
         assertEquals(1, brokenPort.closeCount)
         assertFalse(brokenPort.isOpen)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
     }
 
     @Test
@@ -150,11 +166,28 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertTrue(port.ownerWordWrites.isEmpty())
         assertEquals(1, port.writeRequests.size)
         assertEquals(1, port.closeCount)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, recoveryStore().load())
+    }
+
+    @Test
+    fun unavailableRecoveryRecordBlocksEvenThePreflight() {
+        val port = readyPort(replies)
+        val file = temporary.newFolder("recovery.json").toPath()
+        val unavailable = DesktopSportIdentOwnerRecoveryStore(file)
+
+        assertThrows(IllegalStateException::class.java) {
+            transaction(port, recoveryStore = unavailable).execute(request)
+        }
+
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Unavailable, unavailable.load())
+        assertTrue(port.writeRequests.isEmpty())
+        assertEquals(0, port.closeCount)
     }
 
     private fun transaction(
         port: FakePort,
         readCard: (DesktopSerialPort) -> DesktopSportIdentCardBlockDownload = { download("Daisy;Duck;") },
+        recoveryStore: DesktopSportIdentOwnerRecoveryStore = recoveryStore(),
         verifier: DesktopSportIdentOwnerReadbackVerifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> true },
             readAfterReinsertion = { download("Donald;Duck;") }
@@ -178,10 +211,14 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         val presenceProbe = DesktopSportIdentCardPresenceProbe(DesktopSportIdentStationCommandClient(
             readTimeoutMs = 50, nowMillis = { ++presenceNow }
         ))
-        return DesktopSportIdentOwnerWriteTransaction(preflight, verifier, presenceProbe) { opened ->
+        return DesktopSportIdentOwnerWriteTransaction(preflight, verifier, recoveryStore, presenceProbe) { opened ->
             DesktopSportIdentOwnerWordTransport(opened, readTimeoutMs = 4, nowMillis = { ++wordNow })
         }
     }
+
+    private fun recoveryStore() = DesktopSportIdentOwnerRecoveryStore(
+        temporary.root.toPath().resolve("recovery.json")
+    )
 
     private fun readyPort(replies: List<ByteArray>, failAfterReads: Int? = null) =
         FakePort(listOf(SportIdentProtocol.buildExtendedMessage(

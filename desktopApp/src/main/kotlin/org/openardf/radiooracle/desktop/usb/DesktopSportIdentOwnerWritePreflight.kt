@@ -6,6 +6,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteRehearsal
+import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStage
 
 /**
  * Internal same-port preparation for a future Kotlin owner writer. No UI or
@@ -47,7 +48,7 @@ internal class DesktopSportIdentOwnerWritePreflight(
             try {
                 return onReady(port, rehearsal, before)
             } catch (error: Exception) {
-                rehearsal.abortTransport()
+                if (rehearsal.stage != SportIdentSi8OwnerWriteStage.VERIFIED) rehearsal.abortTransport()
                 throw error
             }
         } finally {
