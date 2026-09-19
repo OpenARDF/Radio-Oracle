@@ -10,6 +10,8 @@ object SportIdentSi8OwnerWordWritePlanner {
     private const val FIRST_OWNER_WORD = 0x08
     private const val WORD_BYTES = 4
     private const val OBSERVED_TEXT_BYTES = 12
+    private const val OBSERVED_SHORT_TEXT_BYTES = 11
+    private val ERASED_NAME_BYTE = 0xEE.toByte()
     private val WRITE_WORD_COMMAND = 0xEA.toByte()
 
     fun plan(request: SportIdentOwnerNameWriteRequest, before: SportIdentOwnerReadFixture): List<ByteArray> {
@@ -40,12 +42,20 @@ object SportIdentSi8OwnerWordWritePlanner {
         val newText = requireNotNull(
             SportIdentSi8OwnerNamePlanner.preview(inspection, request.firstName, request.lastName).encodedOwnerText
         )
-        require(newText.size == OBSERVED_TEXT_BYTES) {
-            "Only the observed three-word SI-Card8 owner-write shape can be planned."
+        require(newText.size == OBSERVED_TEXT_BYTES || newText.size == OBSERVED_SHORT_TEXT_BYTES) {
+            "Only the observed 11- or 12-byte SI-Card8 owner-write shapes can be planned."
         }
+        if (newText.size == OBSERVED_SHORT_TEXT_BYTES) {
+            require(oldText.size == OBSERVED_TEXT_BYTES) {
+                "The 11-byte owner-write shape was observed only after a 12-byte name."
+            }
+        }
+        // A paired native capture after a Mac SDK 12-to-11-byte name change
+        // showed 0xEE in the twelfth slot and older residual bytes untouched.
+        val paddedText = if (newText.size == OBSERVED_SHORT_TEXT_BYTES) newText + ERASED_NAME_BYTE else newText
         return (0 until OBSERVED_TEXT_BYTES / WORD_BYTES).map { index ->
             val payload = byteArrayOf((FIRST_OWNER_WORD + index).toByte()) +
-                newText.copyOfRange(index * WORD_BYTES, (index + 1) * WORD_BYTES)
+                paddedText.copyOfRange(index * WORD_BYTES, (index + 1) * WORD_BYTES)
             SportIdentProtocol.buildExtendedMessage(WRITE_WORD_COMMAND, payload)
         }
     }

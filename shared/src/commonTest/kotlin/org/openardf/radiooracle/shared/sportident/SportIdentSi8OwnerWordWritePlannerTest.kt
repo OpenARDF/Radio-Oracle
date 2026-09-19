@@ -40,6 +40,26 @@ class SportIdentSi8OwnerWordWritePlannerTest {
     }
 
     @Test
+    fun reproducesObservedShorterNameBytesWithoutClearingResidualText() {
+        // The paired Mac SDK reads showed a 0xEE twelfth byte while older
+        // residual text beyond that word remained unchanged.
+        val before = fixture(owner = "Donald;Duck;se;\u00ee")
+        val shorter = request.copy(expectedFirstName = "Donald", firstName = "Daisy")
+        val frames = SportIdentSi8OwnerWordWritePlanner.plan(shorter, before)
+        assertEquals(3, frames.size)
+        assertContentEquals(byteArrayOf('c'.code.toByte(), 'k'.code.toByte(), ';'.code.toByte(), 0xEE.toByte()),
+            frames[2].copyOfRange(5, 9))
+
+        val block0 = decode(before.blocks.single { it.blockNumber == 0 })
+        frames.forEach { frame -> frame.copyOfRange(5, 9).copyInto(block0, (frame[4].toInt() and 0xff) * 4) }
+        val replay = SportIdentOwnerReadVerification.capture(before.stationNumber,
+            listOf(SportIdentCardBlock(0, block0), SportIdentCardBlock(1, decode(before.blocks.single { it.blockNumber == 1 }))))
+        val observedShape = fixture(owner = "Daisy;Duck;\u00eese;\u00ee")
+        assertEquals(observedShape.blocks, replay.blocks)
+        assertEquals("Daisy", SportIdentOwnerReadVerification.nativeRead(replay).firstName)
+    }
+
+    @Test
     fun refusesUnsupportedShapeStaleIdentityAndNormalizedOwnerBytes() {
         val before = fixture()
         listOf(
@@ -48,6 +68,8 @@ class SportIdentSi8OwnerWordWritePlannerTest {
             request.copy(expectedFirstName = "Mickey"),
             request.copy(acceptPossiblePunchLoss = false),
             request.copy(firstName = "Huey"), // Ten bytes; final-word padding is not characterized.
+            request.copy(firstName = "Dewey"), // Eleven-to-eleven-byte replacement is not characterized.
+            request.copy(firstName = "Minnie", lastName = "Mouse"), // Thirteen bytes need four words.
             request.copy(schemaVersion = 2)
         ).forEach { bad ->
             assertFailsWith<IllegalArgumentException> { SportIdentSi8OwnerWordWritePlanner.plan(bad, before) }

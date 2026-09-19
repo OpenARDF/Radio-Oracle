@@ -351,15 +351,34 @@ The JSON report includes the parsed card/station identities, owner names, punch
 counts, every changed block byte and offset, and a separate list of changes
 outside the SI-Card8 owner region in block 0. Exit code 0 means both snapshots
 were valid and a diff was produced; it does not certify a safe write. In
-particular, equal punch counts cannot establish equal punch values. This command
-is ready for a future raw post-write capture; the existing Config+ trace ended
-before that read.
+particular, equal punch counts cannot establish equal punch values. The existing
+Config+ trace ended before a raw post-write read; a later Mac SDK transaction
+provided a paired native capture as described below.
 
-`just sportident-owner-verification-check` passes six shared comparison/replay
-tests and three desktop command tests. An end-to-end offline command smoke test
+`just sportident-owner-verification-check` passes seven shared comparison/replay
+tests and four desktop command tests. An end-to-end offline command smoke test
 also passes with synthetic files whose paths contain spaces. These fixtures are
-test data, not new hardware acceptance. Paired hardware captures and richer
-punch-value/settings comparisons remain the next verification slices.
+test data, not new hardware acceptance. The Mac paired capture below adds
+byte-level evidence for one 12-to-11-byte name change. More lengths and
+response/error behavior remain to be characterized.
+
+### Paired Mac SDK write and native block reads
+
+On 2026-09-19, native Kotlin readout captured both 128-byte blocks of SI-Card8
+2450662 on Mac station 554900 while it held `Donald` / `Duck`. With explicit
+approval for possible punch loss, the installed SDK helper changed the names to
+`Daisy` / `Duck` in one write. A new serial session and physical reinsertion
+confirmed the requested names, 11 control punches, and matching compared punch
+values, feedback, and character set. A second native Kotlin readout captured both
+blocks after that verification. The raw captures remain outside the repository.
+
+The shared byte diff found changes only in block 0 at offsets `0x21`–`0x2b`.
+The original 12-byte `Donald;Duck;` became the 11-byte `Daisy;Duck;` followed
+by `0xEE` at offset `0x2b`. Older residual bytes beginning at `0x2c` were
+unchanged, as were the rest of block 0 and all of block 1. This is evidence for
+the resulting card bytes and preservation in this particular transaction; it
+does not reveal the SDK's transmitted frames or prove that another station,
+card, or name length behaves the same way.
 
 ### Config+ serial write observation
 
@@ -413,21 +432,23 @@ licensing or distribution question for a replacement implementation.
 fixture and name/consent rules to produce an offline plan. It requires a complete
 SI-Card8 read, the requested station and card, exact existing first/last names,
 and raw owner bytes that agree with those parsed names. For now it accepts only
-a 12-byte ASCII `first;last;` string when the existing text is no longer than
-12 bytes, the three-word shape observed above.
-It builds the three `0xEA` frames through the shared CRC encoder. A test checks
-all three frames against the independent Config+ capture and replays their word
-bytes into a copy of the synthetic pre-write block; the normal Kotlin parser
-then reads the requested names while the punch block remains unchanged.
+11- or 12-byte ASCII `first;last;` strings when the existing text is no longer
+than 12 bytes. The 11-byte form is limited to an existing 12-byte name and adds
+the observed `0xEE` twelfth byte. Both produce three-word plans through the
+shared CRC encoder. One test checks all
+three 12-byte frames against the independent Config+ capture. Another replays
+the 11-byte plan into a synthetic pre-write block containing the observed
+residual owner bytes and checks the resulting owner bytes against the paired
+Mac capture's byte pattern; the synthetic punch block remains unchanged.
 
 The planner has no serial transport call and is not wired into desktop or
 Android programming. The fixture itself carries no freshness or card-presence
 guarantee; a future sender must obtain a fresh read and check card identity.
-In particular, the planner refuses a shorter string whose final word would
-require an unverified padding rule, or a longer existing string that could
-leave trailing bytes. A second controlled capture with
-a shorter name, a raw post-write block read, and response/error characterization
-are needed before relaxing this limit or attempting a direct hardware write.
+The Mac capture supports only one-byte `0xEE` padding in the third word; the
+planner still refuses 10-byte and other unobserved lengths, or a longer existing
+string that could leave trailing bytes. Response/error characterization,
+interruption safety, and further lengths are needed before attempting a direct
+Kotlin hardware write.
 
 ### SDK provenance and licensing
 

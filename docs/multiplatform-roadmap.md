@@ -562,16 +562,18 @@ mid-term goal on Android and desktop.
   continue seeking published protocol documentation or independently licensed
   source. A read-only native capture and offline SDK comparison harness checks
   station/card identity, owner names, and control punch count using shared
-  production parsers. Synthetic checks pass; paired hardware captures and richer
-  punch-value/settings comparison remain unfinished. A Config+ COM4 capture now
+  production parsers. Synthetic checks pass; broader paired hardware captures
+  and richer punch-value/settings comparison remain unfinished. A Config+ COM4
+  capture now
   identifies the three `0xEA` word writes for one successful `Daisy;Duck;` to
   `Donald;Duck;` SI-Card8 transaction. A separate read confirmed the new name
   and all 11 displayed punches. A shared Kotlin offline planner now reproduces
-  those three frames from a validated native card snapshot and refuses other
-  byte lengths; it has no hardware sender. A shared offline native-read diff now
-  reports every changed byte across both SI-Card8 blocks, ready to analyze a
-  future raw post-write capture; no such paired hardware read is available yet.
-  Short/long-name encoding,
+  those three frames from a validated native card snapshot; it has no hardware
+  sender. A shared offline native-read diff reports every changed byte across
+  both SI-Card8 blocks. A paired Mac SDK
+  12-to-11-byte name write showed `0xEE` padding in the twelfth owner byte and
+  no other block changes; the shared planner reproduces that owner-byte pattern
+  offline. Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before
   enabling a direct Kotlin writer. SDK read comparison alone does not establish
