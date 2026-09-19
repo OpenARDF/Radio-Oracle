@@ -596,6 +596,26 @@ tasks.register("desktopAutomation", JavaExec) {
     workingDir(rootProject.projectDir)
 }
 
+tasks.register("desktopSportIdentOwnerVerification", JavaExec) {
+    group = "verification"
+    description = "Captures native SI-Card8 reads or compares them offline with SDK read output."
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentOwnerVerificationKt")
+    workingDir(rootProject.projectDir)
+    def mode = providers.gradleProperty("siOwnerMode").orElse("help").get()
+    if (mode == "capture") {
+        args(mode, providers.gradleProperty("siOwnerStation").get(),
+            providers.gradleProperty("siOwnerCard").get(), providers.gradleProperty("siOwnerOutput").get())
+    } else if (mode == "compare") {
+        args(mode, providers.gradleProperty("siOwnerSdkRead").get(), providers.gradleProperty("siOwnerNativeRead").get())
+    } else if (mode == "help") {
+        args("--help")
+    } else {
+        throw new GradleException("siOwnerMode must be capture or compare")
+    }
+}
+
 // Opt-in real-terrain acceptance can reproduce older snapshots retaining every venue grid.
 // Ordinary synthetic unit tests keep Gradle's normal heap limit.
 tasks.withType(Test).configureEach {

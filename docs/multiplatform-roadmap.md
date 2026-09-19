@@ -547,11 +547,25 @@ mid-term goal on Android and desktop.
   corrected GUI hardware retest now pass. Stop Verification releases the helper,
   enables a fresh native read, and restores the editor after acknowledgement
   without restarting the app. Physical interruption during writing,
-  a supported vendor SDK release, and distributable runtime/license packaging
-  remain unfinished.
+  a supported vendor SDK release, and public product packaging remain unfinished.
+  The private Mac prototype now supports a separately installed self-contained
+  bridge and normal launch discovery; its runtime and local installation checks
+  pass. The archive's license permits product bundling with a properly issued
+  key, with a commercial license required for paid products. Public distribution
+  still needs supported-release validation and the agreement's compiled-key
+  provisioning, rather than the private key file used by the local prototype.
   Continue characterizing preservation of unrelated card data and physical
   interruption behavior. This workflow primarily targets new cards;
   if programming clears existing punches, disclose that consequence before writing.
+  Pursue a shared Kotlin replacement without depending on a vendor response:
+  reuse the existing transports, parsers, preparation, and recovery rules, and
+  investigate published protocol documentation or independently licensed source
+  for the missing SI-Card8 write transaction. A read-only native capture and
+  offline SDK comparison harness now checks station/card identity, owner names,
+  and control punch count using shared production parsers. Synthetic checks pass;
+  paired hardware captures, punch-value/settings comparison, and the direct
+  Kotlin writer remain unfinished. SDK comparison does not establish the write
+  protocol or permission to derive it from restricted SDK internals or traffic.
 - Add explicit multi-download-station support so desktop can detect multiple
   connected stations, show their serial numbers/modes/ports, let the user choose
   or assign active stations, and prevent independent readout loops from fighting

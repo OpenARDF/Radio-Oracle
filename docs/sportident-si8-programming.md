@@ -293,12 +293,112 @@ Next, characterize physical interruption and resolve supported SDK, runtime,
 and licensed distribution packaging. This workflow primarily targets new
 cards. SDK completion alone is insufficient evidence that the desired names were stored.
 
-The public [SPORTident developer page](https://www.sportident.com/support/developers)
-provides the .NET Core Communication library upon request. Before distributing
-this bridge, obtain a supported library version and confirmation of macOS ARM64
-and target-runtime support, binary redistribution requirements, and the approved
-license-provisioning method. The public page does not establish those details;
-the working private test release is not distribution approval.
+### Kotlin replacement verification: read parity slice
+
+Development proceeds without requiring a vendor response. The existing SDK
+remains a reference through its ordinary read API; the direct Kotlin write
+transaction still needs a published specification or independently licensed
+implementation. No SDK decompilation or write-traffic tracing was performed.
+
+`SportIdentOwnerReadVerification` in shared Kotlin replays native block evidence
+through the existing card-readout and owner-inspection parsers. It compares the
+SDK probe's existing read JSON against station/card identity, first and last
+names, and control punch count. It rejects unsupported versions/families,
+incomplete or duplicate blocks, malformed hex, and out-of-range counts. Empty
+owner fields are valid reads. The report always identifies its limited scope:
+matching counts do **not** prove matching punch values, feedback, character set,
+or other card settings, and matching reads do not prove a write protocol.
+
+To collect paired reads, close the desktop app and every other station
+connection first, then run these commands sequentially, reinserting the same
+card for each reader. Neither command programs a card. The SDK output file must
+contain the single JSON read result, without build messages.
+
+```sh
+just sportident-sdk-card-read /dev/cu.SLAB_USBtoUART 593927 2450662 > /tmp/si-sdk-read.json
+just sportident-owner-capture 593927 2450662 /tmp/si-native-read.json
+just sportident-owner-compare /tmp/si-sdk-read.json /tmp/si-native-read.json
+```
+
+Native capture verifies the station before starting card readout, verifies the
+inserted/downloaded card, validates the completed blocks, and saves an immutable
+hex snapshot to a new file. Existing evidence files are never overwritten.
+Offline comparison opens no station connection and starts no SDK process. Its
+CLI exit codes are 0 for a match, 2 for differences, and 1 for invalid evidence
+or failed capture; Gradle/just surface nonzero exits as task failures.
+
+`just sportident-owner-verification-check` passes six shared comparison/replay
+tests and three desktop command tests. An end-to-end offline command smoke test
+also passes with synthetic files whose paths contain spaces. These fixtures are
+test data, not new hardware acceptance. Paired hardware captures and richer
+punch-value/settings comparisons remain the next verification slices.
+
+### SDK provenance and licensing
+
+The library used here came from the private archive
+`sportident_communication_core_2.59.0_internal_with_example.zip`, already present
+in the local SPORTident reference collection. It contains the vendor DLL, API
+documentation, console example, and `LICENSE.txt`. The original delivery of that
+archive has not been established; version 2.59.0 is marked as an internal test
+release. The public [SPORTident developer page](https://www.sportident.com/support/developers)
+offers the Communication library upon request.
+
+The agreement included in that archive permits unlimited copies bundled with a
+product using a license key issued to the developer or their organisation. It
+prohibits redistributing the library as a standalone product, circumventing its
+licensing mechanism, reverse engineering its binaries, and suggesting SPORTident
+endorsement through its trademarks. Its FAQ describes non-commercial keys as
+free and perpetual. Charging third parties for the product, including pay-per-use,
+requires a commercial license; charging only for services while personally using
+the product, such as timekeeping, does not.
+
+The agreement forbids publishing license keys or including them in public source.
+For a packaged product it allows the key only inside a compiled executable, with
+public source using a placeholder replaced at build time. The private local
+prototype instead reads the existing private key file at runtime and has not
+been distributed. These terms establish bundled-library permission for this
+archived release; the current key's commercial status, any separate agreement,
+a supported release, and compiled-key provisioning still need verification
+before public product packaging. The licensing-form URL referenced by the
+archive could not be loaded during this investigation.
+
+### Private local desktop bridge installation
+
+The Mac prototype can now discover `sportident/bridge.json` under its existing
+application-data directory during normal launches. The versioned manifest stores
+an absolute helper executable path and the existing private license-file path,
+never license text. Explicit SDK environment settings take precedence; incomplete
+or invalid overrides do not fall back to a different installation. Missing,
+malformed, oversized, unsupported, or symlinked manifests disable programming.
+Discovery never starts a helper or opens a station connection.
+
+`just sportident-sdk-local-publish` builds a self-contained `osx-arm64` bridge in
+ignored build output, with trimming and single-file publishing disabled.
+`just sportident-sdk-local-install <private-license-file>` copies the complete
+publish folder into a new private local version directory, then atomically
+replaces its manifest with file permissions 0600. An incomplete package or failed
+copy leaves the active manifest unchanged. The license remains at its original
+path, and previous version directories remain available to already-running apps.
+
+The build produced an approximately 79 MB ARM64 bridge including .NET 10.0.7.
+Its installed executable verified station 593927 with global runtime paths
+disabled and no `dotnet` executable in the probe PATH. The focused gate passes
+21 desktop tests (six discovery, eight process, seven recovery/cleanup) and
+three SDK-free installer tests. The Mac package build also passes. This is a
+private local prototype installation, not a publicly distributed SDK package.
+Version 1.0.49k was launched normally with all SDK environment overrides removed.
+A fresh native read of card 2450662 showed `Daisy` / `Duck`, and the programming
+editor was available through discovery of the private installation. No new
+card write was performed for this packaging acceptance; the self-contained
+SDK station probe and the app's native card read are separate checks.
+
+The built and hardware-validated bridge targets Mac ARM64 only. Intel Macs,
+Windows, and Linux need their own runtime/architecture builds and SDK, driver,
+serial, and hardware acceptance; selecting another publish RID does not establish
+compatibility. The installer currently supports macOS only. Android needs an
+Android-compatible SDK/transport integration; shared Kotlin request validation,
+progress/result verification, and recovery assessment remain reusable, while
+this Mac executable and its installation workflow do not.
 
 Vendor archives, extracted API documentation, binaries, and credentials stay
 outside this repository. No binary inspection, decompilation, or serial command

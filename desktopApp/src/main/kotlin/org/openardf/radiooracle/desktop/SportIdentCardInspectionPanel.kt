@@ -36,7 +36,7 @@ import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortSelector
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentOwnerSnapshot
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentProgrammingClient
-import org.openardf.radiooracle.desktop.usb.DesktopSportIdentSdkConfiguration
+import org.openardf.radiooracle.desktop.usb.discoverDesktopSportIdentSdk
 import org.openardf.radiooracle.shared.sportident.SportIdentCardHolder
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameProgramming
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameRecovery
@@ -62,7 +62,7 @@ internal fun SportIdentCardInspectionPanel(
     var pendingNames by remember { mutableStateOf<Pair<String, String>?>(null) }
     val recoveryStore = remember { DesktopSportIdentOwnerRecoveryStore() }
     var recoveryState by remember { mutableStateOf(recoveryStore.load()) }
-    val sdkConfiguration = remember { DesktopSportIdentSdkConfiguration.fromEnvironment() }
+    val sdkConfiguration = remember { discoverDesktopSportIdentSdk() }
     var status by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()

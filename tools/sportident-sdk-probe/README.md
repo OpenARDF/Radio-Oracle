@@ -123,7 +123,39 @@ again for independent read-back. The helper emits versioned JSON progress packet
 for WaitingForCard, Writing, and WaitingForReadBack, followed by its verified result.
 The app rejects missing/reordered phases, unsuccessful exit, or mismatched results.
 Normal desktop launches leave programming unavailable unless all private paths are
-configured. This launch recipe does not copy SDK binaries or credentials into the app.
+configured or a private local bridge is installed as described below. This launch
+recipe does not copy SDK binaries or credentials into the app.
+
+### Install a private bridge for normal Mac launches
+
+With `SPORTIDENT_SDK_DLL` configured to your private SDK DLL, use:
+
+```sh
+just sportident-sdk-local-publish
+just sportident-sdk-local-check
+just sportident-sdk-local-install /private/sdk/issued-license.txt
+```
+
+The default target is `osx-arm64`. The bridge includes its .NET runtime, so the
+installed helper does not require a separate runtime installation. .NET SDK and
+NuGet access are needed to build it. The published folder remains ignored; the
+installer copies it into a new private version directory in Radio-Oracle's local
+application data and atomically selects that directory in `sportident/bridge.json`.
+The manifest stores only paths, with permissions 0600. The license text is not
+copied or embedded. Existing versions are retained for running apps.
+
+Save and close Radio-Oracle, then launch it normally. The app discovers this
+installation without SDK environment variables. Existing explicit environment
+overrides take precedence; an incomplete override disables programming instead
+of selecting another bridge. Discovery does not execute the helper.
+
+This procedure is for private local prototype use. The SDK archive's license
+permits bundling the library with a product using a properly issued key, requires
+a commercial license if third parties pay for the product, and forbids standalone
+library redistribution and public keys/source containing keys. Its packaged-product
+key provision allows the key inside a compiled executable. Public product
+packaging therefore still needs a supported release and compiled-key provisioning;
+the runtime private-key file used locally is not that distribution mechanism.
 
 The packaged local Mac app has also completed a user-confirmed write from `Mickey`
 / `Mouse` to `Mortimer` / `Mouse` on card 2450662, with independent read-back and

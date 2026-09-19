@@ -65,6 +65,29 @@ sportident-sdk-card-write port expected_station expected_card request:
 sportident-sdk-supervision-check:
     dotnet run --project tools/sportident-sdk-supervision-check/SportIdentSupervisionCheck.csproj
 
+# Build an ignored private bridge including its .NET runtime; never stages SDK binaries.
+sportident-sdk-local-publish rid="osx-arm64":
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 dotnet publish tools/sportident-sdk-probe/SportIdentSdkProbe.csproj -c Release -r {{quote(rid)}} --self-contained true -p:PublishTrimmed=false -p:PublishSingleFile=false
+
+# Install the private Mac bridge for normal app launches; the license remains at its source path.
+sportident-sdk-local-install license_file rid="osx-arm64":
+    python3 scripts/install-sportident-local-bridge.py {{quote("tools/sportident-sdk-probe/bin/Release/net10.0/" + rid + "/publish")}} --license-file {{quote(license_file)}}
+
+sportident-sdk-local-check:
+    python3 scripts/test-install-sportident-local-bridge.py
+    just gradle :desktopApp:test --tests '*DesktopSportIdentLocalBridgeTest' --tests '*DesktopSportIdentProgrammingClientTest' --tests '*DesktopSportIdentOwnerRecoveryStoreTest'
+
+# Capture a fresh native SI-Card8 read; close competing app/SDK connections first.
+sportident-owner-capture expected_station expected_card output:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=capture {{quote("-PsiOwnerStation=" + expected_station)}} {{quote("-PsiOwnerCard=" + expected_card)}} {{quote("-PsiOwnerOutput=" + output)}}
+
+# Offline comparison of SDK read JSON with native block evidence; never opens a serial port.
+sportident-owner-compare sdk_read native_read:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=compare {{quote("-PsiOwnerSdkRead=" + sdk_read)}} {{quote("-PsiOwnerNativeRead=" + native_read)}}
+
+sportident-owner-verification-check:
+    just gradle :shared:desktopTest --tests '*SportIdentOwnerReadVerificationTest' :desktopApp:test --tests '*DesktopSportIdentOwnerVerificationTest'
+
 android-course-workflow-smoke serial:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug
     ./scripts/android-course-workflow-smoke.sh {{quote(serial)}}
