@@ -426,6 +426,22 @@ those boundaries characterized and fresh read-back verification before it is
 enabled on hardware. The observed Config+ frames also do not resolve any
 licensing or distribution question for a replacement implementation.
 
+### Shared offline word-reply sequence
+
+`SportIdentSi8OwnerWordWriteReplySequence` matches only the three captured
+Config+ replies above. It requires an extended, CRC-valid `0xEA` frame with
+three data bytes: the observed `00 0a` prefix and the next expected word
+address (`08`, `09`, or `0a`). Wrong order, duplicates, changed prefix, wrong
+command or length, and invalid CRC do not advance the sequence. The checker
+has no serial transport, timeout, or retry behavior and is shared with Android.
+
+The `00 0a` bytes have not been decoded as a success status; they may include
+station-specific information. Matching all three replies means only that this
+one captured reply pattern was seen. It does not confirm that a card was
+written. A future sender must stop on unknown replies or timeouts, avoid an
+automatic write retry, and verify card identity, stored names, and preservation
+through a fresh independent read.
+
 ### Shared offline write plan
 
 `SportIdentSi8OwnerWordWritePlanner` now uses the existing shared card-read

@@ -12,7 +12,6 @@ object SportIdentSi8OwnerWordWritePlanner {
     private const val OBSERVED_TEXT_BYTES = 12
     private const val OBSERVED_SHORT_TEXT_BYTES = 11
     private val ERASED_NAME_BYTE = 0xEE.toByte()
-    private val WRITE_WORD_COMMAND = 0xEA.toByte()
 
     fun plan(request: SportIdentOwnerNameWriteRequest, before: SportIdentOwnerReadFixture): List<ByteArray> {
         val read = SportIdentOwnerReadVerification.nativeRead(before)
@@ -56,7 +55,7 @@ object SportIdentSi8OwnerWordWritePlanner {
         return (0 until OBSERVED_TEXT_BYTES / WORD_BYTES).map { index ->
             val payload = byteArrayOf((FIRST_OWNER_WORD + index).toByte()) +
                 paddedText.copyOfRange(index * WORD_BYTES, (index + 1) * WORD_BYTES)
-            SportIdentProtocol.buildExtendedMessage(WRITE_WORD_COMMAND, payload)
+            SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.WRITE_SI_CARD_WORD, payload)
         }
     }
 }

@@ -38,6 +38,7 @@ object SportIdentProtocol {
     const val GET_SI_CARD5: Byte = 0xB1.toByte()
     const val GET_SI_CARD6: Byte = 0xE1.toByte()
     const val GET_SI_CARD8_9_SIAC: Byte = 0xEF.toByte()
+    const val WRITE_SI_CARD_WORD: Byte = 0xEA.toByte()
     const val PROBE_COMMAND: Byte = 0xF0.toByte()
     const val BAUDRATE_LOW = 4800
     const val BAUDRATE_HIGH = 38400
