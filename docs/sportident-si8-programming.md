@@ -357,7 +357,8 @@ provided a paired native capture as described below.
 
 `just sportident-owner-verification-check` covers the shared read comparison,
 write planner, reply sequence, write rehearsal, and desktop verification
-commands, including the desktop fake-serial transport. An end-to-end offline command smoke test
+commands, including the desktop fake-serial transport and read preflight. An
+end-to-end offline command smoke test
 also passes with synthetic files whose paths contain spaces. These fixtures are
 test data, not new hardware acceptance. The Mac paired capture below adds
 byte-level evidence for one 12-to-11-byte name change. More lengths and
@@ -515,8 +516,24 @@ write, serial exception, timeout, NAK, unfamiliar reply, or extra bytes already
 buffered after a reply. Keeping one frame reader across the three words prevents
 coalesced replies from being mistaken for replies to later writes. Fake-port
 tests cover the captured exchange and these failure paths. No UI, CLI, or live
-card path constructs this adapter yet; a fresh same-session card preflight and
-independent read-back still have to be integrated and validated on hardware.
+card path constructs this adapter yet; the preflight below and independent
+read-back still have to be integrated with it and validated on hardware.
+
+### Same-connection read preflight
+
+An internal desktop preflight now opens the selected station, requires its exact
+serial number, extended mode, and download-capable mode, then waits for a newly
+inserted SI-Card8 on that same port. It checks the insert event, parsed readout,
+both complete raw blocks, requested card number, punch count, current names,
+and explicit punch-loss consent before handing a validated shared rehearsal
+and immutable before-read snapshot to a callback. The port stays open through
+the callback and closes on every exit path. Fake-port tests reject mismatched
+stations, cards, names, and incomplete evidence before the callback runs.
+
+No application or CLI path invokes this preflight or the word transport. The
+reader's completed download does not establish continued card presence; a live
+writer must handle removal between reading and writing and obtain an independent
+post-write read. There has still been no direct Kotlin hardware write.
 
 ### SDK provenance and licensing
 

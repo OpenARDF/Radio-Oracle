@@ -583,6 +583,10 @@ mid-term goal on Android and desktop.
   An internal desktop serial adapter passes exact planned frames and first
   replies through that shared sequence and has passed fake-port failure tests;
   it is not exposed to the UI or CLI and has not written a card.
+  An internal same-connection preflight now checks the station, fresh SI-Card8
+  block read, card identity, current names, and request before any handoff,
+  with fake-port tests; continued card presence and independent live read-back
+  remain unverified.
   Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before
