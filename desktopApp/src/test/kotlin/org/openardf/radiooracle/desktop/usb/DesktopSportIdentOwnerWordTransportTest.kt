@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
+import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
@@ -51,6 +52,27 @@ class DesktopSportIdentOwnerWordTransportTest {
         assertEquals(1, port.writeRequests.size)
         assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, rehearsal.stage)
         assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, rehearsal.stopReason)
+    }
+
+    @Test
+    fun exposesTheFirstUnexpectedReplyForDiagnosisWithoutSendingAnotherWord() {
+        val unfamiliar = SportIdentProtocol.buildExtendedMessage(
+            SportIdentProtocol.WRITE_SI_CARD_WORD, byteArrayOf(1, 0x0a, 0x08))
+        val port = FakePort(listOf(unfamiliar))
+        val observed = mutableListOf<ByteArray>()
+        var now = 0L
+
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, fixture())
+        DesktopSportIdentOwnerWordTransport(port, readTimeoutMs = 4, nowMillis = { ++now },
+            onWordResult = { word, result ->
+                assertEquals(1, word)
+                observed += (result as SportIdentCommandResult.Reply).frame.raw
+            }).exchange(rehearsal)
+
+        assertEquals(SportIdentSi8OwnerWriteStopReason.UNEXPECTED_REPLY, rehearsal.stopReason)
+        assertEquals(1, port.writeRequests.size)
+        assertEquals(1, observed.size)
+        assertArrayEquals(unfamiliar.copyOfRange(1, unfamiliar.size), observed.single())
     }
 
     @Test

@@ -43,6 +43,11 @@ class DesktopSportIdentOwnerWriteTransactionTest {
                 steps += "before-read"
                 download("Daisy;Duck;")
             },
+            onBeforeWordExchange = {
+                assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
+                assertTrue(port.ownerWordWrites.isEmpty())
+                steps += "writing"
+            },
             verifier = DesktopSportIdentOwnerReadbackVerifier(
                 awaitTargetRemoval = { opened, card ->
                     assertTrue(opened === port && opened.isOpen)
@@ -60,7 +65,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
 
         val outcome = transaction.execute(request)
 
-        assertEquals(listOf("before-read", "remove", "after-read"), steps)
+        assertEquals(listOf("before-read", "writing", "remove", "after-read"), steps)
         assertTrue(outcome.verified)
         assertEquals(SportIdentSi8OwnerWriteStage.VERIFIED, outcome.stage)
         assertNull(outcome.stopReason)
@@ -188,6 +193,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         port: FakePort,
         readCard: (DesktopSerialPort) -> DesktopSportIdentCardBlockDownload = { download("Daisy;Duck;") },
         recoveryStore: DesktopSportIdentOwnerRecoveryStore = recoveryStore(),
+        onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
         verifier: DesktopSportIdentOwnerReadbackVerifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> true },
             readAfterReinsertion = { download("Donald;Duck;") }
@@ -211,7 +217,9 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         val presenceProbe = DesktopSportIdentCardPresenceProbe(DesktopSportIdentStationCommandClient(
             readTimeoutMs = 50, nowMillis = { ++presenceNow }
         ))
-        return DesktopSportIdentOwnerWriteTransaction(preflight, verifier, recoveryStore, presenceProbe) { opened ->
+        return DesktopSportIdentOwnerWriteTransaction(
+            preflight, verifier, recoveryStore, presenceProbe, onBeforeWordExchange
+        ) { opened ->
             DesktopSportIdentOwnerWordTransport(opened, readTimeoutMs = 4, nowMillis = { ++wordNow })
         }
     }

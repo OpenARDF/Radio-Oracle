@@ -589,7 +589,17 @@ mid-term goal on Android and desktop.
   removal, a new insertion and complete download, and a two-block comparison;
   an internal desktop transaction composes all three steps and has fake-port
   coverage for success, missing replies/removal, byte mismatch, and cleanup.
-  It has no live Kotlin-write evidence or UI/CLI wiring.
+  An experimental desktop CLI now wires the transaction for one explicit
+  attempt with no retry; the app UI is not wired. The first approved live
+  attempt stopped after an unfamiliar first-word reply on station 554900.
+  A fresh full-card read showed the first word had changed `Daisy` to partial
+  `Donay`, with all 11 punches and non-owner bytes unchanged. An approved SDK
+  repair restored `Donald`; its independent read-back confirmed punch values,
+  feedback, and character set, and a native read matched the prior known-good
+  two-block image exactly. The offline recovery command accepted that fresh
+  read and cleared the pending intent. The CLI now records each complete word
+  reply for a later controlled trial, without accepting unknown replies as
+  success.
   A read-only same-port block-0 recheck matched SI-Card8 2450662 while seated
   on Mac station 554900 and received a negative acknowledgement after removal.
   The internal transaction now requires that match immediately before its
@@ -602,8 +612,8 @@ mid-term goal on Android and desktop.
   A read-only command now exercises that exact request's recovery, station,
   fresh-read, name/plan, and seated-card gates without writing. It passed on
   Mac station 554900 and SI-Card8 2450662 with 11 punches and a hypothetical
-  `Daisy` / `Duck` to `Donald` / `Duck` request. The Kotlin word exchange and
-  post-write station events still need controlled hardware acceptance.
+  `Daisy` / `Duck` to `Donald` / `Duck` request. The complete Kotlin word
+  exchange and post-write station events still need controlled hardware acceptance.
   Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before

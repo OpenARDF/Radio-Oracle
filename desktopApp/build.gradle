@@ -640,6 +640,26 @@ tasks.register("desktopSportIdentOwnerReadiness", JavaExec) {
     args(providers.gradleProperty("siOwnerWriteRequest").get())
 }
 
+tasks.register("desktopSportIdentNativeOwnerWrite", JavaExec) {
+    group = "verification"
+    description = "EXPERIMENTAL: attempts one native SI-Card8 owner write and independent read-back."
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
+    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get())
+}
+
+tasks.register("desktopSportIdentNativeOwnerRecovery", JavaExec) {
+    group = "verification"
+    description = "Accepts a fresh complete SI-Card8 read to resolve one pending native-write reminder."
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerRecoveryKt")
+    args("--acknowledge-native-read", providers.gradleProperty("siOwnerReadEvidence").get(),
+        providers.gradleProperty("siOwnerObservedFirstName").get(),
+        providers.gradleProperty("siOwnerObservedLastName").get())
+}
+
 // Opt-in real-terrain acceptance can reproduce older snapshots retaining every venue grid.
 // Ordinary synthetic unit tests keep Gradle's normal heap limit.
 tasks.withType(Test).configureEach {

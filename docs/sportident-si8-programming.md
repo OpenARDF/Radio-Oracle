@@ -460,9 +460,10 @@ the 11-byte plan into a synthetic pre-write block containing the observed
 residual owner bytes and checks the resulting owner bytes against the paired
 Mac capture's byte pattern; the synthetic punch block remains unchanged.
 
-The planner has no serial transport call and is not wired into desktop or
-Android programming. The fixture itself carries no freshness or card-presence
-guarantee; a future sender must obtain a fresh read and check card identity.
+The planner has no serial transport call. The experimental desktop CLI now
+uses it; Android programming is not wired. The fixture itself carries no
+freshness or card-presence guarantee; the sender obtains a fresh read and
+checks card identity.
 The Mac capture supports only one-byte `0xEE` padding in the third word; the
 planner still refuses 10-byte and other unobserved lengths, or a longer existing
 string that could leave trailing bytes. Response/error characterization,
@@ -558,10 +559,11 @@ one attempted word, and a missing removal event or changed non-owner byte
 cannot report success. Fake-port integration tests exercise the complete order,
 no automatic retry, and port cleanup on preflight rejection or transport failure.
 
-No application or CLI path invokes this transaction. Its fake-port tests do not
+The experimental CLI now invokes this transaction; the application UI does not. Its fake-port tests do not
 establish continued card presence during a write, that the station emits the
 expected removal/reinsertion events after a Kotlin write, or that the observed
-`0xEA` reply prefix denotes success. No direct Kotlin hardware write has occurred.
+`0xEA` reply prefix denotes success. The first direct Kotlin attempt is
+described below.
 
 ### Read-only pre-write presence recheck
 
@@ -593,8 +595,7 @@ the original disk error is not hidden by port cleanup.
 
 The existing native Read Card and Accept Card Read recovery flow can assess a
 retained request, but it does not prove punch preservation after an interruption.
-The new transaction still has no UI or CLI caller and has not sent a Kotlin
-owner-write command to hardware. Physical mid-write interruption, the timing
+The new transaction has no UI caller. Physical mid-write interruption, the timing
 gap after the presence recheck, and the station's post-write event sequence
 remain to be tested before enabling it.
 
@@ -614,6 +615,61 @@ the stored `Daisy` / `Duck` names, 11 control punches, and an identical block 0
 while the card was seated. No card programming or recovery-record write occurred.
 This accepts the pre-write sequence on the available hardware; it does not
 validate the Kotlin word exchange or post-write event/read-back behavior.
+
+### Experimental native-write command
+
+`just sportident-owner-native-experiment <request-json>` is an explicit desktop
+CLI entry point for one native Kotlin SI-Card8 owner-write attempt. It accepts
+only a valid exact-request JSON file and checks the recovery state, station,
+freshly inserted card, stored names, supported word plan, and seated block 0
+before persisting an intent and sending owner words. It requests card removal
+after the three expected replies, then a new insertion for full two-block
+comparison. It reports success only when the predicted image matches that
+independent read and the recovery record is cleared. It never retries. An
+uncertain outcome retains the recovery record and requires a fresh read and
+explicit recovery before any further attempt.
+
+The expected reply bytes came from one observed Config+ transaction; their
+general success/error meaning and behavior under physical interruption are
+still unknown. Run this command only as a controlled hardware experiment with
+the exact target card and names reviewed beforehand.
+
+On 2026-09-19, the first approved direct Kotlin attempt targeted station
+554900 and SI-Card8 2450662, `Daisy` / `Duck` to `Donald` / `Duck`. The fresh
+preflight read and seated block-0 recheck passed, and the recovery intent was
+saved. The first word produced an `UNEXPECTED_REPLY`, so the sender stopped
+without sending words two or three. A separate read-only native capture found
+`Donay` / `Duck`: the first word had changed offsets `0x20`–`0x23` to `Dona`,
+while the rest of the original name remained. Comparing both complete blocks
+with the preceding `Daisy` capture found only the three differing name bytes;
+all 11 punches and all non-owner bytes matched. No Kotlin retry was attempted.
+This demonstrates that a word can take effect even when the observed reply is
+unfamiliar.
+
+An explicitly approved SDK repair then changed the partial `Donay` / `Duck`
+to `Donald` / `Duck`. Its independent read-back verified the target names,
+unchanged 11 punch values, feedback, and character set. A further native
+two-block read matched the earlier known-good `Donald` / `Duck` capture byte
+for byte. The offline `sportident-owner-native-recovery` command checked that
+fresh complete read against the pending station/card and explicitly observed
+names, then used the existing recovery-store acknowledgement to clear the
+reminder. It neither opens a serial port nor writes a card.
+
+```sh
+just sportident-owner-native-recovery /private/tmp/fresh-native-read.json Donald Duck
+```
+
+This offline acknowledgement requires the existing pending record, the same
+station and card, complete parseable SI-Card8 blocks, and the observed first
+and last names given on the command line. As in the UI, accepting the read
+resolves the reminder; it does not by itself prove preservation from the
+earlier interrupted attempt.
+
+The first attempt did not record the raw reply bytes. The CLI now prints each
+complete word reply before checking it, so a later separately approved trial
+can distinguish station-dependent reply data from a malformed or negative
+response. Do not relax the reply gate on the basis of this partial write.
+The complete Kotlin word exchange and post-write events remain unverified.
 
 ### SDK provenance and licensing
 

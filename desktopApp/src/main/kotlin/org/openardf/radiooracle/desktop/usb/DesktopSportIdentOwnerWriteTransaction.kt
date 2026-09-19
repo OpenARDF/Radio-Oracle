@@ -19,15 +19,15 @@ internal data class DesktopSportIdentOwnerWriteOutcome(
 }
 
 /**
- * Internal composition of the same-port preflight, one-shot word transport, and
- * independent read-back. No application or CLI path invokes this transaction.
- * Live use still needs card-presence and interruption/recovery validation.
+ * Same-port preflight, one-shot word transport, and independent read-back.
+ * The experimental CLI is its only caller; the app UI does not invoke it.
  */
 internal class DesktopSportIdentOwnerWriteTransaction(
     private val preflight: DesktopSportIdentOwnerWritePreflight,
     private val readbackVerifier: DesktopSportIdentOwnerReadbackVerifier,
     private val recoveryStore: DesktopSportIdentOwnerRecoveryStore,
     private val presenceProbe: DesktopSportIdentCardPresenceProbe = DesktopSportIdentCardPresenceProbe(),
+    private val onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
     private val makeWordTransport: (DesktopSerialPort) -> DesktopSportIdentOwnerWordTransport =
         { port -> DesktopSportIdentOwnerWordTransport(port) }
 ) {
@@ -42,6 +42,7 @@ internal class DesktopSportIdentOwnerWriteTransaction(
             } else {
                 // Persistence must succeed before any owner-word frame can be sent.
                 recoveryStore.begin(request)
+                onBeforeWordExchange(request)
                 makeWordTransport(port).exchange(rehearsal)
             }
             val comparison = if (rehearsal.stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK) {
@@ -57,5 +58,4 @@ internal class DesktopSportIdentOwnerWriteTransaction(
             DesktopSportIdentOwnerWriteOutcome(rehearsal.stage, rehearsal.stopReason, comparison, presence)
         }
     }
-
 }

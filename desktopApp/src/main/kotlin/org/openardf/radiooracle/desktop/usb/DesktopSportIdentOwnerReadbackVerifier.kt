@@ -6,7 +6,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWritePlanCom
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteRehearsal
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStage
 
-/** Internal read-back boundary; no application or CLI path invokes it yet. */
+/** Independent read-back boundary for the experimental CLI; not used by the app UI. */
 internal class DesktopSportIdentOwnerReadbackVerifier(
     private val awaitTargetRemoval: (DesktopSerialPort, Int) -> Boolean = { port, card ->
         DesktopSportIdentCardEventMonitor().waitForRemoveEventOnOpenPort(

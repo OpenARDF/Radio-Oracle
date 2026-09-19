@@ -9,8 +9,8 @@ import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteRehears
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStage
 
 /**
- * Internal same-port preparation for a future Kotlin owner writer. No UI or
- * command invokes this yet; the callback runs only after a fresh card read.
+ * Internal same-port preparation for the experimental Kotlin owner writer.
+ * Its callback runs only after a fresh card read.
  * A completed read cannot prove that the card remains inserted afterward.
  */
 internal class DesktopSportIdentOwnerWritePreflight(
