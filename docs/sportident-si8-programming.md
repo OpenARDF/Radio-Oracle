@@ -713,6 +713,25 @@ owner word. This guard catches card events already waiting between replies, but
 cannot prevent removal immediately after the check. Physical interruption of
 an owner-word exchange remains an open hardware gate.
 
+### Complete 11-to-12-byte Kotlin write
+
+A second approved direct Kotlin transaction changed SI-Card8 2450662 from
+`Daisy` / `Duck` (11 owner-text bytes plus `0xEE` padding) to `Donald` / `Duck`
+(12 owner-text bytes) on Mac station 554900. A fresh read-only preflight matched
+the stored names, 11 punches, and seated block 0. The sender then received all
+three code-14 `0xEA` replies in order. Observed removal and reinsertion led to
+a full two-block read matching the planned result, and the recovery record
+cleared.
+
+Separate read-only captures before and after the write were compared offline.
+The three planned frames predicted the after-image exactly. The direct diff
+found 11 changed bytes, all within block 0's owner-text region at offsets
+`0x21`–`0x2b`; block 1 and every non-owner byte were unchanged, including the
+11 recorded punches. These results establish one successful write in each
+observed 11/12-byte direction on this card and station. Other name lengths,
+other readers/cards, and interrupted writes still need validation before the
+Kotlin path is offered in the app UI.
+
 ### SDK provenance and licensing
 
 The library used here came from the private archive

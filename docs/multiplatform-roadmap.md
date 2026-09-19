@@ -625,10 +625,14 @@ mid-term goal on Android and desktop.
   A read-only command now exercises that exact request's recovery, station,
   fresh-read, name/plan, and seated-card gates without writing. It passed on
   Mac station 554900 and SI-Card8 2450662 with 11 punches and a hypothetical
-  `Daisy` / `Duck` to `Donald` / `Duck` request. The complete Kotlin word
-  exchange and post-write station events still need controlled hardware acceptance.
-  Further short- and long-name encoding,
-  trailing-byte cleanup, response errors, interruption safety, compatibility,
+  `Daisy` / `Duck` to `Donald` / `Duck` request. A later approved Kotlin
+  11-to-12-byte write completed that exact change. Its observed removal and
+  reinsertion produced a full two-block match; separate fresh before/after
+  captures showed only 11 owner-text bytes changed, with all 11 punches and
+  every other byte preserved. Both observed 11/12-byte directions now have one
+  complete Kotlin hardware transaction on this Mac reader and card.
+  Other name lengths, trailing-byte cleanup beyond the observed padding,
+  response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before
   enabling a direct Kotlin writer in the app UI. SDK read comparison alone does
   not establish a write protocol.
