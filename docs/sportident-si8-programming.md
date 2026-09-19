@@ -1,8 +1,8 @@
 # SI-Card8 programming investigation
 
-The desktop inspector and name preview work with SI-Card8. Card writes are
-not implemented. Name preparation remains in shared Kotlin code for future
-Android reuse.
+The desktop inspector and name preview work with SI-Card8. The private Mac SDK
+bridge can write names, but a direct Kotlin card writer is not implemented.
+Name preparation remains in shared Kotlin code for future Android reuse.
 
 ## Verified name limit
 
@@ -297,8 +297,9 @@ cards. SDK completion alone is insufficient evidence that the desired names were
 
 Development proceeds without requiring a vendor response. The existing SDK
 remains a reference through its ordinary read API; the direct Kotlin write
-transaction still needs a published specification or independently licensed
-implementation. No SDK decompilation or write-traffic tracing was performed.
+transaction still needs a sufficiently characterized and permitted protocol.
+No SDK binary was decompiled or instrumented. A later Config+ serial-traffic
+capture is described below.
 
 `SportIdentOwnerReadVerification` in shared Kotlin replays native block evidence
 through the existing card-readout and owner-inspection parsers. It compares the
@@ -332,6 +333,52 @@ tests and three desktop command tests. An end-to-end offline command smoke test
 also passes with synthetic files whose paths contain spaces. These fixtures are
 test data, not new hardware acceptance. Paired hardware captures and richer
 punch-value/settings comparisons remain the next verification slices.
+
+### Config+ serial write observation
+
+On 2026-09-19, an OS-level COM4 trace captured `WriteFile` calls and completed
+`ReadFile` calls from SPORTident Config+ 2.12.0 running in the Windows ARM VM.
+This observed the station's serial exchange without inspecting Config+ or SDK
+binaries. Station 593927 and SI-Card8 2450662 were selected, Auto apply was off,
+and the approved change was `Daisy` / `Duck` to `Donald` / `Duck`. The raw trace
+stays outside the repository.
+
+Immediately before writing, Config+ requested SI-Card8 blocks 0 and 1 with the
+existing `0xEF` read command. Block 0 still contained `Daisy;Duck;` beginning at
+offset `0x20`; block 1 contained the 11 control punches. It then sent three
+`0xEA` extended frames. Each payload contained a one-byte word address followed
+by four bytes of `Donald;Duck;`:
+
+| Word address | Block-0 offsets | Four data bytes | Full transmitted frame |
+| --- | --- | --- | --- |
+| `0x08` | `0x20`–`0x23` | `Dona` | `ff 02 ea 05 08 44 6f 6e 61 96 4e 03` |
+| `0x09` | `0x24`–`0x27` | `ld;D` | `ff 02 ea 05 09 6c 64 3b 44 9e 90 03` |
+| `0x0a` | `0x28`–`0x2b` | `uck;` | `ff 02 ea 05 0a 75 63 6b 3b cf 84 03` |
+
+Each frame's CRC matches the existing shared `SportIdentProtocol.calculateCrc`
+implementation. Config+ received one CRC-valid `0xEA` response after each word:
+`02 ea 03 00 0a 08 00 2e 03`,
+`02 ea 03 00 0a 09 01 2e 03`, and
+`02 ea 03 00 0a 0a 02 2e 03`. The response's final data byte echoes the word
+address; the meaning of the preceding two data bytes is not yet established.
+No write retry or card-memory erase command appeared in this transaction.
+
+In Config+'s read-only SI-card view, a separate read at 9:10:56 AM displayed
+card 2450662 as `Donald` / `Duck`, with all 11 control-punch codes and times
+matching the 8:54:51 AM pre-write read. Duplicate readouts were temporarily
+enabled to make the independent entry visible, then disabled again. The trace
+ended before that fresh read, so it does not contain raw post-write card blocks.
+
+This single transaction establishes the observed address-to-block mapping,
+four-byte word framing, CRC vectors, and a successful name change on the tested
+card and station. It does not establish handling for shorter or longer names,
+empty fields, character sets beyond the tested ASCII, trailing-byte cleanup,
+response error codes, interruption/retry safety, or other card families and
+stations. The pre-write block contained older residual text after `Daisy;Duck;`;
+this transaction wrote only the three words above. A direct Kotlin writer needs
+those boundaries characterized and fresh read-back verification before it is
+enabled on hardware. The observed Config+ frames also do not resolve any
+licensing or distribution question for a replacement implementation.
 
 ### SDK provenance and licensing
 
@@ -400,6 +447,6 @@ Android-compatible SDK/transport integration; shared Kotlin request validation,
 progress/result verification, and recovery assessment remain reusable, while
 this Mac executable and its installation workflow do not.
 
-Vendor archives, extracted API documentation, binaries, and credentials stay
-outside this repository. No binary inspection, decompilation, or serial command
-guessing was used in this investigation.
+Vendor archives, extracted API documentation, binaries, credentials, and the
+raw COM4 trace stay outside this repository. No vendor binary was inspected or
+decompiled; the write frames above came from observed serial traffic.

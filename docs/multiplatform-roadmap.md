@@ -559,13 +559,17 @@ mid-term goal on Android and desktop.
   if programming clears existing punches, disclose that consequence before writing.
   Pursue a shared Kotlin replacement without depending on a vendor response:
   reuse the existing transports, parsers, preparation, and recovery rules, and
-  investigate published protocol documentation or independently licensed source
-  for the missing SI-Card8 write transaction. A read-only native capture and
-  offline SDK comparison harness now checks station/card identity, owner names,
-  and control punch count using shared production parsers. Synthetic checks pass;
-  paired hardware captures, punch-value/settings comparison, and the direct
-  Kotlin writer remain unfinished. SDK comparison does not establish the write
-  protocol or permission to derive it from restricted SDK internals or traffic.
+  continue seeking published protocol documentation or independently licensed
+  source. A read-only native capture and offline SDK comparison harness checks
+  station/card identity, owner names, and control punch count using shared
+  production parsers. Synthetic checks pass; paired hardware captures and richer
+  punch-value/settings comparison remain unfinished. A Config+ COM4 capture now
+  identifies the three `0xEA` word writes for one successful `Daisy;Duck;` to
+  `Donald;Duck;` SI-Card8 transaction. A separate read confirmed the new name
+  and all 11 displayed punches. Short/long-name encoding, trailing-byte cleanup,
+  response errors, interruption safety, compatibility, and permission to
+  distribute a replacement still need resolution before enabling a direct
+  Kotlin writer. SDK read comparison alone does not establish a write protocol.
 - Add explicit multi-download-station support so desktop can detect multiple
   connected stations, show their serial numbers/modes/ports, let the user choose
   or assign active stations, and prevent independent readout loops from fighting

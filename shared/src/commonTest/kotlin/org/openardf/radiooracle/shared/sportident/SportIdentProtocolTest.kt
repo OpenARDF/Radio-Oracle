@@ -60,6 +60,22 @@ class SportIdentProtocolTest {
     }
 
     @Test
+    fun matchesObservedSiCard8NameWordFrame() {
+        // Config+ COM4 capture: the first four bytes of "Donald;Duck;" at word 0x08.
+        assertContentEquals(
+            byteArrayOf(
+                0xff.toByte(), 0x02, 0xea.toByte(), 0x05,
+                0x08, 0x44, 0x6f, 0x6e, 0x61,
+                0x96.toByte(), 0x4e, 0x03
+            ),
+            SportIdentProtocol.buildExtendedMessage(
+                command = 0xea.toByte(),
+                data = byteArrayOf(0x08, 0x44, 0x6f, 0x6e, 0x61)
+            )
+        )
+    }
+
+    @Test
     fun buildsAckMessage() {
         assertContentEquals(
             byteArrayOf(
