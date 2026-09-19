@@ -599,6 +599,11 @@ mid-term goal on Android and desktop.
   or restart, and clears only after exact two-block native read-back. Continued
   card presence between commands, physical interruption behavior, and
   independent live read-back after a Kotlin write remain unverified.
+  A read-only command now exercises that exact request's recovery, station,
+  fresh-read, name/plan, and seated-card gates without writing. It passed on
+  Mac station 554900 and SI-Card8 2450662 with 11 punches and a hypothetical
+  `Daisy` / `Duck` to `Donald` / `Duck` request. The Kotlin word exchange and
+  post-write station events still need controlled hardware acceptance.
   Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before

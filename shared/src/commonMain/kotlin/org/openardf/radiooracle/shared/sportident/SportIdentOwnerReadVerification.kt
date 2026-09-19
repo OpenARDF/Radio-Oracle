@@ -65,6 +65,20 @@ data class SportIdentOwnerNativeReadDiff(
 
 /** Replay ordinary card reads through the production Kotlin parsers for SDK comparison. */
 object SportIdentOwnerReadVerification {
+    /** Decode one immutable evidence block for a later same-card read-only recheck. */
+    fun blockBytes(fixture: SportIdentOwnerReadFixture, blockNumber: Int): ByteArray {
+        require(blockNumber in 0..1) { "Only SI-Card8 blocks 0 and 1 are supported." }
+        require(fixture.blocks.count { it.blockNumber == blockNumber } == 1) {
+            "The requested SI-Card8 block must appear exactly once."
+        }
+        val hex = fixture.blocks.single { it.blockNumber == blockNumber }.hexData
+        require(hex.length == SportIdentProtocol.SI_CARD_BLOCK_SIZE * 2 &&
+            hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) { "Invalid card-block hex data." }
+        return ByteArray(SportIdentProtocol.SI_CARD_BLOCK_SIZE) { offset ->
+            hex.substring(offset * 2, offset * 2 + 2).toInt(16).toByte()
+        }
+    }
+
     fun capture(stationNumber: Int, blocks: List<SportIdentCardBlock>): SportIdentOwnerReadFixture {
         val fixture = SportIdentOwnerReadFixture(1, stationNumber, blocks.map { block ->
             SportIdentOwnerReadBlock(block.blockNumber, block.data.joinToString("") {
@@ -81,11 +95,7 @@ object SportIdentOwnerReadVerification {
             "A complete SI-Card8 read requires blocks 0 and 1 without duplicates."
         }
         val blocks = fixture.blocks.sortedBy { it.blockNumber }.map { block ->
-            require(block.hexData.length == SportIdentProtocol.SI_CARD_BLOCK_SIZE * 2 &&
-                block.hexData.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) { "Invalid card-block hex data." }
-            SportIdentCardBlock(block.blockNumber, ByteArray(SportIdentProtocol.SI_CARD_BLOCK_SIZE) {
-                block.hexData.substring(it * 2, it * 2 + 2).toInt(16).toByte()
-            })
+            SportIdentCardBlock(block.blockNumber, blockBytes(fixture, block.blockNumber))
         }
         val data = blocks.flatMap { it.data.toList() }.toByteArray()
         require((data[24].toInt() and 0x0f) == 2 && (data[22].toInt() and 0xff) <= 30) {

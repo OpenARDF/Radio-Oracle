@@ -598,6 +598,23 @@ owner-write command to hardware. Physical mid-write interruption, the timing
 gap after the presence recheck, and the station's post-write event sequence
 remain to be tested before enabling it.
 
+### Read-only native-write readiness
+
+`just sportident-owner-readiness <request-json>` runs the same recovery-state,
+station, fresh-insertion, complete SI-Card8 read, current-name, supported
+word-plan, and seated block-0 checks used before the internal Kotlin write.
+It closes the port before any recovery intent is saved or owner-word frame is
+sent. A missing or unreadable recovery record is required; an earlier pending
+attempt blocks readiness. A negative acknowledgement or changed block cannot
+produce a ready result.
+
+On 2026-09-19, the command passed on Mac station 554900 with SI-Card8 2450662
+and an exact hypothetical `Daisy` / `Duck` to `Donald` / `Duck` request. It read
+the stored `Daisy` / `Duck` names, 11 control punches, and an identical block 0
+while the card was seated. No card programming or recovery-record write occurred.
+This accepts the pre-write sequence on the available hardware; it does not
+validate the Kotlin word exchange or post-write event/read-back behavior.
+
 ### SDK provenance and licensing
 
 The library used here came from the private archive

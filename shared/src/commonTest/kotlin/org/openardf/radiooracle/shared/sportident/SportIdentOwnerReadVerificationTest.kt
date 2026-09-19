@@ -3,6 +3,7 @@ package org.openardf.radiooracle.shared.sportident
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -70,6 +71,22 @@ class SportIdentOwnerReadVerificationTest {
         assertEquals(listOf(SportIdentOwnerReadByteChange(1, 8, 0, 99)), diff.byteChanges)
         assertEquals(diff.byteChanges, diff.changesOutsideOwnerRegion)
         assertTrue(diff.samePunchCount)
+    }
+
+    @Test fun immutableBlockBytesRejectMissingOrMalformedEvidence() {
+        val originalBlocks = blocks()
+        val captured = SportIdentOwnerReadVerification.capture(593927, originalBlocks)
+        assertContentEquals(originalBlocks[0].data, SportIdentOwnerReadVerification.blockBytes(captured, 0))
+        originalBlocks[0].data[27] = 0
+        assertEquals(2450662 and 0xff,
+            SportIdentOwnerReadVerification.blockBytes(captured, 0)[27].toInt() and 0xff)
+        assertFailsWith<IllegalArgumentException> {
+            SportIdentOwnerReadVerification.blockBytes(captured.copy(blocks = captured.blocks.take(1)), 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SportIdentOwnerReadVerification.blockBytes(captured.copy(blocks = listOf(
+                captured.blocks[0].copy(hexData = "GG".repeat(128)), captured.blocks[1])), 0)
+        }
     }
 
     @Test fun nativeDiffReportsOwnerChangesAndIdentityWithoutCallingThemVerified() {

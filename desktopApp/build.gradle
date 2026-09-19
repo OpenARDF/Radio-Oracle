@@ -631,6 +631,15 @@ tasks.register("desktopSportIdentOwnerVerification", JavaExec) {
     }
 }
 
+tasks.register("desktopSportIdentOwnerReadiness", JavaExec) {
+    group = "verification"
+    description = "Checks one exact SI-Card8 owner-write request on hardware without programming the card."
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentOwnerReadinessKt")
+    args(providers.gradleProperty("siOwnerWriteRequest").get())
+}
+
 // Opt-in real-terrain acceptance can reproduce older snapshots retaining every venue grid.
 // Ordinary synthetic unit tests keep Gradle's normal heap limit.
 tasks.withType(Test).configureEach {
