@@ -15,6 +15,7 @@ enum class SportIdentSi8OwnerWriteStopReason {
     READBACK_NOT_OBSERVED,
     READBACK_MISMATCH,
     INVALID_READBACK,
+    CARD_NOT_CONFIRMED,
     TRANSPORT_FAILURE,
     CANCELLED
 }
@@ -105,6 +106,14 @@ class SportIdentSi8OwnerWriteRehearsal(
     fun rejectReadback() {
         check(stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK) { "No SI-Card8 read-back is pending." }
         stop(SportIdentSi8OwnerWriteStopReason.INVALID_READBACK)
+    }
+
+    /** A read-only recheck failed before the first owner word was attempted. */
+    fun stopForUnconfirmedCard() {
+        check(stage == SportIdentSi8OwnerWriteStage.READY_FOR_WORD && nextFrameIndex == 0) {
+            "The SI-Card8 pre-write card check must precede every owner word."
+        }
+        stop(SportIdentSi8OwnerWriteStopReason.CARD_NOT_CONFIRMED)
     }
 
     private fun stop(reason: SportIdentSi8OwnerWriteStopReason) {

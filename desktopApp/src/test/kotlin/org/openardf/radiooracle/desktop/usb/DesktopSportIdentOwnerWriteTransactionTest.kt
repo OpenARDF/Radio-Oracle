@@ -30,7 +30,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
 
     @Test
     fun runsReadWordsRemovalAndIndependentReadOnOnePort() {
-        val port = FakePort(replies)
+        val port = readyPort(replies)
         val steps = mutableListOf<String>()
         val transaction = transaction(port,
             readCard = { opened ->
@@ -42,7 +42,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
                 awaitTargetRemoval = { opened, card ->
                     assertTrue(opened === port && opened.isOpen)
                     assertEquals(request.cardNumber, card)
-                    assertEquals(3, port.writeRequests.size)
+                    assertEquals(3, port.ownerWordWrites.size)
                     steps += "remove"
                     true
                 },
@@ -59,17 +59,19 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertTrue(outcome.verified)
         assertEquals(SportIdentSi8OwnerWriteStage.VERIFIED, outcome.stage)
         assertNull(outcome.stopReason)
+        assertEquals(DesktopSportIdentCardPresenceResult.MATCHING_BLOCK, outcome.prewritePresence)
         assertTrue(requireNotNull(outcome.comparison).matches)
         val expected = SportIdentSi8OwnerWordWritePlanner.plan(request,
             SportIdentOwnerReadVerification.capture(request.stationNumber, download("Daisy;Duck;").blocks))
-        expected.forEachIndexed { index, bytes -> assertArrayEquals(bytes, port.writeRequests[index]) }
+        expected.forEachIndexed { index, bytes -> assertArrayEquals(bytes, port.ownerWordWrites[index]) }
+        assertEquals(4, port.writeRequests.size)
         assertEquals(1, port.closeCount)
         assertFalse(port.isOpen)
     }
 
     @Test
     fun missingFirstReplyStopsAfterOneWordAndNeverStartsReadback() {
-        val port = FakePort(emptyList())
+        val port = readyPort(emptyList())
         val transaction = transaction(port, verifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> error("Read-back started after a missing word reply") },
             readAfterReinsertion = { error("Read-back started after a missing word reply") }
@@ -81,13 +83,13 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, outcome.stage)
         assertEquals(SportIdentSi8OwnerWriteStopReason.NO_REPLY, outcome.stopReason)
         assertNull(outcome.comparison)
-        assertEquals(1, port.writeRequests.size)
+        assertEquals(1, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
     }
 
     @Test
     fun missingRemovalCannotReportVerificationAfterAllThreeReplies() {
-        val port = FakePort(replies)
+        val port = readyPort(replies)
         val transaction = transaction(port, verifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> false },
             readAfterReinsertion = { error("Read-back started without card removal") }
@@ -97,13 +99,13 @@ class DesktopSportIdentOwnerWriteTransactionTest {
 
         assertFalse(outcome.verified)
         assertEquals(SportIdentSi8OwnerWriteStopReason.READBACK_NOT_OBSERVED, outcome.stopReason)
-        assertEquals(3, port.writeRequests.size)
+        assertEquals(3, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
     }
 
     @Test
     fun changedNonOwnerByteLeavesWholeTransactionStopped() {
-        val port = FakePort(replies)
+        val port = readyPort(replies)
         val transaction = transaction(port, verifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> true },
             readAfterReinsertion = { download("Donald;Duck;", changedPunchByte = 99) }
@@ -114,13 +116,13 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertFalse(outcome.verified)
         assertEquals(SportIdentSi8OwnerWriteStopReason.READBACK_MISMATCH, outcome.stopReason)
         assertEquals(1, requireNotNull(outcome.comparison).predictedVersusObserved.byteChanges.size)
-        assertEquals(3, port.writeRequests.size)
+        assertEquals(3, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
     }
 
     @Test
     fun rejectedPreflightAndTransportExceptionClosePortWithoutRetry() {
-        val wrongCardPort = FakePort(replies)
+        val wrongCardPort = readyPort(replies)
         assertThrows(IllegalArgumentException::class.java) {
             transaction(wrongCardPort, readCard = { download("Daisy;Duck;").copy(
                 inserted = SportIdentCardEvent.Inserted(SportIdentProtocol.SI_CARD8_9_SIAC, 2450663)
@@ -129,11 +131,25 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertTrue(wrongCardPort.writeRequests.isEmpty())
         assertEquals(1, wrongCardPort.closeCount)
 
-        val brokenPort = FakePort(replies, throwOnRead = true)
+        val brokenPort = readyPort(replies, failAfterReads = 1)
         assertThrows(IllegalStateException::class.java) { transaction(brokenPort).execute(request) }
-        assertEquals(1, brokenPort.writeRequests.size)
+        assertEquals(1, brokenPort.ownerWordWrites.size)
         assertEquals(1, brokenPort.closeCount)
         assertFalse(brokenPort.isOpen)
+    }
+
+    @Test
+    fun removedCardStopsBeforeAnyOwnerWord() {
+        val port = FakePort(listOf(byteArrayOf(SportIdentProtocol.NAK)) + replies)
+
+        val outcome = transaction(port).execute(request)
+
+        assertFalse(outcome.verified)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.CARD_NOT_CONFIRMED, outcome.stopReason)
+        assertEquals(DesktopSportIdentCardPresenceResult.NEGATIVE_ACKNOWLEDGEMENT, outcome.prewritePresence)
+        assertTrue(port.ownerWordWrites.isEmpty())
+        assertEquals(1, port.writeRequests.size)
+        assertEquals(1, port.closeCount)
     }
 
     private fun transaction(
@@ -157,11 +173,21 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             },
             readCard = readCard
         )
-        var now = 0L
-        return DesktopSportIdentOwnerWriteTransaction(preflight, verifier) { opened ->
-            DesktopSportIdentOwnerWordTransport(opened, readTimeoutMs = 4, nowMillis = { ++now })
+        var presenceNow = 0L
+        var wordNow = 0L
+        val presenceProbe = DesktopSportIdentCardPresenceProbe(DesktopSportIdentStationCommandClient(
+            readTimeoutMs = 50, nowMillis = { ++presenceNow }
+        ))
+        return DesktopSportIdentOwnerWriteTransaction(preflight, verifier, presenceProbe) { opened ->
+            DesktopSportIdentOwnerWordTransport(opened, readTimeoutMs = 4, nowMillis = { ++wordNow })
         }
     }
+
+    private fun readyPort(replies: List<ByteArray>, failAfterReads: Int? = null) =
+        FakePort(listOf(SportIdentProtocol.buildExtendedMessage(
+            SportIdentProtocol.GET_SI_CARD8_9_SIAC,
+            byteArrayOf(0, 0, 0) + download("Daisy;Duck;").blocks.first().data
+        )) + replies, failAfterReads)
 
     private fun download(owner: String, changedPunchByte: Byte = 0): DesktopSportIdentCardBlockDownload {
         val block0 = ByteArray(128)
@@ -178,13 +204,16 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             listOf(SportIdentCardBlock(0, block0), SportIdentCardBlock(1, block1)), readout)
     }
 
-    private class FakePort(chunks: List<ByteArray>, private val throwOnRead: Boolean = false) : DesktopSerialPort {
+    private class FakePort(chunks: List<ByteArray>, private val failAfterReads: Int? = null) : DesktopSerialPort {
         private val pending = ArrayDeque(chunks)
         override val info = DesktopSerialPortInfo("/dev/cu.fake", "Fake SPORTident",
             SportIdentUsbDevice.VENDOR_ID, SportIdentUsbDevice.PRODUCT_ID, "fake")
         override var isOpen = false
         var closeCount = 0
+        var readCount = 0
         val writeRequests = mutableListOf<ByteArray>()
+        val ownerWordWrites: List<ByteArray>
+            get() = writeRequests.filter { it.size > 2 && it[2] == SportIdentProtocol.WRITE_SI_CARD_WORD }
         override fun configure(baudRate: Int, readTimeoutMs: Int, writeTimeoutMs: Int) = Unit
         override fun open(waitTimeMillis: Int): Boolean {
             isOpen = true
@@ -199,7 +228,8 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             return bytes.size
         }
         override fun read(maxBytes: Int): ByteArray {
-            if (throwOnRead) error("Serial read failed")
+            if (failAfterReads != null && readCount >= failAfterReads) error("Serial read failed")
+            readCount++
             return pending.removeFirstOrNull() ?: ByteArray(0)
         }
     }

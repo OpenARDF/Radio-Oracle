@@ -1,6 +1,8 @@
 package org.openardf.radiooracle.desktop.usb
 
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
+import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWritePlanComparison
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStage
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStopReason
@@ -9,7 +11,8 @@ import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStopRea
 internal data class DesktopSportIdentOwnerWriteOutcome(
     val stage: SportIdentSi8OwnerWriteStage,
     val stopReason: SportIdentSi8OwnerWriteStopReason?,
-    val comparison: SportIdentSi8OwnerWritePlanComparison?
+    val comparison: SportIdentSi8OwnerWritePlanComparison?,
+    val prewritePresence: DesktopSportIdentCardPresenceResult
 ) {
     val verified: Boolean get() = stage == SportIdentSi8OwnerWriteStage.VERIFIED && comparison?.matches == true
 }
@@ -22,12 +25,18 @@ internal data class DesktopSportIdentOwnerWriteOutcome(
 internal class DesktopSportIdentOwnerWriteTransaction(
     private val preflight: DesktopSportIdentOwnerWritePreflight,
     private val readbackVerifier: DesktopSportIdentOwnerReadbackVerifier,
+    private val presenceProbe: DesktopSportIdentCardPresenceProbe = DesktopSportIdentCardPresenceProbe(),
     private val makeWordTransport: (DesktopSerialPort) -> DesktopSportIdentOwnerWordTransport =
         { port -> DesktopSportIdentOwnerWordTransport(port) }
 ) {
     fun execute(request: SportIdentOwnerNameWriteRequest): DesktopSportIdentOwnerWriteOutcome =
-        preflight.withFreshRead(request) { port, rehearsal, _ ->
-            makeWordTransport(port).exchange(rehearsal)
+        preflight.withFreshRead(request) { port, rehearsal, before ->
+            val presence = presenceProbe.check(port, blockZero(before))
+            if (presence != DesktopSportIdentCardPresenceResult.MATCHING_BLOCK) {
+                rehearsal.stopForUnconfirmedCard()
+            } else {
+                makeWordTransport(port).exchange(rehearsal)
+            }
             val comparison = if (rehearsal.stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK) {
                 readbackVerifier.verify(port, rehearsal)
             } else null
@@ -35,6 +44,13 @@ internal class DesktopSportIdentOwnerWriteTransaction(
                 rehearsal.stage == SportIdentSi8OwnerWriteStage.STOPPED) {
                 "The SI-Card8 owner-write transaction did not reach a terminal state."
             }
-            DesktopSportIdentOwnerWriteOutcome(rehearsal.stage, rehearsal.stopReason, comparison)
+            DesktopSportIdentOwnerWriteOutcome(rehearsal.stage, rehearsal.stopReason, comparison, presence)
         }
+
+    private fun blockZero(before: SportIdentOwnerReadFixture): ByteArray {
+        val hex = before.blocks.single { it.blockNumber == 0 }.hexData
+        return ByteArray(SportIdentProtocol.SI_CARD_BLOCK_SIZE) { index ->
+            hex.substring(index * 2, index * 2 + 2).toInt(16).toByte()
+        }
+    }
 }

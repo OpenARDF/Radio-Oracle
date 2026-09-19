@@ -564,6 +564,22 @@ expected removal/reinsertion events after a Kotlin write, or that the observed
 `0xEA` reply prefix denotes success. Interruption recovery must be integrated
 before live use. No direct Kotlin hardware write has occurred.
 
+### Read-only pre-write presence recheck
+
+A read-only diagnostic now re-requests SI-Card8 block 0 on the same open port
+after a complete download, then repeats that request after the card's removal
+event. On 2026-09-19, Mac station 554900 returned an exact block-0 match for
+SI-Card8 2450662 while it was seated and a negative acknowledgement after it
+was removed. No owner-write command was sent during this trial.
+
+The internal transaction now makes that same exact-block recheck immediately
+before its first owner word. A negative acknowledgement, timeout, invalid reply,
+or changed block stops the shared rehearsal before any owner-write frame. The
+check can establish that the expected card answered at that instant; it cannot
+lock the card in place between the recheck and subsequent words. A removal
+during an attempted word still has an uncertain outcome, and independent
+read-back plus durable interruption recovery remain required before live use.
+
 ### SDK provenance and licensing
 
 The library used here came from the private archive

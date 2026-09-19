@@ -541,6 +541,16 @@ tasks.register("desktopUsbCardBlockProbe", JavaExec) {
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockProbeKt")
 }
 
+tasks.register("desktopUsbCardPresenceProbe", JavaExec) {
+    group = "verification"
+    description = "Rechecks SI-Card8 block 0 while seated and after removal; read-only."
+
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardPresenceProbeKt")
+    args(providers.gradleProperty("siOwnerStation").get(), providers.gradleProperty("siOwnerCard").get())
+}
+
 tasks.register("desktopUsbCardLoopProbe", JavaExec) {
     group = "verification"
     description = "Keeps a SPORTident station session open and downloads multiple supported SI cards."

@@ -590,8 +590,12 @@ mid-term goal on Android and desktop.
   an internal desktop transaction composes all three steps and has fake-port
   coverage for success, missing replies/removal, byte mismatch, and cleanup.
   It has no live Kotlin-write evidence or UI/CLI wiring.
-  Continued card presence during a write and independent live read-back remain
-  unverified.
+  A read-only same-port block-0 recheck matched SI-Card8 2450662 while seated
+  on Mac station 554900 and received a negative acknowledgement after removal.
+  The internal transaction now requires that match immediately before its
+  first owner word, stopping without a write if the card is not confirmed.
+  Continued card presence between commands, interruption recovery, and
+  independent live read-back after a Kotlin write remain unverified.
   Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before

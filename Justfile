@@ -81,6 +81,10 @@ sportident-sdk-local-check:
 sportident-owner-capture expected_station expected_card output:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=capture {{quote("-PsiOwnerStation=" + expected_station)}} {{quote("-PsiOwnerCard=" + expected_card)}} {{quote("-PsiOwnerOutput=" + output)}}
 
+# Read-only block-0 checks while the card is seated and after removal; no owner-word writes.
+sportident-card-presence-probe expected_station expected_card:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopUsbCardPresenceProbe {{quote("-PsiOwnerStation=" + expected_station)}} {{quote("-PsiOwnerCard=" + expected_card)}}
+
 # Offline comparison of SDK read JSON with native block evidence; never opens a serial port.
 sportident-owner-compare sdk_read native_read:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=compare {{quote("-PsiOwnerSdkRead=" + sdk_read)}} {{quote("-PsiOwnerNativeRead=" + native_read)}}
@@ -94,7 +98,7 @@ sportident-owner-compare-plan request before_read after_read:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=compare-plan {{quote("-PsiOwnerWriteRequest=" + request)}} {{quote("-PsiOwnerBeforeRead=" + before_read)}} {{quote("-PsiOwnerAfterRead=" + after_read)}}
 
 sportident-owner-verification-check:
-    just gradle :shared:desktopTest --tests '*SportIdentOwnerReadVerificationTest' --tests '*SportIdentSi8OwnerWordWritePlannerTest' --tests '*SportIdentSi8OwnerWordWriteReplySequenceTest' --tests '*SportIdentSi8OwnerWriteRehearsalTest' :desktopApp:test --tests '*DesktopSportIdentOwnerVerificationTest' --tests '*DesktopSportIdentOwnerWordTransportTest' --tests '*DesktopSportIdentOwnerWritePreflightTest' --tests '*DesktopSportIdentOwnerReadbackVerifierTest' --tests '*DesktopSportIdentOwnerWriteTransactionTest'
+    just gradle :shared:desktopTest --tests '*SportIdentOwnerReadVerificationTest' --tests '*SportIdentSi8OwnerWordWritePlannerTest' --tests '*SportIdentSi8OwnerWordWriteReplySequenceTest' --tests '*SportIdentSi8OwnerWriteRehearsalTest' :desktopApp:test --tests '*DesktopSportIdentOwnerVerificationTest' --tests '*DesktopSportIdentOwnerWordTransportTest' --tests '*DesktopSportIdentOwnerWritePreflightTest' --tests '*DesktopSportIdentOwnerReadbackVerifierTest' --tests '*DesktopSportIdentOwnerWriteTransactionTest' --tests '*DesktopSportIdentCardPresenceProbeTest'
 
 android-course-workflow-smoke serial:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:assembleDebug

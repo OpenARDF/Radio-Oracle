@@ -73,6 +73,21 @@ class SportIdentSi8OwnerWriteRehearsalTest {
     }
 
     @Test
+    fun failedPrewritePresenceCheckCannotIssueTheFirstWord() {
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, fixture("Daisy;Duck;"))
+
+        rehearsal.stopForUnconfirmedCard()
+
+        assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, rehearsal.stage)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.CARD_NOT_CONFIRMED, rehearsal.stopReason)
+        assertFailsWith<IllegalStateException> { rehearsal.takeNextWordFrame() }
+        assertFailsWith<IllegalStateException> { rehearsal.stopForUnconfirmedCard() }
+        val alreadyStarted = SportIdentSi8OwnerWriteRehearsal(request, fixture("Daisy;Duck;"))
+        alreadyStarted.takeNextWordFrame()
+        assertFailsWith<IllegalStateException> { alreadyStarted.stopForUnconfirmedCard() }
+    }
+
+    @Test
     fun cancelledMismatchedOrInvalidReadbackCannotResumeWords() {
         val cancelled = SportIdentSi8OwnerWriteRehearsal(request, fixture("Daisy;Duck;"))
         cancelled.takeNextWordFrame()
