@@ -112,8 +112,20 @@ class DesktopSportIdentFrameStreamTest {
         assertEquals(SportIdentProtocol.PROBE_COMMAND, frame!!.command)
     }
 
+    @Test
+    fun cancelledListenerStopsWaitingWithoutConsumingAnotherCardEvent() {
+        val port = ChunkedPort(listOf(ByteArray(0), byteArrayOf(2, 0xe8.toByte(), 3)))
+        val stream = DesktopSportIdentFrameStream(port, nowMillis = advancingClock())
+        var checks = 0
+
+        assertNull(stream.nextFrame(deadlineMillis = 1_000, shouldContinue = { ++checks <= 1 }))
+        assertEquals(1, port.readCalls)
+    }
+
     private class ChunkedPort(chunks: List<ByteArray>) : DesktopSerialPort {
         private val pending = ArrayDeque(chunks)
+        var readCalls = 0
+            private set
 
         override val info = DesktopSerialPortInfo(
             systemPortPath = "/dev/cu.fake",
@@ -128,8 +140,10 @@ class DesktopSportIdentFrameStreamTest {
         override fun open(waitTimeMillis: Int): Boolean = true
         override fun close() = Unit
         override fun write(bytes: ByteArray): Int = bytes.size
-        override fun read(maxBytes: Int): ByteArray =
-            pending.removeFirstOrNull() ?: ByteArray(0)
+        override fun read(maxBytes: Int): ByteArray {
+            readCalls++
+            return pending.removeFirstOrNull() ?: ByteArray(0)
+        }
     }
 
     private fun advancingClock(): () -> Long {

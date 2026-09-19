@@ -59,11 +59,14 @@ class DesktopSportIdentReadoutService(
         onTimeout: () -> Unit = {},
         shouldContinue: () -> Boolean = { true },
         isTimeoutError: (Throwable) -> Boolean = ::isNoCardInsertTimeout,
-        continueAfterTimeout: Boolean = false
+        continueAfterTimeout: Boolean = false,
+        onStationConnected: (DesktopSerialPortInfo, SportIdentStationInfo) -> Unit = { _, _ -> },
+        beforeFirstRead: (DesktopSerialPort) -> Unit = {}
     ): Int {
         val port = firstSportIdentPort()
         var cardsRead = 0
-        withOpenDownloadStation(port) {
+        withOpenDownloadStation(port, onStationConnected) {
+            beforeFirstRead(port)
             while (cardsRead < maxCards && shouldContinue()) {
                 val result = runCatching { readCard(port) }
                 val download = result.getOrNull()

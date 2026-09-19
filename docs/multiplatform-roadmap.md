@@ -568,7 +568,10 @@ mid-term goal on Android and desktop.
   `Donald;Duck;` SI-Card8 transaction. A separate read confirmed the new name
   and all 11 displayed punches. A shared Kotlin offline planner now reproduces
   those three frames from a validated native card snapshot and refuses other
-  byte lengths; it has no hardware sender. Short/long-name encoding,
+  byte lengths; it has no hardware sender. A shared offline native-read diff now
+  reports every changed byte across both SI-Card8 blocks, ready to analyze a
+  future raw post-write capture; no such paired hardware read is available yet.
+  Short/long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before
   enabling a direct Kotlin writer. SDK read comparison alone does not establish

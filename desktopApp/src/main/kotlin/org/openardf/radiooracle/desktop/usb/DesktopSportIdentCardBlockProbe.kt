@@ -116,7 +116,8 @@ class DesktopSportIdentCardBlockReader(
     private val cardReadAttemptTimeoutMs: Int = SportIdentCardCommandReader.DEFAULT_ATTEMPT_TIMEOUT_MS,
     private val cardReadRetryDelayMs: Long = SportIdentCardCommandReader.DEFAULT_RETRY_DELAY_MS,
     private val cardReadMaxAttempts: Int = SportIdentCardReadRetryPolicy.DEFAULT_MAX_ATTEMPTS,
-    private val includeOwnerData: Boolean = false
+    private val includeOwnerData: Boolean = false,
+    private val onCardInserted: () -> Unit = {}
 ) {
     fun readFirstSi8Or9OrSiacBlockAfterInsert(
         port: DesktopSerialPort,
@@ -157,15 +158,18 @@ class DesktopSportIdentCardBlockReader(
         readFirstSupportedCardAfterInsertOnOpenPort(port)
 
     fun readFirstSupportedCardAfterInsertOnOpenPort(
-        port: DesktopSerialPort
+        port: DesktopSerialPort,
+        shouldContinue: () -> Boolean = { true }
     ): DesktopSportIdentCardBlockDownload {
         val event = DesktopSportIdentCardEventMonitor(
             readTimeoutMs = readTimeoutMs,
             writeTimeoutMs = writeTimeoutMs
         ).waitForInsertEventOnOpenPort(
             port,
-            System.currentTimeMillis() + DesktopSportIdentCardEventMonitor.defaultMaxWaitMs
+            System.currentTimeMillis() + DesktopSportIdentCardEventMonitor.defaultMaxWaitMs,
+            shouldContinue
         ) ?: error("No SPORTident card insert event received before timeout.")
+        onCardInserted()
         onProgress("Card inserted: type=${event.cardType.toHexString()} si=${event.siNumber}; keep it seated.")
 
         return readInsertedCardOnOpenPort(port, event)

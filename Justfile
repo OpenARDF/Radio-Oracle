@@ -85,6 +85,10 @@ sportident-owner-capture expected_station expected_card output:
 sportident-owner-compare sdk_read native_read:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=compare {{quote("-PsiOwnerSdkRead=" + sdk_read)}} {{quote("-PsiOwnerNativeRead=" + native_read)}}
 
+# Offline byte-by-byte comparison of two native SI-Card8 reads; never opens a serial port.
+sportident-owner-diff-native before_read after_read:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=diff-native {{quote("-PsiOwnerBeforeRead=" + before_read)}} {{quote("-PsiOwnerAfterRead=" + after_read)}}
+
 sportident-owner-verification-check:
     just gradle :shared:desktopTest --tests '*SportIdentOwnerReadVerificationTest' :desktopApp:test --tests '*DesktopSportIdentOwnerVerificationTest'
 

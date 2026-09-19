@@ -39,6 +39,30 @@ data class SportIdentOwnerReadComparison(val differences: Set<SportIdentOwnerRea
     val scope: String = "Owner names, station/card identity, and control punch count only"
 }
 
+@Serializable
+data class SportIdentOwnerReadByteChange(
+    val blockNumber: Int,
+    val offset: Int,
+    val before: Int,
+    val after: Int
+)
+
+/** Reports every byte change; owner-region changes still need interpretation. */
+@Serializable
+data class SportIdentOwnerNativeReadDiff(
+    val before: SportIdentOwnerReferenceRead,
+    val after: SportIdentOwnerReferenceRead,
+    val byteChanges: List<SportIdentOwnerReadByteChange>
+) {
+    val sameStation: Boolean = before.stationNumber == after.stationNumber
+    val sameCard: Boolean = before.cardNumber == after.cardNumber
+    val samePunchCount: Boolean = before.controlPunchCount == after.controlPunchCount
+    val changesOutsideOwnerRegion: List<SportIdentOwnerReadByteChange> = byteChanges.filter {
+        it.blockNumber != 0 || it.offset !in 0x20..0x7f
+    }
+    val scope: String = "Complete SI-Card8 blocks 0 and 1; byte changes are observations, not write verification"
+}
+
 /** Replay ordinary card reads through the production Kotlin parsers for SDK comparison. */
 object SportIdentOwnerReadVerification {
     fun capture(stationNumber: Int, blocks: List<SportIdentCardBlock>): SportIdentOwnerReadFixture {
@@ -85,6 +109,25 @@ object SportIdentOwnerReadVerification {
             if (reference.lastName != native.lastName) add(SportIdentOwnerReadDifference.LAST_NAME)
             if (reference.controlPunchCount != native.controlPunchCount) add(SportIdentOwnerReadDifference.CONTROL_PUNCH_COUNT)
         })
+    }
+
+    /** Compare two independently captured native reads without opening a station. */
+    fun diffNative(before: SportIdentOwnerReadFixture, after: SportIdentOwnerReadFixture): SportIdentOwnerNativeReadDiff {
+        val beforeRead = nativeRead(before)
+        val afterRead = nativeRead(after)
+        val beforeBlocks = before.blocks.associateBy { it.blockNumber }
+        val afterBlocks = after.blocks.associateBy { it.blockNumber }
+        val changes = (0..1).flatMap { blockNumber ->
+            val beforeHex = beforeBlocks.getValue(blockNumber).hexData
+            val afterHex = afterBlocks.getValue(blockNumber).hexData
+            (0 until SportIdentProtocol.SI_CARD_BLOCK_SIZE).mapNotNull { offset ->
+                val byteIndex = offset * 2
+                val old = beforeHex.substring(byteIndex, byteIndex + 2).toInt(16)
+                val new = afterHex.substring(byteIndex, byteIndex + 2).toInt(16)
+                if (old == new) null else SportIdentOwnerReadByteChange(blockNumber, offset, old, new)
+            }
+        }
+        return SportIdentOwnerNativeReadDiff(beforeRead, afterRead, changes)
     }
 
     private fun validate(read: SportIdentOwnerReferenceRead) {

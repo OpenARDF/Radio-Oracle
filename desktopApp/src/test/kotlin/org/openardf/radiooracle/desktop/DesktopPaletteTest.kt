@@ -58,6 +58,7 @@ class DesktopPaletteTest {
                 "SPORTident",
                 "Punch History",
                 "Time Sync",
+                "SI Card",
                 "Move Course",
                 "Create Course",
                 "2D Graphic",

@@ -96,17 +96,19 @@ class DesktopSportIdentCardEventMonitor(
         }
     }
 
-    fun waitForOneEventOnOpenPort(port: DesktopSerialPort, deadlineMillis: Long): SportIdentCardEvent? {
+    fun waitForOneEventOnOpenPort(port: DesktopSerialPort, deadlineMillis: Long,
+        shouldContinue: () -> Boolean = { true }): SportIdentCardEvent? {
         val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
-        return waitForOneEventOnOpenPort(stream, deadlineMillis)
+        return waitForOneEventOnOpenPort(stream, deadlineMillis, shouldContinue)
     }
 
     private fun waitForOneEventOnOpenPort(
         stream: DesktopSportIdentFrameStream,
-        deadlineMillis: Long
+        deadlineMillis: Long,
+        shouldContinue: () -> Boolean = { true }
     ): SportIdentCardEvent? {
-        while (System.currentTimeMillis() < deadlineMillis) {
-            val frame = stream.nextFrame(deadlineMillis, requireValidCrc = false) ?: return null
+        while (shouldContinue() && System.currentTimeMillis() < deadlineMillis) {
+            val frame = stream.nextFrame(deadlineMillis, requireValidCrc = false, shouldContinue = shouldContinue) ?: return null
             val event = SportIdentCardEventParser.fromFrame(frame)
             if (event != null) {
                 return event
@@ -117,11 +119,12 @@ class DesktopSportIdentCardEventMonitor(
 
     fun waitForInsertEventOnOpenPort(
         port: DesktopSerialPort,
-        deadlineMillis: Long
+        deadlineMillis: Long,
+        shouldContinue: () -> Boolean = { true }
     ): SportIdentCardEvent.Inserted? {
         val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
-        while (System.currentTimeMillis() < deadlineMillis) {
-            when (val event = waitForOneEventOnOpenPort(stream, deadlineMillis)) {
+        while (shouldContinue() && System.currentTimeMillis() < deadlineMillis) {
+            when (val event = waitForOneEventOnOpenPort(stream, deadlineMillis, shouldContinue)) {
                 is SportIdentCardEvent.Inserted -> return event
                 is SportIdentCardEvent.Removed -> continue
                 null -> return null
@@ -133,11 +136,12 @@ class DesktopSportIdentCardEventMonitor(
     fun waitForRemoveEventOnOpenPort(
         port: DesktopSerialPort,
         siNumber: Int?,
-        deadlineMillis: Long
+        deadlineMillis: Long,
+        shouldContinue: () -> Boolean = { true }
     ): SportIdentCardEvent.Removed? {
         val stream = DesktopSportIdentFrameStream(port, maxReadBytes = MAX_FRAME_BYTES)
-        while (System.currentTimeMillis() < deadlineMillis) {
-            when (val event = waitForOneEventOnOpenPort(stream, deadlineMillis)) {
+        while (shouldContinue() && System.currentTimeMillis() < deadlineMillis) {
+            when (val event = waitForOneEventOnOpenPort(stream, deadlineMillis, shouldContinue)) {
                 is SportIdentCardEvent.Removed ->
                     if (siNumber == null || event.siNumber == siNumber) {
                         return event

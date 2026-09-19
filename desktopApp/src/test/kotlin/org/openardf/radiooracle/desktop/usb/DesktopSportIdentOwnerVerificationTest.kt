@@ -3,11 +3,13 @@ package org.openardf.radiooracle.desktop.usb
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.nio.file.Files
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import org.junit.Test
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameProgramming
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNativeReadDiff
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReferenceRead
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -57,6 +59,27 @@ class DesktopSportIdentOwnerVerificationTest {
                 SportIdentOwnerReadVerification.capture(593927, blocks(card = 2450663))
             })
             assertFalse(Files.exists(output))
+        } finally { directory.toFile().deleteRecursively() }
+    }
+
+    @Test fun nativeDiffUsesSavedEvidenceWithoutOpeningAStation() {
+        val directory = Files.createTempDirectory("si-owner-native-diff-")
+        try {
+            val before = directory.resolve("before read.json")
+            val after = directory.resolve("after read.json")
+            Files.writeString(before, SportIdentOwnerNameProgramming.json.encodeToString(fixture()))
+            val changedBlocks = blocks()
+            changedBlocks[1].data[8] = 99
+            Files.writeString(after, SportIdentOwnerNameProgramming.json.encodeToString(
+                SportIdentOwnerReadVerification.capture(593927, changedBlocks)))
+            val out = ByteArrayOutputStream()
+            val refuseCapture: (Int, Int) -> Nothing = { _, _ -> error("Offline diff opened a station") }
+            assertEquals(0, DesktopSportIdentOwnerVerification.run(arrayOf("diff-native", before.toString(), after.toString()),
+                PrintStream(out), capture = refuseCapture))
+            val diff = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerNativeReadDiff>(out.toString())
+            assertTrue(diff.sameCard && diff.samePunchCount)
+            assertEquals(1, diff.changesOutsideOwnerRegion.size)
+            assertEquals(8, diff.changesOutsideOwnerRegion.single().offset)
         } finally { directory.toFile().deleteRecursively() }
     }
 

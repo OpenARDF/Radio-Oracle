@@ -9,12 +9,12 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
-import androidx.compose.material.AlertDialog
 import androidx.compose.material.Checkbox
 import androidx.compose.material.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,10 +30,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardBlockReader
-import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardInspectionService
+import org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardInspectionWatcher
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentPortSelector
-import org.openardf.radiooracle.desktop.usb.DesktopSportIdentReadoutService
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentOwnerSnapshot
 import org.openardf.radiooracle.desktop.usb.DesktopSportIdentProgrammingClient
 import org.openardf.radiooracle.desktop.usb.discoverDesktopSportIdentSdk
@@ -65,7 +63,65 @@ internal fun SportIdentCardInspectionPanel(
     val sdkConfiguration = remember { discoverDesktopSportIdentSdk() }
     var status by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
+    var listenerFailed by remember { mutableStateOf(false) }
+    var listenerGeneration by remember { mutableStateOf(0) }
+    var cardToRemoveBeforeListening by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
+    LaunchedEffect(isReaderConnected, isStationBusy, isProgramming, isFinishingRecovery, pendingNames, listenerGeneration) {
+        if (!isReaderConnected || isStationBusy || isProgramming || isFinishingRecovery || pendingNames != null) return@LaunchedEffect
+        val uiScope = this
+        val listenerJob = checkNotNull(coroutineContext[Job])
+        val initialCardToRemove = cardToRemoveBeforeListening
+        cardToRemoveBeforeListening = null
+        listenerFailed = false
+        if (snapshot == null) {
+            status = "Insert a card to read its stored names. If it is already seated, remove and reinsert it. Keep it seated until the read finishes."
+            failed = false
+        }
+        try {
+            withContext(Dispatchers.IO) {
+                siPortMutex.withLock {
+                    if (listenerJob.isActive) desktopCardInspectionWatcher().watch(
+                        onSnapshot = { read -> uiScope.launch {
+                            if (!listenerJob.isActive) return@launch
+                            snapshot = read
+                            isReading = false
+                            failed = false
+                            status = when {
+                                recoveryState is DesktopSportIdentOwnerRecoveryState.Pending ->
+                                    "Card read. Review the stored names below to finish checking the interrupted write."
+                                read.inspection.family == SportIdentCardFamily.SI8 && sdkConfiguration != null ->
+                                    "Card read. Edit the names below, then choose Write Names. Remove the card before inserting another."
+                                else -> "Card read. Its owner information is shown below. Remove the card before inserting another."
+                            }
+                        } },
+                        onCardInserted = { uiScope.launch {
+                            if (listenerJob.isActive) {
+                                isReading = true
+                                status = "Reading card. Keep it seated until the read finishes…"
+                            }
+                        } },
+                        onCardRemoved = { uiScope.launch {
+                            if (listenerJob.isActive && !isProgramming && pendingNames == null) {
+                                status = "Insert a card to read it automatically, or edit the last card shown below."
+                            }
+                        } },
+                        shouldContinue = { listenerJob.isActive },
+                        initialCardToRemove = initialCardToRemove
+                    )
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            listenerFailed = true
+            failed = true
+            status = "Card reader stopped: ${error.message ?: error::class.simpleName}. Choose Retry Reader."
+            DesktopDebugLog.error("SI", status.orEmpty())
+        } finally {
+            isReading = false
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val step = if (isProgramming) 3 else if (snapshot != null) 2 else 1
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -86,6 +142,7 @@ internal fun SportIdentCardInspectionPanel(
                     Text("Accept this fresh read to enable another write. It does not confirm earlier punch preservation.", fontSize = 13.sp)
                     Button(enabled = !isReading && !isStationBusy && !isFinishingRecovery, onClick = {
                         val inspection = snapshot?.inspection ?: return@Button
+                        cardToRemoveBeforeListening = inspection.siNumber
                         isFinishingRecovery = true
                         scope.launch {
                             try {
@@ -115,34 +172,11 @@ internal fun SportIdentCardInspectionPanel(
         if (isStationBusy) Text("Stop the active SI readout before reading owner information.")
         else if (!isReaderConnected) Text("Connect a SPORTident download station to read a card.")
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(enabled = isReaderConnected && !isStationBusy && !isReading && !isProgramming && !isFinishingRecovery, onClick = {
-            isReading = true
-            snapshot = null
-            failed = false
-            status = "Insert a card to read its number and stored names. Keep it seated until the read finishes."
-            scope.launch {
-                try {
-                    snapshot = withContext(Dispatchers.IO) {
-                        siPortMutex.withLock { desktopCardInspectionService().inspectOneBound() }
-                    }
-                    status = when {
-                        recoveryState is DesktopSportIdentOwnerRecoveryState.Pending ->
-                            "Card read. Review the stored names below to finish checking the interrupted write."
-                        snapshot?.inspection?.family == SportIdentCardFamily.SI8 && sdkConfiguration != null ->
-                            "Card read. Edit the names below, then choose Write Names. Reading has not changed the card."
-                        else -> "Card read. Its owner information is shown below. Reading has not changed the card."
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Exception) {
-                    failed = true
-                    status = "Card read failed: ${error.message ?: error::class.simpleName}"
-                    DesktopDebugLog.error("SI", status.orEmpty())
-                } finally {
-                    isReading = false
-                }
+        if (listenerFailed && isReaderConnected && !isStationBusy && !isProgramming) {
+            Button(onClick = { listenerGeneration++; failed = false; status = "Waiting for the card reader…" }) {
+                Text("Retry Reader")
             }
-        }) { Text(if (isReading) "Reading Card" else "Read Card") }
+        }
         if (isProgramming) {
             Button(enabled = !isCancelling && programmingPhase != SportIdentOwnerWritePhase.WRITING, onClick = {
                 if (!isCancelling && programmingPhase != SportIdentOwnerWritePhase.WRITING) {
@@ -156,7 +190,7 @@ internal fun SportIdentCardInspectionPanel(
         }
         Surface(Modifier.fillMaxWidth(), color = if (failed) DesktopPalette.Error.copy(alpha = 0.08f)
             else DesktopPalette.Black.copy(alpha = 0.04f)) {
-            Text(status ?: "Choose Read Card, then insert a card to check its stored names. Names change only after you confirm Write Names.",
+            Text(status ?: "Insert a card to read its stored names. Names change only after you confirm Write Names.",
                 Modifier.padding(10.dp), color = if (failed) DesktopPalette.Error else DesktopPalette.Black)
         }
         snapshot?.inspection?.let { SportIdentCardOwnerDetails(it, isProgramming) }
@@ -173,7 +207,10 @@ internal fun SportIdentCardInspectionPanel(
     pendingNames?.let { names ->
         var accepted by remember(names) { mutableStateOf(false) }
         val target = snapshot ?: return@let
-        AlertDialog(onDismissRequest = { pendingNames = null },
+        DesktopAlertDialog(onDismissRequest = {
+            cardToRemoveBeforeListening = target.inspection.siNumber
+            pendingNames = null
+        },
             title = { Text("Write Names to SI-Card ${target.inspection.siNumber}?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -216,27 +253,30 @@ internal fun SportIdentCardInspectionPanel(
                                 withContext(Dispatchers.IO) { recoveryStore.completeVerified(request, result) }
                                 snapshot = target.copy(inspection = target.inspection.copy(holder = SportIdentCardHolder(
                                     result.firstName.ifEmpty { null }, result.lastName.ifEmpty { null }, null)))
+                                cardToRemoveBeforeListening = target.inspection.siNumber
                                 val punches = if (result.controlPunchCountAfter == 1) "control punch" else "control punches"
-                                status = "Names written and verified. ${result.controlPunchCountAfter} $punches preserved. You can remove the card."
+                                status = "Names written and verified. ${result.controlPunchCountAfter} $punches preserved. Remove the card before the next read."
                             } catch (cancelled: CancellationException) {
                                 snapshot = null
                                 failed = true
                                 status = if (programmingPhase == SportIdentOwnerWritePhase.WAITING_FOR_READ_BACK)
-                                    "Verification stopped after writing. Read SI-Card ${target.inspection.siNumber} to check its stored names. Earlier punch preservation was not verified."
-                                else "Programming stopped. Read SI-Card ${target.inspection.siNumber} again to check its stored names."
+                                    "Verification stopped after writing. Reinsert SI-Card ${target.inspection.siNumber} to check its stored names. Earlier punch preservation was not verified."
+                                else "Programming stopped. Reinsert SI-Card ${target.inspection.siNumber} to check its stored names."
+                                cardToRemoveBeforeListening = target.inspection.siNumber
                                 throw cancelled
                             } catch (error: Exception) {
                                 snapshot = null
                                 failed = true
                                 status = when (programmingPhase) {
                                     SportIdentOwnerWritePhase.WAITING_FOR_CARD ->
-                                        "The target card could not be confirmed for writing. Choose Read Card to check its stored names before trying again."
+                                        "The target card could not be confirmed for writing. Reinsert it to check its stored names before trying again."
                                     SportIdentOwnerWritePhase.WRITING ->
-                                        "Write completion was not confirmed. Choose Read Card to check its stored names before trying again."
+                                        "Write completion was not confirmed. Reinsert the card to check its stored names before trying again."
                                     SportIdentOwnerWritePhase.WAITING_FOR_READ_BACK ->
-                                        "Writing completed, but verification did not finish. Choose Read Card to check the stored names. Earlier punch preservation was not verified."
-                                    null -> "Programming did not finish. Choose Read Card to check what is stored before trying another write."
+                                        "Writing completed, but verification did not finish. Reinsert the card to check the stored names. Earlier punch preservation was not verified."
+                                    null -> "Programming did not finish. Reinsert the card to check what is stored before trying another write."
                                 }
+                                cardToRemoveBeforeListening = target.inspection.siNumber
                                 DesktopDebugLog.error("SI", status.orEmpty())
                             } finally {
                                 finishDesktopSportIdentOwnerRecovery(recoveryStore) {
@@ -250,7 +290,10 @@ internal fun SportIdentCardInspectionPanel(
                         }
                     }) { Text("Write Names") }
             },
-            dismissButton = { TextButton(onClick = { pendingNames = null }) { Text("Cancel") } })
+            dismissButton = { TextButton(onClick = {
+                cardToRemoveBeforeListening = target.inspection.siNumber
+                pendingNames = null
+            }) { Text("Cancel") } })
     }
 }
 
@@ -286,10 +329,6 @@ private fun SportIdentCardOwnerDetails(inspection: SportIdentCardOwnerInspection
     }
 }
 
-private fun desktopCardInspectionService() = DesktopSportIdentCardInspectionService(
-    DesktopSportIdentReadoutService(
-        portSelector = DesktopSportIdentPortSelector(discoverySettings = DesktopAppSettingsPreferences),
-        readCard = { DesktopSportIdentCardBlockReader(includeOwnerData = true)
-            .readFirstSupportedCardAfterInsertOnOpenPort(it) }
-    )
+private fun desktopCardInspectionWatcher() = DesktopSportIdentCardInspectionWatcher(
+    DesktopSportIdentPortSelector(discoverySettings = DesktopAppSettingsPreferences)
 )

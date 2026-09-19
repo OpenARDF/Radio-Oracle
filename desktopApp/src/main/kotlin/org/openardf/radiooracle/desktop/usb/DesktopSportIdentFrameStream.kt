@@ -49,9 +49,10 @@ internal class DesktopSportIdentFrameStream(
 
     fun nextFrame(
         deadlineMillis: Long,
-        requireValidCrc: Boolean = true
+        requireValidCrc: Boolean = true,
+        shouldContinue: () -> Boolean = { true }
     ): SportIdentFrame? {
-        while (nowMillis() < deadlineMillis) {
+        while (shouldContinue() && nowMillis() < deadlineMillis) {
             nextBufferedFrame(requireValidCrc)?.let { return it }
             trimBufferedNoise()
 
@@ -64,7 +65,7 @@ internal class DesktopSportIdentFrameStream(
             trace("raw ${raw.toHexString()}")
             buffered += raw
         }
-        return nextBufferedFrame(requireValidCrc)
+        return if (shouldContinue()) nextBufferedFrame(requireValidCrc) else null
     }
 
     fun nextCommandResult(

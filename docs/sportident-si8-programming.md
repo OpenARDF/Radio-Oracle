@@ -289,6 +289,19 @@ punch/settings preservation was not verified for this deliberately interrupted
 transaction. This completes the GUI stop/recovery hardware acceptance for the
 available desktop prototype, without claiming physical mid-write interruption coverage.
 
+The SI Card page now starts listening when it opens with a connected, idle
+station. It prompts for insertion without a Read Card click, shows the read
+immediately, waits for removal before accepting another insertion, and releases
+the station when the page closes or writing begins. It also arms automatically
+after interrupted-write recovery; a reader failure offers Retry Reader. The
+write confirmation and independent read-back remain separate. On 2026-09-19,
+the packaged Mac app read SI-Card8 2450662 (stored names Donald Duck) on two
+separate insert/remove cycles with station 554900, without a Read Card click.
+Each cycle produced a successful read in the SPORTident log. Leaving the page
+released the Mac serial port. This was a read-only check; automatic listening
+around a real write and its interrupted-write recovery still need hardware
+validation.
+
 Next, characterize physical interruption and resolve supported SDK, runtime,
 and licensed distribution packaging. This workflow primarily targets new
 cards. SDK completion alone is insufficient evidence that the desired names were stored.
@@ -327,6 +340,20 @@ hex snapshot to a new file. Existing evidence files are never overwritten.
 Offline comparison opens no station connection and starts no SDK process. Its
 CLI exit codes are 0 for a match, 2 for differences, and 1 for invalid evidence
 or failed capture; Gradle/just surface nonzero exits as task failures.
+
+Two saved native reads can also be compared byte for byte without a reader:
+
+```sh
+just sportident-owner-diff-native /tmp/si-before.json /tmp/si-after.json
+```
+
+The JSON report includes the parsed card/station identities, owner names, punch
+counts, every changed block byte and offset, and a separate list of changes
+outside the SI-Card8 owner region in block 0. Exit code 0 means both snapshots
+were valid and a diff was produced; it does not certify a safe write. In
+particular, equal punch counts cannot establish equal punch values. This command
+is ready for a future raw post-write capture; the existing Config+ trace ended
+before that read.
 
 `just sportident-owner-verification-check` passes six shared comparison/replay
 tests and three desktop command tests. An end-to-end offline command smoke test

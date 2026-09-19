@@ -229,6 +229,33 @@ class DesktopSportIdentReadoutServiceTest {
         assertTrue(port.closed)
     }
 
+    @Test
+    fun continuousReadCallsStationAndRemovalHooksAndReleasesPortOnStop() {
+        val port = FakePort()
+        val events = mutableListOf<String>()
+        var active = true
+        val service = DesktopSportIdentReadoutService(
+            portProvider = FakePortProvider(listOf(port)),
+            connectStation = { it.open(0); connection(modeCode = 8) },
+            readCard = { download(siNumber = 2450662) },
+            waitAfterSuccessfulCard = { _, _ -> events += "removed"; active = false }
+        )
+
+        val count = service.downloadUntilTimeout(
+            maxCards = Int.MAX_VALUE,
+            onDownload = { events += "read" },
+            shouldContinue = { active },
+            continueAfterTimeout = true,
+            onStationConnected = { _, station -> events += "station ${station.serialNumber}" },
+            beforeFirstRead = { events += "ready" }
+        )
+
+        assertEquals(1, count)
+        assertEquals(listOf("station 554900", "ready", "read", "removed"), events)
+        assertFalse(port.isOpen)
+        assertTrue(port.closed)
+    }
+
     private class FakePortProvider(private val ports: List<DesktopSerialPort>) : DesktopSerialPortProvider {
         override fun listPorts(): List<DesktopSerialPort> = ports
         override fun getPort(systemPortPath: String): DesktopSerialPort =

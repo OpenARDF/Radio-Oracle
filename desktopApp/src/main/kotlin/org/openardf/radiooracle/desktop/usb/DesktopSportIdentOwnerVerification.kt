@@ -23,7 +23,7 @@ object DesktopSportIdentOwnerVerification {
         return try {
             when (args.firstOrNull()) {
                 "--help", "help" -> {
-                    out.println("capture <expected-station> <expected-card> <new-output-file> | compare <sdk-read-json> <native-read-json>")
+                    out.println("capture <expected-station> <expected-card> <new-output-file> | compare <sdk-read-json> <native-read-json> | diff-native <before-native-json> <after-native-json>")
                     0
                 }
                 "capture" -> {
@@ -48,7 +48,15 @@ object DesktopSportIdentOwnerVerification {
                     out.println(SportIdentOwnerNameProgramming.json.encodeToString(comparison))
                     if (comparison.matches) 0 else 2
                 }
-                else -> error("Choose capture or compare; no card programming is supported by this command.")
+                "diff-native" -> {
+                    require(args.size == 3) { "Usage: diff-native <before-native-json> <after-native-json>" }
+                    val before = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerReadFixture>(readEvidence(args[1]))
+                    val after = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerReadFixture>(readEvidence(args[2]))
+                    val diff = SportIdentOwnerReadVerification.diffNative(before, after)
+                    out.println(SportIdentOwnerNameProgramming.json.encodeToString(diff))
+                    0 // A valid diff is an observation, not a preservation verdict.
+                }
+                else -> error("Choose capture, compare, or diff-native; no card programming is supported by this command.")
             }
         } catch (error: Exception) {
             err.println("Owner-read verification failed: ${error.message}")

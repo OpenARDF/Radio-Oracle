@@ -66,6 +66,30 @@ class SportIdentOwnerReadVerificationTest {
         assertFalse(original == changed)
         assertTrue(SportIdentOwnerReadVerification.compare(reference, original).matches)
         assertTrue(SportIdentOwnerReadVerification.compare(reference, changed).matches)
+        val diff = SportIdentOwnerReadVerification.diffNative(original, changed)
+        assertEquals(listOf(SportIdentOwnerReadByteChange(1, 8, 0, 99)), diff.byteChanges)
+        assertEquals(diff.byteChanges, diff.changesOutsideOwnerRegion)
+        assertTrue(diff.samePunchCount)
+    }
+
+    @Test fun nativeDiffReportsOwnerChangesAndIdentityWithoutCallingThemVerified() {
+        val before = fixture()
+        val after = fixture(first = "Donald")
+        val diff = SportIdentOwnerReadVerification.diffNative(before, after)
+        assertEquals("Daisy", diff.before.firstName)
+        assertEquals("Donald", diff.after.firstName)
+        assertTrue(diff.sameStation && diff.sameCard && diff.samePunchCount)
+        assertTrue(diff.byteChanges.isNotEmpty())
+        assertTrue(diff.byteChanges.all { it.blockNumber == 0 && it.offset in 0x20..0x7f })
+        assertTrue(diff.changesOutsideOwnerRegion.isEmpty())
+        assertTrue(SportIdentOwnerNameProgramming.json.encodeToString(diff).contains("not write verification"))
+
+        val wrongIdentity = SportIdentOwnerReadVerification.diffNative(before, fixture(cardNumber = 2450663))
+        assertFalse(wrongIdentity.sameCard)
+        assertTrue(wrongIdentity.changesOutsideOwnerRegion.isNotEmpty())
+        assertFailsWith<IllegalArgumentException> {
+            SportIdentOwnerReadVerification.diffNative(before, after.copy(blocks = after.blocks.take(1)))
+        }
     }
 
     private fun fixture(first: String = "Daisy", last: String = "Duck", count: Int = 1, series: Int = 2,
