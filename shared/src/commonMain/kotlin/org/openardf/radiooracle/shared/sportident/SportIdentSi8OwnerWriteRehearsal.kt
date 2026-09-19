@@ -14,6 +14,7 @@ enum class SportIdentSi8OwnerWriteStopReason {
     UNEXPECTED_REPLY,
     READBACK_MISMATCH,
     INVALID_READBACK,
+    TRANSPORT_FAILURE,
     CANCELLED
 }
 
@@ -84,6 +85,12 @@ class SportIdentSi8OwnerWriteRehearsal(
     fun cancel() {
         check(stage != SportIdentSi8OwnerWriteStage.VERIFIED) { "Verified rehearsal is already complete." }
         if (stage != SportIdentSi8OwnerWriteStage.STOPPED) stop(SportIdentSi8OwnerWriteStopReason.CANCELLED)
+    }
+
+    /** A short write, serial failure, or unsolicited input leaves the outcome uncertain. */
+    fun abortTransport() {
+        check(stage != SportIdentSi8OwnerWriteStage.VERIFIED) { "Verified rehearsal is already complete." }
+        if (stage != SportIdentSi8OwnerWriteStage.STOPPED) stop(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE)
     }
 
     private fun stop(reason: SportIdentSi8OwnerWriteStopReason) {

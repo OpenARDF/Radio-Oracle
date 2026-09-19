@@ -357,7 +357,7 @@ provided a paired native capture as described below.
 
 `just sportident-owner-verification-check` covers the shared read comparison,
 write planner, reply sequence, write rehearsal, and desktop verification
-commands. An end-to-end offline command smoke test
+commands, including the desktop fake-serial transport. An end-to-end offline command smoke test
 also passes with synthetic files whose paths contain spaces. These fixtures are
 test data, not new hardware acceptance. The Mac paired capture below adds
 byte-level evidence for one 12-to-11-byte name change. More lengths and
@@ -505,6 +505,18 @@ cannot prove read freshness, and the `00 0a` reply bytes still have unknown
 semantics. A future desktop transport must verify the card just before writing,
 send each frame at most once, stop on ambiguous outcomes, and obtain a fresh
 independent read before reporting success.
+
+### Internal desktop word transport
+
+An internal desktop adapter now consumes the shared rehearsal using the existing
+serial port and buffered frame reader. It writes each exact planned frame once,
+examines the first reply even when its CRC is invalid, and stops on a short
+write, serial exception, timeout, NAK, unfamiliar reply, or extra bytes already
+buffered after a reply. Keeping one frame reader across the three words prevents
+coalesced replies from being mistaken for replies to later writes. Fake-port
+tests cover the captured exchange and these failure paths. No UI, CLI, or live
+card path constructs this adapter yet; a fresh same-session card preflight and
+independent read-back still have to be integrated and validated on hardware.
 
 ### SDK provenance and licensing
 

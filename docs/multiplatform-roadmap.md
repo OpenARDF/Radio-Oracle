@@ -580,6 +580,9 @@ mid-term goal on Android and desktop.
   their unknown status bytes as write success. A transport-free shared rehearsal
   now gates each planned word on its observed reply, stops without retry on
   missing or unfamiliar replies, and requires whole-card read-back comparison.
+  An internal desktop serial adapter passes exact planned frames and first
+  replies through that shared sequence and has passed fake-port failure tests;
+  it is not exposed to the UI or CLI and has not written a card.
   Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before

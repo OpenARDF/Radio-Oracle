@@ -47,6 +47,10 @@ internal class DesktopSportIdentFrameStream(
     var lastRawRead: ByteArray? = null
         private set
 
+    /** Remaining bytes from the same serial read must not become the next write's reply. */
+    val hasBufferedBytes: Boolean
+        get() = buffered.isNotEmpty()
+
     fun nextFrame(
         deadlineMillis: Long,
         requireValidCrc: Boolean = true,
