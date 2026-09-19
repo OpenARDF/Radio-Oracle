@@ -698,6 +698,21 @@ rejection. It establishes one complete Kotlin exchange and read-back on this
 station/card combination; interruption behavior, other stations, and card
 families remain unverified.
 
+### Between-word queued-input guard
+
+The desktop serial adapter now checks the driver's already-queued input before
+each owner word, including the first. Any queued byte or failure to inspect the
+queue stops the one-shot attempt without sending the next word. Because intent
+was persisted before the exchange, the recovery record remains pending even
+when this check stops before the first word; read-back is not started.
+Fake-port tests cover input before the first and second words, queue-check
+failure, and transaction-level recovery persistence. A read-only probe on Mac
+station 554900 found an empty queue in 0 ms, then received the complete
+SI-Card8 2450662 insertion event through this nonblocking path. It sent no
+owner word. This guard catches card events already waiting between replies, but
+cannot prevent removal immediately after the check. Physical interruption of
+an owner-word exchange remains an open hardware gate.
+
 ### SDK provenance and licensing
 
 The library used here came from the private archive

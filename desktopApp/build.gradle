@@ -551,6 +551,16 @@ tasks.register("desktopUsbCardPresenceProbe", JavaExec) {
     args(providers.gradleProperty("siOwnerStation").get(), providers.gradleProperty("siOwnerCard").get())
 }
 
+tasks.register("desktopUsbQueuedInputProbe", JavaExec) {
+    group = "verification"
+    description = "Checks queued SI-card insertion bytes through the nonblocking desktop serial path; read-only."
+
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentQueuedInputProbeKt")
+    args(providers.gradleProperty("siOwnerStation").get(), providers.gradleProperty("siOwnerCard").get())
+}
+
 tasks.register("desktopUsbCardLoopProbe", JavaExec) {
     group = "verification"
     description = "Keeps a SPORTident station session open and downloads multiple supported SI cards."

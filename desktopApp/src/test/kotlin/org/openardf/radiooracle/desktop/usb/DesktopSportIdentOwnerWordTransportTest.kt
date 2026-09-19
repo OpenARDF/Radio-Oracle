@@ -55,6 +55,33 @@ class DesktopSportIdentOwnerWordTransportTest {
     }
 
     @Test
+    fun queuedInputStopsBeforeTheNextOwnerWord() {
+        listOf(1, 2).forEach { nextWord ->
+            val port = FakePort(capturedReplies,
+                queuedBeforeWord = nextWord to byteArrayOf(SportIdentProtocol.STX,
+                    SportIdentProtocol.SI_CARD_REMOVED))
+            val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
+
+            transport(port).exchange(rehearsal)
+
+            assertEquals(nextWord - 1, port.writeRequests.size)
+            assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, rehearsal.stage)
+            assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, rehearsal.stopReason)
+        }
+    }
+
+    @Test
+    fun unavailableQueueCheckStopsBeforeAnyOwnerWord() {
+        val port = FakePort(capturedReplies, throwOnAvailable = true)
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
+
+        assertThrows(IllegalStateException::class.java) { transport(port).exchange(rehearsal) }
+
+        assertEquals(0, port.writeRequests.size)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, rehearsal.stopReason)
+    }
+
+    @Test
     fun exposesTheFirstUnexpectedReplyForDiagnosisWithoutSendingAnotherWord() {
         val unfamiliar = SportIdentProtocol.buildExtendedMessage(
             SportIdentProtocol.WRITE_SI_CARD_WORD, byteArrayOf(1, 0x0a, 0x08))
@@ -143,7 +170,9 @@ class DesktopSportIdentOwnerWordTransportTest {
     private class FakePort(
         chunks: List<ByteArray>,
         private val writeLimit: Int? = null,
-        private val throwOnRead: Boolean = false
+        private val throwOnRead: Boolean = false,
+        private val queuedBeforeWord: Pair<Int, ByteArray>? = null,
+        private val throwOnAvailable: Boolean = false
     ) : DesktopSerialPort {
         private val pending = ArrayDeque(chunks)
         val writeRequests = mutableListOf<ByteArray>()
@@ -160,6 +189,11 @@ class DesktopSportIdentOwnerWordTransportTest {
         override fun read(maxBytes: Int): ByteArray {
             if (throwOnRead) error("Serial read failed")
             return pending.removeFirstOrNull() ?: ByteArray(0)
+        }
+        override fun readAvailable(maxBytes: Int): ByteArray {
+            if (throwOnAvailable) error("Cannot inspect queued serial input")
+            return queuedBeforeWord?.takeIf { it.first == writeRequests.size + 1 }
+                ?.second?.copyOf() ?: byteArrayOf()
         }
     }
 

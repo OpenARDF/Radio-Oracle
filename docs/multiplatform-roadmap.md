@@ -615,8 +615,13 @@ mid-term goal on Android and desktop.
   The native transaction now reuses the desktop recovery record: it persists
   intent before the first word, blocks another attempt after uncertain outcomes
   or restart, and clears only after exact two-block native read-back. Continued
-  card presence between commands, physical interruption behavior, and
-  independent live read-back after a Kotlin write remain unverified.
+  card presence between commands and physical interruption behavior remain
+  unverified.
+  The desktop sender now stops before the next owner word if bytes are already
+  queued by the serial driver, or if the queue cannot be inspected. Fake-port
+  tests verify the stop and persistent recovery record. A read-only Mac check
+  observed an empty queue and then SI-Card8 insertion through the nonblocking
+  path; interruption behavior during an owner-word exchange remains unverified.
   A read-only command now exercises that exact request's recovery, station,
   fresh-read, name/plan, and seated-card gates without writing. It passed on
   Mac station 554900 and SI-Card8 2450662 with 11 punches and a hypothetical

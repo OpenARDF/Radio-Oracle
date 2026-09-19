@@ -59,6 +59,10 @@ interface DesktopSerialPort {
     fun close()
     fun write(bytes: ByteArray): Int
     fun read(maxBytes: Int): ByteArray
+
+    /** Read only bytes already queued by the driver; never wait for new input. */
+    fun readAvailable(maxBytes: Int): ByteArray =
+        error("Nonblocking serial reads are not available on this port.")
 }
 
 interface DesktopSerialPortProvider {

@@ -74,4 +74,15 @@ private class JSerialCommDesktopSerialPort(
         val read = port.readBytes(buffer, buffer.size)
         return if (read > 0) buffer.copyOf(read) else byteArrayOf()
     }
+
+    override fun readAvailable(maxBytes: Int): ByteArray {
+        require(maxBytes > 0)
+        val available = port.bytesAvailable()
+        check(available >= 0) { "Could not check queued serial input." }
+        if (available == 0) return byteArrayOf()
+        val buffer = ByteArray(minOf(maxBytes, available))
+        val read = port.readBytes(buffer, buffer.size)
+        check(read > 0) { "Queued serial input could not be read." }
+        return buffer.copyOf(read)
+    }
 }

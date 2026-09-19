@@ -85,6 +85,10 @@ sportident-owner-capture expected_station expected_card output:
 sportident-card-presence-probe expected_station expected_card:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopUsbCardPresenceProbe {{quote("-PsiOwnerStation=" + expected_station)}} {{quote("-PsiOwnerCard=" + expected_card)}}
 
+# Read-only check of the nonblocking serial queue used by the native owner-word sender.
+sportident-queued-input-probe expected_station expected_card:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopUsbQueuedInputProbe {{quote("-PsiOwnerStation=" + expected_station)}} {{quote("-PsiOwnerCard=" + expected_card)}}
+
 # Validate one exact native SI-Card8 write request on hardware without writing the card.
 sportident-owner-readiness request:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerReadiness {{quote("-PsiOwnerWriteRequest=" + request)}}

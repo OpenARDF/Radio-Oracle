@@ -105,6 +105,28 @@ class DesktopSportIdentOwnerWriteTransactionTest {
     }
 
     @Test
+    fun queuedCardEventBeforeOrBetweenWordsRetainsRecoveryAndNeverStartsReadback() {
+        listOf(1, 2).forEach { nextWord ->
+            val port = readyPort(replies, queuedBeforeWord = nextWord)
+            val store = DesktopSportIdentOwnerRecoveryStore(
+                temporary.root.toPath().resolve("recovery-$nextWord.json"))
+            val transaction = transaction(port, recoveryStore = store,
+                verifier = DesktopSportIdentOwnerReadbackVerifier(
+                awaitTargetRemoval = { _, _ -> error("Read-back started after queued card event") },
+                readAfterReinsertion = { error("Read-back started after queued card event") }
+            ))
+
+            val outcome = transaction.execute(request)
+
+            assertFalse(outcome.verified)
+            assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, outcome.stopReason)
+            assertEquals(nextWord - 1, port.ownerWordWrites.size)
+            assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), store.load())
+            assertEquals(1, port.closeCount)
+        }
+    }
+
+    @Test
     fun missingRemovalCannotReportVerificationAfterAllThreeReplies() {
         val port = readyPort(replies)
         val transaction = transaction(port, verifier = DesktopSportIdentOwnerReadbackVerifier(
@@ -228,11 +250,12 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         temporary.root.toPath().resolve("recovery.json")
     )
 
-    private fun readyPort(replies: List<ByteArray>, failAfterReads: Int? = null) =
+    private fun readyPort(replies: List<ByteArray>, failAfterReads: Int? = null,
+                          queuedBeforeWord: Int? = null) =
         FakePort(listOf(SportIdentProtocol.buildExtendedMessage(
             SportIdentProtocol.GET_SI_CARD8_9_SIAC,
             byteArrayOf(0, 0, 0) + download("Daisy;Duck;").blocks.first().data
-        )) + replies, failAfterReads)
+        )) + replies, failAfterReads, queuedBeforeWord)
 
     private fun download(owner: String, changedPunchByte: Byte = 0): DesktopSportIdentCardBlockDownload {
         val block0 = ByteArray(128)
@@ -249,7 +272,8 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             listOf(SportIdentCardBlock(0, block0), SportIdentCardBlock(1, block1)), readout)
     }
 
-    private class FakePort(chunks: List<ByteArray>, private val failAfterReads: Int? = null) : DesktopSerialPort {
+    private class FakePort(chunks: List<ByteArray>, private val failAfterReads: Int? = null,
+                           private val queuedBeforeWord: Int? = null) : DesktopSerialPort {
         private val pending = ArrayDeque(chunks)
         override val info = DesktopSerialPortInfo("/dev/cu.fake", "Fake SPORTident",
             SportIdentUsbDevice.VENDOR_ID, SportIdentUsbDevice.PRODUCT_ID, "fake")
@@ -277,6 +301,10 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             readCount++
             return pending.removeFirstOrNull() ?: ByteArray(0)
         }
+        override fun readAvailable(maxBytes: Int) =
+            if (queuedBeforeWord == ownerWordWrites.size + 1)
+                byteArrayOf(SportIdentProtocol.STX, SportIdentProtocol.SI_CARD_REMOVED)
+            else byteArrayOf()
     }
 
     private fun String.bytes() = split(' ').map { it.toInt(16).toByte() }.toByteArray()

@@ -24,12 +24,15 @@ internal class DesktopSportIdentOwnerWordTransport(
         }
         var wordNumber = 0
         while (rehearsal.stage == SportIdentSi8OwnerWriteStage.READY_FOR_WORD) {
-            if (replies.hasBufferedBytes) {
-                rehearsal.abortTransport()
-                return
-            }
-            val frame = rehearsal.takeNextWordFrame()
             try {
+                // A card event can arrive after the preceding reply without
+                // sharing its serial read. Do not issue another owner word
+                // while any input is already waiting in the driver queue.
+                if (replies.hasBufferedBytes || port.readAvailable(512).isNotEmpty()) {
+                    rehearsal.abortTransport()
+                    return
+                }
+                val frame = rehearsal.takeNextWordFrame()
                 if (port.write(frame) != frame.size) {
                     rehearsal.abortTransport()
                     return
