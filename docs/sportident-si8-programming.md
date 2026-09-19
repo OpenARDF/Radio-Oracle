@@ -357,7 +357,8 @@ provided a paired native capture as described below.
 
 `just sportident-owner-verification-check` covers the shared read comparison,
 write planner, reply sequence, write rehearsal, and desktop verification
-commands, including the desktop fake-serial transport and read preflight. An
+commands, including the desktop fake-serial transport, read preflight, and
+read-back verifier. An
 end-to-end offline command smoke test
 also passes with synthetic files whose paths contain spaces. These fixtures are
 test data, not new hardware acceptance. The Mac paired capture below adds
@@ -534,6 +535,24 @@ No application or CLI path invokes this preflight or the word transport. The
 reader's completed download does not establish continued card presence; a live
 writer must handle removal between reading and writing and obtain an independent
 post-write read. There has still been no direct Kotlin hardware write.
+
+### Independent Kotlin read-back boundary
+
+An internal desktop verifier now waits for a removal event for the target card,
+then uses the existing block reader to wait for a new insert and complete card
+download on the open port. It checks the insert event, parsed readout, raw card
+number and punch count against the target owned by the shared rehearsal. The
+shared comparison then checks both 128-byte blocks against the planned card
+image. Missing removal or reinsertion, a different card, incomplete blocks, or
+changed punch bytes cannot mark the rehearsal verified. The word transport also
+rejects extra bytes buffered after its third reply so they cannot disappear
+when the event reader starts. Fake-port tests cover these boundaries.
+
+The preflight, word transport, and read-back verifier have not yet been composed
+into an application or CLI flow. Their fake-port tests do not establish that
+the station emits the expected removal/reinsertion events after a Kotlin write,
+nor that the observed `0xEA` reply prefix denotes success. No direct Kotlin
+hardware write has occurred.
 
 ### SDK provenance and licensing
 

@@ -54,6 +54,19 @@ class DesktopSportIdentOwnerWordTransportTest {
     }
 
     @Test
+    fun extraBytesAfterFinalReplyCannotBeLostBeforeReadback() {
+        val port = FakePort(listOf(capturedReplies[0], capturedReplies[1],
+            capturedReplies[2] + byteArrayOf(SportIdentProtocol.NAK)))
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, fixture())
+
+        transport(port).exchange(rehearsal)
+
+        assertEquals(3, port.writeRequests.size)
+        assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, rehearsal.stage)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, rehearsal.stopReason)
+    }
+
+    @Test
     fun wrongCommandBadCrcNakAndTimeoutStopWithoutRetry() {
         val wrongCommand = SportIdentProtocol.buildExtendedMessage(
             SportIdentProtocol.PROBE_COMMAND, byteArrayOf(0x4d))

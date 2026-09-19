@@ -40,5 +40,8 @@ internal class DesktopSportIdentOwnerWordTransport(
                 throw error
             }
         }
+        if (rehearsal.stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK && replies.hasBufferedBytes) {
+            rehearsal.abortTransport()
+        }
     }
 }

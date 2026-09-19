@@ -12,6 +12,7 @@ enum class SportIdentSi8OwnerWriteStopReason {
     NO_REPLY,
     NEGATIVE_ACKNOWLEDGEMENT,
     UNEXPECTED_REPLY,
+    READBACK_NOT_OBSERVED,
     READBACK_MISMATCH,
     INVALID_READBACK,
     TRANSPORT_FAILURE,
@@ -35,6 +36,9 @@ class SportIdentSi8OwnerWriteRehearsal(
         private set
     var stopReason: SportIdentSi8OwnerWriteStopReason? = null
         private set
+
+    val targetStationNumber: Int get() = request.stationNumber
+    val targetCardNumber: Int get() = request.cardNumber
 
     /** Returns only the next planned frame; it may not be requested again. */
     fun takeNextWordFrame(): ByteArray {
@@ -91,6 +95,16 @@ class SportIdentSi8OwnerWriteRehearsal(
     fun abortTransport() {
         check(stage != SportIdentSi8OwnerWriteStage.VERIFIED) { "Verified rehearsal is already complete." }
         if (stage != SportIdentSi8OwnerWriteStage.STOPPED) stop(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE)
+    }
+
+    fun stopForMissingReadback() {
+        check(stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK) { "No SI-Card8 read-back is pending." }
+        stop(SportIdentSi8OwnerWriteStopReason.READBACK_NOT_OBSERVED)
+    }
+
+    fun rejectReadback() {
+        check(stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK) { "No SI-Card8 read-back is pending." }
+        stop(SportIdentSi8OwnerWriteStopReason.INVALID_READBACK)
     }
 
     private fun stop(reason: SportIdentSi8OwnerWriteStopReason) {

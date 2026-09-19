@@ -585,8 +585,11 @@ mid-term goal on Android and desktop.
   it is not exposed to the UI or CLI and has not written a card.
   An internal same-connection preflight now checks the station, fresh SI-Card8
   block read, card identity, current names, and request before any handoff,
-  with fake-port tests; continued card presence and independent live read-back
-  remain unverified.
+  with fake-port tests. An internal read-back verifier now requires target-card
+  removal, a new insertion and complete download, and a two-block comparison;
+  it has fake-port coverage but no live Kotlin-write evidence or UI/CLI wiring.
+  Continued card presence during a write and independent live read-back remain
+  unverified.
   Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,
   and permission to distribute a replacement still need resolution before
