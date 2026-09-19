@@ -4,6 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class SportIdentSi8OwnerWordWritePlannerTest {
     private val request = SportIdentOwnerNameWriteRequest(
@@ -57,6 +59,30 @@ class SportIdentSi8OwnerWordWritePlannerTest {
         val observedShape = fixture(owner = "Daisy;Duck;\u00eese;\u00ee")
         assertEquals(observedShape.blocks, replay.blocks)
         assertEquals("Daisy", SportIdentOwnerReadVerification.nativeRead(replay).firstName)
+    }
+
+    @Test
+    fun comparesPlannedWholeCardImageWithIndependentAfterRead() {
+        val before = fixture(owner = "Donald;Duck;se;\u00ee")
+        val after = fixture(owner = "Daisy;Duck;\u00eese;\u00ee")
+        val shorter = request.copy(expectedFirstName = "Donald", firstName = "Daisy")
+        val match = SportIdentSi8OwnerWordWritePlanner.compareToObserved(shorter, before, after)
+        assertTrue(match.matches)
+        assertTrue(match.predictedVersusObserved.byteChanges.isEmpty())
+        assertEquals(3, match.plannedFramesHex.size)
+
+        val changedBlock1 = decode(after.blocks.single { it.blockNumber == 1 }).also { it[8] = 99 }
+        val changed = SportIdentOwnerReadVerification.capture(after.stationNumber,
+            listOf(SportIdentCardBlock(0, decode(after.blocks.single { it.blockNumber == 0 })),
+                SportIdentCardBlock(1, changedBlock1)))
+        val mismatch = SportIdentSi8OwnerWordWritePlanner.compareToObserved(shorter, before, changed)
+        assertFalse(mismatch.matches)
+        assertEquals(listOf(SportIdentOwnerReadByteChange(1, 8, 0, 99)), mismatch.predictedVersusObserved.byteChanges)
+        assertFalse(SportIdentSi8OwnerWordWritePlanner.compareToObserved(shorter, before,
+            after.copy(stationNumber = 593928)).matches)
+        assertFailsWith<IllegalArgumentException> {
+            SportIdentSi8OwnerWordWritePlanner.compareToObserved(shorter, before, after.copy(blocks = after.blocks.take(1)))
+        }
     }
 
     @Test

@@ -611,10 +611,13 @@ tasks.register("desktopSportIdentOwnerVerification", JavaExec) {
         args(mode, providers.gradleProperty("siOwnerSdkRead").get(), providers.gradleProperty("siOwnerNativeRead").get())
     } else if (mode == "diff-native") {
         args(mode, providers.gradleProperty("siOwnerBeforeRead").get(), providers.gradleProperty("siOwnerAfterRead").get())
+    } else if (mode == "compare-plan") {
+        args(mode, providers.gradleProperty("siOwnerWriteRequest").get(),
+            providers.gradleProperty("siOwnerBeforeRead").get(), providers.gradleProperty("siOwnerAfterRead").get())
     } else if (mode == "help") {
         args("--help")
     } else {
-        throw new GradleException("siOwnerMode must be capture, compare, or diff-native")
+        throw new GradleException("siOwnerMode must be capture, compare, diff-native, or compare-plan")
     }
 }
 

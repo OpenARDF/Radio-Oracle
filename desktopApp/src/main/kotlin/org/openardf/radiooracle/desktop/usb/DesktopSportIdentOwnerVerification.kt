@@ -7,9 +7,11 @@ import java.nio.file.StandardOpenOption
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameProgramming
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReferenceRead
+import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWordWritePlanner
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
@@ -23,7 +25,7 @@ object DesktopSportIdentOwnerVerification {
         return try {
             when (args.firstOrNull()) {
                 "--help", "help" -> {
-                    out.println("capture <expected-station> <expected-card> <new-output-file> | compare <sdk-read-json> <native-read-json> | diff-native <before-native-json> <after-native-json>")
+                    out.println("capture <expected-station> <expected-card> <new-output-file> | compare <sdk-read-json> <native-read-json> | diff-native <before-native-json> <after-native-json> | compare-plan <request-json> <before-native-json> <after-native-json>")
                     0
                 }
                 "capture" -> {
@@ -56,7 +58,16 @@ object DesktopSportIdentOwnerVerification {
                     out.println(SportIdentOwnerNameProgramming.json.encodeToString(diff))
                     0 // A valid diff is an observation, not a preservation verdict.
                 }
-                else -> error("Choose capture, compare, or diff-native; no card programming is supported by this command.")
+                "compare-plan" -> {
+                    require(args.size == 4) { "Usage: compare-plan <request-json> <before-native-json> <after-native-json>" }
+                    val request = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerNameWriteRequest>(readEvidence(args[1]))
+                    val before = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerReadFixture>(readEvidence(args[2]))
+                    val after = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerReadFixture>(readEvidence(args[3]))
+                    val comparison = SportIdentSi8OwnerWordWritePlanner.compareToObserved(request, before, after)
+                    out.println(SportIdentOwnerNameProgramming.json.encodeToString(comparison))
+                    if (comparison.matches) 0 else 2
+                }
+                else -> error("Choose capture, compare, diff-native, or compare-plan; no card programming is supported by this command.")
             }
         } catch (error: Exception) {
             err.println("Owner-read verification failed: ${error.message}")

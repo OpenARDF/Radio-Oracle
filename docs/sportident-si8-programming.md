@@ -355,8 +355,8 @@ particular, equal punch counts cannot establish equal punch values. The existing
 Config+ trace ended before a raw post-write read; a later Mac SDK transaction
 provided a paired native capture as described below.
 
-`just sportident-owner-verification-check` passes seven shared comparison/replay
-tests and four desktop command tests. An end-to-end offline command smoke test
+`just sportident-owner-verification-check` covers the shared read comparison
+and desktop verification commands. An end-to-end offline command smoke test
 also passes with synthetic files whose paths contain spaces. These fixtures are
 test data, not new hardware acceptance. The Mac paired capture below adds
 byte-level evidence for one 12-to-11-byte name change. More lengths and
@@ -464,6 +464,26 @@ The Mac capture supports only one-byte `0xEE` padding in the third word; the
 planner still refuses 10-byte and other unobserved lengths, or a longer existing
 string that could leave trailing bytes. Response/error characterization,
 interruption safety, and further lengths are needed before attempting a direct
+Kotlin hardware write.
+
+The shared planner can now replay its proposed word frames into a copy of a
+complete before-read snapshot and compare all 256 predicted card bytes with an
+independent after-read snapshot. The offline desktop command takes the exact
+write request and those two native-read files:
+
+```sh
+just sportident-owner-compare-plan /tmp/si-request.json /tmp/si-before.json /tmp/si-after.json
+```
+
+The JSON report includes the planned frame hex, predicted and observed card
+identities and owner names, and every differing byte. Exit code 0 means the
+predicted and observed card images match, 2 means a mismatch, and 1 means
+invalid evidence or an unsupported plan. The command opens no reader and sends
+no write. Replaying the approved `Donald` / `Duck` to `Daisy` / `Duck` request
+against the paired Mac native captures returned a match: station 554900, card
+2450662, 11 control punches, and zero differing bytes across both blocks. This
+confirms the planned card image for that one transaction, including unchanged
+punch bytes; it does not establish which frames the SDK sent or validate a
 Kotlin hardware write.
 
 ### SDK provenance and licensing

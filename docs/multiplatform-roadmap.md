@@ -573,7 +573,9 @@ mid-term goal on Android and desktop.
   both SI-Card8 blocks. A paired Mac SDK
   12-to-11-byte name write showed `0xEE` padding in the twelfth owner byte and
   no other block changes; the shared planner reproduces that owner-byte pattern
-  offline. A shared offline sequence also matches only the three CRC-valid
+  offline. Replaying the planned frames into the complete before snapshot now
+  matches the independent after snapshot byte for byte for that one Mac SDK
+  transaction. A shared offline sequence also matches only the three CRC-valid
   `0xEA` replies observed in the Config+ trace, in order; it does not interpret
   their unknown status bytes as write success. Further short- and long-name encoding,
   trailing-byte cleanup, response errors, interruption safety, compatibility,

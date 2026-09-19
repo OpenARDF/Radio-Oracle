@@ -89,6 +89,10 @@ sportident-owner-compare sdk_read native_read:
 sportident-owner-diff-native before_read after_read:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=diff-native {{quote("-PsiOwnerBeforeRead=" + before_read)}} {{quote("-PsiOwnerAfterRead=" + after_read)}}
 
+# Offline check of planned Kotlin owner-word bytes against independent native reads; never writes a card.
+sportident-owner-compare-plan request before_read after_read:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=compare-plan {{quote("-PsiOwnerWriteRequest=" + request)}} {{quote("-PsiOwnerBeforeRead=" + before_read)}} {{quote("-PsiOwnerAfterRead=" + after_read)}}
+
 sportident-owner-verification-check:
     just gradle :shared:desktopTest --tests '*SportIdentOwnerReadVerificationTest' :desktopApp:test --tests '*DesktopSportIdentOwnerVerificationTest'
 

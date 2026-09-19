@@ -1,5 +1,17 @@
 package org.openardf.radiooracle.shared.sportident
 
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class SportIdentSi8OwnerWritePlanComparison(
+    val plannedFramesHex: List<String>,
+    val predictedVersusObserved: SportIdentOwnerNativeReadDiff
+) {
+    val matches: Boolean = predictedVersusObserved.sameStation && predictedVersusObserved.sameCard &&
+        predictedVersusObserved.byteChanges.isEmpty()
+    val scope: String = "Offline planned card bytes versus an independent native read; transmitted frames and write success are not proven"
+}
+
 /**
  * Reproduces the one observed Config+ SI-Card8 owner-write shape offline.
  * Nothing calls a serial transport here; other lengths and acknowledgement
@@ -57,5 +69,36 @@ object SportIdentSi8OwnerWordWritePlanner {
                 paddedText.copyOfRange(index * WORD_BYTES, (index + 1) * WORD_BYTES)
             SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.WRITE_SI_CARD_WORD, payload)
         }
+    }
+
+    /** Replay planned word payloads into a copy of the before blocks; never opens a reader. */
+    fun compareToObserved(request: SportIdentOwnerNameWriteRequest, before: SportIdentOwnerReadFixture,
+        observedAfter: SportIdentOwnerReadFixture): SportIdentSi8OwnerWritePlanComparison {
+        val frames = plan(request, before)
+        val predictedBlocks = before.blocks.map { block ->
+            SportIdentCardBlock(block.blockNumber, ByteArray(SportIdentProtocol.SI_CARD_BLOCK_SIZE) { offset ->
+                block.hexData.substring(offset * 2, offset * 2 + 2).toInt(16).toByte()
+            })
+        }
+        val ownerBlock = predictedBlocks.single { it.blockNumber == 0 }.data
+        frames.forEach { bytes ->
+            val frame = requireNotNull(SportIdentFrameParser.firstFrame(bytes)) { "Planned word frame is invalid." }
+            require(frame.command == SportIdentProtocol.WRITE_SI_CARD_WORD && frame.extended &&
+                frame.crcValid == true && frame.data.size == WORD_BYTES + 1) { "Planned word frame is invalid." }
+            val wordAddress = frame.data[0].toInt() and 0xff
+            require(wordAddress in FIRST_OWNER_WORD until FIRST_OWNER_WORD + frames.size) {
+                "Planned word address is outside the owner text."
+            }
+            frame.data.copyOfRange(1, WORD_BYTES + 1).copyInto(ownerBlock, wordAddress * WORD_BYTES)
+        }
+        val predicted = SportIdentOwnerReadVerification.capture(before.stationNumber, predictedBlocks)
+        val predictedRead = SportIdentOwnerReadVerification.nativeRead(predicted)
+        require(predictedRead.firstName == request.firstName && predictedRead.lastName == request.lastName) {
+            "Planned owner bytes do not parse as the requested names."
+        }
+        return SportIdentSi8OwnerWritePlanComparison(
+            frames.map { bytes -> bytes.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') } },
+            SportIdentOwnerReadVerification.diffNative(predicted, observedAfter)
+        )
     }
 }
