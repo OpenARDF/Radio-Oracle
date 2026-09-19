@@ -566,10 +566,13 @@ mid-term goal on Android and desktop.
   punch-value/settings comparison remain unfinished. A Config+ COM4 capture now
   identifies the three `0xEA` word writes for one successful `Daisy;Duck;` to
   `Donald;Duck;` SI-Card8 transaction. A separate read confirmed the new name
-  and all 11 displayed punches. Short/long-name encoding, trailing-byte cleanup,
-  response errors, interruption safety, compatibility, and permission to
-  distribute a replacement still need resolution before enabling a direct
-  Kotlin writer. SDK read comparison alone does not establish a write protocol.
+  and all 11 displayed punches. A shared Kotlin offline planner now reproduces
+  those three frames from a validated native card snapshot and refuses other
+  byte lengths; it has no hardware sender. Short/long-name encoding,
+  trailing-byte cleanup, response errors, interruption safety, compatibility,
+  and permission to distribute a replacement still need resolution before
+  enabling a direct Kotlin writer. SDK read comparison alone does not establish
+  a write protocol.
 - Add explicit multi-download-station support so desktop can detect multiple
   connected stations, show their serial numbers/modes/ports, let the user choose
   or assign active stations, and prevent independent readout loops from fighting

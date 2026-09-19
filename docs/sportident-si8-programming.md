@@ -380,6 +380,28 @@ those boundaries characterized and fresh read-back verification before it is
 enabled on hardware. The observed Config+ frames also do not resolve any
 licensing or distribution question for a replacement implementation.
 
+### Shared offline write plan
+
+`SportIdentSi8OwnerWordWritePlanner` now uses the existing shared card-read
+fixture and name/consent rules to produce an offline plan. It requires a complete
+SI-Card8 read, the requested station and card, exact existing first/last names,
+and raw owner bytes that agree with those parsed names. For now it accepts only
+a 12-byte ASCII `first;last;` string when the existing text is no longer than
+12 bytes, the three-word shape observed above.
+It builds the three `0xEA` frames through the shared CRC encoder. A test checks
+all three frames against the independent Config+ capture and replays their word
+bytes into a copy of the synthetic pre-write block; the normal Kotlin parser
+then reads the requested names while the punch block remains unchanged.
+
+The planner has no serial transport call and is not wired into desktop or
+Android programming. The fixture itself carries no freshness or card-presence
+guarantee; a future sender must obtain a fresh read and check card identity.
+In particular, the planner refuses a shorter string whose final word would
+require an unverified padding rule, or a longer existing string that could
+leave trailing bytes. A second controlled capture with
+a shorter name, a raw post-write block read, and response/error characterization
+are needed before relaxing this limit or attempting a direct hardware write.
+
 ### SDK provenance and licensing
 
 The library used here came from the private archive
