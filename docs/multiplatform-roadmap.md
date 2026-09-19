@@ -587,7 +587,9 @@ mid-term goal on Android and desktop.
   block read, card identity, current names, and request before any handoff,
   with fake-port tests. An internal read-back verifier now requires target-card
   removal, a new insertion and complete download, and a two-block comparison;
-  it has fake-port coverage but no live Kotlin-write evidence or UI/CLI wiring.
+  an internal desktop transaction composes all three steps and has fake-port
+  coverage for success, missing replies/removal, byte mismatch, and cleanup.
+  It has no live Kotlin-write evidence or UI/CLI wiring.
   Continued card presence during a write and independent live read-back remain
   unverified.
   Further short- and long-name encoding,

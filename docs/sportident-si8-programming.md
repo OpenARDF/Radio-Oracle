@@ -548,11 +548,21 @@ changed punch bytes cannot mark the rehearsal verified. The word transport also
 rejects extra bytes buffered after its third reply so they cannot disappear
 when the event reader starts. Fake-port tests cover these boundaries.
 
-The preflight, word transport, and read-back verifier have not yet been composed
-into an application or CLI flow. Their fake-port tests do not establish that
-the station emits the expected removal/reinsertion events after a Kotlin write,
-nor that the observed `0xEA` reply prefix denotes success. No direct Kotlin
-hardware write has occurred.
+### Internal desktop transaction composition
+
+An internal transaction now composes the same-port preflight, one-shot word
+exchange, and independent read-back. Its terminal outcome includes the shared
+rehearsal state, stop reason, and full-block comparison when available. It only
+starts read-back after all three expected replies; a missing reply stops after
+one attempted word, and a missing removal event or changed non-owner byte
+cannot report success. Fake-port integration tests exercise the complete order,
+no automatic retry, and port cleanup on preflight rejection or transport failure.
+
+No application or CLI path invokes this transaction. Its fake-port tests do not
+establish continued card presence during a write, that the station emits the
+expected removal/reinsertion events after a Kotlin write, or that the observed
+`0xEA` reply prefix denotes success. Interruption recovery must be integrated
+before live use. No direct Kotlin hardware write has occurred.
 
 ### SDK provenance and licensing
 
