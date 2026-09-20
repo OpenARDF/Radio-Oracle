@@ -647,9 +647,13 @@ mid-term goal on Android and desktop.
   negative/wrong-station replies at every word, and process failure immediately
   after saving each attempted-word count. The shared assessment flags a fresh
   image that exceeds that count or changes non-owner bytes. The
-  post-third-word/pre-readback boundary remains a physical test gate. An
-  explicit stop-after-third-reply command and fake-port tests are prepared;
-  they retain recovery evidence and never call the transaction's readback.
+  post-third-word/pre-readback boundary also passed a physical test on
+  2026-09-20: the explicit stop command retained a three-word recovery record,
+  and a separate fresh read matched exactly the completed three-word prefix
+  (`Daisy` / `Duck`), with all 11 punches and all non-owner bytes unchanged.
+  After explicit recovery acknowledgement, a separate Kotlin write restored
+  `Donald` / `Duck`; a final independent capture matched the original two-block
+  baseline byte for byte.
   A read-only Config+ direct read confirmed the VM-attached BSM8 UART1 as
   station 593927, code 10, firmware 657, in SI-card readout mode; its visible
   card entries were historical, so this is station evidence only.

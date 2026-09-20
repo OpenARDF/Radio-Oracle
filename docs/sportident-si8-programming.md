@@ -822,8 +822,18 @@ separate deliberate stop after all three valid word replies but before the
 in-process removal/reinsertion readback. It retains the native recovery record
 with an upper bound of three attempted words and requires an independent fresh
 capture and prefix assessment. Fake-port and shared-state tests pass, including
-an extra-byte case after the third reply; this boundary has not yet been
-exercised on a physical card.
+an extra-byte case after the third reply. On 2026-09-20, the physical stop on
+the spare SI-Card8 received all three expected code-14 replies, then exited
+with a pending three-word recovery record before readback. After removal and
+reinsertion, a separate two-block capture read `Daisy` / `Duck` with all 11
+punches. The offline assessment matched only prefix 3: 11 changed bytes within
+the 12 owner bytes and none elsewhere. The accepted fresh read cleared the
+recovery reminder. A separate read-only preflight confirmed the exact
+`Daisy` / `Duck` to `Donald` / `Duck` request; a normal Kotlin write received all three
+replies and verified on fresh removal/reinsertion readback. A further
+independent capture matched the original two-block `Donald` / `Duck` baseline
+byte for byte, including all 11 punches. The intentional-stop command's
+nonzero exit was expected because it retained the pending recovery record.
 
 A second SPORTident reader, serial 593927, is attached to the Windows VM
 rather than available as a Mac serial port. A read-only Config+ v2.12.0 direct
