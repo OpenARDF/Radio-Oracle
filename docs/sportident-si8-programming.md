@@ -3,8 +3,9 @@
 The desktop product reads SI-Card8 names and previews edits, but does not yet
 write names. The SDK bridge is confined to local test tooling and excluded from
 the desktop product. The direct Kotlin writer remains an experimental CLI:
-several short-name writes and one opt-in seven-word trial verified, while an
-earlier seven-word attempt stopped with a partially changed owner word.
+several short-name writes and one opt-in seven-word trial verified, while two
+seven-word attempts that changed multiple owner bytes stopped at the second
+word and required local SDK repair.
 Name preparation, word planning, reply validation, and recovery assessment live
 in shared Kotlin code for future Android reuse.
 
@@ -965,9 +966,36 @@ identical. The card was left with the `-K` name. The word 2 reply-to-next-write
 interval measured 5.496 ms, and later intervals were 0.074–0.596 ms, so this
 success does not prove a submillisecond timing requirement or explain the
 earlier negative reply. This trial exercised all seven word commands but
-changed only one owner byte. The next hardware gate is a full-length name
-transition that changes several words, with fresh whole-card comparison and
-no automatic retry. The default CLI and desktop UI remain gated.
+changed only one owner byte. The default CLI and desktop UI remain gated.
+
+### Multiword seven-word trial stopped at the second word
+
+On 2026-09-20, a separate complete read confirmed `Penny` /
+`Popandrolopoulos-K`, station 554900, and 11 punches before an approved
+opt-in Kotlin trial toward `Donald` / `Duckandrolopoulos`. Both names occupy
+the same 25-byte owner string, but six of the seven owner words would change.
+The first word at address `0x08` received a valid reply. The second word at
+`0x09` received a negative acknowledgement, 2.430 ms after the first reply;
+the writer stopped without retrying and retained its recovery record.
+
+A fresh, separate two-block read showed `Donay` /
+`Popandrolopoulos-K`. Only block 0 offsets `0x20`, `0x21`, and `0x23` had
+changed, exactly the first planned word's changed bytes. Block 1 and all 11
+punches were unchanged. Read-only recovery assessment matched only the
+one-word prefix. An explicitly approved local SDK write restored `Penny` /
+`Popandrolopoulos-K`; its readback preserved the 11 punches, feedback, and
+character set. A further independent Kotlin two-block capture matched the
+pretrial image byte for byte, after which the recovery record was cleared.
+
+The successful `-J` to `-K` trial therefore establishes seven-command
+transport only for a nearly unchanged card image. It does not establish a
+general multiword name change. The cause of the second-word negative reply
+remains unknown. The Config+ long-name trace on station 593927 and the SDK
+long-name writes prove the card can accept a full name, but do not prove that
+Kotlin's transaction on station 554900 is equivalent. The next gate is to
+isolate the station or transaction difference using a traced known-good write
+and a separately approved controlled Kotlin comparison before enabling
+variable-length writes in the product.
 
 ### SDK provenance and licensing
 

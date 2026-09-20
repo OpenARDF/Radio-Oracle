@@ -691,9 +691,17 @@ mid-term goal on Android and desktop.
   fresh-read recovery. An explicitly opted-in Kotlin seven-word `-J` to `-K`
   trial on Mac station 554900 then received all replies. Its separate complete
   read matched the plan byte for byte: only one owner byte changed and all 11
-  punches were preserved. A full-length transition changing multiple words,
-  cross-station validation, and explanation of the earlier NAK remain before
-  exposing variable-length writes in the product.
+  punches were preserved. A subsequent approved full-length Kotlin trial on
+  station 554900 changed the first owner word, then received a second-word NAK.
+  A fresh read found only that first word changed (`Donay` /
+  `Popandrolopoulos-K`), with all 11 punches intact. An exact local SDK repair
+  restored `Penny` / `Popandrolopoulos-K`; a separate native two-block read
+  matched the pretrial image byte for byte and cleared recovery. The cause of
+  the repeated second-word NAK on multiword changes, cross-station behavior,
+  and a verified full-length Kotlin transition remain before exposing
+  variable-length writes in the product. The next gate is a traced known-good
+  write and controlled cross-station comparison to isolate the transaction
+  difference.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Default-character-set Western letters now use a shared, round-trip-checked
