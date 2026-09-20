@@ -1030,6 +1030,50 @@ identified. The next gate is to compare both stations' complete system
 information and a known-good long-name transaction on station 554900 before
 enabling variable-length writes in the product.
 
+### Config+ transaction with all seven owner words changed
+
+Two further Config+ writes on VM station 593927 separated command count from
+actual changed-word count. First, card 2450662 changed from `Donald` /
+`Duckandrolopoulos` to `Penny` / `Popandrolopoulos`. Config+ sent only six
+`WRITE_SI_CARD_WORD` commands, addresses `0x08`–`0x0D`, followed by `FF 06`:
+the seventh word already contained `3B EE EE EE`. A separate Mac two-block
+read confirmed the shorter name and all 11 punches, with only owner bytes
+changed.
+
+Spare SI-Card8 2450663 provided a genuine seven-changed-word baseline:
+`Minnie` / `Mouseface`, one punch, and owner words `0x0D` and `0x0E` both
+`00 00 00 00`. After an explicitly approved Config+ Apply for `Penny` /
+`Popandrolopoulos-J`, a COM4 API trace captured exactly seven outgoing
+`WRITE_SI_CARD_WORD` frames at `0x08`–`0x0E`, followed by `FF 06`. Every
+transmitted frame, including its CRC, matches the shared Kotlin planner's
+offline proposal. The final frame wrote `3B EE EE EE` at `0x0E`, changing
+that word from zero. The trace's overlapped-read hook did not capture the
+individual station replies for this run, so the result does not establish
+their exact bytes or timing. Its successive host write calls were 155–456 ms
+apart; these are observed Config+ intervals, not a demonstrated timing
+requirement for Kotlin.
+
+A fresh, card-number-guarded Mac read of 2450663 independently confirmed the
+full target name and its original punch. The Kotlin offline plan comparison
+matched the complete postwrite image byte for byte. All seven owner words
+changed; the 26 changed bytes were confined to block 0 offsets `0x20`–`0x3B`,
+and block 1 was identical. During the Config+ verification step, a different
+card (2450662) was briefly inserted; its read was excluded, and the guarded
+Mac capture established the outcome for the intended card. Card 2450663 was
+left as `Penny` / `Popandrolopoulos-J` and removed from the reader.
+
+This confirms that Config+ and the Kotlin planner agree on a seven-word write
+where every word's value changes, and that station 593927 completed it without
+altering the spare card's punch. It does not resolve the second-word NAK seen
+in Kotlin on station 554900. After both readers were attached to macOS, the
+read-only Kotlin station diagnostic found the same 38,400 baud rate, model ID
+`0x9198`, firmware 657, SI MASTER mode code 8, protocol byte 5, 128 KB memory,
+and approximately 164 ms median long-system-info response on both. Station
+code (14 versus 10), serial number, and production date differ; other raw
+system-info offsets differ but have not all been identified. A comparable
+known-good vendor transaction on station 554900 remains the next diagnostic
+gate before widening the Kotlin product write path.
+
 ### SDK provenance and licensing
 
 The library used here came from the private archive

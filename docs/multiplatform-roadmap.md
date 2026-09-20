@@ -703,9 +703,19 @@ mid-term goal on Android and desktop.
   changes, and all 11 punches preserved. Both stations identify as BSM8 UART1;
   their station codes differ. The second-word reply-to-write intervals were
   similar on the failed and successful trials, so the observed gap alone does
-  not explain the station-554900 NAK. Comparing complete station settings,
-  firmware, and a known-good long-name transaction on station 554900 remains
-  necessary before exposing variable-length writes in the product.
+  not explain the station-554900 NAK. A subsequent Config+ trace on station
+  593927 changed all seven owner words on spare card 2450663, including the
+  final word from zero to padded terminator; the outgoing frames matched the
+  shared Kotlin plan byte for byte. An independent, card-number-guarded Mac
+  read matched the planned complete image, retained the card's one punch, and
+  found no changes outside the owner field. That vendor result establishes a
+  genuine seven-changed-word reference but does not establish Kotlin behavior
+  on station 554900. Read-only comparison on macOS found the same model,
+  firmware 657, protocol byte 5, SI MASTER mode, 38,400 baud, memory size,
+  and similar system-info response time on both stations; their station code
+  and several raw system-info bytes differ. A known-good long-name vendor
+  transaction on station 554900 remains necessary before exposing
+  variable-length writes in the product.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Default-character-set Western letters now use a shared, round-trip-checked

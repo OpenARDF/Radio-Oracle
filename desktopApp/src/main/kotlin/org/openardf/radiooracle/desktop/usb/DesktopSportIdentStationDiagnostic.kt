@@ -88,6 +88,14 @@ data class DesktopSportIdentStationDiagnosticResult(
                     "modeCode=${stationInfo.stationModeCode ?: "unknown"} " +
                     "mode=$modeLabel"
             )
+            appendLine(
+                "  firmware=${stationInfo.firmwareVersion ?: "unknown"} " +
+                    "modelId=${stationInfo.modelId ?: "unknown"} " +
+                    "built=${stationInfo.buildDate ?: "unknown"} " +
+                    "memoryKb=${stationInfo.memorySizeKb ?: "unknown"} " +
+                    "protocol=${stationInfo.protocolByte ?: "unknown"} " +
+                    "activeMinutes=${stationInfo.activeTimeMinutes ?: "unknown"}"
+            )
             appendLine("  system-info code bytes: primary=${systemInfoData.getOrNull(1)?.toInt()?.and(0xff)} " +
                 "alternate=${systemInfoData.getOrNull(17)?.toInt()?.and(0xff)}")
             appendLine("  probe timing: ${probeTimingsMs.describeTimings()}")
