@@ -679,6 +679,16 @@ tasks.register("desktopSportIdentNativeOwnerStopAfterTwo", JavaExec) {
         "--stop-after-second-reply")
 }
 
+tasks.register("desktopSportIdentNativeOwnerStopAfterThree", JavaExec) {
+    group = "verification"
+    description = "EXPERIMENTAL: stops after all three acknowledged SI-Card8 owner words, before read-back."
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
+    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+        "--stop-after-third-reply")
+}
+
 tasks.register("desktopSportIdentNativeOwnerRecovery", JavaExec) {
     group = "verification"
     description = "Accepts a fresh complete SI-Card8 read to resolve one pending native-write reminder."

@@ -19,7 +19,7 @@ internal class DesktopSportIdentOwnerWordTransport(
     /** Stops on the first ambiguous outcome; read-back remains a separate step. */
     fun exchange(rehearsal: SportIdentSi8OwnerWriteRehearsal,
         beforeWordAttempt: (Int) -> Unit = {}, stopAfterAcknowledgedWord: Int? = null) {
-        require(stopAfterAcknowledgedWord == null || stopAfterAcknowledgedWord in 1..2)
+        require(stopAfterAcknowledgedWord == null || stopAfterAcknowledgedWord in 1..3)
         check(port.isOpen) { "The SPORTident serial port must already be open." }
         check(rehearsal.stage == SportIdentSi8OwnerWriteStage.READY_FOR_WORD) {
             "The SI-Card8 word exchange is not ready to start."
@@ -46,9 +46,16 @@ internal class DesktopSportIdentOwnerWordTransport(
                 onWordResult(wordNumber + 1, result)
                 rehearsal.acceptWordResult(result)
                 wordNumber++
-                if (wordNumber == stopAfterAcknowledgedWord &&
-                    rehearsal.stage == SportIdentSi8OwnerWriteStage.READY_FOR_WORD) {
-                    rehearsal.stopAfterAcknowledgedWord()
+                if (wordNumber == stopAfterAcknowledgedWord) {
+                    if (replies.hasBufferedBytes || port.readAvailable(512).isNotEmpty()) {
+                        rehearsal.abortTransport()
+                        return
+                    }
+                    if (rehearsal.stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK) {
+                        rehearsal.stopBeforeReadback()
+                    } else {
+                        rehearsal.stopAfterAcknowledgedWord()
+                    }
                     return
                 }
             } catch (error: Exception) {

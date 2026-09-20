@@ -89,6 +89,26 @@ class DesktopSportIdentOwnerWordTransportTest {
     }
 
     @Test
+    fun intentionalThirdWordStopRetainsUpperBoundAndNeverBeginsReadback() {
+        val before = fixture()
+        val store = store("third-word.json")
+        store.beginNative(request, before)
+        val port = FakePort(capturedReplies)
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, before)
+        transport(port).exchange(rehearsal,
+            beforeWordAttempt = { store.markWordAttempt(request, it) }, stopAfterAcknowledgedWord = 3)
+
+        assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, rehearsal.stage)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, rehearsal.stopReason)
+        assertEquals(3, port.writeRequests.size)
+        assertEquals(3, (store.load() as DesktopSportIdentOwnerRecoveryState.Pending).nativeAttempt?.attemptedWords)
+        val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(request, before, 3,
+            observedPrefix(3))
+        assertEquals(listOf(3), assessment.plausibleWordPrefixes)
+        assertTrue(assessment.consistentWithRecordedAttempt)
+    }
+
+    @Test
     fun crashAfterSavingAnyWordCannotSendThatWordAndLeavesRestartEvidence() {
         val before = fixture()
         for (crashAt in 1..3) {
@@ -221,15 +241,17 @@ class DesktopSportIdentOwnerWordTransportTest {
 
     @Test
     fun extraBytesAfterFinalReplyCannotBeLostBeforeReadback() {
-        val port = FakePort(listOf(capturedReplies[0], capturedReplies[1],
-            capturedReplies[2] + byteArrayOf(SportIdentProtocol.NAK)))
-        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
+        for (stopAfter in listOf<Int?>(null, 3)) {
+            val port = FakePort(listOf(capturedReplies[0], capturedReplies[1],
+                capturedReplies[2] + byteArrayOf(SportIdentProtocol.NAK)))
+            val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
 
-        transport(port).exchange(rehearsal)
+            transport(port).exchange(rehearsal, stopAfterAcknowledgedWord = stopAfter)
 
-        assertEquals(3, port.writeRequests.size)
-        assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, rehearsal.stage)
-        assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, rehearsal.stopReason)
+            assertEquals(3, port.writeRequests.size)
+            assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, rehearsal.stage)
+            assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, rehearsal.stopReason)
+        }
     }
 
     @Test

@@ -87,6 +87,27 @@ class DesktopSportIdentNativeOwnerWriteTest {
     }
 
     @Test
+    fun thirdReplyStopRequiresItsExplicitFlagAndStillReportsUnverified() {
+        val requestFile = temporary.newFile("third-stop-request.json").toPath()
+        Files.writeString(requestFile, SportIdentOwnerNameProgramming.json.encodeToString(request))
+        val store = recoveryStore()
+        val output = ByteArrayOutputStream()
+        val status = DesktopSportIdentNativeOwnerWrite.run(
+            arrayOf("--execute-native-write", requestFile.toString(), "--stop-after-third-reply"),
+            PrintStream(output), PrintStream(ByteArrayOutputStream()), store
+        ) { supplied ->
+            assertEquals(request, supplied)
+            store.begin(supplied)
+            DesktopSportIdentOwnerWriteOutcome(SportIdentSi8OwnerWriteStage.STOPPED,
+                SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, null,
+                DesktopSportIdentCardPresenceResult.MATCHING_BLOCK)
+        }
+        assertEquals(2, status)
+        assertTrue(output.toString().contains("after acknowledged word 3"))
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), store.load())
+    }
+
+    @Test
     fun exceptionAfterIntentIsPersistedAlsoRetainsRecoveryIntent() {
         val requestFile = temporary.newFile("request.json").toPath()
         Files.writeString(requestFile, SportIdentOwnerNameProgramming.json.encodeToString(request))

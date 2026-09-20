@@ -817,6 +817,14 @@ capture was byte-identical to the day's original baseline across both blocks,
 including all 11 punches. The intentional-stop command's nonzero process exit
 was expected because it retained the recovery record pending independent read.
 
+`just sportident-owner-native-stop-after-three <request-json>` now has a
+separate deliberate stop after all three valid word replies but before the
+in-process removal/reinsertion readback. It retains the native recovery record
+with an upper bound of three attempted words and requires an independent fresh
+capture and prefix assessment. Fake-port and shared-state tests pass, including
+an extra-byte case after the third reply; this boundary has not yet been
+exercised on a physical card.
+
 A second SPORTident reader, serial 593927, is attached to the Windows VM
 rather than available as a Mac serial port. A read-only Config+ v2.12.0 direct
 station read on 2026-09-19 confirmed it as BSM8 UART1 on COM4, code 10,

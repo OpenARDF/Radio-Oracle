@@ -88,6 +88,20 @@ class SportIdentSi8OwnerWriteRehearsalTest {
     }
 
     @Test
+    fun intentionalStopAfterFinalReplyPreventsReadbackAndAnyMoreWords() {
+        val rehearsal = completedRehearsal()
+        assertEquals(SportIdentSi8OwnerWriteStage.REQUIRES_READBACK, rehearsal.stage)
+        rehearsal.stopBeforeReadback()
+        assertEquals(SportIdentSi8OwnerWriteStage.STOPPED, rehearsal.stage)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, rehearsal.stopReason)
+        assertFailsWith<IllegalStateException> { rehearsal.takeNextWordFrame() }
+        assertFailsWith<IllegalStateException> { rehearsal.compareIndependentRead(fixture("Donald;Duck;")) }
+        assertFailsWith<IllegalStateException> { rehearsal.stopBeforeReadback() }
+        val notFinished = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture("Daisy;Duck;"))
+        assertFailsWith<IllegalStateException> { notFinished.stopBeforeReadback() }
+    }
+
+    @Test
     fun cancelledMismatchedOrInvalidReadbackCannotResumeWords() {
         val cancelled = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture("Daisy;Duck;"))
         cancelled.takeNextWordFrame()

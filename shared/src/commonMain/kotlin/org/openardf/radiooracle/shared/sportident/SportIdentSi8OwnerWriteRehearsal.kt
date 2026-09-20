@@ -100,6 +100,12 @@ class SportIdentSi8OwnerWriteRehearsal(
         stop(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP)
     }
 
+    /** Experimental stop after the last reply, before requesting any read-back. */
+    fun stopBeforeReadback() {
+        check(stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK && nextFrameIndex == frames.size)
+        stop(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP)
+    }
+
     /** A short write, serial failure, or unsolicited input leaves the outcome uncertain. */
     fun abortTransport() {
         check(stage != SportIdentSi8OwnerWriteStage.VERIFIED) { "Verified rehearsal is already complete." }

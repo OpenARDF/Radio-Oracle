@@ -28,18 +28,19 @@ internal object DesktopSportIdentNativeOwnerWrite {
     ): Int {
         if (args.contentEquals(arrayOf("--help"))) {
             out.println("Usage: --execute-native-write <exact-owner-write-request-json> " +
-                "[--stop-after-first-reply|--stop-after-second-reply]")
+                "[--stop-after-first-reply|--stop-after-second-reply|--stop-after-third-reply]")
             return 0
         }
         val stopAfterWord = when (args.getOrNull(2)) {
             "--stop-after-first-reply" -> 1
             "--stop-after-second-reply" -> 2
+            "--stop-after-third-reply" -> 3
             else -> null
         }
         if (args.getOrNull(0) != "--execute-native-write" ||
             (args.size != 2 && (args.size != 3 || stopAfterWord == null))) {
             err.println("Usage: --execute-native-write <exact-owner-write-request-json> " +
-                "[--stop-after-first-reply|--stop-after-second-reply]")
+                "[--stop-after-first-reply|--stop-after-second-reply|--stop-after-third-reply]")
             return 1
         }
         return try {

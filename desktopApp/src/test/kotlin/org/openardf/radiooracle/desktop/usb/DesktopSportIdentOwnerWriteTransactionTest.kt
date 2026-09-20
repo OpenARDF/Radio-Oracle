@@ -106,8 +106,8 @@ class DesktopSportIdentOwnerWriteTransactionTest {
     }
 
     @Test
-    fun controlledStopAfterEitherReplySendsOnlyThatPrefixAndRetainsBaseline() {
-        for (stopAfter in 1..2) {
+    fun controlledStopAfterAnyReplySendsOnlyThatPrefixAndRetainsBaseline() {
+        for (stopAfter in 1..3) {
             val port = readyPort(replies)
             val store = DesktopSportIdentOwnerRecoveryStore(
                 temporary.root.toPath().resolve("intentional-$stopAfter.json"))
