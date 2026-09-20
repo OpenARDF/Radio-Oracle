@@ -20,7 +20,7 @@ internal data class DesktopSportIdentOwnerWriteOutcome(
 
 /**
  * Same-port preflight, one-shot word transport, and independent read-back.
- * The experimental CLI is its only caller; the app UI does not invoke it.
+ * Used by the experimental CLI and the desktop owner-name page.
  */
 internal class DesktopSportIdentOwnerWriteTransaction(
     private val preflight: DesktopSportIdentOwnerWritePreflight,

@@ -864,6 +864,21 @@ exact Kotlin write restored `Donald` / `Duck`; its fresh readback verified, and
 an independent final capture matched the original station-593927 two-block
 baseline byte for byte, including all 11 punches. The recovery record is clear.
 
+### Desktop Kotlin test UI
+
+The SI Card owner-name page now keeps the complete raw two-block SI-Card8 read
+alongside the displayed names. Its confirmation dialog offers a **Kotlin test
+writer** only when the shared word planner accepts that exact card image and
+requested 11- or 12-byte name pattern. The optional SPORTident SDK remains a
+separate choice when locally configured. The Kotlin path uses the tested
+same-port preflight, durable recovery record, one-shot three-word exchange,
+observed card removal and reinsertion, and full-card byte comparison. It never
+automatically retries an unverified write. A stopped native attempt blocks
+another write until a fresh read on the same station matches a recorded word
+prefix with no changes outside the owner words and the user accepts that read.
+This UI route is for additional desktop hardware testing; it does not extend
+the protocol to shorter names or other card families.
+
 ### SDK provenance and licensing
 
 The library used here came from the private archive

@@ -2,12 +2,27 @@ package org.openardf.radiooracle.desktop.usb
 
 import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspection
 import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspector
+import org.openardf.radiooracle.shared.sportident.SportIdentCardFamily
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
 
 data class DesktopSportIdentOwnerSnapshot(
     val inspection: SportIdentCardOwnerInspection,
     val portPath: String,
-    val stationNumber: Int
-)
+    val stationNumber: Int,
+    val rawRead: SportIdentOwnerReadFixture? = null
+) {
+    companion object {
+        fun fromDownload(download: DesktopSportIdentCardBlockDownload,
+            portPath: String, stationNumber: Int): DesktopSportIdentOwnerSnapshot {
+            val inspection = SportIdentCardOwnerInspector.inspect(download.readout, download.blocks)
+            val rawRead = if (inspection.family == SportIdentCardFamily.SI8) {
+                runCatching { SportIdentOwnerReadVerification.captureRaw(stationNumber, download.blocks) }.getOrNull()
+            } else null
+            return DesktopSportIdentOwnerSnapshot(inspection, portPath, stationNumber, rawRead)
+        }
+    }
+}
 
 /** Uses the existing station discovery, mode checks, and card-read transaction. */
 class DesktopSportIdentCardInspectionService(
@@ -28,7 +43,6 @@ class DesktopSportIdentCardInspectionService(
         check(download.inserted.siNumber == download.readout.siNumber) {
             "The downloaded card number differs from the inserted card. Remove the card and try again."
         }
-        return DesktopSportIdentOwnerSnapshot(SportIdentCardOwnerInspector.inspect(download.readout, download.blocks),
-            checkNotNull(portPath), checkNotNull(stationNumber))
+        return DesktopSportIdentOwnerSnapshot.fromDownload(download, checkNotNull(portPath), checkNotNull(stationNumber))
     }
 }

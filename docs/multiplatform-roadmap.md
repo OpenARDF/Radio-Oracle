@@ -669,13 +669,20 @@ mid-term goal on Android and desktop.
   The pinned-station CLI now selects by unique USB serial and verifies the
   connected station; general multi-download-station UI support remains future
   work.
+  The desktop SI Card page now offers a clearly labeled Kotlin test writer
+  when its fresh raw SI-Card8 read and requested names fit the verified
+  11- or 12-byte word plan. It uses the one-shot transaction, requires removal
+  and reinsertion for full-card readback, and exposes compatible interrupted
+  attempts for manual recovery acknowledgement. The existing SDK choice remains
+  available where locally installed. This UI route still needs user hardware
+  acceptance before general release.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Other name lengths, trailing-byte cleanup beyond the observed padding,
   response errors, other interruption points, compatibility,
   and permission to distribute a replacement still need resolution before
-  enabling a direct Kotlin writer in the app UI. SDK read comparison alone does
-  not establish a write protocol.
+  making the Kotlin writer a general programming option. SDK read comparison
+  alone does not establish a write protocol.
 - Add explicit multi-download-station support so desktop can detect multiple
   connected stations, show their serial numbers/modes/ports, let the user choose
   or assign active stations, and prevent independent readout loops from fighting

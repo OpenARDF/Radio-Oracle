@@ -1,7 +1,5 @@
 package org.openardf.radiooracle.desktop.usb
 
-import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspector
-
 /** Keeps one station connection while the SI Card page is visible. */
 class DesktopSportIdentCardInspectionWatcher(
     private val portSelector: DesktopSportIdentPortSelector = DesktopSportIdentPortSelector()
@@ -34,10 +32,8 @@ class DesktopSportIdentCardInspectionWatcher(
                 check(download.inserted.siNumber == download.readout.siNumber) {
                     "The downloaded card number differs from the inserted card. Remove the card and try again."
                 }
-                onSnapshot(DesktopSportIdentOwnerSnapshot(
-                    SportIdentCardOwnerInspector.inspect(download.readout, download.blocks),
-                    checkNotNull(portPath), checkNotNull(stationNumber)
-                ))
+                onSnapshot(DesktopSportIdentOwnerSnapshot.fromDownload(download,
+                    checkNotNull(portPath), checkNotNull(stationNumber)))
             },
             shouldContinue = shouldContinue,
             continueAfterTimeout = true,
