@@ -725,7 +725,14 @@ mid-term goal on Android and desktop.
   starting bytes and a USB reconnection prevent attributing the earlier NAK
   to timing alone. The paced path remains an opt-in experimental CLI; repeat
   evidence and compatibility checks before exposing variable-length writes
-  in the product.
+  in the product. A fresh baseline then matched the first paced result byte
+  for byte. The initial reverse command rejected its six-word plan before
+  writing because the seven-word trial guard was exact; recovery remained
+  empty. A separate, explicitly approved six-word paced mode completed the
+  reverse change on 554900. Its six replies, fresh reinsertion readback, and
+  separate full-card capture verified the plan, preserved all 11 punches,
+  and changed only owner bytes. The two successful paced directions strengthen
+  the timing lead but do not yet establish all-reader reliability.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Default-character-set Western letters now use a shared, round-trip-checked

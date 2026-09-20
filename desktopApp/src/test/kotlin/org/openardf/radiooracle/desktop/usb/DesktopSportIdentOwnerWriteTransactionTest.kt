@@ -102,6 +102,31 @@ class DesktopSportIdentOwnerWriteTransactionTest {
     }
 
     @Test
+    fun sixWordTrialRequiresItsOwnOptInAndRetainsFullRecoveryBoundAfterAStop() {
+        val shorter = request.copy(expectedFirstName = "Donald",
+            expectedLastName = "Duckandrolopoulos", firstName = "Penny",
+            lastName = "Popandrolopoulos")
+        val baseline = download("Donald;Duckandrolopoulos;")
+        assertEquals(6, SportIdentSi8OwnerWordWritePlanner.plan(shorter,
+            SportIdentOwnerReadVerification.capture(shorter.stationNumber, baseline.blocks)).size)
+        val gatedPort = readyPort(replies, presenceOwner = "Donald;Duckandrolopoulos;")
+        assertThrows(IllegalArgumentException::class.java) {
+            transaction(gatedPort, readCard = { baseline }).execute(shorter)
+        }
+        assertTrue(gatedPort.ownerWordWrites.isEmpty())
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, recoveryStore().load())
+
+        val trialPort = readyPort(replies, presenceOwner = "Donald;Duckandrolopoulos;")
+        val outcome = transaction(trialPort, readCard = { baseline },
+            allowSixWordExperiment = true, stopAfterAcknowledgedWord = 1).execute(shorter)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, outcome.stopReason)
+        assertEquals(1, trialPort.ownerWordWrites.size)
+        val pending = recoveryStore().load() as DesktopSportIdentOwnerRecoveryState.Pending
+        assertEquals(shorter, pending.request)
+        assertEquals(6, pending.nativeAttempt?.attemptedWords)
+    }
+
+    @Test
     fun missingFirstReplyStopsAfterOneWordAndNeverStartsReadback() {
         val port = readyPort(emptyList())
         val transaction = transaction(port, verifier = DesktopSportIdentOwnerReadbackVerifier(
@@ -270,6 +295,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         recoveryStore: DesktopSportIdentOwnerRecoveryStore = recoveryStore(),
         stopAfterAcknowledgedWord: Int? = null,
         allowSevenWordExperiment: Boolean = false,
+        allowSixWordExperiment: Boolean = false,
         onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
         verifier: DesktopSportIdentOwnerReadbackVerifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> true },
@@ -298,6 +324,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             preflight, verifier, recoveryStore, presenceProbe,
             stopAfterAcknowledgedWord = stopAfterAcknowledgedWord,
             allowSevenWordExperiment = allowSevenWordExperiment,
+            allowSixWordExperiment = allowSixWordExperiment,
             onBeforeWordExchange = onBeforeWordExchange
         ) { opened ->
             DesktopSportIdentOwnerWordTransport(opened, readTimeoutMs = 4, nowMillis = { ++wordNow })
@@ -316,10 +343,10 @@ class DesktopSportIdentOwnerWriteTransactionTest {
     }
 
     private fun readyPort(replies: List<ByteArray>, failAfterReads: Int? = null,
-                          queuedBeforeWord: Int? = null) =
+                          queuedBeforeWord: Int? = null, presenceOwner: String = "Daisy;Duck;") =
         FakePort(listOf(SportIdentProtocol.buildExtendedMessage(
             SportIdentProtocol.GET_SI_CARD8_9_SIAC,
-            byteArrayOf(0, 0, 0) + download("Daisy;Duck;").blocks.first().data
+            byteArrayOf(0, 0, 0) + download(presenceOwner).blocks.first().data
         )) + replies, failAfterReads, queuedBeforeWord)
 
     private fun download(owner: String, changedPunchByte: Byte = 0): DesktopSportIdentCardBlockDownload {

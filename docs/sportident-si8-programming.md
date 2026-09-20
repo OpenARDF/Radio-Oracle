@@ -3,9 +3,10 @@
 The desktop product reads SI-Card8 names and previews edits, but does not yet
 write names. The SDK bridge is confined to local test tooling and excluded from
 the desktop product. The direct Kotlin writer remains an experimental CLI:
-several short-name writes, a seven-word trial on each reader, and a paced
-multiword trial on station 554900 verified. Earlier unpaced multiword attempts
-on 554900 stopped at the second word and required local SDK repair.
+several short-name writes, a seven-word trial on each reader, and paced
+multiword writes in both directions on station 554900 verified. Earlier
+unpaced multiword attempts on 554900 stopped at the second word and required
+local SDK repair.
 Name preparation, word planning, reply validation, and recovery assessment live
 in shared Kotlin code for future Android reuse.
 
@@ -1103,6 +1104,20 @@ a proven root cause: the card's starting owner bytes differed from the earlier
 failed trial, and the USB reader was reconnected in between. Repeatable
 transactions and compatibility checks remain necessary before enabling
 variable-length writes in the desktop UI.
+
+The next read-only baseline on station 554900 matched the separate postwrite
+image byte for byte. A proposed reverse trial from `Donald` /
+`Duckandrolopoulos` to `Penny` / `Popandrolopoulos` stopped before any
+owner-word write because the seven-word experimental guard rejected its
+six-word plan; recovery remained empty. A separate opt-in six-word paced mode
+was added and its guard and recovery bound passed focused tests. After a fresh
+read-only preflight and exact approval for six words, the reverse attempt
+received six valid replies with approximately 202–206 ms from each reply to
+the next write. Its removal/reinsertion readback verified the target and
+cleared recovery. A separate two-block capture matched the Kotlin plan byte
+for byte: 21 changed bytes, all in block 0's owner field; block 1 and all 11
+punches were unchanged. This repeat strengthens the evidence for pacing on
+station 554900, while the need for broader compatibility testing remains.
 
 ### SDK provenance and licensing
 
