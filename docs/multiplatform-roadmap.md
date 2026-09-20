@@ -639,11 +639,15 @@ mid-term goal on Android and desktop.
   other bytes unchanged. After explicit recovery acknowledgement, a separate
   exact Kotlin write restored `Donald`; its fresh read-back and a further
   independent capture matched the original two-block baseline byte for byte.
-  Fake-port checks now cover stopped writes at the second word, lost and
+  A controlled second-word stop on 2026-09-20 produced exactly the two-word
+  prefix (`Daisy` / `Duuck`): seven owner bytes changed, all other bytes and
+  11 punches unchanged. A separate Kotlin repair and independent final capture
+  restored the original `Donald` / `Duck` two-block image byte for byte.
+  Fake-port checks cover lost and
   negative/wrong-station replies at every word, and process failure immediately
   after saving each attempted-word count. The shared assessment flags a fresh
-  image that exceeds that count or changes non-owner bytes. The explicit
-  second-word hardware command is prepared but awaits card handling.
+  image that exceeds that count or changes non-owner bytes. The
+  post-third-word/pre-readback boundary remains a physical test gate.
   A read-only Config+ direct read confirmed the VM-attached BSM8 UART1 as
   station 593927, code 10, firmware 657, in SI-card readout mode; its visible
   card entries were historical, so this is station evidence only.

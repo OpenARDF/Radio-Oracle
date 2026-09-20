@@ -787,32 +787,41 @@ verified a fresh two-block read after observed removal and reinsertion. A
 further independent native capture matched the original `Donald` / `Duck`
 baseline byte for byte across both blocks, including all 11 punches. This
 demonstrates recovery from one deliberately interrupted word sequence on this
-station and spare card. Other interruption points and hardware combinations
-remain untested.
+station and spare card.
 
-While the card operator is away, fake-port checks cover a deliberate stop after
+Fake-port checks cover a deliberate stop after
 two acknowledged words, a lost reply or negative/wrong-station reply at each of
 the three word positions, and a simulated process failure after recording each
 attempt but before sending that word. Each case leaves an upper-bound recovery
 record and sends no subsequent word. The shared assessment marks a fresh image
 as unexpected if it requires more words than the record permits or if bytes
 outside the owner words changed. The serial adapter accepts captured code-10
-and code-14 replies only when the connected station code agrees. These are
-software checks; they do not establish physical interruption behavior.
+and code-14 replies only when the connected station code agrees. Lost replies,
+negative replies, process failure, and cross-station replies remain simulated.
 
-`just sportident-owner-native-stop-after-two <request-json>` is now prepared
-for the next controlled hardware check. The present spare card was last read
-as `Donald` / `Duck` on Mac station 554900. Before the test, take a fresh
-baseline and recheck the exact card and request. After two replies, remove and
-reinsert the card for a read-only capture and run the offline assessment before
-acknowledging any result or proposing a repair. If both words applied to the
-current 12-to-11-byte plan, the expected intermediate owner text is
-`Daisy;Duuck;`; the actual card read is authoritative. A second SPORTident
-reader, serial 593927, is attached to the Windows VM rather than available as
-a Mac serial port. A read-only Config+ v2.12.0 direct station read on
-2026-09-19 confirmed it as BSM8 UART1 on COM4, code 10, firmware 657, in
-SI-card readout mode. Config+'s visible SI-card entries were historical; no
-fresh card read or owner write has yet tested this second station.
+On 2026-09-20, `just sportident-owner-native-stop-after-two` passed on the
+same spare card and Mac station. A fresh two-block `Donald` / `Duck` baseline
+was byte-identical to the earlier known-good read, including all 11 punches.
+The command rechecked the seated card, received the expected code-14 replies
+for words 1 and 2, and deliberately stopped without sending word 3. The
+persisted recovery record bounded the attempt at two words. After removal and
+reinsertion, an independent read showed `Daisy` / `Duuck` (`Daisy;Duuck;` in
+the 12 owner bytes). The shared offline assessment matched exactly the
+two-word prefix: seven changed owner bytes, zero changes elsewhere. The
+offline baseline-restore proposal produced three frames but transmitted none.
+The accepted fresh read cleared the reminder; a separate read-only preflight
+then confirmed the exact `Daisy` / `Duuck` to `Donald` / `Duck` repair request.
+One normal Kotlin write received all three expected replies and passed fresh
+two-block readback after observed removal and reinsertion. A further separate
+capture was byte-identical to the day's original baseline across both blocks,
+including all 11 punches. The intentional-stop command's nonzero process exit
+was expected because it retained the recovery record pending independent read.
+
+A second SPORTident reader, serial 593927, is attached to the Windows VM
+rather than available as a Mac serial port. A read-only Config+ v2.12.0 direct
+station read on 2026-09-19 confirmed it as BSM8 UART1 on COM4, code 10,
+firmware 657, in SI-card readout mode. Config+'s visible SI-card entries were
+historical; no fresh card read or owner write has yet tested this second station.
 
 ### SDK provenance and licensing
 
