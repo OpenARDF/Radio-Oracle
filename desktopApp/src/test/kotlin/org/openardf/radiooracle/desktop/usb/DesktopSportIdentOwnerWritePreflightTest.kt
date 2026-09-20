@@ -50,6 +50,39 @@ class DesktopSportIdentOwnerWritePreflightTest {
     }
 
     @Test
+    fun pinnedPreflightSkipsOtherUsbReaderBeforeReadingCard() {
+        val first = FakePort("/dev/cu.SLAB_USBtoUART", "554900")
+        val second = FakePort("/dev/cu.SLAB_USBtoUART5", "593927")
+        val provider = object : DesktopSerialPortProvider {
+            override fun listPorts() = listOf(first, second)
+            override fun getPort(systemPortPath: String) = listOf(first, second)
+                .first { it.info.systemPortPath == systemPortPath }
+        }
+        var reads = 0
+        val preflight = DesktopSportIdentOwnerWritePreflight(
+            portSelector = DesktopSportIdentPortSelector(provider),
+            connectStation = { opened ->
+                opened.open(0)
+                DesktopSportIdentStationConnection(38400, byteArrayOf(),
+                    station(serial = opened.info.serialNumber!!.toInt()))
+            },
+            readCard = { opened ->
+                assertTrue(opened === second)
+                reads++
+                download()
+            }
+        )
+
+        preflight.withFreshRead(request) { opened, _, _ -> assertTrue(opened === second) }
+
+        assertEquals(0, first.openCount)
+        assertEquals(0, first.closeCount)
+        assertEquals(1, second.openCount)
+        assertEquals(1, second.closeCount)
+        assertEquals(1, reads)
+    }
+
+    @Test
     fun passesConnectedStationCodeToWordReplyGate() {
         val port = FakePort()
         preflight(port, station = station(code = 14)).withFreshRead(request) { _, rehearsal, _ ->
@@ -195,9 +228,12 @@ class DesktopSportIdentOwnerWritePreflightTest {
             listOf(SportIdentCardBlock(0, block0), SportIdentCardBlock(1, block1)), readout)
     }
 
-    private class FakePort : DesktopSerialPort {
-        override val info = DesktopSerialPortInfo("/dev/cu.fake", "Fake SPORTident",
-            SportIdentUsbDevice.VENDOR_ID, SportIdentUsbDevice.PRODUCT_ID, "fake")
+    private class FakePort(
+        path: String = "/dev/cu.fake",
+        serialNumber: String = "fake"
+    ) : DesktopSerialPort {
+        override val info = DesktopSerialPortInfo(path, "Fake SPORTident",
+            SportIdentUsbDevice.VENDOR_ID, SportIdentUsbDevice.PRODUCT_ID, serialNumber)
         override var isOpen = false
         var openCount = 0
         var closeCount = 0

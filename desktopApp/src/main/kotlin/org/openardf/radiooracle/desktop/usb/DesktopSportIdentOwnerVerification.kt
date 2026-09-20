@@ -84,7 +84,7 @@ object DesktopSportIdentOwnerVerification {
     }
 
     private fun captureNative(expectedStation: Int, expectedCard: Int): SportIdentOwnerReadFixture {
-        val download = DesktopSportIdentReadoutService().downloadOne { _, station ->
+        val download = DesktopSportIdentReadoutService().downloadOneFromStation(expectedStation) { _, station ->
             require(station.serialNumber == expectedStation) { "Unexpected station; card read refused." }
             System.err.println("Station verified. Remove and insert SI-Card8 $expectedCard; keep it seated until completion.")
         }

@@ -655,8 +655,20 @@ mid-term goal on Android and desktop.
   `Donald` / `Duck`; a final independent capture matched the original two-block
   baseline byte for byte.
   A read-only Config+ direct read confirmed the VM-attached BSM8 UART1 as
-  station 593927, code 10, firmware 657, in SI-card readout mode; its visible
-  card entries were historical, so this is station evidence only.
+  station 593927, code 10, firmware 657, in SI-card readout mode. With duplicate
+  readout enabled, Config+ added a fresh timestamped read of SI-Card8 2450662
+  (`Donald` / `Duck`, 11 punches) on 2026-09-20. With both readers handed to the
+  Mac, pinned-station Kotlin capture on 593927 matched the 554900 card image
+  byte for byte. The first code-10 write stopped safely after word 1 because
+  the shared system-info parser misread a BSF7 alternate byte as this BSM8's
+  station code. A fresh read matched exactly the one-word prefix. A model-gated
+  parser fix and tests restored code 10 in the live diagnostic; separate exact
+  Kotlin writes then completed `Daisld` / `Duck` to `Daisy` / `Duck` and back to
+  `Donald` / `Duck`, each with fresh readback. A final independent capture
+  matched the original two-block image byte for byte, including all 11 punches.
+  The pinned-station CLI now selects by unique USB serial and verifies the
+  connected station; general multi-download-station UI support remains future
+  work.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Other name lengths, trailing-byte cleanup beyond the observed padding,

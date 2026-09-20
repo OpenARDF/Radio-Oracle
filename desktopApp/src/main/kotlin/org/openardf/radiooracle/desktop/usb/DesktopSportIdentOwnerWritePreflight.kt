@@ -26,7 +26,8 @@ internal class DesktopSportIdentOwnerWritePreflight(
     fun <T> withFreshRead(request: SportIdentOwnerNameWriteRequest,
         onReady: (DesktopSerialPort, SportIdentSi8OwnerWriteRehearsal, SportIdentOwnerReadFixture) -> T): T {
         SportIdentOwnerNameRecovery.validate(request)
-        val port = portSelector.selectPort() ?: error("No SPORTident USB station found.")
+        val port = portSelector.selectPortForStation(request.stationNumber)
+            ?: error("No uniquely identifiable SPORTident USB port for station ${request.stationNumber}.")
         try {
             val station = connectStation(port).stationInfo
             require(port.isOpen && station.serialNumber == request.stationNumber &&

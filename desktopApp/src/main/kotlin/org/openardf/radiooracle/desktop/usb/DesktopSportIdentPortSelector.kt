@@ -52,15 +52,20 @@ class DesktopSportIdentPortSelector(
         runCatching { DesktopSportIdentStationProbe().probe(port) }.isSuccess
     }
 ) {
+    /** Use the USB serial as a port hint; callers must still verify the station after connecting. */
+    fun selectPortForStation(stationNumber: Int): DesktopSerialPort? {
+        require(stationNumber > 0)
+        val candidates = candidatePorts()
+        val matching = candidates.filter { it.info.serialNumber == stationNumber.toString() }
+        if (matching.size == 1) return matching.single()
+        // A lone adapter may not expose its station number as a USB serial.
+        // With multiple candidates, guessing would risk opening the wrong reader.
+        return if (candidates.size == 1) selectPort() else null
+    }
+
     fun selectPort(): DesktopSerialPort? {
         val mode = discoverySettings.sportIdentPortDiscoveryMode()
-        val ports = portProvider.listPorts().preferredSerialPorts()
-        val candidates = when (mode) {
-            DesktopSportIdentPortDiscoveryMode.SPORTIDENT_USB_ONLY ->
-                ports.filter { it.info.matchesSportIdent() }
-            DesktopSportIdentPortDiscoveryMode.PROBE_FTDI_ADAPTERS ->
-                ftdiProbeCandidates(ports)
-        }
+        val candidates = candidatePorts()
 
         for (port in candidates) {
             if (port.info.matchesSportIdent()) {
@@ -74,6 +79,17 @@ class DesktopSportIdentPortSelector(
             }
         }
         return null
+    }
+
+    private fun candidatePorts(): List<DesktopSerialPort> {
+        val mode = discoverySettings.sportIdentPortDiscoveryMode()
+        val ports = portProvider.listPorts().preferredSerialPorts()
+        return when (mode) {
+            DesktopSportIdentPortDiscoveryMode.SPORTIDENT_USB_ONLY ->
+                ports.filter { it.info.matchesSportIdent() }
+            DesktopSportIdentPortDiscoveryMode.PROBE_FTDI_ADAPTERS ->
+                ftdiProbeCandidates(ports)
+        }
     }
 
     private fun ftdiProbeCandidates(ports: List<DesktopSerialPort>): List<DesktopSerialPort> {

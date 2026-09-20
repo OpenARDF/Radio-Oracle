@@ -1232,6 +1232,8 @@ class DesktopSportIdentTimeSyncServiceTest {
             data[4] = 0x01
             data[5] = 0x9E.toByte()
             data[6] = 0x90.toByte()
+            data[3 + 0x0B] = 0x81.toByte()
+            data[3 + 0x0C] = 0x17
             data[17] = stationCodeNumber.toByte()
             data[20] = 0x08
             data[119] = 0x01

@@ -838,8 +838,31 @@ nonzero exit was expected because it retained the pending recovery record.
 A second SPORTident reader, serial 593927, is attached to the Windows VM
 rather than available as a Mac serial port. A read-only Config+ v2.12.0 direct
 station read on 2026-09-19 confirmed it as BSM8 UART1 on COM4, code 10,
-firmware 657, in SI-card readout mode. Config+'s visible SI-card entries were
-historical; no fresh card read or owner write has yet tested this second station.
+firmware 657, in SI-card readout mode. On 2026-09-20, Config+ added a fresh
+timestamped read of SI-Card8 2450662 on this station: `Donald` / `Duck` with
+11 punches. Its duplicate-readout option had to be enabled because older reads
+of the same SIID were already listed. After handing its USB connection from
+the VM to macOS, a Kotlin two-block capture on station 593927 matched the
+station-554900 baseline byte for byte while both readers were attached. The
+internal pinned-station commands now select a unique USB serial matching the
+requested station and still verify the connected station before reading.
+
+The first Kotlin owner-write attempt on station 593927 stopped after word 1:
+the station returned the CRC-valid code-10 reply `00 0a 08`, but the shared
+system-info parser reported code 32. A separate fresh capture read `Daisld` /
+`Duck`, matching only the saved one-word prefix, with three owner bytes changed
+and all 11 punches intact. Read-only station diagnostics showed this BSM8's
+primary code byte was 10 while an unrelated byte at the BSF7 direct-code
+offset was 32. The parser now applies that alternate offset only to BSF7
+models. Shared parser and desktop compatibility tests passed, and the live
+diagnostic then reported code 10. After explicit recovery acknowledgement, a
+new exact `Daisld` / `Duck` to `Daisy` / `Duck` Kotlin write received all three
+code-10 replies and verified on fresh removal/reinsertion readback. A separate
+capture found only the expected 11 owner-byte changes from the original
+`Donald` / `Duck` baseline, with no punch or other byte changes. A further
+exact Kotlin write restored `Donald` / `Duck`; its fresh readback verified, and
+an independent final capture matched the original station-593927 two-block
+baseline byte for byte, including all 11 punches. The recovery record is clear.
 
 ### SDK provenance and licensing
 

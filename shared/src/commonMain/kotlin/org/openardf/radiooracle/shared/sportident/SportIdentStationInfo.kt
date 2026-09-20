@@ -121,11 +121,11 @@ object SportIdentStationInfoParser {
             .getOrNull(EXTENDED_MODE_DATA_OFFSET)
             ?.let { (it.toUnsignedInt() and EXTENDED_MODE_FLAG) == EXTENDED_MODE_FLAG }
             ?: false
-        val stationCodeNumber = frame.data.stationCodeNumber()
+        val modelId = frame.data.readSystemInfoUInt16(SYS_VAL_MODEL_ID_OFFSET)
+        val stationCodeNumber = frame.data.stationCodeNumber(modelId)
         val stationModeCode = frame.data
             .getOrNull(STATION_MODE_CODE_DATA_OFFSET)
             ?.toUnsignedInt()
-        val modelId = frame.data.readSystemInfoUInt16(SYS_VAL_MODEL_ID_OFFSET)
 
         return SportIdentStationInfo(
             serialNumber = serialNumber,
@@ -164,10 +164,11 @@ object SportIdentStationInfoParser {
     private const val SYS_VAL_ACTIVE_TIME_OFFSET = 0x7E
     private const val MAX_ACTIVE_TIME_MINUTES = 5_759
 
-    private fun ByteArray.stationCodeNumber(): Int? {
+    private fun ByteArray.stationCodeNumber(modelId: Int?): Int? {
         val primary = getOrNull(STATION_CODE_NUMBER_DATA_OFFSET)?.toUnsignedInt()
         val bsf7Direct = getOrNull(BSF7_DIRECT_STATION_CODE_NUMBER_DATA_OFFSET)?.toUnsignedInt()
         return if (
+            modelId in BSF7_DIRECT_MODEL_IDS &&
             primary != null &&
             bsf7Direct != null &&
             primary <= MAX_NON_STATION_STATUS_VALUE &&
@@ -180,6 +181,7 @@ object SportIdentStationInfoParser {
     }
 
     private const val MAX_NON_STATION_STATUS_VALUE = 10
+    private val BSF7_DIRECT_MODEL_IDS = setOf(0x8117, 0x8118, 0x8197)
 
     private fun ByteArray.readSystemInfoUInt8(offset: Int): Int? =
         getOrNull(SYS_VAL_DATA_OFFSET + offset)?.toUnsignedInt()

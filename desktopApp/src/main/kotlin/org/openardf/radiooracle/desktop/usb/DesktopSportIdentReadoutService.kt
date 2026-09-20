@@ -53,6 +53,21 @@ class DesktopSportIdentReadoutService(
         }
     }
 
+    /** Select a pinned station when several SPORTident USB readers are present. */
+    fun downloadOneFromStation(
+        expectedStation: Int,
+        onStationConnected: (DesktopSerialPortInfo, SportIdentStationInfo) -> Unit = { _, _ -> }
+    ): DesktopSportIdentCardBlockDownload {
+        val port = portSelector.selectPortForStation(expectedStation)
+            ?: error("No uniquely identifiable SPORTident USB port for station $expectedStation.")
+        return withOpenDownloadStation(port, { info, station ->
+            require(station.serialNumber == expectedStation) { "Unexpected station; card read refused." }
+            onStationConnected(info, station)
+        }) {
+            readCard(port)
+        }
+    }
+
     fun downloadUntilTimeout(
         maxCards: Int,
         onDownload: (DesktopSportIdentCardBlockDownload) -> Unit,

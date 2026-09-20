@@ -128,6 +128,37 @@ class SportIdentStationInfoParserTest {
     }
 
     @Test
+    fun bsm8UsesPrimaryCodeEvenWhenAlternateByteLooksLikeAnotherStationCode() {
+        val data = systemInfoData(593927, true, stationCodeNumber = 10, stationModeCode = 8, size = 131)
+        data[3 + 0x0B] = 0x91.toByte()
+        data[3 + 0x0C] = 0x98.toByte()
+        data[17] = 32
+        val frame = assertNotNull(SportIdentFrameParser.firstFrame(
+            SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.GET_SYSTEM_INFO, data)))
+
+        val info = assertNotNull(SportIdentStationInfoParser.fromSystemInfoFrame(frame))
+
+        assertEquals(593927, info.serialNumber)
+        assertEquals("BSM8-USB/SRR", info.modelName)
+        assertEquals(10, info.stationCodeNumber)
+    }
+
+    @Test
+    fun bsf7DirectUsesAlternateCodeWhenPrimaryIsStatusByte() {
+        val data = systemInfoData(106128, true, stationCodeNumber = 6, stationModeCode = 8, size = 131)
+        data[3 + 0x0B] = 0x81.toByte()
+        data[3 + 0x0C] = 0x17
+        data[17] = 32
+        val frame = assertNotNull(SportIdentFrameParser.firstFrame(
+            SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.GET_SYSTEM_INFO, data)))
+
+        val info = assertNotNull(SportIdentStationInfoParser.fromSystemInfoFrame(frame))
+
+        assertEquals("BSF7", info.modelName)
+        assertEquals(32, info.stationCodeNumber)
+    }
+
+    @Test
     fun parsesExtendedSystemInfoDiagnostics() {
         val frame = assertNotNull(
             SportIdentFrameParser.firstFrame(

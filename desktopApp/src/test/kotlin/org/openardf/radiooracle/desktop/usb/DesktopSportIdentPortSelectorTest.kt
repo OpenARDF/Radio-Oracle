@@ -123,6 +123,18 @@ class DesktopSportIdentPortSelectorTest {
         assertEquals(emptyList<String>(), probedPorts)
     }
 
+    @Test
+    fun pinnedStationSelectsItsUsbSerialAndDoesNotGuessAmongReaders() {
+        val first = FakePort("/dev/cu.SLAB_USBtoUART", "SPORTident USB", SportIdentUsbDevice.VENDOR_ID,
+            SportIdentUsbDevice.PRODUCT_ID, serialNumber = "554900")
+        val second = FakePort("/dev/cu.SLAB_USBtoUART5", "SPORTident USB", SportIdentUsbDevice.VENDOR_ID,
+            SportIdentUsbDevice.PRODUCT_ID, serialNumber = "593927")
+        val selector = DesktopSportIdentPortSelector(portProvider = FakePortProvider(listOf(first, second)))
+
+        assertEquals(second, selector.selectPortForStation(593927))
+        assertNull(selector.selectPortForStation(600000))
+    }
+
     private class FakeDiscoverySettings(
         private var mode: DesktopSportIdentPortDiscoveryMode,
         private var rememberedPortPath: String? = null

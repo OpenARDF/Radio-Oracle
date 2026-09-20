@@ -84,9 +84,12 @@ data class DesktopSportIdentStationDiagnosticResult(
                 "  station serial=${stationInfo.serialNumber} " +
                     "extended=${stationInfo.extendedMode} " +
                     "codeNumber=${stationInfo.stationCodeNumber ?: "unknown"} " +
+                    "model=${stationInfo.modelName ?: "unknown"} " +
                     "modeCode=${stationInfo.stationModeCode ?: "unknown"} " +
                     "mode=$modeLabel"
             )
+            appendLine("  system-info code bytes: primary=${systemInfoData.getOrNull(1)?.toInt()?.and(0xff)} " +
+                "alternate=${systemInfoData.getOrNull(17)?.toInt()?.and(0xff)}")
             appendLine("  probe timing: ${probeTimingsMs.describeTimings()}")
             append("  system-info timing: ${systemInfoTimingsMs.describeTimings()}")
         }

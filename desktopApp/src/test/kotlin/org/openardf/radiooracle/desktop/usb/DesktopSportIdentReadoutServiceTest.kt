@@ -70,6 +70,53 @@ class DesktopSportIdentReadoutServiceTest {
     }
 
     @Test
+    fun pinnedDownloadUsesSecondReaderAndVerifiesConnectedStationBeforeCardRead() {
+        val first = FakePort(path = "/dev/cu.SLAB_USBtoUART", serialNumber = "554900")
+        val second = FakePort(path = "/dev/cu.SLAB_USBtoUART5", serialNumber = "593927")
+        val connected = mutableListOf<String>()
+        var cardReads = 0
+        val service = DesktopSportIdentReadoutService(
+            portProvider = FakePortProvider(listOf(first, second)),
+            connectStation = {
+                connected += it.info.systemPortPath
+                it.open(0)
+                connection(modeCode = 8, serialNumber = 593927)
+            },
+            readCard = {
+                assertSame(second, it)
+                cardReads += 1
+                download()
+            }
+        )
+
+        service.downloadOneFromStation(593927)
+
+        assertEquals(listOf(second.info.systemPortPath), connected)
+        assertEquals(1, cardReads)
+        assertFalse(first.closed)
+        assertTrue(second.closed)
+    }
+
+    @Test
+    fun pinnedDownloadRefusesUsbSerialThatDoesNotMatchStationReply() {
+        val port = FakePort(serialNumber = "593927")
+        var cardReads = 0
+        val service = DesktopSportIdentReadoutService(
+            portProvider = FakePortProvider(listOf(port)),
+            connectStation = { it.open(0); connection(modeCode = 8, serialNumber = 554900) },
+            readCard = { cardReads += 1; download() }
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            service.downloadOneFromStation(593927)
+        }
+
+        assertEquals("Unexpected station; card read refused.", error.message)
+        assertEquals(0, cardReads)
+        assertFalse(port.isOpen)
+    }
+
+    @Test
     fun downloadOneBlocksClearlyNonDownloadStationAndClosesPort() {
         val port = FakePort()
         val service = DesktopSportIdentReadoutService(
@@ -262,13 +309,16 @@ class DesktopSportIdentReadoutServiceTest {
             ports.first { it.info.systemPortPath == systemPortPath }
     }
 
-    private class FakePort : DesktopSerialPort {
+    private class FakePort(
+        path: String = "/dev/cu.fake",
+        serialNumber: String = "fake"
+    ) : DesktopSerialPort {
         override val info = DesktopSerialPortInfo(
-            systemPortPath = "/dev/cu.fake",
+            systemPortPath = path,
             descriptivePortName = "Fake SPORTident",
             vendorId = SportIdentUsbDevice.VENDOR_ID,
             productId = SportIdentUsbDevice.PRODUCT_ID,
-            serialNumber = "fake"
+            serialNumber = serialNumber
         )
 
         override var isOpen: Boolean = false
@@ -292,12 +342,12 @@ class DesktopSportIdentReadoutServiceTest {
         override fun read(maxBytes: Int): ByteArray = byteArrayOf()
     }
 
-    private fun connection(modeCode: Int): DesktopSportIdentStationConnection =
+    private fun connection(modeCode: Int, serialNumber: Int = 554900): DesktopSportIdentStationConnection =
         DesktopSportIdentStationConnection(
             baudRate = 38400,
             probeReply = byteArrayOf(),
             stationInfo = SportIdentStationInfo(
-                serialNumber = 554900,
+                serialNumber = serialNumber,
                 extendedMode = true,
                 stationCodeNumber = 14,
                 stationModeCode = modeCode
