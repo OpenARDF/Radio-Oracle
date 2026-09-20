@@ -97,9 +97,17 @@ sportident-owner-readiness request:
 sportident-owner-native-experiment request:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerWrite {{quote("-PsiOwnerWriteRequest=" + request)}}
 
+# EXPERIMENTAL: deliberately stops after one acknowledged owner word; requires recovery assessment.
+sportident-owner-native-stop-after-one request:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerStopAfterOne {{quote("-PsiOwnerWriteRequest=" + request)}}
+
 # Resolve a pending experimental attempt using a freshly captured complete native read.
 sportident-owner-native-recovery evidence observed_first observed_last:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerRecovery {{quote("-PsiOwnerReadEvidence=" + evidence)}} {{quote("-PsiOwnerObservedFirstName=" + observed_first)}} {{quote("-PsiOwnerObservedLastName=" + observed_last)}}
+
+# Read-only assessment of a pending native attempt; retains the recovery record.
+sportident-owner-native-assess evidence:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerAssess {{quote("-PsiOwnerReadEvidence=" + evidence)}}
 
 # Offline comparison of SDK read JSON with native block evidence; never opens a serial port.
 sportident-owner-compare sdk_read native_read:

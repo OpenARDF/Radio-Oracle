@@ -17,7 +17,9 @@ internal class DesktopSportIdentOwnerWordTransport(
     private val replies = DesktopSportIdentFrameStream(port, nowMillis = nowMillis)
 
     /** Stops on the first ambiguous outcome; read-back remains a separate step. */
-    fun exchange(rehearsal: SportIdentSi8OwnerWriteRehearsal) {
+    fun exchange(rehearsal: SportIdentSi8OwnerWriteRehearsal,
+        beforeWordAttempt: (Int) -> Unit = {}, stopAfterAcknowledgedWord: Int? = null) {
+        require(stopAfterAcknowledgedWord == null || stopAfterAcknowledgedWord in 1..2)
         check(port.isOpen) { "The SPORTident serial port must already be open." }
         check(rehearsal.stage == SportIdentSi8OwnerWriteStage.READY_FOR_WORD) {
             "The SI-Card8 word exchange is not ready to start."
@@ -33,6 +35,7 @@ internal class DesktopSportIdentOwnerWordTransport(
                     return
                 }
                 val frame = rehearsal.takeNextWordFrame()
+                beforeWordAttempt(wordNumber + 1)
                 if (port.write(frame) != frame.size) {
                     rehearsal.abortTransport()
                     return
@@ -43,6 +46,11 @@ internal class DesktopSportIdentOwnerWordTransport(
                 onWordResult(wordNumber + 1, result)
                 rehearsal.acceptWordResult(result)
                 wordNumber++
+                if (wordNumber == stopAfterAcknowledgedWord &&
+                    rehearsal.stage == SportIdentSi8OwnerWriteStage.READY_FOR_WORD) {
+                    rehearsal.stopAfterAcknowledgedWord()
+                    return
+                }
             } catch (error: Exception) {
                 rehearsal.abortTransport()
                 throw error

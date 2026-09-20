@@ -14,6 +14,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentOwnerDataStatus
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameProgramming
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
+import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWordWritePlanner
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
@@ -27,8 +28,11 @@ internal object DesktopSportIdentNativeOwnerRecovery {
         err: PrintStream = System.err,
         store: DesktopSportIdentOwnerRecoveryStore = DesktopSportIdentOwnerRecoveryStore()
     ): Int {
-        if (args.size != 4 || args[0] != "--acknowledge-native-read") {
-            err.println("Usage: --acknowledge-native-read <fresh-native-read-json> <observed-first-name> <observed-last-name>")
+        val assess = args.size == 2 && args[0] == "--assess-native-read"
+        val acknowledge = args.size == 4 && args[0] == "--acknowledge-native-read"
+        if (!assess && !acknowledge) {
+            err.println("Usage: --assess-native-read <fresh-native-read-json> | " +
+                "--acknowledge-native-read <fresh-native-read-json> <observed-first-name> <observed-last-name>")
             return 1
         }
         return try {
@@ -40,6 +44,21 @@ internal object DesktopSportIdentNativeOwnerRecovery {
             }
             val fixture = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerReadFixture>(
                 Files.readString(file))
+            pending.nativeAttempt?.let { attempt ->
+                val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(
+                    pending.request, attempt.before, attempt.attemptedWords, fixture)
+                out.println("Saved native attempt: up to ${assessment.attemptedWordsUpperBound} owner words may have been sent; " +
+                    "fresh read matches prefix(es) ${assessment.matchingWordPrefixes}; " +
+                    "${assessment.byteChangesFromBaseline.size} changed bytes, " +
+                    "${assessment.changesOutsideOwnerWords.size} outside the 12 owner bytes.")
+                if (assessment.changesOutsideOwnerWords.isNotEmpty()) {
+                    out.println("Changes outside owner words: ${assessment.changesOutsideOwnerWords}")
+                }
+            }
+            if (assess) {
+                out.println("Read-only assessment complete; pending record retained. No write or retry was attempted.")
+                return 0
+            }
             val read = SportIdentOwnerReadVerification.nativeRead(fixture)
             require(read.stationNumber == pending.request.stationNumber && read.cardNumber == pending.request.cardNumber &&
                 read.firstName == args[2] && read.lastName == args[3]) {

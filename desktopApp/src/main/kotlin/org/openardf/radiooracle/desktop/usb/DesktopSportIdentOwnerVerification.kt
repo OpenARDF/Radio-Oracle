@@ -36,8 +36,10 @@ object DesktopSportIdentOwnerVerification {
                     require(!Files.exists(output)) { "Output already exists; choose a new evidence file." }
                     err.println("Close other SPORTident connections. Reinsert the expected SI-Card8 when the station is ready.")
                     val fixture = capture(station, card)
-                    val read = SportIdentOwnerReadVerification.nativeRead(fixture)
-                    require(read.stationNumber == station && read.cardNumber == card) { "Capture identity differs from the target." }
+                    require(fixture.stationNumber == station &&
+                        SportIdentOwnerReadVerification.rawCardNumber(fixture) == card) {
+                        "Capture identity differs from the target."
+                    }
                     Files.writeString(output, SportIdentOwnerNameProgramming.json.encodeToString(fixture), StandardOpenOption.CREATE_NEW)
                     out.println("Native read evidence saved to $output")
                     0
@@ -89,6 +91,6 @@ object DesktopSportIdentOwnerVerification {
         require(download.inserted.siNumber == expectedCard && download.readout.siNumber == expectedCard) {
             "Unexpected inserted or downloaded card; evidence not saved."
         }
-        return SportIdentOwnerReadVerification.capture(expectedStation, download.blocks)
+        return SportIdentOwnerReadVerification.captureRaw(expectedStation, download.blocks)
     }
 }

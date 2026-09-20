@@ -17,6 +17,7 @@ enum class SportIdentSi8OwnerWriteStopReason {
     INVALID_READBACK,
     CARD_NOT_CONFIRMED,
     TRANSPORT_FAILURE,
+    INTENTIONAL_STOP,
     CANCELLED
 }
 
@@ -91,6 +92,12 @@ class SportIdentSi8OwnerWriteRehearsal(
     fun cancel() {
         check(stage != SportIdentSi8OwnerWriteStage.VERIFIED) { "Verified rehearsal is already complete." }
         if (stage != SportIdentSi8OwnerWriteStage.STOPPED) stop(SportIdentSi8OwnerWriteStopReason.CANCELLED)
+    }
+
+    /** Experimental interruption after an acknowledged prefix; the card still needs a fresh read. */
+    fun stopAfterAcknowledgedWord() {
+        check(stage == SportIdentSi8OwnerWriteStage.READY_FOR_WORD && nextFrameIndex in 1 until frames.size)
+        stop(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP)
     }
 
     /** A short write, serial failure, or unsolicited input leaves the outcome uncertain. */

@@ -9,6 +9,7 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameProgramming
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNativeReadDiff
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReferenceRead
@@ -61,6 +62,11 @@ class DesktopSportIdentOwnerVerificationTest {
                 SportIdentOwnerReadVerification.capture(593927, blocks(card = 2450663))
             })
             assertFalse(Files.exists(output))
+            val rawPartial = SportIdentOwnerReadVerification.captureRaw(593927,
+                blocks(owner = "Dai\u0001y;Duck;"))
+            assertEquals(0, DesktopSportIdentOwnerVerification.run(args, out, out) { _, _ -> rawPartial })
+            assertEquals(rawPartial, SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerReadFixture>(
+                Files.readString(output)))
         } finally { directory.toFile().deleteRecursively() }
     }
 

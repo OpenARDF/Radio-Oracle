@@ -659,6 +659,16 @@ tasks.register("desktopSportIdentNativeOwnerWrite", JavaExec) {
     args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get())
 }
 
+tasks.register("desktopSportIdentNativeOwnerStopAfterOne", JavaExec) {
+    group = "verification"
+    description = "EXPERIMENTAL: intentionally stops after one acknowledged SI-Card8 owner word."
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
+    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+        "--stop-after-first-reply")
+}
+
 tasks.register("desktopSportIdentNativeOwnerRecovery", JavaExec) {
     group = "verification"
     description = "Accepts a fresh complete SI-Card8 read to resolve one pending native-write reminder."
@@ -668,6 +678,15 @@ tasks.register("desktopSportIdentNativeOwnerRecovery", JavaExec) {
     args("--acknowledge-native-read", providers.gradleProperty("siOwnerReadEvidence").get(),
         providers.gradleProperty("siOwnerObservedFirstName").get(),
         providers.gradleProperty("siOwnerObservedLastName").get())
+}
+
+tasks.register("desktopSportIdentNativeOwnerAssess", JavaExec) {
+    group = "verification"
+    description = "Read-only comparison of a fresh SI-Card8 read with pending native-write evidence."
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerRecoveryKt")
+    args("--assess-native-read", providers.gradleProperty("siOwnerReadEvidence").get())
 }
 
 // Opt-in real-terrain acceptance can reproduce older snapshots retaining every venue grid.

@@ -729,8 +729,51 @@ found 11 changed bytes, all within block 0's owner-text region at offsets
 `0x21`–`0x2b`; block 1 and every non-owner byte were unchanged, including the
 11 recorded punches. These results establish one successful write in each
 observed 11/12-byte direction on this card and station. Other name lengths,
-other readers/cards, and interrupted writes still need validation before the
-Kotlin path is offered in the app UI.
+other readers/cards, and interruption points beyond the one-word test below
+still need validation before the Kotlin path is offered in the app UI.
+
+The next interruption gate now has a durable native recovery record. Before
+the first `0xEA` word, the desktop CLI atomically saves both complete pre-write
+SI-Card8 blocks and the exact request. Immediately before each serial word it
+atomically advances an attempted-word count. The count is an upper bound: a
+crash may occur after saving it but before transmission. A failed save prevents
+that word from being sent. Older SDK reminder records remain readable.
+
+`just sportident-owner-native-assess <fresh-native-read-json>` compares a
+fresh two-block read with the saved baseline and all zero-to-three-word prefix
+images. It reports matching prefixes and every byte changed outside the 12
+owner bytes, and retains the pending record. The read-only native capture now
+saves valid full-card blocks by card identity even when partial owner bytes do
+not parse cleanly; assessment compares those raw blocks. This is an offline
+assessment, not proof that every attempted word reached the card. An explicit
+`just sportident-owner-native-recovery` acknowledgement still requires the
+observed names and clears the reminder only after a complete parseable read.
+
+For the spare-card interruption test,
+`just sportident-owner-native-stop-after-one <request-json>` uses the same
+preflight and recovery persistence as the normal experimental writer, then
+deliberately stops after the first valid word reply. It never sends words two
+or three, never retries, and leaves the recovery record for independent
+read-only capture and assessment. The controlled-stop mode has passed simulated
+transport tests. On 2026-09-19 it was also exercised on station 554900 and
+spare SI-Card8 2450662. A fresh baseline matched the prior `Donald` / `Duck`
+image byte for byte with 11 punches. The command sent only word 1 of the
+`Donald` / `Duck` to `Daisy` / `Duck` plan, received the expected station-code-14
+reply, and stopped intentionally with a persisted upper bound of one attempted
+word. After removal and reinsertion, a fresh read showed `Daisld` / `Duck`.
+The offline assessment matched exactly the one-word prefix: three bytes in
+block 0 changed, with zero changes outside the 12 owner bytes. The 11 punch
+records matched the baseline.
+
+After explicitly acknowledging that partial read, a separate read-only
+preflight confirmed the exact `Daisld` / `Duck` to `Donald` / `Duck` repair
+request. One normal Kotlin write received all three expected replies, then
+verified a fresh two-block read after observed removal and reinsertion. A
+further independent native capture matched the original `Donald` / `Duck`
+baseline byte for byte across both blocks, including all 11 punches. This
+demonstrates recovery from one deliberately interrupted word sequence on this
+station and spare card. Other interruption points and hardware combinations
+remain untested.
 
 ### SDK provenance and licensing
 

@@ -86,6 +86,30 @@ class SportIdentSi8OwnerWordWritePlannerTest {
     }
 
     @Test
+    fun classifiesEveryCrashBoundaryFromRawFullCardBytes() {
+        val before = fixture()
+        val frames = SportIdentSi8OwnerWordWritePlanner.plan(request, before)
+        for (count in 0..3) {
+            val block0 = decode(before.blocks.single { it.blockNumber == 0 })
+            frames.take(count).forEach { frame ->
+                frame.copyOfRange(5, 9).copyInto(block0, (frame[4].toInt() and 0xff) * 4)
+            }
+            val fresh = SportIdentOwnerReadFixture(1, before.stationNumber,
+                listOf(SportIdentOwnerReadBlock(0, block0.joinToString("") { "%02x".format(it.toInt() and 0xff) }),
+                    before.blocks.single { it.blockNumber == 1 }))
+            val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(request, before, count, fresh)
+            assertTrue(count in assessment.matchingWordPrefixes)
+            assertTrue(assessment.changesOutsideOwnerWords.isEmpty())
+        }
+        val wrongCard = before.copy(blocks = before.blocks.map { block ->
+            if (block.blockNumber == 0) block.copy(hexData = block.hexData.replaceRange(50, 52, "26")) else block
+        })
+        assertFailsWith<IllegalArgumentException> {
+            SportIdentSi8OwnerWordWritePlanner.assessInterruption(request, before, 1, wrongCard)
+        }
+    }
+
+    @Test
     fun refusesUnsupportedShapeStaleIdentityAndNormalizedOwnerBytes() {
         val before = fixture()
         listOf(

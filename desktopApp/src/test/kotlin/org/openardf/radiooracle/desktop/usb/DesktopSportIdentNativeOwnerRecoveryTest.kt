@@ -44,6 +44,27 @@ class DesktopSportIdentNativeOwnerRecoveryTest {
         assertTrue(output.toString().contains("Recovery reminder cleared"))
     }
 
+    @Test
+    fun readOnlyAssessmentKeepsInterruptedNativeRecord() {
+        val store = DesktopSportIdentOwnerRecoveryStore(temporary.root.toPath().resolve("native-recovery.json"))
+        val before = SportIdentOwnerReadVerification.capture(request.stationNumber,
+            listOf(SportIdentCardBlock(0, block0("Daisy;Duck;")), SportIdentCardBlock(1, ByteArray(128))))
+        store.beginNative(request, before)
+        store.markWordAttempt(request, 1)
+        val partial = SportIdentOwnerReadVerification.capture(request.stationNumber,
+            listOf(SportIdentCardBlock(0, block0("Donay;Duck;")), SportIdentCardBlock(1, ByteArray(128))))
+        val evidence = temporary.newFile("partial.json").toPath()
+        Files.writeString(evidence, SportIdentOwnerNameProgramming.json.encodeToString(partial))
+        val output = ByteArrayOutputStream()
+
+        assertEquals(0, DesktopSportIdentNativeOwnerRecovery.run(
+            arrayOf("--assess-native-read", evidence.toString()),
+            PrintStream(output), PrintStream(ByteArrayOutputStream()), store))
+        assertTrue(output.toString().contains("matches prefix(es) [1]"))
+        assertTrue(output.toString().contains("pending record retained"))
+        assertEquals(1, (store.load() as DesktopSportIdentOwnerRecoveryState.Pending).nativeAttempt?.attemptedWords)
+    }
+
     private fun block0(owner: String) = ByteArray(128).also { block ->
         block[22] = 1
         block[24] = 2

@@ -606,22 +606,21 @@ mid-term goal on Android and desktop.
   `0xEA` replies matched in order; observed removal/reinsertion led to a fresh
   two-block read that matched the predicted card image byte for byte, preserving
   all 11 punches and every non-owner byte. The native recovery record cleared.
-  This validates one complete direct Kotlin transaction on the Mac station;
-  interruption behavior and broader station/card compatibility remain open.
+  This validated the first complete direct Kotlin transaction on the Mac
+  station; broader station/card compatibility remains open.
   A read-only same-port block-0 recheck matched SI-Card8 2450662 while seated
   on Mac station 554900 and received a negative acknowledgement after removal.
   The internal transaction now requires that match immediately before its
   first owner word, stopping without a write if the card is not confirmed.
   The native transaction now reuses the desktop recovery record: it persists
   intent before the first word, blocks another attempt after uncertain outcomes
-  or restart, and clears only after exact two-block native read-back. Continued
-  card presence between commands and physical interruption behavior remain
-  unverified.
+  or restart, and clears only after exact two-block native read-back. The
+  subsequent controlled one-word interruption is described below.
   The desktop sender now stops before the next owner word if bytes are already
   queued by the serial driver, or if the queue cannot be inspected. Fake-port
   tests verify the stop and persistent recovery record. A read-only Mac check
   observed an empty queue and then SI-Card8 insertion through the nonblocking
-  path; interruption behavior during an owner-word exchange remains unverified.
+  path. The subsequent controlled one-word interruption is described below.
   A read-only command now exercises that exact request's recovery, station,
   fresh-read, name/plan, and seated-card gates without writing. It passed on
   Mac station 554900 and SI-Card8 2450662 with 11 punches and a hypothetical
@@ -631,8 +630,17 @@ mid-term goal on Android and desktop.
   captures showed only 11 owner-text bytes changed, with all 11 punches and
   every other byte preserved. Both observed 11/12-byte directions now have one
   complete Kotlin hardware transaction on this Mac reader and card.
+  The native recovery record now saves complete pre-write blocks and advances
+  an attempted-word upper bound atomically before each word. Shared Kotlin can
+  assess a fresh raw two-block read against every planned word prefix and list
+  byte changes outside the 12 owner bytes. A controlled stop after the first
+  acknowledged word changed `Donald` to partial `Daisld` on the spare SI-Card8.
+  A fresh read matched exactly the one-word prefix, with all 11 punches and
+  other bytes unchanged. After explicit recovery acknowledgement, a separate
+  exact Kotlin write restored `Donald`; its fresh read-back and a further
+  independent capture matched the original two-block baseline byte for byte.
   Other name lengths, trailing-byte cleanup beyond the observed padding,
-  response errors, interruption safety, compatibility,
+  response errors, other interruption points, compatibility,
   and permission to distribute a replacement still need resolution before
   enabling a direct Kotlin writer in the app UI. SDK read comparison alone does
   not establish a write protocol.

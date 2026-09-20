@@ -8,6 +8,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.jsonObject
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameProgramming
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameRecovery
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
@@ -15,10 +16,14 @@ import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteResult
 import org.openardf.radiooracle.shared.sportident.SportIdentCardOwnerInspection
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameRecoveryAssessment
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWritePlanComparison
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
+import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWordWritePlanner
+import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerNativeAttempt
 
 internal sealed interface DesktopSportIdentOwnerRecoveryState {
     data object Empty : DesktopSportIdentOwnerRecoveryState
-    data class Pending(val request: SportIdentOwnerNameWriteRequest) : DesktopSportIdentOwnerRecoveryState
+    data class Pending(val request: SportIdentOwnerNameWriteRequest,
+        val nativeAttempt: SportIdentSi8OwnerNativeAttempt? = null) : DesktopSportIdentOwnerRecoveryState
     data object Unavailable : DesktopSportIdentOwnerRecoveryState
 }
 
@@ -39,10 +44,17 @@ internal class DesktopSportIdentOwnerRecoveryStore(
         if (Files.notExists(file, LinkOption.NOFOLLOW_LINKS)) {
             DesktopSportIdentOwnerRecoveryState.Empty
         } else {
-            check(Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && Files.size(file) <= 4096)
-            val request = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerNameWriteRequest>(Files.readString(file))
-            SportIdentOwnerNameRecovery.validate(request)
-            DesktopSportIdentOwnerRecoveryState.Pending(request)
+            check(Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && Files.size(file) <= 8192)
+            val text = Files.readString(file)
+            if (SportIdentOwnerNameProgramming.json.parseToJsonElement(text).jsonObject.containsKey("attemptedWords")) {
+                val attempt = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentSi8OwnerNativeAttempt>(text)
+                validateNative(attempt)
+                DesktopSportIdentOwnerRecoveryState.Pending(attempt.request, attempt)
+            } else {
+                val request = SportIdentOwnerNameProgramming.json.decodeFromString<SportIdentOwnerNameWriteRequest>(text)
+                SportIdentOwnerNameRecovery.validate(request)
+                DesktopSportIdentOwnerRecoveryState.Pending(request)
+            }
         }
     } catch (_: Exception) { DesktopSportIdentOwnerRecoveryState.Unavailable }
 
@@ -53,6 +65,36 @@ internal class DesktopSportIdentOwnerRecoveryStore(
         val text = SportIdentOwnerNameProgramming.json.encodeToString(request)
         require(text.toByteArray(Charsets.UTF_8).size <= 4096)
         writeDesktopTextAtomically(file, text)
+    }
+
+    /** Save the complete baseline before any native word can be sent. */
+    @Synchronized fun beginNative(request: SportIdentOwnerNameWriteRequest, before: SportIdentOwnerReadFixture) {
+        check(load() == DesktopSportIdentOwnerRecoveryState.Empty)
+        saveNative(SportIdentSi8OwnerNativeAttempt(1, request, before, 0))
+    }
+
+    /** Called immediately before port.write; a failed save prevents transmission. */
+    @Synchronized fun markWordAttempt(request: SportIdentOwnerNameWriteRequest, wordNumber: Int) {
+        val pending = load() as? DesktopSportIdentOwnerRecoveryState.Pending
+            ?: error("Native owner-write recovery record is missing or unreadable.")
+        val attempt = pending.nativeAttempt ?: error("Native owner-write baseline is missing.")
+        check(pending.request == request && wordNumber == attempt.attemptedWords + 1)
+        saveNative(attempt.copy(attemptedWords = wordNumber))
+    }
+
+    private fun saveNative(attempt: SportIdentSi8OwnerNativeAttempt) {
+        validateNative(attempt)
+        val text = SportIdentOwnerNameProgramming.json.encodeToString(attempt)
+        require(text.toByteArray(Charsets.UTF_8).size <= 8192)
+        writeDesktopTextAtomically(file, text)
+        check(load() == DesktopSportIdentOwnerRecoveryState.Pending(attempt.request, attempt))
+    }
+
+    private fun validateNative(attempt: SportIdentSi8OwnerNativeAttempt) {
+        require(attempt.schemaVersion == 1 && attempt.attemptedWords in 0..3)
+        SportIdentOwnerNameRecovery.validate(attempt.request)
+        require(attempt.before.stationNumber == attempt.request.stationNumber)
+        require(SportIdentSi8OwnerWordWritePlanner.plan(attempt.request, attempt.before).size == 3)
     }
 
     @Synchronized fun completeVerified(request: SportIdentOwnerNameWriteRequest, result: SportIdentOwnerNameWriteResult) {
@@ -82,7 +124,7 @@ internal class DesktopSportIdentOwnerRecoveryStore(
     }
 
     private fun clear(request: SportIdentOwnerNameWriteRequest) {
-        check(load() == DesktopSportIdentOwnerRecoveryState.Pending(request))
+        check((load() as? DesktopSportIdentOwnerRecoveryState.Pending)?.request == request)
         Files.delete(file)
     }
 }

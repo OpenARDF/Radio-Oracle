@@ -12,6 +12,23 @@ data class SportIdentSi8OwnerWritePlanComparison(
     val scope: String = "Offline planned card bytes versus an independent native read; transmitted frames and write success are not proven"
 }
 
+/** A fresh raw read is compared with every possible prefix, never treated as permission to retry. */
+data class SportIdentSi8OwnerInterruptionAssessment(
+    val attemptedWordsUpperBound: Int,
+    val matchingWordPrefixes: List<Int>,
+    val byteChangesFromBaseline: List<SportIdentOwnerReadByteChange>,
+    val changesOutsideOwnerWords: List<SportIdentOwnerReadByteChange>
+)
+
+@Serializable
+data class SportIdentSi8OwnerNativeAttempt(
+    val schemaVersion: Int,
+    val request: SportIdentOwnerNameWriteRequest,
+    val before: SportIdentOwnerReadFixture,
+    /** Upper bound: persistence precedes serial write, so the last word may not have been sent. */
+    val attemptedWords: Int
+)
+
 /**
  * Reproduces the one observed Config+ SI-Card8 owner-write shape offline.
  * Nothing calls a serial transport here; other lengths and acknowledgement
@@ -24,6 +41,36 @@ object SportIdentSi8OwnerWordWritePlanner {
     private const val OBSERVED_TEXT_BYTES = 12
     private const val OBSERVED_SHORT_TEXT_BYTES = 11
     private val ERASED_NAME_BYTE = 0xEE.toByte()
+
+    fun assessInterruption(request: SportIdentOwnerNameWriteRequest, before: SportIdentOwnerReadFixture,
+        attemptedWordsUpperBound: Int, fresh: SportIdentOwnerReadFixture): SportIdentSi8OwnerInterruptionAssessment {
+        require(attemptedWordsUpperBound in 0..3)
+        val frames = plan(request, before)
+        require(fresh.stationNumber == before.stationNumber &&
+            SportIdentOwnerReadVerification.rawCardNumber(fresh) == request.cardNumber) {
+            "Fresh read must contain the expected SI-Card8 and station."
+        }
+        val baseline = (0..1).map { SportIdentOwnerReadVerification.blockBytes(before, it) }
+        val observed = (0..1).map { SportIdentOwnerReadVerification.blockBytes(fresh, it) }
+        val changes = (0..1).flatMap { block ->
+            baseline[block].indices.mapNotNull { offset ->
+                val old = baseline[block][offset].toInt() and 0xff
+                val new = observed[block][offset].toInt() and 0xff
+                if (old == new) null else SportIdentOwnerReadByteChange(block, offset, old, new)
+            }
+        }
+        val matches = (0..3).filter { count ->
+            val predicted = baseline.map { it.copyOf() }
+            frames.take(count).forEach { bytes ->
+                val frame = requireNotNull(SportIdentFrameParser.firstFrame(bytes))
+                val address = frame.data[0].toInt() and 0xff
+                frame.data.copyOfRange(1, 5).copyInto(predicted[0], address * WORD_BYTES)
+            }
+            predicted[0].contentEquals(observed[0]) && predicted[1].contentEquals(observed[1])
+        }
+        return SportIdentSi8OwnerInterruptionAssessment(attemptedWordsUpperBound, matches, changes,
+            changes.filter { it.blockNumber != 0 || it.offset !in OWNER_OFFSET until OWNER_OFFSET + OBSERVED_TEXT_BYTES })
+    }
 
     fun plan(request: SportIdentOwnerNameWriteRequest, before: SportIdentOwnerReadFixture): List<ByteArray> {
         val read = SportIdentOwnerReadVerification.nativeRead(before)

@@ -1,5 +1,6 @@
 package org.openardf.radiooracle.desktop.usb
 
+import java.nio.file.Files
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,7 +45,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
                 download("Daisy;Duck;")
             },
             onBeforeWordExchange = {
-                assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
+                assertNativePending(recoveryStore(), 0)
                 assertTrue(port.ownerWordWrites.isEmpty())
                 steps += "writing"
             },
@@ -96,12 +97,40 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertNull(outcome.comparison)
         assertEquals(1, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
-        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
+        assertNativePending(recoveryStore(), 1)
 
         val retryPort = readyPort(replies)
         assertThrows(IllegalStateException::class.java) { transaction(retryPort).execute(request) }
         assertTrue(retryPort.writeRequests.isEmpty())
         assertEquals(0, retryPort.closeCount)
+    }
+
+    @Test
+    fun controlledStopAfterFirstReplySendsOnlyOneWordAndRetainsBaseline() {
+        val port = readyPort(replies)
+        val outcome = transaction(port, stopAfterAcknowledgedWord = 1,
+            verifier = DesktopSportIdentOwnerReadbackVerifier(
+                awaitTargetRemoval = { _, _ -> error("Read-back started after intentional stop") },
+                readAfterReinsertion = { error("Read-back started after intentional stop") }
+            )).execute(request)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, outcome.stopReason)
+        assertEquals(1, port.ownerWordWrites.size)
+        assertNativePending(recoveryStore(), 1)
+    }
+
+    @Test
+    fun unreadableRecordBeforeFirstWordPreventsTransmission() {
+        val port = readyPort(replies)
+        val file = temporary.root.toPath().resolve("failure-recovery.json")
+        val store = DesktopSportIdentOwnerRecoveryStore(file)
+        assertThrows(IllegalStateException::class.java) {
+            transaction(port, recoveryStore = store, onBeforeWordExchange = {
+                Files.delete(file)
+                Files.createDirectory(file)
+            }).execute(request)
+        }
+        assertTrue(port.ownerWordWrites.isEmpty())
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Unavailable, store.load())
     }
 
     @Test
@@ -121,7 +150,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             assertFalse(outcome.verified)
             assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, outcome.stopReason)
             assertEquals(nextWord - 1, port.ownerWordWrites.size)
-            assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), store.load())
+            assertNativePending(store, nextWord - 1)
             assertEquals(1, port.closeCount)
         }
     }
@@ -140,7 +169,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertEquals(SportIdentSi8OwnerWriteStopReason.READBACK_NOT_OBSERVED, outcome.stopReason)
         assertEquals(3, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
-        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
+        assertNativePending(recoveryStore(), 3)
     }
 
     @Test
@@ -158,7 +187,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertEquals(1, requireNotNull(outcome.comparison).predictedVersusObserved.byteChanges.size)
         assertEquals(3, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
-        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
+        assertNativePending(recoveryStore(), 3)
     }
 
     @Test
@@ -178,7 +207,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertEquals(1, brokenPort.ownerWordWrites.size)
         assertEquals(1, brokenPort.closeCount)
         assertFalse(brokenPort.isOpen)
-        assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), recoveryStore().load())
+        assertNativePending(recoveryStore(), 1)
     }
 
     @Test
@@ -215,6 +244,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         port: FakePort,
         readCard: (DesktopSerialPort) -> DesktopSportIdentCardBlockDownload = { download("Daisy;Duck;") },
         recoveryStore: DesktopSportIdentOwnerRecoveryStore = recoveryStore(),
+        stopAfterAcknowledgedWord: Int? = null,
         onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
         verifier: DesktopSportIdentOwnerReadbackVerifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> true },
@@ -240,7 +270,9 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             readTimeoutMs = 50, nowMillis = { ++presenceNow }
         ))
         return DesktopSportIdentOwnerWriteTransaction(
-            preflight, verifier, recoveryStore, presenceProbe, onBeforeWordExchange
+            preflight, verifier, recoveryStore, presenceProbe,
+            stopAfterAcknowledgedWord = stopAfterAcknowledgedWord,
+            onBeforeWordExchange = onBeforeWordExchange
         ) { opened ->
             DesktopSportIdentOwnerWordTransport(opened, readTimeoutMs = 4, nowMillis = { ++wordNow })
         }
@@ -249,6 +281,13 @@ class DesktopSportIdentOwnerWriteTransactionTest {
     private fun recoveryStore() = DesktopSportIdentOwnerRecoveryStore(
         temporary.root.toPath().resolve("recovery.json")
     )
+
+    private fun assertNativePending(store: DesktopSportIdentOwnerRecoveryStore, attemptedWords: Int) {
+        val pending = store.load() as DesktopSportIdentOwnerRecoveryState.Pending
+        assertEquals(request, pending.request)
+        assertEquals(attemptedWords, requireNotNull(pending.nativeAttempt).attemptedWords)
+        assertEquals("Daisy", SportIdentOwnerReadVerification.nativeRead(pending.nativeAttempt.before).firstName)
+    }
 
     private fun readyPort(replies: List<ByteArray>, failAfterReads: Int? = null,
                           queuedBeforeWord: Int? = null) =

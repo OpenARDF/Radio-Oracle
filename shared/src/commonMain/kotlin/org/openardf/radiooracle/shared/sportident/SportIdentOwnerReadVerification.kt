@@ -80,13 +80,34 @@ object SportIdentOwnerReadVerification {
     }
 
     fun capture(stationNumber: Int, blocks: List<SportIdentCardBlock>): SportIdentOwnerReadFixture {
+        val fixture = captureRaw(stationNumber, blocks)
+        nativeRead(fixture)
+        return fixture
+    }
+
+    /** Preserve complete SI-Card8 evidence even when interrupted owner bytes are not parseable. */
+    fun captureRaw(stationNumber: Int, blocks: List<SportIdentCardBlock>): SportIdentOwnerReadFixture {
         val fixture = SportIdentOwnerReadFixture(1, stationNumber, blocks.map { block ->
             SportIdentOwnerReadBlock(block.blockNumber, block.data.joinToString("") {
                 (it.toInt() and 0xff).toString(16).padStart(2, '0')
             })
         })
-        nativeRead(fixture)
+        rawCardNumber(fixture)
         return fixture
+    }
+
+    fun rawCardNumber(fixture: SportIdentOwnerReadFixture): Int {
+        require(fixture.schemaVersion == 1 && fixture.stationNumber > 0 &&
+            fixture.blocks.size == 2 && fixture.blocks.map { it.blockNumber }.toSet() == setOf(0, 1)) {
+            "A complete SI-Card8 read requires blocks 0 and 1 without duplicates."
+        }
+        val data = blockBytes(fixture, 0) + blockBytes(fixture, 1)
+        require((data[24].toInt() and 0x0f) == 2 && (data[22].toInt() and 0xff) <= 30) {
+            "Read evidence must contain an SI-Card8 with a valid punch count."
+        }
+        return requireNotNull(SportIdentCardReadoutParser.parseSi8Or9OrSiac(data)) {
+            "Card data could not be parsed."
+        }.siNumber.also { require(it > 0) }
     }
 
     fun nativeRead(fixture: SportIdentOwnerReadFixture): SportIdentOwnerReferenceRead {

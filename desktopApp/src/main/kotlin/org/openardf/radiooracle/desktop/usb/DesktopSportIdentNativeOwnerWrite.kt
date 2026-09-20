@@ -27,11 +27,12 @@ internal object DesktopSportIdentNativeOwnerWrite {
         execute: ((SportIdentOwnerNameWriteRequest) -> DesktopSportIdentOwnerWriteOutcome)? = null
     ): Int {
         if (args.contentEquals(arrayOf("--help"))) {
-            out.println("Usage: --execute-native-write <exact-owner-write-request-json>")
+            out.println("Usage: --execute-native-write <exact-owner-write-request-json> [--stop-after-first-reply]")
             return 0
         }
-        if (args.size != 2 || args[0] != "--execute-native-write") {
-            err.println("Usage: --execute-native-write <exact-owner-write-request-json>")
+        val controlledStop = args.size == 3 && args[2] == "--stop-after-first-reply"
+        if ((args.size != 2 && !controlledStop) || args[0] != "--execute-native-write") {
+            err.println("Usage: --execute-native-write <exact-owner-write-request-json> [--stop-after-first-reply]")
             return 1
         }
         return try {
@@ -44,25 +45,34 @@ internal object DesktopSportIdentNativeOwnerWrite {
             SportIdentOwnerNameRecovery.validate(request)
             out.println("Experimental native SI-Card8 write: station=${request.stationNumber} " +
                 "card=${request.cardNumber} '${request.expectedFirstName} ${request.expectedLastName}' " +
-                "to '${request.firstName} ${request.lastName}'. One attempt; no automatic retry.")
-            val outcome = (execute ?: { nativeExecute(it, store, out) })(request)
+                "to '${request.firstName} ${request.lastName}'. One attempt; no automatic retry." +
+                if (controlledStop) " Stop deliberately after the first acknowledged word." else "")
+            val outcome = (execute ?: { nativeExecute(it, store, out, controlledStop) })(request)
             if (outcome.verified && store.load() == DesktopSportIdentOwnerRecoveryState.Empty) {
                 out.println("Native write verified against a fresh two-block card read; recovery record cleared.")
                 0
             } else {
                 err.println("Native write not verified: ${outcome.stopReason ?: outcome.stage}; " +
-                    "recovery=${store.load()}. Do not retry without a fresh card read.")
+                    "recovery=${describeRecovery(store.load())}. Do not retry without a fresh card read.")
                 2
             }
         } catch (error: Exception) {
-            err.println("Native write failed: ${error.message}; recovery=${store.load()}. " +
+            err.println("Native write failed: ${error.message}; recovery=${describeRecovery(store.load())}. " +
                 "Do not retry an uncertain attempt without a fresh card read.")
             1
         }
     }
 
+    private fun describeRecovery(state: DesktopSportIdentOwnerRecoveryState): String = when (state) {
+        DesktopSportIdentOwnerRecoveryState.Empty -> "empty"
+        DesktopSportIdentOwnerRecoveryState.Unavailable -> "unavailable"
+        is DesktopSportIdentOwnerRecoveryState.Pending ->
+            "pending card=${state.request.cardNumber} attemptedWords=${state.nativeAttempt?.attemptedWords ?: "unknown"}"
+    }
+
     private fun nativeExecute(request: SportIdentOwnerNameWriteRequest,
-        store: DesktopSportIdentOwnerRecoveryStore, out: PrintStream): DesktopSportIdentOwnerWriteOutcome {
+        store: DesktopSportIdentOwnerRecoveryStore, out: PrintStream,
+        controlledStop: Boolean): DesktopSportIdentOwnerWriteOutcome {
         val preflight = DesktopSportIdentOwnerWritePreflight(readCard = { port ->
             out.println("Station ${request.stationNumber} ready. Insert SI-Card8 ${request.cardNumber}; keep it seated.")
             DesktopSportIdentCardBlockReader(onProgress = { out.println(it) })
@@ -83,8 +93,11 @@ internal object DesktopSportIdentNativeOwnerWrite {
         )
         return DesktopSportIdentOwnerWriteTransaction(
             preflight, readback, store,
+            stopAfterAcknowledgedWord = if (controlledStop) 1 else null,
             onBeforeWordExchange = {
-                out.println("Target card rechecked and recovery intent saved. Writing three owner words; keep it seated.")
+                out.println("Target card rechecked and recovery baseline saved. " +
+                    if (controlledStop) "Writing one owner word, then stopping; keep the card seated."
+                    else "Writing three owner words; keep the card seated.")
             },
             makeWordTransport = { port ->
                 DesktopSportIdentOwnerWordTransport(port, onWordResult = { word, result ->

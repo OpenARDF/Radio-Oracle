@@ -37,6 +37,7 @@ class DesktopSportIdentNativeOwnerWriteTest {
         assertEquals(1, run(arrayOf(requestFile.toString()), execute))
         assertEquals(1, run(arrayOf("--execute-native-write", badFile.toString()), execute))
         assertEquals(1, run(arrayOf("--execute-native-write", temporary.root.toString()), execute))
+        assertEquals(1, run(arrayOf("--execute-native-write", requestFile.toString(), "--unknown"), execute))
         assertEquals(0, calls)
     }
 
@@ -60,6 +61,7 @@ class DesktopSportIdentNativeOwnerWriteTest {
         assertEquals(2, status)
         assertEquals(DesktopSportIdentOwnerRecoveryState.Pending(request), store.load())
         assertTrue(stderr.toString().contains("Do not retry"))
+        assertTrue(stderr.toString().contains("recovery=pending card=2450662 attemptedWords=unknown"))
         assertFalse(stderr.toString().contains("recovery=Empty"))
     }
 

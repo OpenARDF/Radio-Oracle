@@ -27,6 +27,7 @@ internal class DesktopSportIdentOwnerWriteTransaction(
     private val readbackVerifier: DesktopSportIdentOwnerReadbackVerifier,
     private val recoveryStore: DesktopSportIdentOwnerRecoveryStore,
     private val presenceProbe: DesktopSportIdentCardPresenceProbe = DesktopSportIdentCardPresenceProbe(),
+    private val stopAfterAcknowledgedWord: Int? = null,
     private val onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
     private val makeWordTransport: (DesktopSerialPort) -> DesktopSportIdentOwnerWordTransport =
         { port -> DesktopSportIdentOwnerWordTransport(port) }
@@ -41,9 +42,11 @@ internal class DesktopSportIdentOwnerWriteTransaction(
                 rehearsal.stopForUnconfirmedCard()
             } else {
                 // Persistence must succeed before any owner-word frame can be sent.
-                recoveryStore.begin(request)
+                recoveryStore.beginNative(request, before)
                 onBeforeWordExchange(request)
-                makeWordTransport(port).exchange(rehearsal)
+                makeWordTransport(port).exchange(rehearsal,
+                    beforeWordAttempt = { wordNumber -> recoveryStore.markWordAttempt(request, wordNumber) },
+                    stopAfterAcknowledgedWord = stopAfterAcknowledgedWord)
             }
             val comparison = if (rehearsal.stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK) {
                 readbackVerifier.verify(port, rehearsal)

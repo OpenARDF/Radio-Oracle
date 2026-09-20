@@ -70,6 +70,25 @@ class DesktopSportIdentOwnerRecoveryStoreTest {
         assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, store.load())
     }
 
+    @Test fun nativeBaselineAndEachAttemptSurviveRestartBeforeTheNextWord() {
+        val file = temporary.root.toPath().resolve("native-recovery.json")
+        val nativeRequest = SportIdentOwnerNameWriteRequest(1, 593927, 2450662,
+            "Daisy", "Duck", "Donald", "Duck", true)
+        val before = nativeFixture("Daisy;Duck;")
+        val store = DesktopSportIdentOwnerRecoveryStore(file)
+        store.beginNative(nativeRequest, before)
+        for (count in 0..3) {
+            val pending = DesktopSportIdentOwnerRecoveryStore(file).load() as DesktopSportIdentOwnerRecoveryState.Pending
+            assertEquals(nativeRequest, pending.request)
+            assertEquals(before, requireNotNull(pending.nativeAttempt).before)
+            assertEquals(count, pending.nativeAttempt.attemptedWords)
+            refused { store.begin(nativeRequest) }
+            if (count < 3) store.markWordAttempt(nativeRequest, count + 1)
+        }
+        refused { store.markWordAttempt(nativeRequest, 3) }
+        refused { store.markWordAttempt(nativeRequest.copy(firstName = "Minnie"), 4) }
+    }
+
     @Test fun anOlderAcknowledgementCannotDeleteAnotherAttempt() {
         val store = store()
         val other = request.copy(firstName = "Mortimer")
