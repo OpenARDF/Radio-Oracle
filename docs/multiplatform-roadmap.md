@@ -713,9 +713,19 @@ mid-term goal on Android and desktop.
   on station 554900. Read-only comparison on macOS found the same model,
   firmware 657, protocol byte 5, SI MASTER mode, 38,400 baud, memory size,
   and similar system-info response time on both stations; their station code
-  and several raw system-info bytes differ. A known-good long-name vendor
-  transaction on station 554900 remains necessary before exposing
-  variable-length writes in the product.
+  and several raw system-info bytes differ. A Config+ comparison on 554900
+  could not run: Windows listed the reader as COM6 but could not open the
+  device after USB reconnect and VM restart. Back on macOS, an explicitly
+  approved Kotlin seven-command trial on 554900 added a 200 ms pause after
+  each valid word reply. It changed six owner words from `Penny` /
+  `Popandrolopoulos` to `Donald` / `Duckandrolopoulos`; all seven replies
+  arrived, and both the in-command fresh read and a separate two-block read
+  matched the shared plan exactly. All 11 punches and every byte outside the
+  owner field were preserved. Pacing is a promising lead, but different
+  starting bytes and a USB reconnection prevent attributing the earlier NAK
+  to timing alone. The paced path remains an opt-in experimental CLI; repeat
+  evidence and compatibility checks before exposing variable-length writes
+  in the product.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Default-character-set Western letters now use a shared, round-trip-checked

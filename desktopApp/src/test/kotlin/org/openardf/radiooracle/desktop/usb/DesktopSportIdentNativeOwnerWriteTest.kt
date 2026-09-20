@@ -59,7 +59,9 @@ class DesktopSportIdentNativeOwnerWriteTest {
         assertEquals(0, calls)
         assertEquals(2, run(arrayOf("--execute-native-write", requestFile.toString(),
             "--allow-seven-word-trial"), execute))
-        assertEquals(1, calls)
+        assertEquals(2, run(arrayOf("--execute-native-write", requestFile.toString(),
+            "--allow-seven-word-paced-trial"), execute))
+        assertEquals(2, calls)
     }
 
     @Test

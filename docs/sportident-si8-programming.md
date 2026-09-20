@@ -3,9 +3,9 @@
 The desktop product reads SI-Card8 names and previews edits, but does not yet
 write names. The SDK bridge is confined to local test tooling and excluded from
 the desktop product. The direct Kotlin writer remains an experimental CLI:
-several short-name writes and one opt-in seven-word trial verified, while two
-seven-word attempts that changed multiple owner bytes stopped at the second
-word and required local SDK repair.
+several short-name writes, a seven-word trial on each reader, and a paced
+multiword trial on station 554900 verified. Earlier unpaced multiword attempts
+on 554900 stopped at the second word and required local SDK repair.
 Name preparation, word planning, reply validation, and recovery assessment live
 in shared Kotlin code for future Android reuse.
 
@@ -1071,8 +1071,38 @@ read-only Kotlin station diagnostic found the same 38,400 baud rate, model ID
 and approximately 164 ms median long-system-info response on both. Station
 code (14 versus 10), serial number, and production date differ; other raw
 system-info offsets differ but have not all been identified. A comparable
-known-good vendor transaction on station 554900 remains the next diagnostic
-gate before widening the Kotlin product write path.
+vendor transaction on station 554900 was the planned next diagnostic gate.
+
+### Paced Kotlin multiword trial on station 554900
+
+A planned Config+ comparison on station 554900 could not run because Windows
+listed the VM-attached reader as COM6 but could not open the port, including
+after a USB reconnect and VM restart. Config+ and a direct serial-port check
+both reported that the device did not exist. No Config+ write was attempted on
+that station. After reconnecting the reader to macOS, a fresh, read-only
+two-block capture of spare SI-Card8 2450662 matched its earlier image byte
+for byte: `Penny` / `Popandrolopoulos`, with 11 punches.
+
+For an explicitly approved Kotlin trial, the experimental CLI waited 200 ms
+after each valid owner-word reply before sending the next word. This pause is
+opt-in via `sportident-owner-native-seven-word-paced-trial`; the product path
+and existing experimental command retain their previous timing. The exact
+request changed 2450662 on Mac station 554900 to `Donald` /
+`Duckandrolopoulos`, a seven-command transaction with six changed owner words.
+All seven replies passed address and CRC checks. Observed reply-to-next-write
+intervals were approximately 200–208 ms. The command then observed removal,
+required reinsertion, and verified a fresh two-block read before clearing its
+recovery record. A separate read-only capture matched the shared Kotlin plan
+byte for byte: 21 bytes changed, all in the owner field of block 0; block 1,
+all 11 punches, and unrelated bytes were unchanged. The card was removed from
+the reader after verification.
+
+This demonstrates a successful paced multiword write on the station that
+previously returned a second-word NAK. The pause is a strong timing lead, not
+a proven root cause: the card's starting owner bytes differed from the earlier
+failed trial, and the USB reader was reconnected in between. Repeatable
+transactions and compatibility checks remain necessary before enabling
+variable-length writes in the desktop UI.
 
 ### SDK provenance and licensing
 

@@ -20,7 +20,9 @@ fun main(args: Array<String>) {
 /** Explicit experimental CLI for one native owner-write attempt; never retries. */
 internal object DesktopSportIdentNativeOwnerWrite {
     private const val usage = "Usage: --execute-native-write <exact-owner-write-request-json> " +
-        "[--stop-after-first-reply|--stop-after-second-reply|--stop-after-third-reply|--allow-seven-word-trial]"
+        "[--stop-after-first-reply|--stop-after-second-reply|--stop-after-third-reply|" +
+        "--allow-seven-word-trial|--allow-seven-word-paced-trial]"
+    private const val pacedTrialPauseMillis = 200L
 
     fun run(
         args: Array<String>,
@@ -39,7 +41,8 @@ internal object DesktopSportIdentNativeOwnerWrite {
             "--stop-after-third-reply" -> 3
             else -> null
         }
-        val allowSevenWordTrial = args.getOrNull(2) == "--allow-seven-word-trial"
+        val pacedSevenWordTrial = args.getOrNull(2) == "--allow-seven-word-paced-trial"
+        val allowSevenWordTrial = args.getOrNull(2) == "--allow-seven-word-trial" || pacedSevenWordTrial
         if (args.getOrNull(0) != "--execute-native-write" ||
             (args.size != 2 && (args.size != 3 || (stopAfterWord == null && !allowSevenWordTrial)))) {
             err.println(usage)
@@ -57,8 +60,10 @@ internal object DesktopSportIdentNativeOwnerWrite {
                 "card=${request.cardNumber} '${request.expectedFirstName} ${request.expectedLastName}' " +
                 "to '${request.firstName} ${request.lastName}'. One attempt; no automatic retry." +
                 if (stopAfterWord != null) " Stop deliberately after acknowledged word $stopAfterWord."
+                else if (pacedSevenWordTrial) " Opt-in seven-word trial with a 200 ms pause between words."
                 else if (allowSevenWordTrial) " Opt-in seven-word trial." else "")
-            val outcome = (execute ?: { nativeExecute(it, store, out, stopAfterWord, allowSevenWordTrial) })(request)
+            val outcome = (execute ?: { nativeExecute(it, store, out, stopAfterWord,
+                allowSevenWordTrial, if (pacedSevenWordTrial) pacedTrialPauseMillis else 0L) })(request)
             if (outcome.verified && store.load() == DesktopSportIdentOwnerRecoveryState.Empty) {
                 out.println("Native write verified against a fresh two-block card read; recovery record cleared.")
                 0
@@ -83,7 +88,8 @@ internal object DesktopSportIdentNativeOwnerWrite {
 
     private fun nativeExecute(request: SportIdentOwnerNameWriteRequest,
         store: DesktopSportIdentOwnerRecoveryStore, out: PrintStream,
-        stopAfterWord: Int?, allowSevenWordTrial: Boolean): DesktopSportIdentOwnerWriteOutcome {
+        stopAfterWord: Int?, allowSevenWordTrial: Boolean,
+        pauseAfterReplyMillis: Long): DesktopSportIdentOwnerWriteOutcome {
         val wordResults = mutableListOf<String>()
         val preflight = DesktopSportIdentOwnerWritePreflight(readCard = { port ->
             out.println("Station ${request.stationNumber} ready. Insert SI-Card8 ${request.cardNumber}; keep it seated.")
@@ -119,7 +125,7 @@ internal object DesktopSportIdentNativeOwnerWrite {
                     wordResults += "Owner word ${timing.wordNumber} timing: reply-to-write=" +
                         (timing.replyToWriteMicros?.let { "$it us" } ?: "first word") +
                         ", write-to-reply=${timing.writeToReplyMicros} us"
-                })
+                }, pauseAfterReplyMillis = pauseAfterReplyMillis)
             }
         )
         try {

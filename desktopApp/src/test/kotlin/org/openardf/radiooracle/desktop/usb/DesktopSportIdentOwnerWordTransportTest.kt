@@ -61,6 +61,39 @@ class DesktopSportIdentOwnerWordTransportTest {
     }
 
     @Test
+    fun pacedTrialPausesOnlyBetweenAcknowledgedWords() {
+        val port = FakePort(capturedReplies)
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
+        val pauses = mutableListOf<Long>()
+        var now = 0L
+
+        DesktopSportIdentOwnerWordTransport(port, readTimeoutMs = 4,
+            nowMillis = { ++now }, pauseAfterReplyMillis = 200,
+            pause = { pauses += it }).exchange(rehearsal)
+
+        assertEquals(SportIdentSi8OwnerWriteStage.REQUIRES_READBACK, rehearsal.stage)
+        assertEquals(3, port.writeRequests.size)
+        assertEquals(listOf(200L, 200L), pauses)
+    }
+
+    @Test
+    fun pacedTrialChecksForCardEventsAfterThePause() {
+        val port = FakePort(capturedReplies, queuedBeforeWord = 2 to byteArrayOf(
+            SportIdentProtocol.STX, SportIdentProtocol.SI_CARD_REMOVED))
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, fixture())
+        val pauses = mutableListOf<Long>()
+        var now = 0L
+
+        DesktopSportIdentOwnerWordTransport(port, readTimeoutMs = 4,
+            nowMillis = { ++now }, pauseAfterReplyMillis = 200,
+            pause = { pauses += it }).exchange(rehearsal)
+
+        assertEquals(listOf(200L), pauses)
+        assertEquals(1, port.writeRequests.size)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, rehearsal.stopReason)
+    }
+
+    @Test
     fun sevenWordNameUsesAddressCheckedRepliesAndDurableRecovery() {
         val before = fixture()
         val longer = request.copy(firstName = "ABCDEFGHIJKLMNOPQRSTUVW", lastName = "")

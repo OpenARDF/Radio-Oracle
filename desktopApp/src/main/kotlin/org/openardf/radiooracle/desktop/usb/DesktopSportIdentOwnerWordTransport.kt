@@ -19,8 +19,14 @@ internal class DesktopSportIdentOwnerWordTransport(
     private val readTimeoutMs: Int = 1200,
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val onWordResult: (Int, SportIdentCommandResult) -> Unit = { _, _ -> },
-    private val onWordTiming: (DesktopSportIdentOwnerWordTiming) -> Unit = {}
+    private val onWordTiming: (DesktopSportIdentOwnerWordTiming) -> Unit = {},
+    private val pauseAfterReplyMillis: Long = 0,
+    private val pause: (Long) -> Unit = Thread::sleep
 ) {
+    init {
+        require(pauseAfterReplyMillis in 0L..500L) { "Experimental owner-word pause must be 0–500 ms." }
+    }
+
     private val replies = DesktopSportIdentFrameStream(port, nowMillis = nowMillis)
 
     /** Stops on the first ambiguous outcome; read-back remains a separate step. */
@@ -35,6 +41,12 @@ internal class DesktopSportIdentOwnerWordTransport(
         var previousReplyAtNanos: Long? = null
         while (rehearsal.stage == SportIdentSi8OwnerWriteStage.READY_FOR_WORD) {
             try {
+                // The opt-in comparison trial gives the station time to finish
+                // one word before the next. Check the serial queue afterward
+                // so a card event arriving during the pause stops the write.
+                if (previousReplyAtNanos != null && pauseAfterReplyMillis > 0) {
+                    pause(pauseAfterReplyMillis)
+                }
                 // A card event can arrive after the preceding reply without
                 // sharing its serial read. Do not issue another owner word
                 // while any input is already waiting in the driver queue.
