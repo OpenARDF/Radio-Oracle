@@ -22,7 +22,7 @@ enum class SportIdentSi8OwnerWriteStopReason {
 }
 
 /**
- * Transport-free rehearsal of the one observed SI-Card8 owner-write sequence.
+ * Transport-free rehearsal of an SI-Card8 owner-write sequence.
  * Handing out a frame consumes that attempt: an absent or unfamiliar reply
  * permanently stops this session, and no reply alone proves a card write.
  */
@@ -32,7 +32,7 @@ class SportIdentSi8OwnerWriteRehearsal(
     private val before: SportIdentOwnerReadFixture
 ) {
     private val frames = SportIdentSi8OwnerWordWritePlanner.plan(request, before)
-    private val replies = SportIdentSi8OwnerWordWriteReplySequence(stationCode)
+    private val replies = SportIdentSi8OwnerWordWriteReplySequence(stationCode, frames.size)
     private var nextFrameIndex = 0
 
     var stage: SportIdentSi8OwnerWriteStage = SportIdentSi8OwnerWriteStage.READY_FOR_WORD
@@ -42,6 +42,7 @@ class SportIdentSi8OwnerWriteRehearsal(
 
     val targetStationNumber: Int get() = request.stationNumber
     val targetCardNumber: Int get() = request.cardNumber
+    val wordCount: Int get() = frames.size
 
     /** Returns only the next planned frame; it may not be requested again. */
     fun takeNextWordFrame(): ByteArray {

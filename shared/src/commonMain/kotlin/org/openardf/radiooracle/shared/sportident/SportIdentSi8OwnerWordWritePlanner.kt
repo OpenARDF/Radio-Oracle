@@ -34,22 +34,35 @@ data class SportIdentSi8OwnerNativeAttempt(
 )
 
 /**
- * Reproduces the one observed Config+ SI-Card8 owner-write shape offline.
- * Nothing calls a serial transport here; other lengths and acknowledgement
- * semantics must be characterized before these frames can be sent to a card.
+ * Plans SI-Card8 owner words only. This is shared, transport-free code; a
+ * caller must confirm station/card identity and independently verify both
+ * complete card blocks after transmitting any frames.
  */
 object SportIdentSi8OwnerWordWritePlanner {
     private const val OWNER_OFFSET = 0x20
     private const val FIRST_OWNER_WORD = 0x08
     private const val WORD_BYTES = 4
-    private const val OBSERVED_TEXT_BYTES = 12
-    private const val OBSERVED_SHORT_TEXT_BYTES = 11
+    private const val MAX_OWNER_TEXT_BYTES = SportIdentSi8OwnerNamePlanner.MAX_NAME_CHARACTERS + 2
     private val ERASED_NAME_BYTE = 0xEE.toByte()
+
+    /** Limit real direct writes to the name transitions already completed on hardware. */
+    fun hasPreviouslyVerifiedDirectShape(request: SportIdentOwnerNameWriteRequest,
+        before: SportIdentOwnerReadFixture): Boolean {
+        val frames = plan(request, before)
+        val old = SportIdentOwnerReadVerification.nativeRead(before)
+        if ((request.firstName + request.lastName + old.firstName + old.lastName).any { it !in ' '..'~' }) {
+            return false
+        }
+        val oldBytes = old.firstName.length + old.lastName.length + 2
+        val newBytes = request.firstName.length + request.lastName.length + 2
+        return frames.size == 3 &&
+            ((newBytes == 12 && oldBytes <= 12) || (newBytes == 11 && oldBytes == 12))
+    }
 
     fun assessInterruption(request: SportIdentOwnerNameWriteRequest, before: SportIdentOwnerReadFixture,
         attemptedWordsUpperBound: Int, fresh: SportIdentOwnerReadFixture): SportIdentSi8OwnerInterruptionAssessment {
-        require(attemptedWordsUpperBound in 0..3)
         val frames = plan(request, before)
+        require(attemptedWordsUpperBound in 0..frames.size)
         require(fresh.stationNumber == before.stationNumber &&
             SportIdentOwnerReadVerification.rawCardNumber(fresh) == request.cardNumber) {
             "Fresh read must contain the expected SI-Card8 and station."
@@ -63,7 +76,7 @@ object SportIdentSi8OwnerWordWritePlanner {
                 if (old == new) null else SportIdentOwnerReadByteChange(block, offset, old, new)
             }
         }
-        val matches = (0..3).filter { count ->
+        val matches = (0..frames.size).filter { count ->
             val predicted = baseline.map { it.copyOf() }
             frames.take(count).forEach { bytes ->
                 val frame = requireNotNull(SportIdentFrameParser.firstFrame(bytes))
@@ -73,7 +86,7 @@ object SportIdentSi8OwnerWordWritePlanner {
             predicted[0].contentEquals(observed[0]) && predicted[1].contentEquals(observed[1])
         }
         return SportIdentSi8OwnerInterruptionAssessment(attemptedWordsUpperBound, matches, changes,
-            changes.filter { it.blockNumber != 0 || it.offset !in OWNER_OFFSET until OWNER_OFFSET + OBSERVED_TEXT_BYTES })
+            changes.filter { it.blockNumber != 0 || it.offset !in OWNER_OFFSET until OWNER_OFFSET + frames.size * WORD_BYTES })
     }
 
     /** Offline proposal only: restore the saved owner words after a compatible fresh raw read. */
@@ -86,7 +99,7 @@ object SportIdentSi8OwnerWordWritePlanner {
         }
         if (assessment.byteChangesFromBaseline.isEmpty()) return emptyList()
         val originalOwnerBlock = SportIdentOwnerReadVerification.blockBytes(before, 0)
-        return (0 until OBSERVED_TEXT_BYTES / WORD_BYTES).map { index ->
+        return (0 until plan(request, before).size).map { index ->
             val offset = OWNER_OFFSET + index * WORD_BYTES
             val payload = byteArrayOf((FIRST_OWNER_WORD + index).toByte()) +
                 originalOwnerBlock.copyOfRange(offset, offset + WORD_BYTES)
@@ -110,9 +123,7 @@ object SportIdentSi8OwnerWordWritePlanner {
         val oldText = requireNotNull(
             SportIdentSi8OwnerNamePlanner.preview(inspection, read.firstName, read.lastName).encodedOwnerText
         ) { "Stored SI-Card8 names cannot be encoded exactly." }
-        require(oldText.size <= OBSERVED_TEXT_BYTES) {
-            "Writing fewer owner bytes than the current text would require an unverified cleanup rule."
-        }
+        require(oldText.size in 2..MAX_OWNER_TEXT_BYTES)
         val block0Hex = before.blocks.single { it.blockNumber == 0 }.hexData
         val storedPrefix = ByteArray(oldText.size) { index ->
             block0Hex.substring((OWNER_OFFSET + index) * 2, (OWNER_OFFSET + index + 1) * 2).toInt(16).toByte()
@@ -122,18 +133,15 @@ object SportIdentSi8OwnerWordWritePlanner {
         val newText = requireNotNull(
             SportIdentSi8OwnerNamePlanner.preview(inspection, request.firstName, request.lastName).encodedOwnerText
         )
-        require(newText.size == OBSERVED_TEXT_BYTES || newText.size == OBSERVED_SHORT_TEXT_BYTES) {
-            "Only the observed 11- or 12-byte SI-Card8 owner-write shapes can be planned."
+        require(newText.size in 2..MAX_OWNER_TEXT_BYTES)
+        // Independent SDK card images confirmed 0xEE final-word padding for
+        // 10 and 25 bytes, and that a 25-to-12-byte change leaves older words
+        // untouched. Only the words covering the new text are transmitted.
+        val wordCount = (newText.size + WORD_BYTES - 1) / WORD_BYTES
+        val paddedText = ByteArray(wordCount * WORD_BYTES) { index ->
+            if (index < newText.size) newText[index] else ERASED_NAME_BYTE
         }
-        if (newText.size == OBSERVED_SHORT_TEXT_BYTES) {
-            require(oldText.size == OBSERVED_TEXT_BYTES) {
-                "The 11-byte owner-write shape was observed only after a 12-byte name."
-            }
-        }
-        // A paired native capture after a Mac SDK 12-to-11-byte name change
-        // showed 0xEE in the twelfth slot and older residual bytes untouched.
-        val paddedText = if (newText.size == OBSERVED_SHORT_TEXT_BYTES) newText + ERASED_NAME_BYTE else newText
-        return (0 until OBSERVED_TEXT_BYTES / WORD_BYTES).map { index ->
+        return (0 until wordCount).map { index ->
             val payload = byteArrayOf((FIRST_OWNER_WORD + index).toByte()) +
                 paddedText.copyOfRange(index * WORD_BYTES, (index + 1) * WORD_BYTES)
             SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.WRITE_SI_CARD_WORD, payload)

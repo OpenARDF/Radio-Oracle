@@ -523,8 +523,8 @@ mid-term goal on Android and desktop.
   card/station combinations and name encoding/length limits,
   verify the actual write protocol and capacity, then verify the written name
   by reading it back. The desktop SI-Card8 editor previews names using the
-  vendor-validated combined limit of 23 name characters and an ASCII-only
-  name policy. An optional, privately configured desktop SDK bridge now provides
+  vendor-validated combined limit of 23 name characters and a round-trip-checked
+  default-character-set name policy. A privately configured desktop SDK bridge now provides
   an explicit write confirmation, pinned card/station identity, and independent
   read-back verification. Shared Kotlin validates requests, progress ordering,
   and verification results for later Android reuse. See the
@@ -669,17 +669,34 @@ mid-term goal on Android and desktop.
   The pinned-station CLI now selects by unique USB serial and verifies the
   connected station; general multi-download-station UI support remains future
   work.
-  The desktop SI Card page now offers a clearly labeled Kotlin test writer
-  when its fresh raw SI-Card8 read and requested names fit the verified
-  11- or 12-byte word plan. It uses the one-shot transaction, requires removal
-  and reinsertion for full-card readback, and exposes compatible interrupted
-  attempts for manual recovery acknowledgement. The existing SDK choice remains
-  available where locally installed. This UI route still needs user hardware
-  acceptance before general release.
+  The desktop SI Card page now reads names and previews edits without offering
+  a write until the Kotlin transaction is proven for all supported names. The
+  SDK bridge and .NET runtime are local comparison tools only, excluded from the
+  desktop product and checked at packaging. The Kotlin writer remains
+  available only through guarded experimental commands. Shared Kotlin plans
+  one to seven owner words; separate two-block SDK comparisons matched plans
+  for a 10-byte name, a maximum 25-byte owner string, and shortening that
+  maximum string back to 12 bytes, with all 11 punches unchanged. However,
+  the first direct seven-word Kotlin trial stopped on a second-word negative
+  acknowledgement and left that owner word partly corrupted. The recovery
+  guard blocked another native write; an exact SDK repair and independent
+  native capture restored the pretrial two-block image byte for byte. The real
+  direct transaction now rejects unverified lengths while offline planning
+  remains available. A traced Config+ seven-word write on station 593927 then
+  matched every planned Kotlin frame and reply; independent raw readback changed
+  only owner bytes and retained the 11 punches. The difference from the failed
+  Kotlin trial on station 554900 may lie in serial timing or station behavior;
+  the direct transaction now reserves its recovery bound before the word
+  sequence, avoiding a disk sync between words while retaining conservative
+  fresh-read recovery. Measure the direct reply-to-next-word interval and retest under the existing
+  recovery and independent-read guards before exposing variable-length writes.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
-  Other name lengths, trailing-byte cleanup beyond the observed padding,
-  response errors, other interruption points, compatibility,
+  Default-character-set Western letters now use a shared, round-trip-checked
+  codec derived from the SDK's public conversion method. Separate SDK writes
+  and native raw reads confirmed `José` and `Bjørn`; the spare returned to
+  `Donald` with all 11 punches intact. Other character sets, direct
+  variable-length response errors, compatibility,
   and permission to distribute a replacement still need resolution before
   making the Kotlin writer a general programming option. SDK read comparison
   alone does not establish a write protocol.

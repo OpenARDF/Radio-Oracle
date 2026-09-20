@@ -45,8 +45,21 @@ class SportIdentSi8OwnerNamePlannerTest {
     }
 
     @Test
-    fun rejectsDelimitersControlsAndNonAsciiInsteadOfSilentlyChangingNames() {
-        listOf("Anne;Marie", "Anne\n", "Anne\t", "André", "Runner😀", "Anne\u0000", "Anne\u007f").forEach { name ->
+    fun supportsObservedDefaultCharsetAccentsWithoutChangingTheirStoredSpelling() {
+        listOf("José" to "4a6f7382", "Bjørn" to "426af8726e").forEach { (name, expectedHex) ->
+            val preview = SportIdentSi8OwnerNamePlanner.preview(card, name, "Duck")
+            assertTrue(preview.problems.isEmpty())
+            val bytes = assertNotNull(preview.encodedOwnerText)
+            assertEquals(expectedHex, bytes.take(name.length).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') })
+            val data = ByteArray(128)
+            bytes.copyInto(data, 32)
+            assertEquals(name, SportIdentCardReadoutParser.parseSemicolonCardHolder(data, 2)?.firstName)
+        }
+    }
+
+    @Test
+    fun rejectsDelimitersControlsAndUnsupportedUnicodeInsteadOfSilentlyChangingNames() {
+        listOf("Anne;Marie", "Anne\n", "Anne\t", "Łukasz", "東京", "Runner😀", "Anne\u0000", "Anne\u007f", "Anne\u00a0").forEach { name ->
             val preview = SportIdentSi8OwnerNamePlanner.preview(card, name, "Runner")
             assertEquals(name, preview.firstName)
             assertEquals(setOf(SportIdentOwnerNameProblem.UNSUPPORTED_CHARACTERS), preview.problems)

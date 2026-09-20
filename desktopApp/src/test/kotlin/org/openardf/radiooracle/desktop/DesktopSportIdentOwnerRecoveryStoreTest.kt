@@ -89,6 +89,30 @@ class DesktopSportIdentOwnerRecoveryStoreTest {
         refused { store.markWordAttempt(nativeRequest.copy(firstName = "Minnie"), 4) }
     }
 
+    @Test fun reservedWholeSequenceSurvivesRestartAndAllowsOnlyObservedPrefixRecovery() {
+        val nativeRequest = SportIdentOwnerNameWriteRequest(1, 593927, 2450662,
+            "Daisy", "Duck", "Donald", "Duck", true)
+        val before = nativeFixture("Daisy;Duck;")
+        val file = temporary.root.toPath().resolve("reserved-recovery.json")
+        val store = DesktopSportIdentOwnerRecoveryStore(file)
+        store.beginNative(nativeRequest, before)
+        refused { store.reserveNativeWordSequence(nativeRequest.copy(firstName = "Minnie")) }
+        store.reserveNativeWordSequence(nativeRequest)
+
+        val restarted = DesktopSportIdentOwnerRecoveryStore(file)
+        assertEquals(3, (restarted.load() as DesktopSportIdentOwnerRecoveryState.Pending)
+            .nativeAttempt?.attemptedWords)
+        refused { restarted.reserveNativeWordSequence(nativeRequest) }
+        val partial = nativeFixture("Donay;Duck;")
+        val changedPunchBlock = partial.copy(blocks = partial.blocks.map { block ->
+            if (block.blockNumber == 1) block.copy(hexData = block.hexData.replaceRange(16, 18, "63"))
+            else block
+        })
+        refused { restarted.acknowledgeNative(nativeRequest, changedPunchBlock, "Donay", "Duck") }
+        restarted.acknowledgeNative(nativeRequest, partial, "Donay", "Duck")
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, restarted.load())
+    }
+
     @Test fun nativeAttemptCannotBeClearedByNamesAloneOrAnomalousCardBytes() {
         val nativeRequest = SportIdentOwnerNameWriteRequest(1, 593927, 2450662,
             "Daisy", "Duck", "Donald", "Duck", true)

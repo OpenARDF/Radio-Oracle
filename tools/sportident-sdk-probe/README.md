@@ -48,7 +48,8 @@ successful only when the process exits zero, including serial close.
 
 The optional write command requires a local JSON request. It reads a freshly
 inserted SI-Card8, checks its identity and existing names, validates the new
-ASCII names (23 characters combined), and invokes the documented SDK writer
+default-character-set names (23 characters combined, with an exact byte
+round-trip check), and invokes the documented SDK writer
 once with Auto apply disabled and feedback editing unset. After SDK completion,
 it closes and reopens the serial connection and verifies the station again.
 It then prompts for removal/reinsertion and compares the fresh read's identity,
@@ -103,59 +104,18 @@ A separately approved return to `Mickey` / `Mouse` passed the complete revised
 transaction with exit zero: 11 control punches before/after, matching captured
 punch values, feedback bytes, and reported character set. Unexposed card data
 was not compared; mid-write removal has not been tested on hardware.
-The optional desktop prototype can invoke this helper as a separate process. A
-supported vendor release, runtime packaging, and license injection into a
-distributed product still need to be resolved.
+The SDK helper and its .NET runtime are retained only for local protocol
+investigation and comparison. The desktop product no longer discovers or invokes
+the helper. Build and run this command-line probe using the private SDK reference
+and license described above; do not place its published files in a product bundle.
 
-## Launch the local desktop prototype
+## Historical desktop bridge tests
 
-After building the helper with the private SDK reference and building the Mac
-app using `just desktop-package`, configure these environment variables locally:
-
-- `RADIO_ORACLE_SI_SDK_HELPER_DLL`: absolute path to the built `SportIdentSdkProbe.dll`.
-- `RADIO_ORACLE_DOTNET`: absolute path to the executable .NET runtime.
-- `SPORTIDENT_SDK_LICENSE_FILE`: absolute path to the privately issued license file.
-
-Save and close the running app, then use `just desktop-sdk-launch`. The SI Card
-page offers Write Names after a fresh native read. Its confirmation requires
-acceptance of possible punch loss; reinsertion is required before writing and
-again for independent read-back. The helper emits versioned JSON progress packets
-for WaitingForCard, Writing, and WaitingForReadBack, followed by its verified result.
-The app rejects missing/reordered phases, unsuccessful exit, or mismatched results.
-Normal desktop launches leave programming unavailable unless all private paths are
-configured or a private local bridge is installed as described below. This launch
-recipe does not copy SDK binaries or credentials into the app.
-
-### Install a private bridge for normal Mac launches
-
-With `SPORTIDENT_SDK_DLL` configured to your private SDK DLL, use:
-
-```sh
-just sportident-sdk-local-publish
-just sportident-sdk-local-check
-just sportident-sdk-local-install /private/sdk/issued-license.txt
-```
-
-The default target is `osx-arm64`. The bridge includes its .NET runtime, so the
-installed helper does not require a separate runtime installation. .NET SDK and
-NuGet access are needed to build it. The published folder remains ignored; the
-installer copies it into a new private version directory in Radio-Oracle's local
-application data and atomically selects that directory in `sportident/bridge.json`.
-The manifest stores only paths, with permissions 0600. The license text is not
-copied or embedded. Existing versions are retained for running apps.
-
-Save and close Radio-Oracle, then launch it normally. The app discovers this
-installation without SDK environment variables. Existing explicit environment
-overrides take precedence; an incomplete override disables programming instead
-of selecting another bridge. Discovery does not execute the helper.
-
-This procedure is for private local prototype use. The SDK archive's license
-permits bundling the library with a product using a properly issued key, requires
-a commercial license if third parties pay for the product, and forbids standalone
-library redistribution and public keys/source containing keys. Its packaged-product
-key provision allows the key inside a compiled executable. Public product
-packaging therefore still needs a supported release and compiled-key provisioning;
-the runtime private-key file used locally is not that distribution mechanism.
+Earlier private Mac prototypes invoked this helper through a supervised process
+and a local `sportident/bridge.json` manifest. Those bridge classes now live in
+test-only Kotlin sources, and desktop package checks reject them and SDK/.NET
+payloads. The following results document the historical prototype behavior; they
+are not instructions for enabling SDK writing in the current desktop app.
 
 The packaged local Mac app has also completed a user-confirmed write from `Mickey`
 / `Mouse` to `Mortimer` / `Mouse` on card 2450662, with independent read-back and

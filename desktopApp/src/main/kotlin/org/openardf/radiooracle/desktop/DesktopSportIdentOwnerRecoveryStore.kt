@@ -74,6 +74,16 @@ internal class DesktopSportIdentOwnerRecoveryStore(
         saveNative(SportIdentSi8OwnerNativeAttempt(1, request, before, 0))
     }
 
+    /** Reserve a conservative upper bound once, before the time-sensitive word sequence. */
+    @Synchronized fun reserveNativeWordSequence(request: SportIdentOwnerNameWriteRequest) {
+        val pending = load() as? DesktopSportIdentOwnerRecoveryState.Pending
+            ?: error("Native owner-write recovery record is missing or unreadable.")
+        val attempt = pending.nativeAttempt ?: error("Native owner-write baseline is missing.")
+        check(pending.request == request && attempt.attemptedWords == 0)
+        val wordCount = SportIdentSi8OwnerWordWritePlanner.plan(request, attempt.before).size
+        saveNative(attempt.copy(attemptedWords = wordCount))
+    }
+
     /** Called immediately before port.write; a failed save prevents transmission. */
     @Synchronized fun markWordAttempt(request: SportIdentOwnerNameWriteRequest, wordNumber: Int) {
         val pending = load() as? DesktopSportIdentOwnerRecoveryState.Pending
@@ -92,10 +102,10 @@ internal class DesktopSportIdentOwnerRecoveryStore(
     }
 
     private fun validateNative(attempt: SportIdentSi8OwnerNativeAttempt) {
-        require(attempt.schemaVersion == 1 && attempt.attemptedWords in 0..3)
+        require(attempt.schemaVersion == 1)
         SportIdentOwnerNameRecovery.validate(attempt.request)
         require(attempt.before.stationNumber == attempt.request.stationNumber)
-        require(SportIdentSi8OwnerWordWritePlanner.plan(attempt.request, attempt.before).size == 3)
+        require(attempt.attemptedWords in 0..SportIdentSi8OwnerWordWritePlanner.plan(attempt.request, attempt.before).size)
     }
 
     @Synchronized fun completeVerified(request: SportIdentOwnerNameWriteRequest, result: SportIdentOwnerNameWriteResult) {

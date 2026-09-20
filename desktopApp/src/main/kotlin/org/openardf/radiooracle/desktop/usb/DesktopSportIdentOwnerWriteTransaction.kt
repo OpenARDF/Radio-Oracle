@@ -7,6 +7,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerificatio
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWritePlanComparison
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStage
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStopReason
+import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWordWritePlanner
 
 /** Terminal outcome of one native word exchange; a stopped attempt must never be retried blindly. */
 internal data class DesktopSportIdentOwnerWriteOutcome(
@@ -20,7 +21,7 @@ internal data class DesktopSportIdentOwnerWriteOutcome(
 
 /**
  * Same-port preflight, one-shot word transport, and independent read-back.
- * Used by the experimental CLI and the desktop owner-name page.
+ * Used by the experimental CLI; the desktop owner-name page is read-only.
  */
 internal class DesktopSportIdentOwnerWriteTransaction(
     private val preflight: DesktopSportIdentOwnerWritePreflight,
@@ -37,6 +38,9 @@ internal class DesktopSportIdentOwnerWriteTransaction(
             "Resolve the pending SI-card owner-write attempt before starting another."
         }
         return preflight.withFreshRead(request) { port, rehearsal, before ->
+            require(SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(request, before)) {
+                "Direct SI-Card8 writes are limited to the previously verified 11/12-byte transitions."
+            }
             val presence = presenceProbe.check(port, SportIdentOwnerReadVerification.blockBytes(before, 0))
             if (presence != DesktopSportIdentCardPresenceResult.MATCHING_BLOCK) {
                 rehearsal.stopForUnconfirmedCard()
@@ -44,8 +48,10 @@ internal class DesktopSportIdentOwnerWriteTransaction(
                 // Persistence must succeed before any owner-word frame can be sent.
                 recoveryStore.beginNative(request, before)
                 onBeforeWordExchange(request)
+                // One durable upper bound avoids a disk sync between replies
+                // and the next word. Fresh readback still identifies the actual prefix.
+                recoveryStore.reserveNativeWordSequence(request)
                 makeWordTransport(port).exchange(rehearsal,
-                    beforeWordAttempt = { wordNumber -> recoveryStore.markWordAttempt(request, wordNumber) },
                     stopAfterAcknowledgedWord = stopAfterAcknowledgedWord)
             }
             val comparison = if (rehearsal.stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK) {

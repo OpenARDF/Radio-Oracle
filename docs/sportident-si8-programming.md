@@ -1,10 +1,12 @@
 # SI-Card8 programming investigation
 
-The desktop inspector and name preview work with SI-Card8. The private Mac SDK
-bridge can write names. An experimental direct Kotlin desktop CLI has completed
-one verified SI-Card8 name write on Mac station 554900; it is not exposed in the
-app UI. Name preparation and reply validation live in shared Kotlin code for
-future Android reuse.
+The desktop product reads SI-Card8 names and previews edits, but does not yet
+write names. The SDK bridge is confined to local test tooling and excluded from
+the desktop product. The direct Kotlin writer remains an experimental CLI:
+several short-name writes verified, but a seven-word attempt stopped with a
+partially changed owner word.
+Name preparation, word planning, reply validation, and recovery assessment live
+in shared Kotlin code for future Android reuse.
 
 ## Verified name limit
 
@@ -31,8 +33,10 @@ first-name and last-name limits are also 23, and club is unsupported.
 
 This replaces the initial conservative preview rule of 24 bytes including two
 separators, which unnecessarily rejected names totaling 23 characters. The
-preview still accepts only printable ASCII excluding semicolons and removes
-outer spaces explicitly. Accented-name write encoding has not been verified.
+preview now accepts printable ASCII plus default-character-set Western letters
+that round-trip through the SDK's public printer-character conversion, excluding
+semicolons. It removes outer spaces explicitly. Two accented names have also
+been checked against real SI-Card8 reads below.
 
 The shared planner's encoded text is for round-tripping through the existing
 read parser. It is **not a write payload**. Neither the read parser's larger
@@ -177,12 +181,12 @@ the .NET runtime/library and injecting a licensed key without adding secrets
 to public source. A desktop bridge would be separate from the shared Kotlin
 planner and would require a separate Android integration later.
 
-### Optional desktop programming prototype
+### Historical optional desktop programming prototype
 
-The desktop SI Card page can now offer Write Names when launched with privately
-configured SDK helper, runtime, and license-file paths. Normal launches retain
-the native owner-information reader and name preview. No SDK binaries or license
-values are included in the Mac bundle or repository.
+Earlier desktop builds offered Write Names when launched with privately
+configured SDK helper, runtime, and license-file paths. That UI path has been
+removed from the product; the following is historical test evidence. No SDK
+binaries or license values are included in the Mac bundle or repository.
 
 A native read captures the card number, station number, and port. The confirmation
 shows the replacement names and requires acceptance of possible punch loss. The
@@ -213,8 +217,8 @@ SI-Card8/BSM8 hardware, without claiming hardware interruption/recovery coverage
 
 ### Cancellation and recovery slice
 
-The desktop prototype now offers Cancel Programming while waiting for a card and
-Stop Verification while waiting for read-back. Cancellation is disabled during
+The historical desktop prototype offered Cancel Programming while waiting for a card and
+Stop Verification while waiting for read-back. Cancellation was disabled during
 the SDK write itself. Page changes and app shutdown also stop the helper; they
 do not trigger another write.
 
@@ -264,7 +268,7 @@ fields side by side, and Write Names without scrolling at the tested 1436 × 768
 window size. Status instructions explain the fresh insertion before writing,
 reinsertion for independent verification, and the distinction between writing
 completion and verified success. The Mac package build and focused desktop
-process/recovery/navigation tests pass; the rebuilt app is running locally.
+process/recovery/navigation tests passed in that prototype.
 
 An approved GUI test changed card 2450662 back to `Mortimer` / `Mouse` and clicked
 Stop Verification after the app reported write completion. The SDK helper exited,
@@ -864,20 +868,85 @@ exact Kotlin write restored `Donald` / `Duck`; its fresh readback verified, and
 an independent final capture matched the original station-593927 two-block
 baseline byte for byte, including all 11 punches. The recovery record is clear.
 
-### Desktop Kotlin test UI
+### Desktop owner-name UI and variable-length comparison
 
-The SI Card owner-name page now keeps the complete raw two-block SI-Card8 read
-alongside the displayed names. Its confirmation dialog offers a **Kotlin test
-writer** only when the shared word planner accepts that exact card image and
-requested 11- or 12-byte name pattern. The optional SPORTident SDK remains a
-separate choice when locally configured. The Kotlin path uses the tested
-same-port preflight, durable recovery record, one-shot three-word exchange,
-observed card removal and reinsertion, and full-card byte comparison. It never
-automatically retries an unverified write. A stopped native attempt blocks
-another write until a fresh read on the same station matches a recorded word
-prefix with no changes outside the owner words and the user accepts that read.
-This UI route is for additional desktop hardware testing; it does not extend
-the protocol to shorter names or other card families.
+The SI Card owner-name page keeps the complete raw two-block SI-Card8 read
+alongside the displayed names. Its confirmation dialog no longer exposes a
+backend choice or asks users to accept likely punch erasure. On this Mac, the
+installed private SDK bridge handles writes. It compares the card number and
+stored names before writing, makes one write, requires physical reinsertion,
+and compares the new names, individual punches, feedback, and character set.
+An interrupted write leaves a durable recovery reminder. The dialog supports
+printable ASCII and round-trippable default-character-set Western letters
+totaling up to 23 characters, excluding semicolons. SDK availability on this
+Mac is not Android support or public distribution permission.
+
+On Mac station 554900, the SDK wrote `José;Duck;` and `Bjørn;Duck;` to spare
+SI-Card8 2450662 in separate one-write sessions. Each independent SDK read
+returned the exact spelling and preserved all 11 individual punches, feedback,
+and the reported character set. Separate Kotlin two-block reads found `é` as
+`0x82` and `ø` as `0xF8`, matching
+`CardPersonalData.ReplacePrinterCharsetBytes` with the default character set.
+Shared Kotlin now applies that public conversion table for SI-Card8 owner
+reads and write previews and rejects characters that do not round-trip or
+would produce a card terminator byte. The spare was returned to `Donald;Duck;`
+with another independent SDK read confirming the 11 punches. Other character
+sets and Unicode outside the verified default mapping remain unsupported.
+
+The shared Kotlin planner now handles 2- through 25-byte `first;last;` owner
+text in one to seven four-byte owner words. An independent Mac SDK write of
+`Donald;Duck;` to `Huey;Duck;` matched its three-word plan byte for byte, with
+`0xEE` padding in the final word. `Huey;Duck;` to the 23-character
+`Penny;Popandrolopoulos-J;` matched all seven planned words, including final
+padding. The SDK's return from that maximum-length name to `Donald;Duck;`
+matched the planner's three-word proposal: older trailing owner bytes remained
+untouched. Each separate two-block capture showed the same 11 punches and no
+changes outside the planned owner words.
+
+The first direct Kotlin seven-word trial stopped at the second word after an
+acknowledged first word and a negative acknowledgement for the second. A fresh
+read found the first word changed as planned and owner word `0x09` containing
+`EA EA EA EA`, rather than any planned whole-word prefix. The shared recovery
+assessment correctly rejected it; block 1 and all 11 punches were unchanged.
+The SDK read the partial names as `Pennêêêêuck` / `rolopoulos-J`, then an exact
+SDK repair restored `Donald` / `Duck`. A separate native two-block read matched
+the saved pretrial image byte for byte, and only then was the recovery record
+cleared. No automatic retry occurred. Until the direct transport failure is
+understood and retested, the real direct transaction rejects unverified lengths.
+Variable-length planning remains offline and is not selected by the desktop UI.
+
+### Config+ seven-word serial trace on station 593927
+
+On 2026-09-20, a controlled Config+ 2.12.0 write changed spare SI-Card8
+2450662 from `Donald` / `Duck` to `Penny` / `Popandrolopoulos-J` through the
+VM-attached station 593927. A COM4 API trace recorded seven `WRITE_SI_CARD_WORD`
+frames at addresses `0x08`–`0x0E`, each followed by a CRC-valid reply for
+station code 10 and the matching address. The seven transmitted frames match
+the shared Kotlin planner byte for byte, including CRCs and `0xEE` padding in
+the final word. Config+ sent `FF 06` after the seventh reply; its role in this
+transaction is not yet established.
+
+The trace includes two complete prewrite reads and an independent complete
+postwrite read of both 128-byte card blocks. The two prewrite images agree.
+The postwrite image differs at 11 bytes, all within owner block 0 offsets
+`0x20`–`0x2B`; block 1 is byte-identical, including its punch data. Config+'s
+fresh card row showed the full requested name and all 11 punches. The card
+was left with `Penny` / `Popandrolopoulos-J` after this test.
+
+This establishes that the seven command frames and reply sequence are valid on
+station 593927. It does not explain the earlier direct Kotlin second-word NAK
+on Mac station 554900. The vendor trace advanced from each reply to the next
+write quickly. The direct Kotlin transaction now durably reserves the full word
+count before transmission, removing its former per-word disk sync, and buffers
+per-word CLI output until the sequence ends. It records reply-to-next-write
+and write-to-reply intervals for the next comparison. The saved
+count is a conservative upper bound: after interruption, a fresh two-block
+read must still match an actual planned prefix with no changes outside owner
+words. The queued-input guard remains. Measure the direct reply-to-next-word
+interval and compare station behavior before another controlled seven-word
+trial. Keep the live Kotlin length gate and the product write UI disabled until
+the transaction and fresh two-block verification succeed on the intended
+hardware combinations.
 
 ### SDK provenance and licensing
 
@@ -908,7 +977,12 @@ a supported release, and compiled-key provisioning still need verification
 before public product packaging. The licensing-form URL referenced by the
 archive could not be loaded during this investigation.
 
-### Private local desktop bridge installation
+### Historical private local desktop bridge prototype
+
+This prototype is retained only for local investigation. The current desktop
+product never discovers or launches its SDK helper, and its package checks reject
+the bridge classes and SDK/.NET payloads. The following records how the earlier
+prototype was installed and tested; it is not a product setup procedure.
 
 The Mac prototype can now discover `sportident/bridge.json` under its existing
 application-data directory during normal launches. The versioned manifest stores

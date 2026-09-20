@@ -31,16 +31,16 @@ object SportIdentSi8OwnerNamePlanner {
         if (inspection.family != SportIdentCardFamily.SI8 || inspection.status != SportIdentOwnerDataStatus.READ) {
             problems += SportIdentOwnerNameProblem.CARD_NOT_READY
         }
-        val supported = (first + last).all { it in ' '..'~' && it != ';' }
-        if (!supported) problems += SportIdentOwnerNameProblem.UNSUPPORTED_CHARACTERS
         val text = "$first;$last;"
-        val characterCount = if (supported) first.length + last.length else null
+        val encodedText = if (';' in first || ';' in last) null else SportIdentSi8OwnerCharacterCodec.encode(text)
+        if (encodedText == null) problems += SportIdentOwnerNameProblem.UNSUPPORTED_CHARACTERS
+        val characterCount = if (encodedText != null) first.length + last.length else null
         if (characterCount != null && characterCount > MAX_NAME_CHARACTERS) {
             problems += SportIdentOwnerNameProblem.TOO_LONG
         }
         return SportIdentSi8OwnerNamePreview(
             inspection.siNumber, first, last, characterCount, problems,
-            if (problems.isEmpty()) ByteArray(text.length) { text[it].code.toByte() } else null
+            if (problems.isEmpty()) encodedText else null
         )
     }
 }

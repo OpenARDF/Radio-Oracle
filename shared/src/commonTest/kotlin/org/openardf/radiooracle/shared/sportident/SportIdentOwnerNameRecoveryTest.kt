@@ -33,7 +33,7 @@ class SportIdentOwnerNameRecoveryTest {
     @Test fun malformedSavedIntentionsCannotBeUsedForRecovery() {
         for (bad in listOf(request.copy(schemaVersion = 2), request.copy(acceptPossiblePunchLoss = false),
                 request.copy(cardNumber = 0), request.copy(stationNumber = 0), request.copy(firstName = "Minnie "),
-                request.copy(firstName = "Mickey"), request.copy(firstName = "é"))) {
+                request.copy(firstName = "Mickey"), request.copy(firstName = "東京"))) {
             assertFailsWith<IllegalArgumentException> { SportIdentOwnerNameRecovery.assess(bad, original) }
         }
     }

@@ -131,6 +131,28 @@ class SportIdentSi8OwnerWordWritePlannerTest {
     }
 
     @Test
+    fun negativeReplyWithPartiallyChangedOwnerWordRemainsBlocked() {
+        val before = fixture(owner = "Donald;Duck;")
+        val longer = request.copy(expectedFirstName = "Donald", firstName = "Penny",
+            lastName = "Popandrolopoulos-J")
+        val block0 = decode(before.blocks.single { it.blockNumber == 0 })
+        "Penn".forEachIndexed { index, char -> block0[32 + index] = char.code.toByte() }
+        (36..39).forEach { block0[it] = 0xEA.toByte() }
+        val fresh = SportIdentOwnerReadVerification.captureRaw(before.stationNumber,
+            listOf(SportIdentCardBlock(0, block0),
+                SportIdentCardBlock(1, decode(before.blocks.single { it.blockNumber == 1 }))))
+
+        val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(longer, before, 2, fresh)
+
+        assertTrue(assessment.matchingWordPrefixes.isEmpty())
+        assertTrue(assessment.changesOutsideOwnerWords.isEmpty())
+        assertFalse(assessment.consistentWithRecordedAttempt)
+        assertFailsWith<IllegalArgumentException> {
+            SportIdentSi8OwnerWordWritePlanner.planBaselineRestoreAfterInterruption(longer, before, 2, fresh)
+        }
+    }
+
+    @Test
     fun identicalLaterWordsLeaveSeveralValidPrefixMatches() {
         val before = fixture(owner = "Donald;Duck;")
         val firstWordOnly = request.copy(expectedFirstName = "Donald", firstName = "Ronald")
@@ -190,16 +212,13 @@ class SportIdentSi8OwnerWordWritePlannerTest {
     }
 
     @Test
-    fun refusesUnsupportedShapeStaleIdentityAndNormalizedOwnerBytes() {
+    fun refusesStaleIdentityAndNormalizedOwnerBytes() {
         val before = fixture()
         listOf(
             request.copy(stationNumber = 593928),
             request.copy(cardNumber = 2450663),
             request.copy(expectedFirstName = "Mickey"),
             request.copy(acceptPossiblePunchLoss = false),
-            request.copy(firstName = "Huey"), // Ten bytes; final-word padding is not characterized.
-            request.copy(firstName = "Dewey"), // Eleven-to-eleven-byte replacement is not characterized.
-            request.copy(firstName = "Minnie", lastName = "Mouse"), // Thirteen bytes need four words.
             request.copy(schemaVersion = 2)
         ).forEach { bad ->
             assertFailsWith<IllegalArgumentException> { SportIdentSi8OwnerWordWritePlanner.plan(bad, before) }
@@ -210,11 +229,82 @@ class SportIdentSi8OwnerWordWritePlannerTest {
         assertFailsWith<IllegalArgumentException> {
             SportIdentSi8OwnerWordWritePlanner.plan(request, fixture(owner = "Da\u0001isy;Duck;"))
         }
-        val longOwner = fixture(owner = "Christopher;Robin;")
-        val matchingLongOwner = request.copy(expectedFirstName = "Christopher", expectedLastName = "Robin")
-        assertFailsWith<IllegalArgumentException> {
-            SportIdentSi8OwnerWordWritePlanner.plan(matchingLongOwner, longOwner)
+    }
+
+    @Test
+    fun plansShortAndMaximumNamesWithoutTouchingOtherCardBytes() {
+        val before = fixture(owner = "Donald;Duck;se;\u00ee")
+        val changes = listOf(
+            "Huey" to "Duck",
+            "" to "",
+            "ABCDEFGHIJKLMNOPQRSTUVW" to ""
+        )
+        changes.forEach { (first, last) ->
+            val target = request.copy(expectedFirstName = "Donald", firstName = first, lastName = last)
+            val frames = SportIdentSi8OwnerWordWritePlanner.plan(target, before)
+            val textLength = first.length + last.length + 2
+            assertEquals((textLength + 3) / 4, frames.size)
+            assertTrue(frames.size in 1..7)
+            val afterBlock0 = decode(before.blocks.single { it.blockNumber == 0 })
+            frames.forEachIndexed { index, bytes ->
+                val frame = requireNotNull(SportIdentFrameParser.firstFrame(bytes))
+                assertEquals(0x08 + index, frame.data[0].toInt() and 0xff)
+                frame.data.copyOfRange(1, 5).copyInto(afterBlock0, 32 + index * 4)
+            }
+            val after = SportIdentOwnerReadVerification.capture(before.stationNumber,
+                listOf(SportIdentCardBlock(0, afterBlock0),
+                    SportIdentCardBlock(1, decode(before.blocks.single { it.blockNumber == 1 }))))
+            val read = SportIdentOwnerReadVerification.nativeRead(after)
+            assertEquals(first, read.firstName)
+            assertEquals(last, read.lastName)
+            assertTrue(SportIdentSi8OwnerWordWritePlanner.compareToObserved(target, before, after).matches)
         }
+    }
+
+    @Test
+    fun reproducesAllSevenFramesCapturedFromConfigPlusMaximumNameWrite() {
+        val before = fixture(owner = "Donald;Duck;rolopoulos-J;")
+        val longer = request.copy(expectedFirstName = "Donald", firstName = "Penny",
+            lastName = "Popandrolopoulos-J")
+        val frames = SportIdentSi8OwnerWordWritePlanner.plan(longer, before)
+
+        assertEquals(listOf(
+            "ff 02 ea 05 08 50 65 6e 6e a4 5e 03",
+            "ff 02 ea 05 09 79 3b 50 6f f7 eb 03",
+            "ff 02 ea 05 0a 70 61 6e 64 1c dd 03",
+            "ff 02 ea 05 0b 72 6f 6c 6f 27 f9 03",
+            "ff 02 ea 05 0c 70 6f 75 6c c8 84 03",
+            "ff 02 ea 05 0d 6f 73 2d 4a b2 d8 03",
+            "ff 02 ea 05 0e 3b ee ee ee 62 48 03"
+        ), frames.map { frame -> frame.joinToString(" ") {
+            (it.toInt() and 0xff).toString(16).padStart(2, '0')
+        } })
+
+        val block0 = decode(before.blocks.single { it.blockNumber == 0 })
+        frames.forEach { frame -> frame.copyOfRange(5, 9).copyInto(block0, (frame[4].toInt() and 0xff) * 4) }
+        val observed = SportIdentOwnerReadVerification.capture(before.stationNumber,
+            listOf(SportIdentCardBlock(0, block0),
+                SportIdentCardBlock(1, decode(before.blocks.single { it.blockNumber == 1 }))))
+        assertEquals("Penny", SportIdentOwnerReadVerification.nativeRead(observed).firstName)
+        assertEquals("Popandrolopoulos-J", SportIdentOwnerReadVerification.nativeRead(observed).lastName)
+        assertTrue(SportIdentSi8OwnerWordWritePlanner.compareToObserved(longer, before, observed).matches)
+        assertFalse(SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(longer, before))
+    }
+
+    @Test
+    fun liveDirectGateRejectsTheFailedSevenWordShapeWhileKeepingOfflinePlans() {
+        val before = fixture(owner = "Donald;Duck;")
+        val eleven = request.copy(expectedFirstName = "Donald", firstName = "Daisy")
+        val sevenWords = request.copy(expectedFirstName = "Donald", firstName = "Penny",
+            lastName = "Popandrolopoulos-J")
+        assertTrue(SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(request, fixture()))
+        assertTrue(SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(eleven, before))
+        assertFalse(SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(
+            request.copy(expectedFirstName = "Donald", firstName = "Huey"), before))
+        assertFalse(SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(
+            request.copy(expectedFirstName = "Donald", firstName = "Dónald"), before))
+        assertEquals(7, SportIdentSi8OwnerWordWritePlanner.plan(sevenWords, before).size)
+        assertFalse(SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(sevenWords, before))
     }
 
     private fun fixture(owner: String = "Daisy;Duck;"): SportIdentOwnerReadFixture {

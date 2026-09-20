@@ -97,7 +97,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertNull(outcome.comparison)
         assertEquals(1, port.ownerWordWrites.size)
         assertEquals(1, port.closeCount)
-        assertNativePending(recoveryStore(), 1)
+        assertNativePending(recoveryStore(), 3)
 
         val retryPort = readyPort(replies)
         assertThrows(IllegalStateException::class.java) { transaction(retryPort).execute(request) }
@@ -118,7 +118,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
                 )).execute(request)
             assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, outcome.stopReason)
             assertEquals(stopAfter, port.ownerWordWrites.size)
-            assertNativePending(store, stopAfter)
+            assertNativePending(store, 3)
         }
     }
 
@@ -154,7 +154,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             assertFalse(outcome.verified)
             assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, outcome.stopReason)
             assertEquals(nextWord - 1, port.ownerWordWrites.size)
-            assertNativePending(store, nextWord - 1)
+            assertNativePending(store, 3)
             assertEquals(1, port.closeCount)
         }
     }
@@ -211,7 +211,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertEquals(1, brokenPort.ownerWordWrites.size)
         assertEquals(1, brokenPort.closeCount)
         assertFalse(brokenPort.isOpen)
-        assertNativePending(recoveryStore(), 1)
+        assertNativePending(recoveryStore(), 3)
     }
 
     @Test

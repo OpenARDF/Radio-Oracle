@@ -52,7 +52,7 @@ internal object DesktopSportIdentNativeOwnerRecovery {
                 out.println("Saved native attempt: up to ${assessment.attemptedWordsUpperBound} owner words may have been sent; " +
                     "fresh read matches prefix(es) ${assessment.matchingWordPrefixes}; " +
                     "${assessment.byteChangesFromBaseline.size} changed bytes, " +
-                    "${assessment.changesOutsideOwnerWords.size} outside the 12 owner bytes.")
+                    "${assessment.changesOutsideOwnerWords.size} outside the planned owner words.")
                 out.println("Prefixes compatible with the saved attempt: ${assessment.plausibleWordPrefixes}; " +
                     "consistency=${if (assessment.consistentWithRecordedAttempt) "expected" else "unexpected"}.")
                 if (assessment.changesOutsideOwnerWords.isNotEmpty()) {

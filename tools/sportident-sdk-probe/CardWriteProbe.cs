@@ -159,7 +159,19 @@ static class CardWriteProbe
     }
 
     static bool ValidName(string? name) => name != null && name == name.Trim(' ') &&
-        name.All(character => character >= ' ' && character <= '~' && character != ';');
+        name.All(character => character != ';' && RoundTripsDefaultCharacterSet(character));
+
+    static bool RoundTripsDefaultCharacterSet(char character)
+    {
+        if (character is >= ' ' and <= '~') return true;
+        if (character is < '\u00a0' or > '\u00ff') return false;
+        var stored = CardPersonalData.ReplacePrinterCharsetBytes(
+            new[] { (byte)character }, SiCardCharacterSet.Default);
+        if (stored.Length != 1 || stored[0] == 0 || stored[0] == 0xEE) return false;
+        var decoded = CardPersonalData.ReplacePrinterCharsetBytes(
+            stored, SiCardCharacterSet.Default, fromPrinter: true);
+        return decoded.Length == 1 && decoded[0] == (byte)character;
+    }
 
     // Capture immutable values immediately: a later SDK event may reuse mutable card objects.
     static string CapturePunches(SportidentCard card) => JsonSerializer.Serialize(new

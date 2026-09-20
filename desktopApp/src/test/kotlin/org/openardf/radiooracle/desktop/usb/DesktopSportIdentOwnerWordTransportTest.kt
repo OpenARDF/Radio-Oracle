@@ -40,17 +40,49 @@ class DesktopSportIdentOwnerWordTransportTest {
         val before = fixture()
         val port = FakePort(capturedReplies)
         val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, before)
+        val timings = mutableListOf<DesktopSportIdentOwnerWordTiming>()
+        var now = 0L
 
-        val transport = transport(port)
+        val transport = DesktopSportIdentOwnerWordTransport(port, readTimeoutMs = 4,
+            nowMillis = { ++now }, onWordTiming = { timings += it })
         transport.exchange(rehearsal)
 
         assertEquals(SportIdentSi8OwnerWriteStage.REQUIRES_READBACK, rehearsal.stage)
         assertEquals(3, port.writeRequests.size)
+        assertEquals(listOf(1, 2, 3), timings.map { it.wordNumber })
+        assertEquals(null, timings.first().replyToWriteMicros)
+        assertTrue(timings.drop(1).all { it.replyToWriteMicros != null && it.replyToWriteMicros >= 0 })
+        assertTrue(timings.all { it.writeToReplyMicros >= 0 })
         SportIdentSi8OwnerWordWritePlanner.plan(request, before).forEachIndexed { index, frame ->
             assertArrayEquals(frame, port.writeRequests[index])
         }
         assertThrows(IllegalStateException::class.java) { transport.exchange(rehearsal) }
         assertEquals(3, port.writeRequests.size)
+    }
+
+    @Test
+    fun sevenWordNameUsesAddressCheckedRepliesAndDurableRecovery() {
+        val before = fixture()
+        val longer = request.copy(firstName = "ABCDEFGHIJKLMNOPQRSTUVW", lastName = "")
+        val replies = (0 until 7).map { index ->
+            val frame = SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.WRITE_SI_CARD_WORD,
+                byteArrayOf(0, 10, (0x08 + index).toByte()))
+            frame.copyOfRange(1, frame.size)
+        }
+        val store = store("seven-word.json")
+        store.beginNative(longer, before)
+        val port = FakePort(replies)
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(longer, 10, before)
+
+        transport(port).exchange(rehearsal, beforeWordAttempt = { store.markWordAttempt(longer, it) })
+
+        assertEquals(7, rehearsal.wordCount)
+        assertEquals(SportIdentSi8OwnerWriteStage.REQUIRES_READBACK, rehearsal.stage)
+        assertEquals(7, port.writeRequests.size)
+        assertEquals(7, (store.load() as DesktopSportIdentOwnerRecoveryState.Pending).nativeAttempt?.attemptedWords)
+        SportIdentSi8OwnerWordWritePlanner.plan(longer, before).forEachIndexed { index, frame ->
+            assertArrayEquals(frame, port.writeRequests[index])
+        }
     }
 
     @Test

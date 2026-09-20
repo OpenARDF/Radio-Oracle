@@ -183,7 +183,8 @@ object SportIdentCardReadoutParser {
         val text = parseNullTerminatedAscii(
             data,
             CARD_HOLDER_OFFSET,
-            minOf(bytesToRead, data.size - CARD_HOLDER_OFFSET)
+            minOf(bytesToRead, data.size - CARD_HOLDER_OFFSET),
+            series == SI_CARD8_SERIES
         )
         val parts = text?.split(";") ?: return null
         val firstName = parts.getOrNull(0)?.ifBlank { null }
@@ -263,12 +264,14 @@ object SportIdentCardReadoutParser {
         return data.copyOfRange(offset, end).toAsciiString()
     }
 
-    private fun parseNullTerminatedAscii(data: ByteArray, offset: Int, length: Int): String? {
+    private fun parseNullTerminatedAscii(data: ByteArray, offset: Int, length: Int,
+        si8DefaultCharset: Boolean = false): String? {
         if (data.size < offset + length) {
             return null
         }
         val end = (offset until offset + length).firstOrNull { isCardHolderTerminator(data[it]) } ?: offset + length
-        return data.copyOfRange(offset, end).toAsciiString()
+        val bytes = data.copyOfRange(offset, end)
+        return if (si8DefaultCharset) SportIdentSi8OwnerCharacterCodec.decode(bytes) else bytes.toAsciiString()
     }
 
     private fun isCardHolderTerminator(byte: Byte): Boolean =

@@ -135,6 +135,26 @@ def requiredJdeploySkikoRuntimeArtifacts = [
 ]
 def desktopImplementationVersion = version.toString()
 def desktopBaseVersion = rootProject.ext.radioOracleVersion.toString()
+def verifyNoSportIdentSdkPayload = { File root ->
+    def forbiddenFileName = ~/^(?i:SPORTident\.Communication.*|SportIdentSdkProbe.*|libcoreclr.*|libhostfxr.*|dotnet(?:\.exe)?)$/
+    def forbiddenClassName = ~/^org\/openardf\/radiooracle\/desktop\/usb\/(?:DesktopSportIdentProgrammingClient|DesktopSportIdentSdkConfiguration|DesktopSportIdentLocalBridgeKt).*\.class$/
+    Files.walk(root.toPath()).withCloseable { paths ->
+        paths.filter { Files.isRegularFile(it) }.forEach { path ->
+            def file = path.toFile()
+            if (file.name ==~ forbiddenFileName) {
+                throw new GradleException("Desktop product contains an SDK or .NET payload: ${file.absolutePath}")
+            }
+            if (file.name.endsWith(".jar")) {
+                new JarFile(file).withCloseable { archive ->
+                    def matchingClass = archive.entries().find { entry -> entry.name ==~ forbiddenClassName }
+                    if (matchingClass != null) {
+                        throw new GradleException("Desktop product contains an SDK bridge class: ${file.absolutePath}!/${matchingClass.name}")
+                    }
+                }
+            }
+        }
+    }
+}
 def desktopBuildInfoDir = layout.buildDirectory.dir("generated/source/desktopBuildInfo/kotlin")
 def desktopBuildSuffixFile = layout.projectDirectory.file(".gradle/desktop-build-suffix.txt")
 def isDesktopReleaseBuild = (findProperty("radioOracle.releaseBuild")?.toString()?.toBoolean() ?: false) ||
@@ -364,6 +384,7 @@ tasks.register("verifyDesktopDistributable") {
         if (distributionDir.listFiles() == null || distributionDir.listFiles().length == 0) {
             throw new GradleException("Desktop distribution directory is empty: ${distributionDir.absolutePath}")
         }
+        verifyNoSportIdentSdkPayload(distributionDir)
 
         if (System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("mac")) {
             def appBundle = new File(distributionDir, "${desktopAppName}.app")
@@ -471,6 +492,7 @@ tasks.register("verifyDesktopJdeployBundle") {
         if (!jarFile.isFile()) {
             throw new GradleException("Expected jDeploy jar at ${jarFile.absolutePath}")
         }
+        verifyNoSportIdentSdkPayload(desktopJdeployBundleDir.get().asFile)
 
         new JarFile(jarFile).withCloseable { archive ->
             def manifest = archive.manifest

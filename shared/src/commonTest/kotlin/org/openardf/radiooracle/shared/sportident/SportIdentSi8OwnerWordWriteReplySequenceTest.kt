@@ -74,6 +74,28 @@ class SportIdentSi8OwnerWordWriteReplySequenceTest {
         assertTrue(station14.allObservedRepliesMatched)
     }
 
+    @Test
+    fun acceptsVariableLengthSequenceOnlyThroughItsLastWord() {
+        val one = SportIdentSi8OwnerWordWriteReplySequence(14, 1)
+        one.accept(parse(macReplies.first()))
+        assertTrue(one.allObservedRepliesMatched)
+        assertNull(one.nextExpectedWordAddress)
+
+        // Seven CRC-valid replies captured from Config+ on station 593927.
+        val seven = SportIdentSi8OwnerWordWriteReplySequence(10, 7)
+        listOf(
+            "02 ea 03 00 0a 08 00 2e 03",
+            "02 ea 03 00 0a 09 01 2e 03",
+            "02 ea 03 00 0a 0a 02 2e 03",
+            "02 ea 03 00 0a 0b 03 2e 03",
+            "02 ea 03 00 0a 0c 04 2e 03",
+            "02 ea 03 00 0a 0d 05 2e 03",
+            "02 ea 03 00 0a 0e 06 2e 03"
+        ).forEach { seven.accept(parse(it)) }
+        assertTrue(seven.allObservedRepliesMatched)
+        assertNull(seven.nextExpectedWordAddress)
+    }
+
     private fun parse(hex: String): SportIdentFrame = parse(hex.hexBytes())
 
     private fun parse(bytes: ByteArray): SportIdentFrame =

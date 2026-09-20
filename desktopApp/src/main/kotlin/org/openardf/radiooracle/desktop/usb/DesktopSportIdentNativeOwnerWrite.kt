@@ -81,6 +81,7 @@ internal object DesktopSportIdentNativeOwnerWrite {
     private fun nativeExecute(request: SportIdentOwnerNameWriteRequest,
         store: DesktopSportIdentOwnerRecoveryStore, out: PrintStream,
         stopAfterWord: Int?): DesktopSportIdentOwnerWriteOutcome {
+        val wordResults = mutableListOf<String>()
         val preflight = DesktopSportIdentOwnerWritePreflight(readCard = { port ->
             out.println("Station ${request.stationNumber} ready. Insert SI-Card8 ${request.cardNumber}; keep it seated.")
             DesktopSportIdentCardBlockReader(onProgress = { out.println(it) })
@@ -88,7 +89,7 @@ internal object DesktopSportIdentNativeOwnerWrite {
         })
         val readback = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { port, card ->
-                out.println("Three expected word replies observed. Remove SI-Card8 $card now for independent verification.")
+                out.println("Expected owner-word replies observed. Remove SI-Card8 $card now for independent verification.")
                 DesktopSportIdentCardEventMonitor().waitForRemoveEventOnOpenPort(
                     port, card, System.currentTimeMillis() + DesktopSportIdentCardEventMonitor.defaultMaxWaitMs
                 ) != null
@@ -99,20 +100,29 @@ internal object DesktopSportIdentNativeOwnerWrite {
                     .readFirstSupportedCardAfterInsertOnOpenPort(port)
             }
         )
-        return DesktopSportIdentOwnerWriteTransaction(
+        val transaction = DesktopSportIdentOwnerWriteTransaction(
             preflight, readback, store,
             stopAfterAcknowledgedWord = stopAfterWord,
             onBeforeWordExchange = {
                 out.println("Target card rechecked and recovery baseline saved. " +
                     if (stopAfterWord != null) "Writing $stopAfterWord owner word(s), then stopping; keep the card seated."
-                    else "Writing three owner words; keep the card seated.")
+                    else "Writing owner words; keep the card seated.")
             },
             makeWordTransport = { port ->
                 DesktopSportIdentOwnerWordTransport(port, onWordResult = { word, result ->
-                    out.println("Owner word $word reply: ${describe(result)}")
+                    wordResults += "Owner word $word reply: ${describe(result)}"
+                }, onWordTiming = { timing ->
+                    wordResults += "Owner word ${timing.wordNumber} timing: reply-to-write=" +
+                        (timing.replyToWriteMicros?.let { "$it us" } ?: "first word") +
+                        ", write-to-reply=${timing.writeToReplyMicros} us"
                 })
             }
-        ).execute(request)
+        )
+        try {
+            return transaction.execute(request)
+        } finally {
+            wordResults.forEach(out::println)
+        }
     }
 
     private fun describe(result: SportIdentCommandResult): String = when (result) {
