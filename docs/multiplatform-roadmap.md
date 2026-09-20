@@ -681,15 +681,19 @@ mid-term goal on Android and desktop.
   acknowledgement and left that owner word partly corrupted. The recovery
   guard blocked another native write; an exact SDK repair and independent
   native capture restored the pretrial two-block image byte for byte. The real
-  direct transaction now rejects unverified lengths while offline planning
+  direct transaction now rejects unverified lengths by default while offline planning
   remains available. A traced Config+ seven-word write on station 593927 then
   matched every planned Kotlin frame and reply; independent raw readback changed
   only owner bytes and retained the 11 punches. The difference from the failed
   Kotlin trial on station 554900 may lie in serial timing or station behavior;
   the direct transaction now reserves its recovery bound before the word
   sequence, avoiding a disk sync between words while retaining conservative
-  fresh-read recovery. Measure the direct reply-to-next-word interval and retest under the existing
-  recovery and independent-read guards before exposing variable-length writes.
+  fresh-read recovery. An explicitly opted-in Kotlin seven-word `-J` to `-K`
+  trial on Mac station 554900 then received all replies. Its separate complete
+  read matched the plan byte for byte: only one owner byte changed and all 11
+  punches were preserved. A full-length transition changing multiple words,
+  cross-station validation, and explanation of the earlier NAK remain before
+  exposing variable-length writes in the product.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Default-character-set Western letters now use a shared, round-trip-checked

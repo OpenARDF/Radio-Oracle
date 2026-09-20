@@ -3,8 +3,8 @@
 The desktop product reads SI-Card8 names and previews edits, but does not yet
 write names. The SDK bridge is confined to local test tooling and excluded from
 the desktop product. The direct Kotlin writer remains an experimental CLI:
-several short-name writes verified, but a seven-word attempt stopped with a
-partially changed owner word.
+several short-name writes and one opt-in seven-word trial verified, while an
+earlier seven-word attempt stopped with a partially changed owner word.
 Name preparation, word planning, reply validation, and recovery assessment live
 in shared Kotlin code for future Android reuse.
 
@@ -911,9 +911,9 @@ assessment correctly rejected it; block 1 and all 11 punches were unchanged.
 The SDK read the partial names as `Pennêêêêuck` / `rolopoulos-J`, then an exact
 SDK repair restored `Donald` / `Duck`. A separate native two-block read matched
 the saved pretrial image byte for byte, and only then was the recovery record
-cleared. No automatic retry occurred. Until the direct transport failure is
-understood and retested, the real direct transaction rejects unverified lengths.
-Variable-length planning remains offline and is not selected by the desktop UI.
+cleared. No automatic retry occurred. The ordinary direct transaction still
+rejects unverified lengths; variable-length writing requires an explicit
+experimental CLI flag and is not selected by the desktop UI.
 
 ### Config+ seven-word serial trace on station 593927
 
@@ -944,9 +944,30 @@ count is a conservative upper bound: after interruption, a fresh two-block
 read must still match an actual planned prefix with no changes outside owner
 words. The queued-input guard remains. Measure the direct reply-to-next-word
 interval and compare station behavior before another controlled seven-word
-trial. Keep the live Kotlin length gate and the product write UI disabled until
-the transaction and fresh two-block verification succeed on the intended
-hardware combinations.
+trial. Keep the default Kotlin length gate and the product write UI disabled
+until the transaction and fresh two-block verification succeed across the
+intended names and hardware combinations.
+
+### First verified Kotlin seven-word trial on station 554900
+
+On 2026-09-20, an exact opt-in Kotlin trial changed spare SI-Card8 2450662
+from `Penny` / `Popandrolopoulos-J` to `Penny` /
+`Popandrolopoulos-K` on Mac station 554900. A separate prewrite two-block read
+confirmed the original names and 11 punches. The writer received all seven
+station-code-14 replies and requested physical removal and reinsertion before
+its own complete readback. It cleared the recovery record only after the
+readback matched the planned card image.
+
+A second, separate native two-block capture matched that plan byte for byte.
+Compared with the prewrite baseline, the only changed byte was block 0 offset
+`0x37`, `J` to `K`; block 1, all 11 punches, and every unrelated byte were
+identical. The card was left with the `-K` name. The word 2 reply-to-next-write
+interval measured 5.496 ms, and later intervals were 0.074–0.596 ms, so this
+success does not prove a submillisecond timing requirement or explain the
+earlier negative reply. This trial exercised all seven word commands but
+changed only one owner byte. The next hardware gate is a full-length name
+transition that changes several words, with fresh whole-card comparison and
+no automatic retry. The default CLI and desktop UI remain gated.
 
 ### SDK provenance and licensing
 

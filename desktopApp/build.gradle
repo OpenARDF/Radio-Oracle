@@ -681,6 +681,16 @@ tasks.register("desktopSportIdentNativeOwnerWrite", JavaExec) {
     args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get())
 }
 
+tasks.register("desktopSportIdentNativeOwnerSevenWordTrial", JavaExec) {
+    group = "verification"
+    description = "EXPERIMENTAL: opt-in seven-word SI-Card8 write with independent read-back."
+    dependsOn(tasks.named("classes"))
+    classpath(sourceSets.main.runtimeClasspath)
+    mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
+    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+        "--allow-seven-word-trial")
+}
+
 tasks.register("desktopSportIdentNativeOwnerStopAfterOne", JavaExec) {
     group = "verification"
     description = "EXPERIMENTAL: intentionally stops after one acknowledged SI-Card8 owner word."

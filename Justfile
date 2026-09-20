@@ -97,6 +97,10 @@ sportident-owner-readiness request:
 sportident-owner-native-experiment request:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerWrite {{quote("-PsiOwnerWriteRequest=" + request)}}
 
+# EXPERIMENTAL: explicit opt-in for one seven-word SI-Card8 trial; requires exact hardware approval and fresh read-back.
+sportident-owner-native-seven-word-trial request:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerSevenWordTrial {{quote("-PsiOwnerWriteRequest=" + request)}}
+
 # EXPERIMENTAL: deliberately stops after one acknowledged owner word; requires recovery assessment.
 sportident-owner-native-stop-after-one request:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerStopAfterOne {{quote("-PsiOwnerWriteRequest=" + request)}}

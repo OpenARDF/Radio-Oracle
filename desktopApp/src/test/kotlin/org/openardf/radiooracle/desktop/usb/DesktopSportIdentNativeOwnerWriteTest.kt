@@ -42,6 +42,27 @@ class DesktopSportIdentNativeOwnerWriteTest {
     }
 
     @Test
+    fun sevenWordTrialFlagMustBeExplicitAndCannotCombineWithStopFlag() {
+        val requestFile = temporary.newFile("seven-word-request.json").toPath()
+        val sevenWordRequest = request.copy(firstName = "Penny", lastName = "Popandrolopoulos-J")
+        Files.writeString(requestFile, SportIdentOwnerNameProgramming.json.encodeToString(sevenWordRequest))
+        var calls = 0
+        val execute: (SportIdentOwnerNameWriteRequest) -> DesktopSportIdentOwnerWriteOutcome = { supplied ->
+            assertEquals(sevenWordRequest, supplied)
+            calls++
+            DesktopSportIdentOwnerWriteOutcome(SportIdentSi8OwnerWriteStage.STOPPED,
+                SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, null,
+                DesktopSportIdentCardPresenceResult.MATCHING_BLOCK)
+        }
+        assertEquals(1, run(arrayOf("--execute-native-write", requestFile.toString(),
+            "--allow-seven-word-trial", "--stop-after-first-reply"), execute))
+        assertEquals(0, calls)
+        assertEquals(2, run(arrayOf("--execute-native-write", requestFile.toString(),
+            "--allow-seven-word-trial"), execute))
+        assertEquals(1, calls)
+    }
+
+    @Test
     fun stoppedAttemptReportsFailureAndRetainsRecoveryIntent() {
         val requestFile = temporary.newFile("request.json").toPath()
         Files.writeString(requestFile, SportIdentOwnerNameProgramming.json.encodeToString(request))

@@ -29,6 +29,7 @@ internal class DesktopSportIdentOwnerWriteTransaction(
     private val recoveryStore: DesktopSportIdentOwnerRecoveryStore,
     private val presenceProbe: DesktopSportIdentCardPresenceProbe = DesktopSportIdentCardPresenceProbe(),
     private val stopAfterAcknowledgedWord: Int? = null,
+    private val allowSevenWordExperiment: Boolean = false,
     private val onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
     private val makeWordTransport: (DesktopSerialPort) -> DesktopSportIdentOwnerWordTransport =
         { port -> DesktopSportIdentOwnerWordTransport(port) }
@@ -38,8 +39,10 @@ internal class DesktopSportIdentOwnerWriteTransaction(
             "Resolve the pending SI-card owner-write attempt before starting another."
         }
         return preflight.withFreshRead(request) { port, rehearsal, before ->
-            require(SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(request, before)) {
-                "Direct SI-Card8 writes are limited to the previously verified 11/12-byte transitions."
+            require(if (allowSevenWordExperiment) rehearsal.wordCount == 7 else
+                SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(request, before)) {
+                if (allowSevenWordExperiment) "The opt-in trial requires exactly seven owner words."
+                else "Direct SI-Card8 writes are limited to the previously verified 11/12-byte transitions."
             }
             val presence = presenceProbe.check(port, SportIdentOwnerReadVerification.blockBytes(before, 0))
             if (presence != DesktopSportIdentCardPresenceResult.MATCHING_BLOCK) {

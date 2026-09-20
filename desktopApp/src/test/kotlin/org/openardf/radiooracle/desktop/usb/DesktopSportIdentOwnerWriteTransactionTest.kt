@@ -82,6 +82,26 @@ class DesktopSportIdentOwnerWriteTransactionTest {
     }
 
     @Test
+    fun sevenWordTrialRequiresOptInAndRetainsFullRecoveryBoundAfterAStop() {
+        val longer = request.copy(firstName = "Penny", lastName = "Popandrolopoulos-J")
+        val gatedPort = readyPort(replies)
+        assertThrows(IllegalArgumentException::class.java) {
+            transaction(gatedPort).execute(longer)
+        }
+        assertTrue(gatedPort.ownerWordWrites.isEmpty())
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, recoveryStore().load())
+
+        val trialPort = readyPort(replies)
+        val outcome = transaction(trialPort, allowSevenWordExperiment = true,
+            stopAfterAcknowledgedWord = 1).execute(longer)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, outcome.stopReason)
+        assertEquals(1, trialPort.ownerWordWrites.size)
+        val pending = recoveryStore().load() as DesktopSportIdentOwnerRecoveryState.Pending
+        assertEquals(longer, pending.request)
+        assertEquals(7, pending.nativeAttempt?.attemptedWords)
+    }
+
+    @Test
     fun missingFirstReplyStopsAfterOneWordAndNeverStartsReadback() {
         val port = readyPort(emptyList())
         val transaction = transaction(port, verifier = DesktopSportIdentOwnerReadbackVerifier(
@@ -249,6 +269,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         readCard: (DesktopSerialPort) -> DesktopSportIdentCardBlockDownload = { download("Daisy;Duck;") },
         recoveryStore: DesktopSportIdentOwnerRecoveryStore = recoveryStore(),
         stopAfterAcknowledgedWord: Int? = null,
+        allowSevenWordExperiment: Boolean = false,
         onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
         verifier: DesktopSportIdentOwnerReadbackVerifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> true },
@@ -276,6 +297,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         return DesktopSportIdentOwnerWriteTransaction(
             preflight, verifier, recoveryStore, presenceProbe,
             stopAfterAcknowledgedWord = stopAfterAcknowledgedWord,
+            allowSevenWordExperiment = allowSevenWordExperiment,
             onBeforeWordExchange = onBeforeWordExchange
         ) { opened ->
             DesktopSportIdentOwnerWordTransport(opened, readTimeoutMs = 4, nowMillis = { ++wordNow })
