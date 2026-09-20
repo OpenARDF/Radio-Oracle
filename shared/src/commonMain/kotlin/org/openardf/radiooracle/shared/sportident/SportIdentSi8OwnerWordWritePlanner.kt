@@ -76,6 +76,24 @@ object SportIdentSi8OwnerWordWritePlanner {
             changes.filter { it.blockNumber != 0 || it.offset !in OWNER_OFFSET until OWNER_OFFSET + OBSERVED_TEXT_BYTES })
     }
 
+    /** Offline proposal only: restore the saved owner words after a compatible fresh raw read. */
+    fun planBaselineRestoreAfterInterruption(request: SportIdentOwnerNameWriteRequest,
+        before: SportIdentOwnerReadFixture, attemptedWordsUpperBound: Int,
+        fresh: SportIdentOwnerReadFixture): List<ByteArray> {
+        val assessment = assessInterruption(request, before, attemptedWordsUpperBound, fresh)
+        require(assessment.consistentWithRecordedAttempt) {
+            "Fresh card bytes do not match a possible saved word prefix without other changes."
+        }
+        if (assessment.byteChangesFromBaseline.isEmpty()) return emptyList()
+        val originalOwnerBlock = SportIdentOwnerReadVerification.blockBytes(before, 0)
+        return (0 until OBSERVED_TEXT_BYTES / WORD_BYTES).map { index ->
+            val offset = OWNER_OFFSET + index * WORD_BYTES
+            val payload = byteArrayOf((FIRST_OWNER_WORD + index).toByte()) +
+                originalOwnerBlock.copyOfRange(offset, offset + WORD_BYTES)
+            SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.WRITE_SI_CARD_WORD, payload)
+        }
+    }
+
     fun plan(request: SportIdentOwnerNameWriteRequest, before: SportIdentOwnerReadFixture): List<ByteArray> {
         val read = SportIdentOwnerReadVerification.nativeRead(before)
         val inspection = SportIdentCardOwnerInspection(

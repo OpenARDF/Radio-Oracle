@@ -113,6 +113,10 @@ sportident-owner-native-recovery evidence observed_first observed_last:
 sportident-owner-native-assess evidence:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerAssess {{quote("-PsiOwnerReadEvidence=" + evidence)}}
 
+# Offline only: display baseline restore frames after a compatible fresh read; no serial port opens.
+sportident-owner-native-restore-proposal evidence:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerRestoreProposal {{quote("-PsiOwnerReadEvidence=" + evidence)}}
+
 # Offline comparison of SDK read JSON with native block evidence; never opens a serial port.
 sportident-owner-compare sdk_read native_read:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentOwnerVerification -PsiOwnerMode=compare {{quote("-PsiOwnerSdkRead=" + sdk_read)}} {{quote("-PsiOwnerNativeRead=" + native_read)}}

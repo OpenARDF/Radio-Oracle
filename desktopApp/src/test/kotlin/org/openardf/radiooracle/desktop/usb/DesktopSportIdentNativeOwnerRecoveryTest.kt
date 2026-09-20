@@ -64,6 +64,21 @@ class DesktopSportIdentNativeOwnerRecoveryTest {
         assertTrue(output.toString().contains("consistency=expected"))
         assertTrue(output.toString().contains("pending record retained"))
         assertEquals(1, (store.load() as DesktopSportIdentOwnerRecoveryState.Pending).nativeAttempt?.attemptedWords)
+        val proposal = ByteArrayOutputStream()
+        assertEquals(0, DesktopSportIdentNativeOwnerRecovery.run(
+            arrayOf("--propose-native-restore", evidence.toString()),
+            PrintStream(proposal), PrintStream(ByteArrayOutputStream()), store))
+        assertTrue(proposal.toString().contains("3 owner-word frame(s)"))
+        assertTrue(proposal.toString().contains("No frame transmitted; pending record retained"))
+        assertEquals(1, (store.load() as DesktopSportIdentOwnerRecoveryState.Pending).nativeAttempt?.attemptedWords)
+
+        val impossible = SportIdentOwnerReadVerification.capture(request.stationNumber,
+            listOf(SportIdentCardBlock(0, block0("Donald;Duck;")), SportIdentCardBlock(1, ByteArray(128))))
+        val impossibleEvidence = temporary.newFile("impossible.json").toPath()
+        Files.writeString(impossibleEvidence, SportIdentOwnerNameProgramming.json.encodeToString(impossible))
+        assertEquals(1, DesktopSportIdentNativeOwnerRecovery.run(
+            arrayOf("--propose-native-restore", impossibleEvidence.toString()),
+            PrintStream(ByteArrayOutputStream()), PrintStream(ByteArrayOutputStream()), store))
         assertEquals(1, DesktopSportIdentNativeOwnerRecovery.run(
             arrayOf("--acknowledge-native-read", evidence.toString(), "Donald", "Duck"),
             PrintStream(ByteArrayOutputStream()), PrintStream(ByteArrayOutputStream()), store))

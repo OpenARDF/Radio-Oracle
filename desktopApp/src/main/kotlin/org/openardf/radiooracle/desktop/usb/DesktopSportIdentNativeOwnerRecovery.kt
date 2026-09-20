@@ -29,9 +29,11 @@ internal object DesktopSportIdentNativeOwnerRecovery {
         store: DesktopSportIdentOwnerRecoveryStore = DesktopSportIdentOwnerRecoveryStore()
     ): Int {
         val assess = args.size == 2 && args[0] == "--assess-native-read"
+        val proposeRestore = args.size == 2 && args[0] == "--propose-native-restore"
         val acknowledge = args.size == 4 && args[0] == "--acknowledge-native-read"
-        if (!assess && !acknowledge) {
+        if (!assess && !proposeRestore && !acknowledge) {
             err.println("Usage: --assess-native-read <fresh-native-read-json> | " +
+                "--propose-native-restore <fresh-native-read-json> | " +
                 "--acknowledge-native-read <fresh-native-read-json> <observed-first-name> <observed-last-name>")
             return 1
         }
@@ -61,6 +63,19 @@ internal object DesktopSportIdentNativeOwnerRecovery {
                 out.println("Read-only assessment complete; pending record retained. No write or retry was attempted.")
                 return 0
             }
+            if (proposeRestore) {
+                val attempt = pending.nativeAttempt ?: error("No saved native baseline exists for a restore proposal.")
+                val frames = SportIdentSi8OwnerWordWritePlanner.planBaselineRestoreAfterInterruption(
+                    pending.request, attempt.before, attempt.attemptedWords, fixture)
+                out.println("Offline baseline restore proposal: ${frames.size} owner-word frame(s).")
+                frames.forEachIndexed { index, frame ->
+                    out.println("Owner word ${index + 1}: " + frame.joinToString(" ") {
+                        "%02x".format(it.toInt() and 0xff)
+                    })
+                }
+                out.println("No frame transmitted; pending record retained.")
+                return 0
+            }
             val read = SportIdentOwnerReadVerification.nativeRead(fixture)
             require(read.stationNumber == pending.request.stationNumber && read.cardNumber == pending.request.cardNumber &&
                 read.firstName == args[2] && read.lastName == args[3]) {
@@ -78,7 +93,7 @@ internal object DesktopSportIdentNativeOwnerRecovery {
                 "${read.controlPunchCount} punches. Recovery reminder cleared; preservation is assessed separately.")
             0
         } catch (error: Exception) {
-            err.println("Recovery acknowledgement failed: ${error.message}. The pending record was not accepted.")
+            err.println("Native recovery command failed: ${error.message}. The pending record was not accepted.")
             1
         }
     }

@@ -143,6 +143,53 @@ class SportIdentSi8OwnerWordWritePlannerTest {
     }
 
     @Test
+    fun proposesRawBaselineRestoreWithoutTrustingPartialOwnerNames() {
+        val original = fixture(owner = "A;B;")
+        val change = request.copy(expectedFirstName = "A", expectedLastName = "B",
+            firstName = "Jack", lastName = "Smiths")
+        val firstWord = SportIdentSi8OwnerWordWritePlanner.plan(change, original).first()
+        val partialBlock0 = decode(original.blocks.single { it.blockNumber == 0 })
+        firstWord.copyOfRange(5, 9).copyInto(partialBlock0, 32)
+        val partial = SportIdentOwnerReadVerification.captureRaw(original.stationNumber,
+            listOf(SportIdentCardBlock(0, partialBlock0),
+                SportIdentCardBlock(1, decode(original.blocks.single { it.blockNumber == 1 }))))
+        val partialNames = SportIdentOwnerReadVerification.nativeRead(partial)
+        assertFalse(partialNames.firstName == change.firstName && partialNames.lastName == change.lastName)
+        assertFalse(partialNames.firstName == change.expectedFirstName &&
+            partialNames.lastName == change.expectedLastName)
+
+        val restore = SportIdentSi8OwnerWordWritePlanner.planBaselineRestoreAfterInterruption(
+            change, original, 1, partial)
+        assertEquals(3, restore.size)
+        restore.forEachIndexed { index, frame ->
+            val parsed = requireNotNull(SportIdentFrameParser.firstFrame(frame))
+            assertEquals(SportIdentProtocol.WRITE_SI_CARD_WORD, parsed.command)
+            assertTrue(parsed.extended && parsed.crcValid == true)
+            assertEquals(8 + index, parsed.data[0].toInt() and 0xff)
+            parsed.data.copyOfRange(1, 5).copyInto(partialBlock0, 32 + index * 4)
+        }
+        assertContentEquals(decode(original.blocks.single { it.blockNumber == 0 }), partialBlock0)
+        assertTrue(SportIdentSi8OwnerWordWritePlanner.planBaselineRestoreAfterInterruption(
+            change, original, 0, original).isEmpty())
+    }
+
+    @Test
+    fun refusesRawRestoreWithoutACompatibleFreshFullCardImage() {
+        val before = fixture()
+        val target = fixture(owner = "Donald;Duck;")
+        assertFailsWith<IllegalArgumentException> {
+            SportIdentSi8OwnerWordWritePlanner.planBaselineRestoreAfterInterruption(request, before, 1, target)
+        }
+        val changedBlock1 = decode(target.blocks.single { it.blockNumber == 1 }).also { it[8] = 99 }
+        val changed = SportIdentOwnerReadVerification.captureRaw(target.stationNumber,
+            listOf(SportIdentCardBlock(0, decode(target.blocks.single { it.blockNumber == 0 })),
+                SportIdentCardBlock(1, changedBlock1)))
+        assertFailsWith<IllegalArgumentException> {
+            SportIdentSi8OwnerWordWritePlanner.planBaselineRestoreAfterInterruption(request, before, 3, changed)
+        }
+    }
+
+    @Test
     fun refusesUnsupportedShapeStaleIdentityAndNormalizedOwnerBytes() {
         val before = fixture()
         listOf(

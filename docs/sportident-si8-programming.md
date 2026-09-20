@@ -753,6 +753,17 @@ changes outside the 12 owner bytes. The desktop editor cannot clear a native
 attempt from displayed names alone; its earlier name-only acknowledgement is
 still available for SDK-originated reminders.
 
+Shared Kotlin can also propose, without transmitting, three owner-word frames
+that restore the saved pre-write 12 bytes when a fresh full-card image matches
+a possible prefix and all other bytes match the baseline. It returns no frames
+when the fresh image already equals the baseline and refuses a mismatched
+station/card, impossible prefix, or non-owner byte change. This proposal uses
+raw bytes, so misleading intermediate names do not become repair authority.
+`just sportident-owner-native-restore-proposal <fresh-native-read-json>` prints
+those frames offline and retains the recovery record. No CLI or UI path sends
+the proposed restore frames; actual interruption repair still requires a
+separately verified write transaction.
+
 For the spare-card interruption test,
 `just sportident-owner-native-stop-after-one <request-json>` uses the same
 preflight and recovery persistence as the normal experimental writer, then

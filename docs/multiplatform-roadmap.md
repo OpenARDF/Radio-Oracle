@@ -647,6 +647,8 @@ mid-term goal on Android and desktop.
   A read-only Config+ direct read confirmed the VM-attached BSM8 UART1 as
   station 593927, code 10, firmware 657, in SI-card readout mode; its visible
   card entries were historical, so this is station evidence only.
+  Shared Kotlin now has an offline raw-baseline restore proposal gated by a
+  compatible fresh two-block prefix image. No transport or UI sends it yet.
   Other name lengths, trailing-byte cleanup beyond the observed padding,
   response errors, other interruption points, compatibility,
   and permission to distribute a replacement still need resolution before
