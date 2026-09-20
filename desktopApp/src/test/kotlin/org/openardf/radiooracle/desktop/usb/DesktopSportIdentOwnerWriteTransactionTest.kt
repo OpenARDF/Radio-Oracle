@@ -106,16 +106,20 @@ class DesktopSportIdentOwnerWriteTransactionTest {
     }
 
     @Test
-    fun controlledStopAfterFirstReplySendsOnlyOneWordAndRetainsBaseline() {
-        val port = readyPort(replies)
-        val outcome = transaction(port, stopAfterAcknowledgedWord = 1,
-            verifier = DesktopSportIdentOwnerReadbackVerifier(
-                awaitTargetRemoval = { _, _ -> error("Read-back started after intentional stop") },
-                readAfterReinsertion = { error("Read-back started after intentional stop") }
-            )).execute(request)
-        assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, outcome.stopReason)
-        assertEquals(1, port.ownerWordWrites.size)
-        assertNativePending(recoveryStore(), 1)
+    fun controlledStopAfterEitherReplySendsOnlyThatPrefixAndRetainsBaseline() {
+        for (stopAfter in 1..2) {
+            val port = readyPort(replies)
+            val store = DesktopSportIdentOwnerRecoveryStore(
+                temporary.root.toPath().resolve("intentional-$stopAfter.json"))
+            val outcome = transaction(port, recoveryStore = store, stopAfterAcknowledgedWord = stopAfter,
+                verifier = DesktopSportIdentOwnerReadbackVerifier(
+                    awaitTargetRemoval = { _, _ -> error("Read-back started after intentional stop") },
+                    readAfterReinsertion = { error("Read-back started after intentional stop") }
+                )).execute(request)
+            assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, outcome.stopReason)
+            assertEquals(stopAfter, port.ownerWordWrites.size)
+            assertNativePending(store, stopAfter)
+        }
     }
 
     @Test
@@ -135,7 +139,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
 
     @Test
     fun queuedCardEventBeforeOrBetweenWordsRetainsRecoveryAndNeverStartsReadback() {
-        listOf(1, 2).forEach { nextWord ->
+        (1..3).forEach { nextWord ->
             val port = readyPort(replies, queuedBeforeWord = nextWord)
             val store = DesktopSportIdentOwnerRecoveryStore(
                 temporary.root.toPath().resolve("recovery-$nextWord.json"))

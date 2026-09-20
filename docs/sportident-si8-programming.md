@@ -748,6 +748,10 @@ not parse cleanly; assessment compares those raw blocks. This is an offline
 assessment, not proof that every attempted word reached the card. An explicit
 `just sportident-owner-native-recovery` acknowledgement still requires the
 observed names and clears the reminder only after a complete parseable read.
+For a native attempt, it also requires a plausible word-prefix image with no
+changes outside the 12 owner bytes. The desktop editor cannot clear a native
+attempt from displayed names alone; its earlier name-only acknowledgement is
+still available for SDK-originated reminders.
 
 For the spare-card interruption test,
 `just sportident-owner-native-stop-after-one <request-json>` uses the same
@@ -774,6 +778,30 @@ baseline byte for byte across both blocks, including all 11 punches. This
 demonstrates recovery from one deliberately interrupted word sequence on this
 station and spare card. Other interruption points and hardware combinations
 remain untested.
+
+While the card operator is away, fake-port checks cover a deliberate stop after
+two acknowledged words, a lost reply or negative/wrong-station reply at each of
+the three word positions, and a simulated process failure after recording each
+attempt but before sending that word. Each case leaves an upper-bound recovery
+record and sends no subsequent word. The shared assessment marks a fresh image
+as unexpected if it requires more words than the record permits or if bytes
+outside the owner words changed. The serial adapter accepts captured code-10
+and code-14 replies only when the connected station code agrees. These are
+software checks; they do not establish physical interruption behavior.
+
+`just sportident-owner-native-stop-after-two <request-json>` is now prepared
+for the next controlled hardware check. The present spare card was last read
+as `Donald` / `Duck` on Mac station 554900. Before the test, take a fresh
+baseline and recheck the exact card and request. After two replies, remove and
+reinsert the card for a read-only capture and run the offline assessment before
+acknowledging any result or proposing a repair. If both words applied to the
+current 12-to-11-byte plan, the expected intermediate owner text is
+`Daisy;Duuck;`; the actual card read is authoritative. A second SPORTident
+reader, serial 593927, is attached to the Windows VM rather than available as
+a Mac serial port. A read-only Config+ v2.12.0 direct station read on
+2026-09-19 confirmed it as BSM8 UART1 on COM4, code 10, firmware 657, in
+SI-card readout mode. Config+'s visible SI-card entries were historical; no
+fresh card read or owner write has yet tested this second station.
 
 ### SDK provenance and licensing
 

@@ -101,6 +101,10 @@ sportident-owner-native-experiment request:
 sportident-owner-native-stop-after-one request:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerStopAfterOne {{quote("-PsiOwnerWriteRequest=" + request)}}
 
+# EXPERIMENTAL: deliberately stops after two acknowledged owner words; requires recovery assessment.
+sportident-owner-native-stop-after-two request:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerStopAfterTwo {{quote("-PsiOwnerWriteRequest=" + request)}}
+
 # Resolve a pending experimental attempt using a freshly captured complete native read.
 sportident-owner-native-recovery evidence observed_first observed_last:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerRecovery {{quote("-PsiOwnerReadEvidence=" + evidence)}} {{quote("-PsiOwnerObservedFirstName=" + observed_first)}} {{quote("-PsiOwnerObservedLastName=" + observed_last)}}

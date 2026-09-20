@@ -110,6 +110,39 @@ class SportIdentSi8OwnerWordWritePlannerTest {
     }
 
     @Test
+    fun flagsImpossibleProgressAndChangesOutsideOwnerWords() {
+        val before = fixture()
+        val fullTarget = fixture(owner = "Donald;Duck;")
+        val impossible = SportIdentSi8OwnerWordWritePlanner.assessInterruption(
+            request, before, 1, fullTarget)
+        assertEquals(listOf(3), impossible.matchingWordPrefixes)
+        assertTrue(impossible.plausibleWordPrefixes.isEmpty())
+        assertFalse(impossible.consistentWithRecordedAttempt)
+
+        val block1 = decode(fullTarget.blocks.single { it.blockNumber == 1 }).also { it[8] = 99 }
+        val anomalous = SportIdentOwnerReadVerification.captureRaw(fullTarget.stationNumber,
+            listOf(SportIdentCardBlock(0, decode(fullTarget.blocks.single { it.blockNumber == 0 })),
+                SportIdentCardBlock(1, block1)))
+        val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(
+            request, before, 3, anomalous)
+        assertTrue(assessment.matchingWordPrefixes.isEmpty())
+        assertEquals(listOf(SportIdentOwnerReadByteChange(1, 8, 0, 99)), assessment.changesOutsideOwnerWords)
+        assertFalse(assessment.consistentWithRecordedAttempt)
+    }
+
+    @Test
+    fun identicalLaterWordsLeaveSeveralValidPrefixMatches() {
+        val before = fixture(owner = "Donald;Duck;")
+        val firstWordOnly = request.copy(expectedFirstName = "Donald", firstName = "Ronald")
+        val observed = fixture(owner = "Ronald;Duck;")
+        val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(
+            firstWordOnly, before, 1, observed)
+        assertEquals(listOf(1, 2, 3), assessment.matchingWordPrefixes)
+        assertEquals(listOf(1), assessment.plausibleWordPrefixes)
+        assertTrue(assessment.consistentWithRecordedAttempt)
+    }
+
+    @Test
     fun refusesUnsupportedShapeStaleIdentityAndNormalizedOwnerBytes() {
         val before = fixture()
         listOf(

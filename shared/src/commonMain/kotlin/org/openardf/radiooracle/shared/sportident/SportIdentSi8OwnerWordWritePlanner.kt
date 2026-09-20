@@ -18,7 +18,11 @@ data class SportIdentSi8OwnerInterruptionAssessment(
     val matchingWordPrefixes: List<Int>,
     val byteChangesFromBaseline: List<SportIdentOwnerReadByteChange>,
     val changesOutsideOwnerWords: List<SportIdentOwnerReadByteChange>
-)
+) {
+    val plausibleWordPrefixes: List<Int> = matchingWordPrefixes.filter { it <= attemptedWordsUpperBound }
+    val consistentWithRecordedAttempt: Boolean = plausibleWordPrefixes.isNotEmpty() &&
+        changesOutsideOwnerWords.isEmpty()
+}
 
 @Serializable
 data class SportIdentSi8OwnerNativeAttempt(

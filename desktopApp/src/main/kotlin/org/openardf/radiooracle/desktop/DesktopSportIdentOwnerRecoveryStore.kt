@@ -19,6 +19,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWritePlanCom
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWordWritePlanner
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerNativeAttempt
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
 
 internal sealed interface DesktopSportIdentOwnerRecoveryState {
     data object Empty : DesktopSportIdentOwnerRecoveryState
@@ -117,9 +118,32 @@ internal class DesktopSportIdentOwnerRecoveryStore(
 
     /** Acknowledgement checks identity/readiness but never claims punch preservation. */
     @Synchronized fun acknowledge(request: SportIdentOwnerNameWriteRequest, inspection: SportIdentCardOwnerInspection) {
+        val pending = load() as? DesktopSportIdentOwnerRecoveryState.Pending
+            ?: error("Owner-write recovery record is missing or unreadable.")
+        check(pending.request == request && pending.nativeAttempt == null) {
+            "A native owner-write attempt requires complete two-block recovery evidence."
+        }
         val assessment = SportIdentOwnerNameRecovery.assess(request, inspection)
         check(assessment != SportIdentOwnerNameRecoveryAssessment.NOT_TARGET_CARD &&
             assessment != SportIdentOwnerNameRecoveryAssessment.UNREADABLE)
+        clear(request)
+    }
+
+    /** Native acknowledgement requires a compatible fresh two-block card image. */
+    @Synchronized fun acknowledgeNative(request: SportIdentOwnerNameWriteRequest,
+        fresh: SportIdentOwnerReadFixture, observedFirstName: String, observedLastName: String) {
+        val pending = load() as? DesktopSportIdentOwnerRecoveryState.Pending
+            ?: error("Native owner-write recovery record is missing or unreadable.")
+        val attempt = pending.nativeAttempt ?: error("Native owner-write baseline is missing.")
+        check(pending.request == request)
+        val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(
+            request, attempt.before, attempt.attemptedWords, fresh)
+        check(assessment.consistentWithRecordedAttempt) {
+            "Fresh card bytes do not match a possible word prefix without other changes."
+        }
+        val read = SportIdentOwnerReadVerification.nativeRead(fresh)
+        check(read.cardNumber == request.cardNumber && read.firstName == observedFirstName &&
+            read.lastName == observedLastName)
         clear(request)
     }
 

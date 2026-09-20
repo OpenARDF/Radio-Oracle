@@ -134,10 +134,14 @@ internal fun SportIdentCardInspectionPanel(
             is DesktopSportIdentOwnerRecoveryState.Pending -> if (!isProgramming) {
                 Text("Check interrupted write · SI-Card ${recovery.request.cardNumber}",
                     fontWeight = FontWeight.Bold, color = DesktopPalette.Error)
-                Text("Read this card to check the names. Earlier punch and settings preservation was not verified.")
+                if (recovery.nativeAttempt != null) {
+                    Text("This native write requires a fresh complete card read and recovery assessment before another write. The names shown here do not clear its recovery record.")
+                } else {
+                    Text("Read this card to check the names. Earlier punch and settings preservation was not verified.")
+                }
                 val assessment = snapshot?.inspection?.let { SportIdentOwnerNameRecovery.assess(recovery.request, it) }
                 assessment?.let { Text(ownerNameRecoveryMessage(it)) }
-                if (assessment in listOf(SportIdentOwnerNameRecoveryAssessment.REQUESTED_NAMES,
+                if (recovery.nativeAttempt == null && assessment in listOf(SportIdentOwnerNameRecoveryAssessment.REQUESTED_NAMES,
                         SportIdentOwnerNameRecoveryAssessment.ORIGINAL_NAMES, SportIdentOwnerNameRecoveryAssessment.DIFFERENT_NAMES)) {
                     Text("Accept this fresh read to enable another write. It does not confirm earlier punch preservation.", fontSize = 13.sp)
                     Button(enabled = !isReading && !isStationBusy && !isFinishingRecovery, onClick = {

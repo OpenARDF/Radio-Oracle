@@ -3,7 +3,12 @@ package org.openardf.radiooracle.desktop.usb
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.openardf.radiooracle.desktop.DesktopSportIdentOwnerRecoveryState
+import org.openardf.radiooracle.desktop.DesktopSportIdentOwnerRecoveryStore
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
 import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
@@ -16,12 +21,18 @@ import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWordWritePla
 import org.openardf.radiooracle.shared.sportident.SportIdentUsbDevice
 
 class DesktopSportIdentOwnerWordTransportTest {
+    @get:Rule val temporary = TemporaryFolder()
     private val request = SportIdentOwnerNameWriteRequest(1, 593927, 2450662,
         "Daisy", "Duck", "Donald", "Duck", true)
     private val capturedReplies = listOf(
         "02 ea 03 00 0a 08 00 2e 03".bytes(),
         "02 ea 03 00 0a 09 01 2e 03".bytes(),
         "02 ea 03 00 0a 0a 02 2e 03".bytes()
+    )
+    private val macReplies = listOf(
+        "02 ea 03 00 0e 08 80 35 03".bytes(),
+        "02 ea 03 00 0e 09 81 35 03".bytes(),
+        "02 ea 03 00 0e 0a 82 35 03".bytes()
     )
 
     @Test
@@ -40,6 +51,112 @@ class DesktopSportIdentOwnerWordTransportTest {
         }
         assertThrows(IllegalStateException::class.java) { transport.exchange(rehearsal) }
         assertEquals(3, port.writeRequests.size)
+    }
+
+    @Test
+    fun transportAcceptsBothObservedStationCodesAndRejectsCrossStationReplies() {
+        for ((code, replies) in listOf(10 to capturedReplies, 14 to macReplies)) {
+            val port = FakePort(replies)
+            val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, code, fixture())
+            transport(port).exchange(rehearsal)
+            assertEquals(SportIdentSi8OwnerWriteStage.REQUIRES_READBACK, rehearsal.stage)
+            assertEquals(3, port.writeRequests.size)
+        }
+        val wrongStation = FakePort(capturedReplies)
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 14, fixture())
+        transport(wrongStation).exchange(rehearsal)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.UNEXPECTED_REPLY, rehearsal.stopReason)
+        assertEquals(1, wrongStation.writeRequests.size)
+    }
+
+    @Test
+    fun intentionalSecondWordStopRetainsExactUpperBoundWithoutSendingThirdWord() {
+        val before = fixture()
+        val store = store("second-word.json")
+        store.beginNative(request, before)
+        val port = FakePort(capturedReplies)
+        val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, before)
+        transport(port).exchange(rehearsal,
+            beforeWordAttempt = { store.markWordAttempt(request, it) }, stopAfterAcknowledgedWord = 2)
+
+        assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, rehearsal.stopReason)
+        assertEquals(2, port.writeRequests.size)
+        assertEquals(2, (store.load() as DesktopSportIdentOwnerRecoveryState.Pending).nativeAttempt?.attemptedWords)
+        val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(request, before, 2,
+            observedPrefix(2))
+        assertTrue(2 in assessment.matchingWordPrefixes)
+        assertTrue(assessment.changesOutsideOwnerWords.isEmpty())
+    }
+
+    @Test
+    fun crashAfterSavingAnyWordCannotSendThatWordAndLeavesRestartEvidence() {
+        val before = fixture()
+        for (crashAt in 1..3) {
+            val store = store("crash-$crashAt.json")
+            store.beginNative(request, before)
+            val port = FakePort(capturedReplies)
+            val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, before)
+            assertThrows(IllegalStateException::class.java) {
+                transport(port).exchange(rehearsal, beforeWordAttempt = { word ->
+                    store.markWordAttempt(request, word)
+                    if (word == crashAt) error("Simulated crash after saving word $word")
+                })
+            }
+            assertEquals(crashAt - 1, port.writeRequests.size)
+            assertEquals(SportIdentSi8OwnerWriteStopReason.TRANSPORT_FAILURE, rehearsal.stopReason)
+            val restarted = store("crash-$crashAt.json").load() as DesktopSportIdentOwnerRecoveryState.Pending
+            assertEquals(before, restarted.nativeAttempt?.before)
+            assertEquals(crashAt, restarted.nativeAttempt?.attemptedWords)
+            val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(request, before,
+                crashAt, observedPrefix(crashAt - 1))
+            assertTrue(crashAt - 1 in assessment.matchingWordPrefixes)
+            assertTrue(assessment.changesOutsideOwnerWords.isEmpty())
+        }
+    }
+
+    @Test
+    fun lostReplyAfterAnyWordKeepsBothPossibleFreshCardOutcomesAssessable() {
+        val before = fixture()
+        for (lostAt in 1..3) {
+            val store = store("lost-$lostAt.json")
+            store.beginNative(request, before)
+            val port = FakePort(capturedReplies.take(lostAt - 1))
+            val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, before)
+            transport(port).exchange(rehearsal, beforeWordAttempt = { store.markWordAttempt(request, it) })
+            assertEquals(SportIdentSi8OwnerWriteStopReason.NO_REPLY, rehearsal.stopReason)
+            assertEquals(lostAt, port.writeRequests.size)
+            val restarted = store("lost-$lostAt.json").load() as DesktopSportIdentOwnerRecoveryState.Pending
+            assertEquals(lostAt, restarted.nativeAttempt?.attemptedWords)
+            for (applied in lostAt - 1..lostAt) {
+                val assessment = SportIdentSi8OwnerWordWritePlanner.assessInterruption(request, before,
+                    lostAt, observedPrefix(applied))
+                assertTrue(applied in assessment.matchingWordPrefixes)
+                assertTrue(assessment.changesOutsideOwnerWords.isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun negativeOrWrongStationReplyAtEachWordStopsWithNoSubsequentWrite() {
+        val before = fixture()
+        for (failedAt in 1..3) {
+            for ((label, badReply, expectedReason) in listOf(
+                Triple("nak", byteArrayOf(SportIdentProtocol.NAK),
+                    SportIdentSi8OwnerWriteStopReason.NEGATIVE_ACKNOWLEDGEMENT),
+                Triple("wrong-station", macReplies[failedAt - 1],
+                    SportIdentSi8OwnerWriteStopReason.UNEXPECTED_REPLY)
+            )) {
+                val store = store("$label-$failedAt.json")
+                store.beginNative(request, before)
+                val port = FakePort(capturedReplies.take(failedAt - 1) + badReply)
+                val rehearsal = SportIdentSi8OwnerWriteRehearsal(request, 10, before)
+                transport(port).exchange(rehearsal, beforeWordAttempt = { store.markWordAttempt(request, it) })
+                assertEquals(expectedReason, rehearsal.stopReason)
+                assertEquals(failedAt, port.writeRequests.size)
+                assertEquals(failedAt,
+                    (store.load() as DesktopSportIdentOwnerRecoveryState.Pending).nativeAttempt?.attemptedWords)
+            }
+        }
     }
 
     @Test
@@ -153,6 +270,22 @@ class DesktopSportIdentOwnerWordTransportTest {
     private fun transport(port: DesktopSerialPort): DesktopSportIdentOwnerWordTransport {
         var now = 0L
         return DesktopSportIdentOwnerWordTransport(port, readTimeoutMs = 4, nowMillis = { ++now })
+    }
+
+    private fun store(name: String) = DesktopSportIdentOwnerRecoveryStore(
+        temporary.root.toPath().resolve(name))
+
+    private fun observedPrefix(words: Int) = ByteArray(128).also { block0 ->
+        block0[22] = 1
+        block0[24] = 2
+        block0[25] = 0x25
+        block0[26] = 0x64
+        block0[27] = 0xe6.toByte()
+        val owner = listOf("Daisy;Duck;", "Donay;Duck;", "Donald;Dck;", "Donald;Duck;")[words]
+        owner.forEachIndexed { index, char -> block0[32 + index] = char.code.toByte() }
+    }.let { block0 ->
+        SportIdentOwnerReadVerification.captureRaw(593927,
+            listOf(SportIdentCardBlock(0, block0), SportIdentCardBlock(1, ByteArray(128))))
     }
 
     private fun fixture() = ByteArray(128).also { block0 ->

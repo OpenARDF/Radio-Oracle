@@ -89,6 +89,26 @@ class DesktopSportIdentOwnerRecoveryStoreTest {
         refused { store.markWordAttempt(nativeRequest.copy(firstName = "Minnie"), 4) }
     }
 
+    @Test fun nativeAttemptCannotBeClearedByNamesAloneOrAnomalousCardBytes() {
+        val nativeRequest = SportIdentOwnerNameWriteRequest(1, 593927, 2450662,
+            "Daisy", "Duck", "Donald", "Duck", true)
+        val store = store()
+        store.beginNative(nativeRequest, nativeFixture("Daisy;Duck;"))
+        store.markWordAttempt(nativeRequest, 1)
+        val partial = nativeFixture("Donay;Duck;")
+        refused { store.acknowledge(nativeRequest, original.copy(
+            holder = SportIdentCardHolder("Donay", "Duck", null))) }
+        refused { store.acknowledgeNative(nativeRequest, partial, "Donald", "Duck") }
+        refused { store.acknowledgeNative(nativeRequest, nativeFixture("Donald;Duck;"), "Donald", "Duck") }
+        val changedBlock1 = partial.blocks.map { block ->
+            if (block.blockNumber == 1) block.copy(hexData = block.hexData.replaceRange(16, 18, "63")) else block
+        }
+        refused { store.acknowledgeNative(nativeRequest, partial.copy(blocks = changedBlock1), "Donay", "Duck") }
+        assertEquals(1, (store.load() as DesktopSportIdentOwnerRecoveryState.Pending).nativeAttempt?.attemptedWords)
+        store.acknowledgeNative(nativeRequest, partial, "Donay", "Duck")
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, store.load())
+    }
+
     @Test fun anOlderAcknowledgementCannotDeleteAnotherAttempt() {
         val store = store()
         val other = request.copy(firstName = "Mortimer")

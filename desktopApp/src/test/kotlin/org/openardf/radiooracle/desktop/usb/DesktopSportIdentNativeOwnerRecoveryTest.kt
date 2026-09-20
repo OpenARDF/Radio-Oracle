@@ -61,8 +61,16 @@ class DesktopSportIdentNativeOwnerRecoveryTest {
             arrayOf("--assess-native-read", evidence.toString()),
             PrintStream(output), PrintStream(ByteArrayOutputStream()), store))
         assertTrue(output.toString().contains("matches prefix(es) [1]"))
+        assertTrue(output.toString().contains("consistency=expected"))
         assertTrue(output.toString().contains("pending record retained"))
         assertEquals(1, (store.load() as DesktopSportIdentOwnerRecoveryState.Pending).nativeAttempt?.attemptedWords)
+        assertEquals(1, DesktopSportIdentNativeOwnerRecovery.run(
+            arrayOf("--acknowledge-native-read", evidence.toString(), "Donald", "Duck"),
+            PrintStream(ByteArrayOutputStream()), PrintStream(ByteArrayOutputStream()), store))
+        assertEquals(0, DesktopSportIdentNativeOwnerRecovery.run(
+            arrayOf("--acknowledge-native-read", evidence.toString(), "Donay", "Duck"),
+            PrintStream(ByteArrayOutputStream()), PrintStream(ByteArrayOutputStream()), store))
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, store.load())
     }
 
     private fun block0(owner: String) = ByteArray(128).also { block ->

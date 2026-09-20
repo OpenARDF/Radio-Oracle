@@ -51,6 +51,8 @@ internal object DesktopSportIdentNativeOwnerRecovery {
                     "fresh read matches prefix(es) ${assessment.matchingWordPrefixes}; " +
                     "${assessment.byteChangesFromBaseline.size} changed bytes, " +
                     "${assessment.changesOutsideOwnerWords.size} outside the 12 owner bytes.")
+                out.println("Prefixes compatible with the saved attempt: ${assessment.plausibleWordPrefixes}; " +
+                    "consistency=${if (assessment.consistentWithRecordedAttempt) "expected" else "unexpected"}.")
                 if (assessment.changesOutsideOwnerWords.isNotEmpty()) {
                     out.println("Changes outside owner words: ${assessment.changesOutsideOwnerWords}")
                 }
@@ -66,7 +68,11 @@ internal object DesktopSportIdentNativeOwnerRecovery {
             }
             val inspection = SportIdentCardOwnerInspection(read.cardNumber, SportIdentCardFamily.SI8,
                 SportIdentCardHolder(read.firstName, read.lastName, null), SportIdentOwnerDataStatus.READ)
-            store.acknowledge(pending.request, inspection)
+            if (pending.nativeAttempt != null) {
+                store.acknowledgeNative(pending.request, fixture, args[2], args[3])
+            } else {
+                store.acknowledge(pending.request, inspection)
+            }
             check(store.load() == DesktopSportIdentOwnerRecoveryState.Empty)
             out.println("Accepted native read of SI-Card8 ${read.cardNumber}: '${read.firstName} ${read.lastName}', " +
                 "${read.controlPunchCount} punches. Recovery reminder cleared; preservation is assessed separately.")
