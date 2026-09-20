@@ -109,6 +109,10 @@ sportident-owner-native-seven-word-paced-trial request:
 sportident-owner-native-six-word-paced-trial request:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerSixWordPacedTrial {{quote("-PsiOwnerWriteRequest=" + request)}}
 
+# EXPERIMENTAL: opt-in three-word trial with a 200 ms post-reply pause; requires exact hardware approval.
+sportident-owner-native-three-word-paced-trial request:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerThreeWordPacedTrial {{quote("-PsiOwnerWriteRequest=" + request)}}
+
 # EXPERIMENTAL: deliberately stops after one acknowledged owner word; requires recovery assessment.
 sportident-owner-native-stop-after-one request:
     JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :desktopApp:desktopSportIdentNativeOwnerStopAfterOne {{quote("-PsiOwnerWriteRequest=" + request)}}

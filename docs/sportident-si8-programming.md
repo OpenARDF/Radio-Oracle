@@ -1119,6 +1119,24 @@ for byte: 21 changed bytes, all in block 0's owner field; block 1 and all 11
 punches were unchanged. This repeat strengthens the evidence for pacing on
 station 554900, while the need for broader compatibility testing remains.
 
+### Paced Kotlin long-to-short trial on station 554900
+
+The next fresh two-block baseline of spare SI-Card8 2450662 matched its prior
+`Penny` / `Popandrolopoulos` image byte for byte, including all 11 punches.
+For an explicitly approved write to `Daisy` / `Duck`, the experimental CLI
+required exactly three planned owner words and paused 200 ms between valid
+replies. All three replies arrived, and a removal/reinsertion readback verified
+the shorter name and cleared recovery. A separate read-only capture matched
+the complete Kotlin plan byte for byte. Ten bytes changed within block 0's
+first three owner words; the older owner bytes beyond the new terminator were
+untouched. Block 1 and all 11 punches were identical to the baseline. The
+card was removed from the reader after verification.
+
+This verifies one long-to-short transaction on station 554900 and reproduces
+the vendor-observed behavior of retaining older bytes beyond the new name.
+It does not establish every name length, character set, or reader combination.
+The desktop writer remains disabled pending broader testing and recovery UX.
+
 ### SDK provenance and licensing
 
 The library used here came from the private archive

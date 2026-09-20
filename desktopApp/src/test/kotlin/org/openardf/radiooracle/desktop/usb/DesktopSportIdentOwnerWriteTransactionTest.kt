@@ -92,7 +92,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, recoveryStore().load())
 
         val trialPort = readyPort(replies)
-        val outcome = transaction(trialPort, allowSevenWordExperiment = true,
+        val outcome = transaction(trialPort, experimentalWordCount = 7,
             stopAfterAcknowledgedWord = 1).execute(longer)
         assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, outcome.stopReason)
         assertEquals(1, trialPort.ownerWordWrites.size)
@@ -118,12 +118,36 @@ class DesktopSportIdentOwnerWriteTransactionTest {
 
         val trialPort = readyPort(replies, presenceOwner = "Donald;Duckandrolopoulos;")
         val outcome = transaction(trialPort, readCard = { baseline },
-            allowSixWordExperiment = true, stopAfterAcknowledgedWord = 1).execute(shorter)
+            experimentalWordCount = 6, stopAfterAcknowledgedWord = 1).execute(shorter)
         assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, outcome.stopReason)
         assertEquals(1, trialPort.ownerWordWrites.size)
         val pending = recoveryStore().load() as DesktopSportIdentOwnerRecoveryState.Pending
         assertEquals(shorter, pending.request)
         assertEquals(6, pending.nativeAttempt?.attemptedWords)
+    }
+
+    @Test
+    fun threeWordLongToShortTrialRequiresOptInAndRetainsRecoveryBound() {
+        val shorter = request.copy(expectedFirstName = "Penny",
+            expectedLastName = "Popandrolopoulos", firstName = "Daisy", lastName = "Duck")
+        val baseline = download("Penny;Popandrolopoulos;")
+        assertEquals(3, SportIdentSi8OwnerWordWritePlanner.plan(shorter,
+            SportIdentOwnerReadVerification.capture(shorter.stationNumber, baseline.blocks)).size)
+        val gatedPort = readyPort(replies, presenceOwner = "Penny;Popandrolopoulos;")
+        assertThrows(IllegalArgumentException::class.java) {
+            transaction(gatedPort, readCard = { baseline }).execute(shorter)
+        }
+        assertTrue(gatedPort.ownerWordWrites.isEmpty())
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, recoveryStore().load())
+
+        val trialPort = readyPort(replies, presenceOwner = "Penny;Popandrolopoulos;")
+        val outcome = transaction(trialPort, readCard = { baseline },
+            experimentalWordCount = 3, stopAfterAcknowledgedWord = 1).execute(shorter)
+        assertEquals(SportIdentSi8OwnerWriteStopReason.INTENTIONAL_STOP, outcome.stopReason)
+        assertEquals(1, trialPort.ownerWordWrites.size)
+        val pending = recoveryStore().load() as DesktopSportIdentOwnerRecoveryState.Pending
+        assertEquals(shorter, pending.request)
+        assertEquals(3, pending.nativeAttempt?.attemptedWords)
     }
 
     @Test
@@ -294,8 +318,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         readCard: (DesktopSerialPort) -> DesktopSportIdentCardBlockDownload = { download("Daisy;Duck;") },
         recoveryStore: DesktopSportIdentOwnerRecoveryStore = recoveryStore(),
         stopAfterAcknowledgedWord: Int? = null,
-        allowSevenWordExperiment: Boolean = false,
-        allowSixWordExperiment: Boolean = false,
+        experimentalWordCount: Int? = null,
         onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
         verifier: DesktopSportIdentOwnerReadbackVerifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> true },
@@ -323,8 +346,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         return DesktopSportIdentOwnerWriteTransaction(
             preflight, verifier, recoveryStore, presenceProbe,
             stopAfterAcknowledgedWord = stopAfterAcknowledgedWord,
-            allowSevenWordExperiment = allowSevenWordExperiment,
-            allowSixWordExperiment = allowSixWordExperiment,
+            experimentalWordCount = experimentalWordCount,
             onBeforeWordExchange = onBeforeWordExchange
         ) { opened ->
             DesktopSportIdentOwnerWordTransport(opened, readTimeoutMs = 4, nowMillis = { ++wordNow })

@@ -732,7 +732,13 @@ mid-term goal on Android and desktop.
   reverse change on 554900. Its six replies, fresh reinsertion readback, and
   separate full-card capture verified the plan, preserved all 11 punches,
   and changed only owner bytes. The two successful paced directions strengthen
-  the timing lead but do not yet establish all-reader reliability.
+  the timing lead but do not yet establish all-reader reliability. A later
+  explicitly approved paced three-word Kotlin trial shortened `Penny` /
+  `Popandrolopoulos` to `Daisy` / `Duck` on 554900. Fresh in-command and
+  separate full-card reads matched the plan; only 10 bytes in the first three
+  owner words changed, older owner bytes beyond the new name remained, and
+  all 11 punches were preserved. Other lengths and reader combinations
+  remain experimental.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Default-character-set Western letters now use a shared, round-trip-checked

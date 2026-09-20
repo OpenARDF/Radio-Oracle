@@ -21,7 +21,8 @@ fun main(args: Array<String>) {
 internal object DesktopSportIdentNativeOwnerWrite {
     private const val usage = "Usage: --execute-native-write <exact-owner-write-request-json> " +
         "[--stop-after-first-reply|--stop-after-second-reply|--stop-after-third-reply|" +
-        "--allow-seven-word-trial|--allow-seven-word-paced-trial|--allow-six-word-paced-trial]"
+        "--allow-seven-word-trial|--allow-seven-word-paced-trial|--allow-six-word-paced-trial|" +
+        "--allow-three-word-paced-trial]"
     private const val pacedTrialPauseMillis = 200L
 
     fun run(
@@ -41,12 +42,18 @@ internal object DesktopSportIdentNativeOwnerWrite {
             "--stop-after-third-reply" -> 3
             else -> null
         }
-        val pacedSevenWordTrial = args.getOrNull(2) == "--allow-seven-word-paced-trial"
-        val pacedSixWordTrial = args.getOrNull(2) == "--allow-six-word-paced-trial"
-        val allowSevenWordTrial = args.getOrNull(2) == "--allow-seven-word-trial" || pacedSevenWordTrial
+        val experimentalWordCount = when (args.getOrNull(2)) {
+            "--allow-seven-word-trial", "--allow-seven-word-paced-trial" -> 7
+            "--allow-six-word-paced-trial" -> 6
+            "--allow-three-word-paced-trial" -> 3
+            else -> null
+        }
+        val pacedTrial = args.getOrNull(2) in setOf(
+            "--allow-seven-word-paced-trial", "--allow-six-word-paced-trial",
+            "--allow-three-word-paced-trial")
         if (args.getOrNull(0) != "--execute-native-write" ||
             (args.size != 2 && (args.size != 3 ||
-                (stopAfterWord == null && !allowSevenWordTrial && !pacedSixWordTrial)))) {
+                (stopAfterWord == null && experimentalWordCount == null)))) {
             err.println(usage)
             return 1
         }
@@ -62,12 +69,11 @@ internal object DesktopSportIdentNativeOwnerWrite {
                 "card=${request.cardNumber} '${request.expectedFirstName} ${request.expectedLastName}' " +
                 "to '${request.firstName} ${request.lastName}'. One attempt; no automatic retry." +
                 if (stopAfterWord != null) " Stop deliberately after acknowledged word $stopAfterWord."
-                else if (pacedSevenWordTrial || pacedSixWordTrial)
-                    " Opt-in ${if (pacedSevenWordTrial) "seven" else "six"}-word trial with a 200 ms pause between words."
-                else if (allowSevenWordTrial) " Opt-in seven-word trial." else "")
+                else if (pacedTrial)
+                    " Opt-in $experimentalWordCount-word trial with a 200 ms pause between words."
+                else if (experimentalWordCount != null) " Opt-in $experimentalWordCount-word trial." else "")
             val outcome = (execute ?: { nativeExecute(it, store, out, stopAfterWord,
-                allowSevenWordTrial, pacedSixWordTrial,
-                if (pacedSevenWordTrial || pacedSixWordTrial) pacedTrialPauseMillis else 0L) })(request)
+                experimentalWordCount, if (pacedTrial) pacedTrialPauseMillis else 0L) })(request)
             if (outcome.verified && store.load() == DesktopSportIdentOwnerRecoveryState.Empty) {
                 out.println("Native write verified against a fresh two-block card read; recovery record cleared.")
                 0
@@ -92,7 +98,7 @@ internal object DesktopSportIdentNativeOwnerWrite {
 
     private fun nativeExecute(request: SportIdentOwnerNameWriteRequest,
         store: DesktopSportIdentOwnerRecoveryStore, out: PrintStream,
-        stopAfterWord: Int?, allowSevenWordTrial: Boolean, allowSixWordTrial: Boolean,
+        stopAfterWord: Int?, experimentalWordCount: Int?,
         pauseAfterReplyMillis: Long): DesktopSportIdentOwnerWriteOutcome {
         val wordResults = mutableListOf<String>()
         val preflight = DesktopSportIdentOwnerWritePreflight(readCard = { port ->
@@ -116,8 +122,7 @@ internal object DesktopSportIdentNativeOwnerWrite {
         val transaction = DesktopSportIdentOwnerWriteTransaction(
             preflight, readback, store,
             stopAfterAcknowledgedWord = stopAfterWord,
-            allowSevenWordExperiment = allowSevenWordTrial,
-            allowSixWordExperiment = allowSixWordTrial,
+            experimentalWordCount = experimentalWordCount,
             onBeforeWordExchange = {
                 out.println("Target card rechecked and recovery baseline saved. " +
                     if (stopAfterWord != null) "Writing $stopAfterWord owner word(s), then stopping; keep the card seated."
