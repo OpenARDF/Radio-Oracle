@@ -899,10 +899,11 @@ text in one to seven four-byte owner words. An independent Mac SDK write of
 `Donald;Duck;` to `Huey;Duck;` matched its three-word plan byte for byte, with
 `0xEE` padding in the final word. `Huey;Duck;` to the 23-character
 `Penny;Popandrolopoulos-J;` matched all seven planned words, including final
-padding. The SDK's return from that maximum-length name to `Donald;Duck;`
-matched the planner's three-word proposal: older trailing owner bytes remained
-untouched. Each separate two-block capture showed the same 11 punches and no
-changes outside the planned owner words.
+padding. In that SDK comparison, the seventh word changed from `00 00 00 00`
+to `3B EE EE EE`. The SDK's return from that maximum-length name to
+`Donald;Duck;` matched the planner's three-word proposal: older trailing owner
+bytes remained untouched. Each separate two-block capture showed the same 11
+punches and no changes outside the planned owner words.
 
 The first direct Kotlin seven-word trial stopped at the second word after an
 acknowledged first word and a negative acknowledgement for the second. A fresh
@@ -926,6 +927,11 @@ station code 10 and the matching address. The seven transmitted frames match
 the shared Kotlin planner byte for byte, including CRCs and `0xEE` padding in
 the final word. Config+ sent `FF 06` after the seventh reply; its role in this
 transaction is not yet established.
+
+This capture proves seven command frames, but not seven changed word values.
+An earlier maximum-to-shorter SDK write had left the final owner word as
+`3B EE EE EE`, already equal to the Config+ target. Only the first three
+owner words changed in this particular transaction.
 
 The trace includes two complete prewrite reads and an independent complete
 postwrite read of both 128-byte card blocks. The two prewrite images agree.
