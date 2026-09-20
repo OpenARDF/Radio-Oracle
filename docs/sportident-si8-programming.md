@@ -992,10 +992,37 @@ transport only for a nearly unchanged card image. It does not establish a
 general multiword name change. The cause of the second-word negative reply
 remains unknown. The Config+ long-name trace on station 593927 and the SDK
 long-name writes prove the card can accept a full name, but do not prove that
-Kotlin's transaction on station 554900 is equivalent. The next gate is to
-isolate the station or transaction difference using a traced known-good write
-and a separately approved controlled Kotlin comparison before enabling
-variable-length writes in the product.
+Kotlin's transaction on station 554900 is equivalent.
+
+### Full-length Kotlin write verified on the second station
+
+On 2026-09-20, station 593927 was handed from the VM to macOS. A separate
+Kotlin two-block capture of SI-Card8 2450662 matched the restored
+station-554900 image byte for byte: `Penny` / `Popandrolopoulos-K`, with 11
+punches. The local SDK identified both stations as `BSM8 UART1 (USB)`; their
+verified station codes differ (10 for 593927, 14 for 554900).
+
+An explicitly approved Kotlin seven-word trial on station 593927 then used
+the same name change that had stopped on station 554900: `Penny` /
+`Popandrolopoulos-K` to `Donald` / `Duckandrolopoulos`. Raw frame tracing
+showed all seven CRC-valid, sequential code-10 replies for addresses
+`0x08`–`0x0E`. The word-2 reply-to-next-write interval was 2.596 ms, close to
+the 2.430 ms before station 554900's word-2 NAK, so the observed gap alone
+does not explain the difference. The command required removal and reinsertion,
+then verified the fresh two-block read and cleared recovery.
+
+A further independent two-block capture matched the shared Kotlin plan byte
+for byte. Relative to the station-593927 prewrite baseline, 21 bytes changed,
+all in block 0's owner field; block 1, all 11 punches, and all unrelated bytes
+were unchanged. The card was left with `Donald` / `Duckandrolopoulos` and
+removed from the reader.
+
+This verifies a full-length, six-changed-word Kotlin transaction on one BSM8
+station. It also narrows the repeated second-word NAK to a station-specific
+setting, firmware difference, or host transaction detail still to be
+identified. The next gate is to compare both stations' complete system
+information and a known-good long-name transaction on station 554900 before
+enabling variable-length writes in the product.
 
 ### SDK provenance and licensing
 

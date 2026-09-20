@@ -696,18 +696,23 @@ mid-term goal on Android and desktop.
   A fresh read found only that first word changed (`Donay` /
   `Popandrolopoulos-K`), with all 11 punches intact. An exact local SDK repair
   restored `Penny` / `Popandrolopoulos-K`; a separate native two-block read
-  matched the pretrial image byte for byte and cleared recovery. The cause of
-  the repeated second-word NAK on multiword changes, cross-station behavior,
-  and a verified full-length Kotlin transition remain before exposing
-  variable-length writes in the product. The next gate is a traced known-good
-  write and controlled cross-station comparison to isolate the transaction
-  difference.
+  matched the pretrial image byte for byte and cleared recovery. A controlled
+  Kotlin trial of the same six-changed-word name transition on station 593927
+  then received all seven replies. Fresh in-command and separate two-block
+  reads matched the plan exactly: 21 changed owner bytes, no other byte
+  changes, and all 11 punches preserved. Both stations identify as BSM8 UART1;
+  their station codes differ. The second-word reply-to-write intervals were
+  similar on the failed and successful trials, so the observed gap alone does
+  not explain the station-554900 NAK. Comparing complete station settings,
+  firmware, and a known-good long-name transaction on station 554900 remains
+  necessary before exposing variable-length writes in the product.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Default-character-set Western letters now use a shared, round-trip-checked
   codec derived from the SDK's public conversion method. Separate SDK writes
-  and native raw reads confirmed `José` and `Bjørn`; the spare returned to
-  `Donald` with all 11 punches intact. Other character sets, direct
+  and native raw reads confirmed `José` and `Bjørn`; those tests returned the
+  spare to `Donald` with all 11 punches intact. The later cross-station trial
+  left it with `Donald` / `Duckandrolopoulos`. Other character sets, direct
   variable-length response errors, compatibility,
   and permission to distribute a replacement still need resolution before
   making the Kotlin writer a general programming option. SDK read comparison
