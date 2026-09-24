@@ -15,6 +15,7 @@ import org.openardf.radiooracle.desktop.DesktopSportIdentOwnerRecoveryStore
 import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
 import org.openardf.radiooracle.shared.sportident.SportIdentCardEvent
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
+import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
 import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
@@ -99,6 +100,26 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         val pending = recoveryStore().load() as DesktopSportIdentOwnerRecoveryState.Pending
         assertEquals(longer, pending.request)
         assertEquals(7, pending.nativeAttempt?.attemptedWords)
+    }
+
+    @Test
+    fun guardedVariableLengthPathCompletesSevenWordsAndFreshReadback() {
+        val longer = request.copy(firstName = "Penny", lastName = "Popandrolopoulos-J")
+        val sevenReplies = (0 until 7).map { index ->
+            val frame = SportIdentProtocol.buildExtendedMessage(SportIdentProtocol.WRITE_SI_CARD_WORD,
+                byteArrayOf(0, 10, (0x08 + index).toByte()))
+            frame.copyOfRange(1, frame.size)
+        }
+        val port = readyPort(sevenReplies)
+        val outcome = transaction(port, allowVariableLength = true,
+            verifier = DesktopSportIdentOwnerReadbackVerifier(
+                awaitTargetRemoval = { _, _ -> true },
+                readAfterReinsertion = { downloadAfterWrite(longer, download("Daisy;Duck;")) }
+            )).execute(longer)
+
+        assertTrue(outcome.verified)
+        assertEquals(7, port.ownerWordWrites.size)
+        assertEquals(DesktopSportIdentOwnerRecoveryState.Empty, recoveryStore().load())
     }
 
     @Test
@@ -319,6 +340,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         recoveryStore: DesktopSportIdentOwnerRecoveryStore = recoveryStore(),
         stopAfterAcknowledgedWord: Int? = null,
         experimentalWordCount: Int? = null,
+        allowVariableLength: Boolean = false,
         onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
         verifier: DesktopSportIdentOwnerReadbackVerifier = DesktopSportIdentOwnerReadbackVerifier(
             awaitTargetRemoval = { _, _ -> true },
@@ -347,6 +369,7 @@ class DesktopSportIdentOwnerWriteTransactionTest {
             preflight, verifier, recoveryStore, presenceProbe,
             stopAfterAcknowledgedWord = stopAfterAcknowledgedWord,
             experimentalWordCount = experimentalWordCount,
+            allowVariableLength = allowVariableLength,
             onBeforeWordExchange = onBeforeWordExchange
         ) { opened ->
             DesktopSportIdentOwnerWordTransport(opened, readTimeoutMs = 4, nowMillis = { ++wordNow })
@@ -384,6 +407,20 @@ class DesktopSportIdentOwnerWriteTransactionTest {
         return DesktopSportIdentCardBlockDownload(
             SportIdentCardEvent.Inserted(SportIdentProtocol.SI_CARD8_9_SIAC, request.cardNumber),
             listOf(SportIdentCardBlock(0, block0), SportIdentCardBlock(1, block1)), readout)
+    }
+
+    private fun downloadAfterWrite(write: SportIdentOwnerNameWriteRequest,
+        before: DesktopSportIdentCardBlockDownload): DesktopSportIdentCardBlockDownload {
+        val blocks = before.blocks.sortedBy(SportIdentCardBlock::blockNumber).map { it.data.copyOf() }
+        val fixture = SportIdentOwnerReadVerification.capture(write.stationNumber, before.blocks)
+        SportIdentSi8OwnerWordWritePlanner.plan(write, fixture).forEach { raw ->
+            val frame = requireNotNull(SportIdentFrameParser.firstFrame(raw))
+            val address = frame.data[0].toInt() and 0xff
+            frame.data.copyOfRange(1, 5).copyInto(blocks[0], address * 4)
+        }
+        val readout = requireNotNull(SportIdentCardReadoutParser.parseSi8Or9OrSiac(blocks[0] + blocks[1]))
+        return DesktopSportIdentCardBlockDownload(before.inserted,
+            listOf(SportIdentCardBlock(0, blocks[0]), SportIdentCardBlock(1, blocks[1])), readout)
     }
 
     private class FakePort(chunks: List<ByteArray>, private val failAfterReads: Int? = null,

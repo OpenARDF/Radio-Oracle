@@ -1,10 +1,10 @@
 # SI-Card8 programming investigation
 
-The desktop product reads SI-Card8 names and previews edits, but does not yet
-write names. The SDK bridge is confined to local test tooling and excluded from
-the desktop product. The direct Kotlin writer remains an experimental CLI:
-several short-name writes, a seven-word trial on each reader, and paced
-multiword writes in both directions on station 554900 verified. Earlier
+The desktop product reads SI-Card8 names and now exposes a guarded Kotlin-only
+name writer for additional user testing. The SDK bridge is confined to local
+test tooling and excluded from the desktop product. Several short-name writes,
+a seven-word trial on each reader, paced multiword writes in both directions,
+and a paced short-to-maximum write on station 554900 are verified. Earlier
 unpaced multiword attempts on 554900 stopped at the second word and required
 local SDK repair.
 Name preparation, word planning, reply validation, and recovery assessment live
@@ -1136,7 +1136,42 @@ card was removed from the reader after verification.
 This verifies one long-to-short transaction on station 554900 and reproduces
 the vendor-observed behavior of retaining older bytes beyond the new name.
 It does not establish every name length, character set, or reader combination.
-The desktop writer remains disabled pending broader testing and recovery UX.
+At that gate, the desktop writer remained disabled pending a successful
+short-to-maximum trial and product-path recovery wiring.
+
+### Paced Kotlin short-to-maximum trial and desktop test writer
+
+A fresh two-block baseline of spare SI-Card8 2450662 on station 554900 read
+`Daisy` / `Duck` with 11 punches. After a separate read-only preflight, an
+explicitly approved paced Kotlin write changed it to the validated 23-character
+maximum, `Penny` / `Popandrolopoulos-J`. All seven address- and CRC-checked word
+replies arrived with approximately 203–209 ms between replies and subsequent
+writes. The transaction required removal and reinsertion, verified a fresh
+two-block read, and cleared recovery. A second independent capture matched the
+shared Kotlin plan. Twelve bytes changed, all inside block 0's owner field;
+block 1, all 11 punches, and every byte outside the owner field were unchanged.
+
+This closes the remaining short-to-maximum hardware gate on station 554900.
+The desktop owner-name page now uses this guarded Kotlin transaction for
+additional user testing: one to seven owner words, a 200 ms post-reply pause,
+no automatic retry, durable recovery before the first word, and mandatory
+fresh complete-card verification. The UI does not expose or package the SDK,
+does not offer a backend choice, and does not ask the user to accept punch
+loss. It reports success only when both card blocks match the planned owner
+change and all punches and unrelated card data are preserved.
+
+The packaged Mac product path was then exercised on station 593927 with spare
+card 2450662. Its automatic read displayed `Penny` /
+`Popandrolopoulos-K`, the 23/23-character limit, and all 11 control punches in
+the initial viewport. The confirmation dialog identified the exact card and
+replacement `Penny` / `Popandrolopoulos-J`, described the required removal and
+reinsertion steps, and stated the complete-card preservation check. The Kotlin
+UI transaction received its expected owner-word reply and accepted success
+only after a fresh two-block read. Radio-Oracle reported that all 11 punches
+were preserved and no other card data changed, wrote the same result to the
+desktop diagnostic log, and kept a visible verified-result banner after the
+transaction. This validates the packaged Kotlin UI path on a second BSM8
+reader; broader card and reader compatibility remains future work.
 
 ### Vendor permission and protocol-investigation workflow
 

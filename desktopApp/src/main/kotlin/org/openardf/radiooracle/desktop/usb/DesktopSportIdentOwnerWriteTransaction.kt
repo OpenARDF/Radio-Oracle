@@ -21,7 +21,7 @@ internal data class DesktopSportIdentOwnerWriteOutcome(
 
 /**
  * Same-port preflight, one-shot word transport, and independent read-back.
- * Used by the experimental CLI; the desktop owner-name page is read-only.
+ * Used by the experimental CLI and the guarded desktop owner-name writer.
  */
 internal class DesktopSportIdentOwnerWriteTransaction(
     private val preflight: DesktopSportIdentOwnerWritePreflight,
@@ -30,12 +30,14 @@ internal class DesktopSportIdentOwnerWriteTransaction(
     private val presenceProbe: DesktopSportIdentCardPresenceProbe = DesktopSportIdentCardPresenceProbe(),
     private val stopAfterAcknowledgedWord: Int? = null,
     private val experimentalWordCount: Int? = null,
+    private val allowVariableLength: Boolean = false,
     private val onBeforeWordExchange: (SportIdentOwnerNameWriteRequest) -> Unit = {},
     private val makeWordTransport: (DesktopSerialPort) -> DesktopSportIdentOwnerWordTransport =
         { port -> DesktopSportIdentOwnerWordTransport(port) }
 ) {
     init {
         require(experimentalWordCount == null || experimentalWordCount in 1..7)
+        require(!allowVariableLength || experimentalWordCount == null)
     }
 
     fun execute(request: SportIdentOwnerNameWriteRequest): DesktopSportIdentOwnerWriteOutcome {
@@ -43,10 +45,15 @@ internal class DesktopSportIdentOwnerWriteTransaction(
             "Resolve the pending SI-card owner-write attempt before starting another."
         }
         return preflight.withFreshRead(request) { port, rehearsal, before ->
-            require(if (experimentalWordCount != null) rehearsal.wordCount == experimentalWordCount else
-                SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(request, before)) {
+            require(when {
+                experimentalWordCount != null -> rehearsal.wordCount == experimentalWordCount
+                allowVariableLength -> rehearsal.wordCount in 1..7
+                else -> SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(request, before)
+            }) {
                 if (experimentalWordCount != null)
                     "The opt-in trial requires exactly $experimentalWordCount owner words."
+                else if (allowVariableLength)
+                    "The SI-Card8 owner write must contain between one and seven owner words."
                 else "Direct SI-Card8 writes are limited to the previously verified 11/12-byte transitions."
             }
             val presence = presenceProbe.check(port, SportIdentOwnerReadVerification.blockBytes(before, 0))

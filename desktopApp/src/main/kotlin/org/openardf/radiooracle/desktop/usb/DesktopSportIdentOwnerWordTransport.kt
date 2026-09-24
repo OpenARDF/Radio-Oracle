@@ -5,8 +5,8 @@ import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteRehears
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStage
 
 /**
- * Single-port adapter for exact owner-word frames. Only the experimental CLI
- * constructs this on a real port.
+ * Single-port adapter for exact owner-word frames used by the guarded desktop
+ * writer and the experimental comparison commands.
  */
 internal data class DesktopSportIdentOwnerWordTiming(
     val wordNumber: Int,
@@ -24,7 +24,7 @@ internal class DesktopSportIdentOwnerWordTransport(
     private val pause: (Long) -> Unit = Thread::sleep
 ) {
     init {
-        require(pauseAfterReplyMillis in 0L..500L) { "Experimental owner-word pause must be 0–500 ms." }
+        require(pauseAfterReplyMillis in 0L..500L) { "Owner-word pause must be 0–500 ms." }
     }
 
     private val replies = DesktopSportIdentFrameStream(port, nowMillis = nowMillis)

@@ -746,8 +746,20 @@ mid-term goal on Android and desktop.
   `Popandrolopoulos` to `Daisy` / `Duck` on 554900. Fresh in-command and
   separate full-card reads matched the plan; only 10 bytes in the first three
   owner words changed, older owner bytes beyond the new name remained, and
-  all 11 punches were preserved. Other lengths and reader combinations
-  remain experimental.
+  all 11 punches were preserved. A later short-to-maximum trial changed that
+  card from `Daisy` / `Duck` to the 23-character `Penny` /
+  `Popandrolopoulos-J` with seven paced word replies. Fresh in-command and
+  separate reads matched the plan, preserved all 11 punches, and changed only
+  owner bytes. The desktop owner-name page now exposes this guarded Kotlin-only
+  path for additional user testing, with a 200 ms post-reply pause, no automatic
+  retry, durable recovery, and mandatory fresh complete-card verification.
+  It contains no SDK backend choice or punch-loss acceptance. Other reader
+  combinations remain experimental. A packaged Mac UI test on station 593927
+  then changed spare card 2450662 from the maximum-length final suffix `K` to
+  `J`. The dialog showed the exact card and requested names, the product path
+  completed fresh two-block verification, preserved all 11 punches and every
+  unrelated byte, logged the outcome, and kept a visible verified-result
+  banner. The automatic read also shows the punch count without scrolling.
   Shared Kotlin now has an offline raw-baseline restore proposal gated by a
   compatible fresh two-block prefix image. No transport or UI sends it yet.
   Default-character-set Western letters now use a shared, round-trip-checked

@@ -35,7 +35,11 @@ internal class DesktopSportIdentNativeProgrammingClient(
             preflight = preflight,
             readbackVerifier = readback,
             recoveryStore = recoveryStore,
-            onBeforeWordExchange = { onPhase(SportIdentOwnerWritePhase.WRITING) }
+            allowVariableLength = true,
+            onBeforeWordExchange = { onPhase(SportIdentOwnerWritePhase.WRITING) },
+            makeWordTransport = { port ->
+                DesktopSportIdentOwnerWordTransport(port, pauseAfterReplyMillis = 200)
+            }
         ).execute(request)
     }
 }
