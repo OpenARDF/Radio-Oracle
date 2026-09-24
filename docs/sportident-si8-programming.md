@@ -437,8 +437,9 @@ response error codes, interruption/retry safety, or other card families and
 stations. The pre-write block contained older residual text after `Daisy;Duck;`;
 this transaction wrote only the three words above. A direct Kotlin writer needs
 those boundaries characterized and fresh read-back verification before it is
-enabled on hardware. The observed Config+ frames also do not resolve any
-licensing or distribution question for a replacement implementation.
+enabled on hardware. The observed Config+ frames alone did not resolve
+publication permission; SPORTident's later written response is recorded under
+"Vendor permission and protocol-investigation workflow" below.
 
 ### Shared offline word-reply sequence
 
@@ -1136,6 +1137,58 @@ This verifies one long-to-short transaction on station 554900 and reproduces
 the vendor-observed behavior of retaining older bytes beyond the new name.
 It does not establish every name length, character set, or reader combination.
 The desktop writer remains disabled pending broader testing and recovery UX.
+
+### Vendor permission and protocol-investigation workflow
+
+SPORTident explicitly confirmed the investigation and publication path in its
+24 September 2026 response to support ticket **T261095**, "SI-Card8
+name-writing protocol documentation." Burkhard Ritter, SPORTident GmbH's
+Managing Director, said that Radio-Oracle may be published as open source. He
+recommended using the PC Programmer's Guide together with Config+ serial
+communication to understand and implement card-personal-data writing, and said
+that the Communication library may also be used directly for inspection. He
+invited a more detailed follow-up if those sources are insufficient.
+
+Config+ has a hidden Test mode toggled with **Ctrl-Alt-D-D**. SPORTident says
+this enables a Test view that can show the binary communication protocol with
+its hardware. The next Config+ investigation should first establish what this
+view actually exposes for a read-only card exchange: transmitted frames,
+received replies, timestamps or ordering, and whether the output can be saved
+without alteration. If it proves complete enough, use it as the preferred
+source for controlled write comparisons because SPORTident specifically
+recommended it. Do not assume it is adequate until a captured exchange has
+been checked against the raw serial and card-read evidence already recorded.
+
+Use this order for future protocol questions:
+
+1. Start with the PC Programmer's Guide and other vendor-published material.
+2. Try Config+ Test view and validate its output against a known read-only
+   exchange before relying on it for a write investigation.
+3. Use the licensed Communication library directly as a local behavioral and
+   serial-output reference when Test view omits a necessary detail.
+4. Use operating-system API tracing or packet capture only when the two
+   vendor-recommended paths cannot expose the required frames, replies, or
+   timing. Record the missing detail that justified the lower-level capture.
+5. For every write comparison, retain a fresh complete two-block baseline and
+   an independent post-write read. Compare card identity, names, every punch,
+   feedback/settings bytes, and changes outside the planned owner words.
+6. If a protocol detail remains ambiguous, send SPORTident a narrow question
+   with the observed transaction and the specific missing interpretation.
+
+The same email mentioned the open-source Java library
+[GecoSI](https://github.com/sdenier/GecoSI) and noted that Python and Rust
+libraries also exist. These may provide hypotheses and test vectors, but they
+are not vendor guarantees and must be checked against current vendor output and
+hardware.
+
+This permission covers examining Config+ and Communication-library output and
+publishing Radio-Oracle's independent open-source implementation. It does not
+grant permission to publish or redistribute SPORTident binaries, SDK source,
+license keys, private archives, or restricted documentation, nor to bypass the
+SDK license. Keep those materials outside the repository. The original email
+remains in the project owner's Gmail under ticket T261095; this repository
+records the resulting permission and workflow without reproducing private mail
+headers, credentials, or vendor files.
 
 ### SDK provenance and licensing
 

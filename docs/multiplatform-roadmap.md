@@ -474,10 +474,16 @@ mid-term goal on Android and desktop.
   broadening protocol behavior. Cover SI5, SI6, SI6*, SI8, SI9, pCard, tCard,
   SI-Card10/11, and SIAC memory layouts; card-number family boundaries; maximum
   punch counts; card-holder fields; CRC vectors; block ordering; erased and
-  zero-filled bytes; and malformed or incomplete reads. Use vendor documentation
-  and a licensed reference implementation as private behavioral oracles, but do
-  not commit proprietary binaries, restricted documentation, or license keys to
-  the public repository.
+  zero-filled bytes; and malformed or incomplete reads. Use vendor documentation,
+  Config+ Test view, and a licensed reference implementation as private
+  behavioral oracles, but do not commit proprietary binaries, restricted
+  documentation, or license keys to the public repository. SPORTident confirmed
+  in its 24 September 2026 response to ticket T261095 that Radio-Oracle may be
+  published as open source and recommended inspecting Config+ serial traffic;
+  it also permitted direct use of the Communication library for inspection.
+  Validate Test view against a known read-only exchange before making it the
+  preferred capture path. Fall back to OS API tracing or packet capture only
+  for details Test view and the library do not expose, and record why.
 - Audit protocol and model boundaries exposed by those fixtures. In particular,
   verify permanent SI6* numbers above 9,999,999, the intended application limit
   for encoded control codes above 511, tCard's 25 eight-byte records, SIAC owner
@@ -557,13 +563,16 @@ mid-term goal on Android and desktop.
   Continue characterizing preservation of unrelated card data and physical
   interruption behavior. This workflow primarily targets new cards;
   if programming clears existing punches, disclose that consequence before writing.
-  Pursue a shared Kotlin replacement without depending on a vendor response:
-  reuse the existing transports, parsers, preparation, and recovery rules, and
-  continue seeking published protocol documentation or independently licensed
-  source. A read-only native capture and offline SDK comparison harness checks
-  station/card identity, owner names, and control punch count using shared
-  production parsers. Synthetic checks pass; broader paired hardware captures
-  and richer punch-value/settings comparison remain unfinished. A Config+ COM4
+  Pursue the shared Kotlin replacement using the vendor-confirmed observation
+  path: reuse the existing transports, parsers, preparation, and recovery rules;
+  consult the PC Programmer's Guide; prefer validated Config+ Test-view output;
+  and use the Communication library locally for comparison when necessary.
+  Ask SPORTident a focused follow-up if those sources leave a specific protocol
+  detail unresolved. A read-only native capture and offline SDK comparison
+  harness checks station/card identity, owner names, and control punch count
+  using shared production parsers. Synthetic checks pass; broader paired
+  hardware captures and richer punch-value/settings comparison remain
+  unfinished. A Config+ COM4
   capture now
   identifies the three `0xEA` word writes for one successful `Daisy;Duck;` to
   `Donald;Duck;` SI-Card8 transaction. A separate read confirmed the new name
@@ -745,11 +754,14 @@ mid-term goal on Android and desktop.
   codec derived from the SDK's public conversion method. Separate SDK writes
   and native raw reads confirmed `José` and `Bjørn`; those tests returned the
   spare to `Donald` with all 11 punches intact. The later cross-station trial
-  left it with `Donald` / `Duckandrolopoulos`. Other character sets, direct
-  variable-length response errors, compatibility,
-  and permission to distribute a replacement still need resolution before
-  making the Kotlin writer a general programming option. SDK read comparison
-  alone does not establish a write protocol.
+  left it with `Donald` / `Duckandrolopoulos`. Other character sets,
+  compatibility, and direct variable-length response errors still need
+  resolution before making the Kotlin writer a general programming option.
+  SPORTident has
+  explicitly permitted publication of the independent open-source software and
+  inspection through Config+ or the Communication library. That permission does
+  not authorize redistribution of its SDK, binaries, keys, or private material.
+  SDK read comparison alone does not establish a write protocol.
 - Add explicit multi-download-station support so desktop can detect multiple
   connected stations, show their serial numbers/modes/ports, let the user choose
   or assign active stations, and prevent independent readout loops from fighting
