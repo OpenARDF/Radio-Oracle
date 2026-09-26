@@ -459,6 +459,13 @@ object DesktopFileDialogs {
             defaultFileName = defaultFileName
         ) { DesktopProjectFilePaths.withPdfExtension(it) }
 
+    fun chooseExportCourseReportPdf(defaultFileName: String? = null): Path? =
+        chooseSaveFile(
+            title = "Export Course Report PDF",
+            extension = DesktopProjectFilePaths.PDF_EXTENSION,
+            defaultFileName = defaultFileName
+        ) { DesktopProjectFilePaths.withPdfExtension(it) }
+
     fun chooseExportPrintableStartListPdf(defaultFileName: String? = null): Path? =
         chooseSaveFile(
             title = "Export Printable Start List PDF",

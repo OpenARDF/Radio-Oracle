@@ -5,6 +5,7 @@ import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.*
+import kotlin.math.roundToInt
 
 class DesktopCourseBriefReportTest {
     @Test fun correctedIofReportsRecalculateWithElevationAndRetainedDetoursWithoutChangingTheRace() {
@@ -250,6 +251,24 @@ class DesktopCourseBriefReportTest {
         assertNotNull(report.horizontalLengthMeters)
         assertTrue(report.notice!!.contains("Elevation"))
     }
+
+    @Test fun idealRouteLegDistancesFollowMandatoryBendsBetweenCourseObjects() {
+        val project = courseReportFixtureWithMandatoryBend()
+        val report = DesktopCourseBriefReports.build(project, emptyMap()).first()
+        val firstLeg = report.idealRouteLegs.first()
+        val objects = project.raceData.categories.first().category.courseInfo!!.courseObjects
+        val start = objects.first().let { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) }
+        val bend = objects[1].let { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) }
+        val fox = objects[2].let { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) }
+
+        assertEquals("S", firstLeg.fromLabel)
+        assertEquals("Fox1", firstLeg.toLabel)
+        assertEquals(
+            DesktopCourseRouteMetricsCalculator.horizontalLengthMeters(listOf(start, bend, fox)).roundToInt(),
+            firstLeg.distanceMeters
+        )
+        assertTrue(firstLeg.distanceMeters!! > start.distanceMetersTo(fox).roundToInt())
+    }
 }
 
 internal fun correctedIofCourseReportFixture(withDetour: Boolean): EventProjectFile {
@@ -301,4 +320,48 @@ internal fun courseReportFixture(): EventProjectFile {
     }
     return project.copy(raceData = project.raceData.copy(controls = controls, categories = categories,
         courseMappings = listOf(categories.first().copy(category = categories.first().category.copy(id = "inactive", name = "M70")))))
+}
+
+internal fun courseReportFixtureWithMandatoryBend(): EventProjectFile {
+    var project = EventProjectFactory.createEmptyProject("race", "Course report", "2026-09-26T09:00")
+    project = project.copy(raceData = project.raceData.copy(
+        race = project.raceData.race.copy(raceType = RaceType.FOXORING)
+    ))
+    project = EventProjectEditor.addCategory(project, "m21", "M21")
+    val control = EventControl("fox-1", "race", "Fox1", 31, ControlPointType.CONTROL, publicLabel = "Fox1")
+    val controlPoint = ProtectedCourseControlPoint("fox-1", "Fox1", 39.001, -95.001, elevationMeters = 110.0)
+    val start = ProtectedCourseObjectPoint(
+        "start", "Start", ProtectedCourseObjectType.START, 39.0, -95.0, 100.0
+    )
+    val bend = ProtectedCourseObjectPoint(
+        id = "mandatory-bend",
+        label = "Mandatory bend",
+        type = ProtectedCourseObjectType.WAYPOINT,
+        latitude = 39.001,
+        longitude = -94.998,
+        elevationMeters = 105.0
+    )
+    val fox = ProtectedCourseObjectPoint(
+        "fox-1", "Fox1", ProtectedCourseObjectType.CONTROL,
+        controlPoint.latitude, controlPoint.longitude, controlPoint.elevationMeters
+    )
+    val finish = ProtectedCourseObjectPoint(
+        "finish", "Finish", ProtectedCourseObjectType.FINISH, 39.002, -95.002, 120.0
+    )
+    val objects = listOf(start, bend, fox, finish)
+    val category = project.raceData.categories.single()
+    val info = ProtectedCourseInfo(
+        idealOrder = "Fox1",
+        controlPoints = listOf(controlPoint),
+        courseObjects = objects,
+        route = objects.map { ProtectedCourseRoutePoint(it.latitude, it.longitude, it.elevationMeters) }
+    )
+    val updated = category.copy(
+        category = category.category.copy(courseInfo = info, lengthMeters = 700, climbMeters = 20),
+        controlPoints = listOf(EventControlPoint("m21-1", "m21", 31, ControlPointType.CONTROL, 0, "fox-1"))
+    )
+    return project.copy(raceData = project.raceData.copy(
+        controls = listOf(control),
+        categories = listOf(updated)
+    ))
 }

@@ -67,6 +67,13 @@ internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
     val unassigned = project.raceData.courseMappings.sortedWith(EventCategorySort.byDisplayName)
     val locked = project.hasEncryptedCategoryData() && !isUnlocked
     val restriction = DesktopCourseLibrary.disabledReason(project)
+    // Export the same completed report snapshot rendered below; never recalculate while saving.
+    val reportExportDisabledReason = when {
+        reports == null -> "Course reports are still being calculated."
+        reports.isEmpty() -> "No course reports are available."
+        reports.any { it.isLocked } -> "Unlock course data before exporting the course reports."
+        else -> null
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
         Text("Courses", style = MaterialTheme.typography.h6)
         Text("Every imported course is listed here. Assign an unassigned course to one or more categories, create a category for it, or delete it. Use Controls to manage the shared control list.")
@@ -78,6 +85,24 @@ internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
             TextButton(onClick = { if (onUnlock(password)) password = "" else message = "Unable to unlock course data. Check the Race Password." }) { Text("Unlock course data") }
         }
         Text("Reports use the current control labels and Course Analyzer speed settings. Times are estimates.")
+        DisabledReasonTooltip(reportExportDisabledReason) {
+            Button(
+                enabled = reportExportDisabledReason == null,
+                modifier = Modifier.testTag("export-course-report-pdf"),
+                onClick = {
+                    val readyReports = reports ?: return@Button
+                    DesktopFileDialogs.chooseExportCourseReportPdf(
+                        DesktopCourseReportPdf.defaultFileName(project)
+                    )?.let { path ->
+                        runCatching { DesktopCourseReportPdf.exportPdf(path, project, readyReports) }
+                            .onSuccess { message = "Exported ${path.fileName} with ${readyReports.size} course reports." }
+                            .onFailure { error ->
+                                message = "Course Report PDF export failed: ${error.message ?: error::class.simpleName}"
+                            }
+                    }
+                }
+            ) { Text("Export Course Report PDF...") }
+        }
         Text("Unassigned courses (${unassigned.size})", style = MaterialTheme.typography.subtitle1)
         if (unassigned.isEmpty()) Text("No unassigned courses.")
         unassigned.forEach { course ->

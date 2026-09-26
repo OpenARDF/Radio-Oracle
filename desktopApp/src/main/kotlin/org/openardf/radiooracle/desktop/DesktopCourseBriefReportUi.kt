@@ -71,9 +71,46 @@ internal fun CourseBriefReportSection(report: DesktopCourseBriefReport, imported
             val pace = report.assumedPaceMinutesPerKm?.let { " (${String.format(Locale.ROOT, "%.1f", it)} min/km)" }.orEmpty()
             Text("${if (importedRoute) "Estimated time" else "Estimated ideal time"}: ${DesktopCourseAnalyzer.summaryDurationText(seconds)}$pace")
         }
+        CourseBriefLegDistanceTable(report)
         report.legWarnings.forEach { Text(it, color = DesktopPalette.Warning) }
         report.notice?.let { Text(it, color = DesktopPalette.Disconnected) }
         CourseBriefReportGraphics(report)
+    }
+}
+
+@Composable
+private fun CourseBriefLegDistanceTable(report: DesktopCourseBriefReport) {
+    if (report.idealRouteLegs.isEmpty()) return
+    Column(
+        Modifier.fillMaxWidth().testTag("course-report-leg-table-${report.categoryId}"),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text("Ideal route legs", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.subtitle2)
+        Text(
+            "Each distance follows the ideal route between the listed course objects, including any mandatory bends.",
+            style = MaterialTheme.typography.caption
+        )
+        CourseBriefLegDistanceRow("Ideal-order leg", "Distance", header = true)
+        Divider()
+        report.idealRouteLegs.forEach { leg ->
+            CourseBriefLegDistanceRow(
+                "${leg.fromLabel} → ${leg.toLabel}",
+                DesktopCourseAnalyzer.summaryLengthText(leg.distanceMeters)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CourseBriefLegDistanceRow(
+    leg: String,
+    distance: String,
+    header: Boolean = false
+) {
+    val weight = if (header) FontWeight.Bold else FontWeight.Normal
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(leg, Modifier.weight(3f), fontWeight = weight, style = MaterialTheme.typography.caption)
+        Text(distance, Modifier.weight(1f), fontWeight = weight, style = MaterialTheme.typography.caption)
     }
 }
 

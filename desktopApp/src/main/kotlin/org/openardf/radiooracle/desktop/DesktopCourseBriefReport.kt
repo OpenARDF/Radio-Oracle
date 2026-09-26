@@ -19,7 +19,15 @@ internal data class DesktopCourseBriefReport(
     val isLocked: Boolean = false,
     val legWarnings: List<String> = emptyList(),
     val assumedPaceMinutesPerKm: Double? = null,
-    val elevationProfile: DesktopCourseElevationProfileSummary? = null
+    val elevationProfile: DesktopCourseElevationProfileSummary? = null,
+    val idealRouteLegs: List<DesktopCourseBriefLeg> = emptyList()
+)
+
+/** A displayed course-object leg; mandatory waypoints shape its distance but never become table rows. */
+internal data class DesktopCourseBriefLeg(
+    val fromLabel: String,
+    val toLabel: String,
+    val distanceMeters: Int?
 )
 
 /** A read-only summary of active courses, independent of the CSV's control-set grouping. */
@@ -107,6 +115,10 @@ internal object DesktopCourseBriefReports {
                 assumedPaceMinutesPerKm = 1000.0 / (60.0 * summary.speedModel.effectiveSpeedMetersPerSecond),
                 elevationProfile = section.elevationProfile.takeIf { it.isNotEmpty() }?.let {
                     DesktopCourseElevationProfileSummary("Elevation profile", it, section.elevationMarkers)
+                },
+                // Analyzer leg rows already collapse mandatory bends into their surrounding course-object leg.
+                idealRouteLegs = section.legRows.map { leg ->
+                    DesktopCourseBriefLeg(leg.fromLabel, leg.toLabel, leg.lengthMeters)
                 }
             )
         } catch (error: Exception) {

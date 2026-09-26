@@ -165,4 +165,37 @@ class DesktopCourseBriefReportUiTest {
         scroll.performKeyInput { pressKey(Key.MoveHome) }
         rule.onNodeWithText("Export Course Report CSV...").assertIsDisplayed()
     }
+
+    @Test fun coursesPdfExportIsEnabledAboveTheFirstCalculatedReportAndLegTableIsVisible() {
+        val project = courseReportFixtureWithMandatoryBend()
+        rule.setContent {
+            MaterialTheme { Surface(Modifier.fillMaxSize()) {
+                DesktopWorkspaceScroll(Modifier.fillMaxSize()) {
+                    DesktopCoursesPanel(project, true, { true }, { null })
+                }
+            } }
+        }
+        rule.waitUntil(30_000) {
+            rule.onAllNodesWithTag("course-report-leg-table-m21").fetchSemanticsNodes().isNotEmpty()
+        }
+        val export = rule.onNodeWithTag("export-course-report-pdf").assertIsEnabled()
+        val firstReport = rule.onNodeWithTag("course-report-m21")
+        assertTrue(export.fetchSemanticsNode().boundsInRoot.bottom <= firstReport.fetchSemanticsNode().boundsInRoot.top)
+        listOf("Ideal route legs", "Ideal-order leg", "S → Fox1").forEach { text ->
+            rule.onAllNodesWithText(text, substring = true).onFirst().assertExists()
+        }
+        rule.onNodeWithText("Mandatory bend", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun coursesPdfExportIsDisabledWhenNoReportsAreAvailable() {
+        val project = org.openardf.radiooracle.shared.event.EventProjectFactory.createEmptyProject(
+            "empty-race", "Empty race", "2026-09-26T09:00"
+        )
+        rule.setContent {
+            MaterialTheme { Surface {
+                DesktopCoursesPanel(project, true, { true }, { null })
+            } }
+        }
+        rule.onNodeWithTag("export-course-report-pdf").assertIsNotEnabled()
+    }
 }
