@@ -7,14 +7,31 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import org.openardf.radiooracle.shared.event.EventProjectFile
 
-/** Printable counterpart of the reports already calculated for Setup > Courses. */
+/** Compact printable counterpart of the reports already calculated for Setup > Courses. */
 internal object DesktopCourseReportPdf {
-    private const val Left = 54.0
-    private const val Right = 54.0
-    private const val Top = 750.0
-    private const val Bottom = 54.0
+    private const val Left = 42.0
+    private const val Right = 42.0
+    private const val DocumentTop = 758.0
+    private const val HeaderBottom = 731.0
+    private const val ContentTop = 721.0
+    private const val Bottom = 42.0
     private const val ContentWidth = DesktopPdfDocument.LetterWidth - Left - Right
-    private const val TableRowHeight = 18.0
+    private const val MetricsWidth = 238.0
+    private const val ColumnGap = 10.0
+    private const val LegTableWidth = ContentWidth - MetricsWidth - ColumnGap
+    private const val CourseGap = 8.0
+    private const val CourseHeaderHeight = 24.0
+    private const val MetricLineHeight = 9.0
+    private const val LegTitleHeight = 10.0
+    private const val TableHeaderHeight = 9.0
+    private const val TableRowHeight = 9.0
+    private const val NoteLineHeight = 8.0
+    private const val GraphicsGap = 8.0
+    private const val GraphicsLabelHeight = 19.0
+    private const val GraphicFrameHeight = 120.0
+    private const val GraphicGap = 10.0
+    private const val GraphicWidth = (ContentWidth - GraphicGap) / 2.0
+    private const val BlockBottomPadding = 6.0
 
     fun defaultFileName(projectFile: EventProjectFile): String =
         DesktopProjectFilePaths.defaultPdfFileName(projectFile.raceData.race.name, "course report")
@@ -27,112 +44,102 @@ internal object DesktopCourseReportPdf {
 
     internal fun pdfBytes(projectFile: EventProjectFile, reports: List<DesktopCourseBriefReport>): ByteArray {
         require(reports.isNotEmpty()) { "No course reports are available to export." }
-        val pages = reports.flatMap { report -> reportPages(report) }
-        val contents = pages.mapIndexed { index, page ->
+        val pages = reportPages(reports)
+        val contents = pages.mapIndexed { pageIndex, blocks ->
             buildString {
-                appendPageHeader(projectFile.raceData.race.name, reportName(page.report), index + 1, pages.size)
-                when (page) {
-                    is CoursePage.Overview -> appendOverview(page)
-                    is CoursePage.Notes -> appendNotes(page)
-                    is CoursePage.Graphics -> appendGraphics(page.report)
+                appendPageHeader(projectFile.raceData.race.name, pageIndex + 1, pages.size)
+                var top = ContentTop
+                blocks.forEach { block ->
+                    appendCourseBlock(block, top)
+                    top -= block.height + CourseGap
                 }
             }
         }
         return DesktopPdfDocument.bytes(contents)
     }
 
-    private sealed class CoursePage(open val report: DesktopCourseBriefReport) {
-        data class Overview(
-            override val report: DesktopCourseBriefReport,
-            val includeMetrics: Boolean,
-            val legs: List<DesktopCourseBriefLeg>,
-            val continuation: Boolean,
-            val notes: List<NoteLine> = emptyList()
-        ) : CoursePage(report)
-
-        data class Notes(
-            override val report: DesktopCourseBriefReport,
-            val lines: List<NoteLine>,
-            val continuation: Boolean
-        ) : CoursePage(report)
-
-        data class Graphics(override val report: DesktopCourseBriefReport) : CoursePage(report)
-    }
-
     private data class NoteLine(val text: String, val warning: Boolean)
 
-    /** Keeps each table row intact and reserves a separate page for the two graphics shown in the UI. */
-    private fun reportPages(report: DesktopCourseBriefReport): List<CoursePage> = buildList {
-        val metricLines = overviewLines(report)
-        val notes = noteLines(report)
-        val yAfterMetrics = 690.0 - metricLines.size * 14.0
-        val canInlineNotes = notes.size <= 10
-        val inlineNotesHeight = if (canInlineNotes && notes.isNotEmpty()) 26.0 + notes.size * 14.0 else 0.0
-        val firstLegCapacityWithNotes =
-            ((yAfterMetrics - Bottom - 62.0 - inlineNotesHeight) / TableRowHeight).toInt().coerceAtLeast(0)
-        val inlineNotes = canInlineNotes && report.idealRouteLegs.size <= firstLegCapacityWithNotes
-        val firstLegCapacity = if (inlineNotes) firstLegCapacityWithNotes else
-            ((yAfterMetrics - Bottom - 62.0) / TableRowHeight).toInt().coerceAtLeast(0)
-        if (report.idealRouteLegs.isEmpty()) {
-            add(CoursePage.Overview(report, includeMetrics = true, legs = emptyList(), continuation = false,
-                notes = notes.takeIf { canInlineNotes }.orEmpty()))
-        } else if (firstLegCapacity > 0) {
-            val first = report.idealRouteLegs.take(firstLegCapacity)
-            add(CoursePage.Overview(report, includeMetrics = true, legs = first, continuation = false,
-                notes = notes.takeIf { inlineNotes }.orEmpty()))
-            report.idealRouteLegs.drop(first.size).chunked(32).forEach { legs ->
-                add(CoursePage.Overview(report, includeMetrics = false, legs = legs, continuation = true))
+    private data class CourseBlock(
+        val report: DesktopCourseBriefReport,
+        val metrics: List<String>,
+        val notes: List<NoteLine>,
+        val detailsHeight: Double,
+        val noteHeight: Double,
+        val height: Double
+    )
+
+    /** Packs complete course blocks without splitting a table or either graphic across pages. */
+    private fun reportPages(reports: List<DesktopCourseBriefReport>): List<List<CourseBlock>> {
+        val availableHeight = ContentTop - Bottom
+        val pages = mutableListOf<List<CourseBlock>>()
+        var current = mutableListOf<CourseBlock>()
+        var usedHeight = 0.0
+        reports.map(::courseBlock).forEach { block ->
+            val requiredHeight = block.height + if (current.isEmpty()) 0.0 else CourseGap
+            if (current.isNotEmpty() && usedHeight + requiredHeight > availableHeight) {
+                pages += current
+                current = mutableListOf()
+                usedHeight = 0.0
             }
-        } else {
-            add(CoursePage.Overview(report, includeMetrics = true, legs = emptyList(), continuation = false))
-            report.idealRouteLegs.chunked(32).forEach { legs ->
-                add(CoursePage.Overview(report, includeMetrics = false, legs = legs, continuation = true))
-            }
+            current += block
+            usedHeight += block.height + if (current.size == 1) 0.0 else CourseGap
         }
-        notes.takeUnless { canInlineNotes && (report.idealRouteLegs.isEmpty() || inlineNotes) }.orEmpty()
-            .chunked(45).forEachIndexed { index, lines ->
-            add(CoursePage.Notes(report, lines, continuation = index > 0))
-        }
-        add(CoursePage.Graphics(report))
+        if (current.isNotEmpty()) pages += current
+        return pages
     }
 
-    private fun reportName(report: DesktopCourseBriefReport): String = report.courseName.ifBlank { "Unnamed course" }
+    private fun courseBlock(report: DesktopCourseBriefReport): CourseBlock {
+        val metrics = overviewLines(report)
+        val notes = noteLines(report)
+        val metricHeight = metrics.size * MetricLineHeight
+        val tableHeight = if (report.idealRouteLegs.isEmpty()) 0.0 else
+            LegTitleHeight + TableHeaderHeight + report.idealRouteLegs.size * TableRowHeight
+        val detailsHeight = max(metricHeight, tableHeight)
+        val noteHeight = if (notes.isEmpty()) 0.0 else 5.0 + notes.size * NoteLineHeight
+        val height = CourseHeaderHeight + detailsHeight + noteHeight + GraphicsGap +
+            GraphicsLabelHeight + GraphicFrameHeight + BlockBottomPadding
+        return CourseBlock(report, metrics, notes, detailsHeight, noteHeight, height)
+    }
 
-    private fun StringBuilder.appendPageHeader(raceName: String, courseName: String, page: Int, pageCount: Int) {
-        appendText(Left, Top, 18, "Course Report", bold = true)
-        appendText(Left, Top - 20.0, 10, "Race: ${raceName.ifBlank { "Untitled Race" }}")
-        appendText(Left, Top - 35.0, 10, "Course: $courseName")
-        appendText(DesktopPdfDocument.LetterWidth - Right - 68.0, Top - 20.0, 9, "Page $page of $pageCount")
+    private fun StringBuilder.appendPageHeader(raceName: String, page: Int, pageCount: Int) {
+        appendText(Left, DocumentTop, 15, "Course Report", bold = true)
+        appendText(Left, DocumentTop - 16.0, 8, "Race: ${raceName.ifBlank { "Untitled Race" }}")
+        appendText(DesktopPdfDocument.LetterWidth - Right - 62.0, DocumentTop - 10.0, 8, "Page $page of $pageCount")
         appendLine("0.72 0.72 0.72 RG")
         appendLine("0.6 w")
-        appendLine("${number(Left)} ${number(Top - 45.0)} m ${number(DesktopPdfDocument.LetterWidth - Right)} ${number(Top - 45.0)} l S")
+        appendLine("${number(Left)} ${number(HeaderBottom)} m ${number(Left + ContentWidth)} ${number(HeaderBottom)} l S")
     }
 
-    private fun StringBuilder.appendOverview(page: CoursePage.Overview) {
-        var y = 690.0
-        if (page.includeMetrics) {
-            overviewLines(page.report).forEach { line ->
-                appendText(Left, y, 10, line)
-                y -= 14.0
-            }
-            y -= 8.0
+    private fun StringBuilder.appendCourseBlock(block: CourseBlock, top: Double) {
+        val report = block.report
+        appendText(Left, top - 11.0, 10, "Course: ${reportName(report)}", bold = true)
+        appendLine("0.82 0.82 0.82 RG")
+        appendLine("0.4 w")
+        appendLine("${number(Left)} ${number(top - 17.0)} m ${number(Left + ContentWidth)} ${number(top - 17.0)} l S")
+
+        val detailsTop = top - CourseHeaderHeight
+        appendMetrics(block.metrics, detailsTop)
+        if (report.idealRouteLegs.isNotEmpty()) {
+            appendLegTable(report.idealRouteLegs, Left + MetricsWidth + ColumnGap, detailsTop)
         }
-        if (page.legs.isNotEmpty()) {
-            appendText(Left, y, 13, if (page.continuation) "Ideal route legs (continued)" else "Ideal route legs", bold = true)
-            y -= 15.0
-            if (!page.continuation) {
-                appendText(Left, y, 9, "Each distance follows the ideal route between the listed course objects, including any mandatory bends.")
-                y -= 13.0
-            }
-            y = appendLegTable(page.legs, y) - 18.0
+
+        val detailsBottom = detailsTop - block.detailsHeight
+        var noteY = detailsBottom - 7.0
+        block.notes.forEach { line ->
+            appendText(Left, noteY, 6, line.text, red = line.warning)
+            noteY -= NoteLineHeight
         }
-        if (page.notes.isNotEmpty()) {
-            appendText(Left, y, 13, "Course notes", bold = true)
-            y -= 20.0
-            page.notes.forEach { line ->
-                appendText(Left, y, 10, line.text, red = line.warning)
-                y -= 14.0
-            }
+
+        val graphicsTop = detailsBottom - block.noteHeight - GraphicsGap
+        appendGraphics(report, graphicsTop)
+    }
+
+    private fun StringBuilder.appendMetrics(lines: List<String>, top: Double) {
+        var y = top - 7.0
+        lines.forEach { line ->
+            appendText(Left, y, 7, fitText(line, MetricsWidth, 7))
+            y -= MetricLineHeight
         }
     }
 
@@ -141,7 +148,7 @@ internal object DesktopCourseReportPdf {
         add("Total climb: ${DesktopCourseAnalyzer.summaryClimbText(report.climbMeters)}")
         add("Effective length: ${DesktopCourseAnalyzer.summaryLengthText(report.effectiveLengthMeters)}")
         val order = report.idealOrder.takeIf { it.isNotEmpty() }?.joinToString(" -> ") ?: "Unavailable"
-        addAll(wrap("Ideal order: $order", 92))
+        addAll(wrap("Ideal order: $order", 58))
         report.estimatedIdealSeconds?.let { seconds ->
             val pace = report.assumedPaceMinutesPerKm
                 ?.let { " (${String.format(Locale.ROOT, "%.1f", it)} min/km)" }
@@ -151,32 +158,25 @@ internal object DesktopCourseReportPdf {
     }
 
     private fun noteLines(report: DesktopCourseBriefReport): List<NoteLine> = buildList {
-        report.legWarnings.forEach { warning -> wrap(warning, 96).forEach { add(NoteLine(it, warning = true)) } }
-        report.notice?.let { notice -> wrap(notice, 96).forEach { add(NoteLine(it, warning = false)) } }
+        report.legWarnings.forEach { warning -> wrap(warning, 125).forEach { add(NoteLine(it, warning = true)) } }
+        report.notice?.let { notice -> wrap(notice, 125).forEach { add(NoteLine(it, warning = false)) } }
     }
 
-    private fun StringBuilder.appendNotes(page: CoursePage.Notes) {
-        var y = 690.0
-        appendText(Left, y, 13, if (page.continuation) "Course notes (continued)" else "Course notes", bold = true)
-        y -= 22.0
-        page.lines.forEach { line ->
-            appendText(Left, y, 10, line.text, red = line.warning)
-            y -= 14.0
-        }
-    }
-
-    private fun StringBuilder.appendLegTable(legs: List<DesktopCourseBriefLeg>, tableTop: Double): Double {
-        val widths = listOf(355.0, 149.0)
+    private fun StringBuilder.appendLegTable(legs: List<DesktopCourseBriefLeg>, left: Double, top: Double) {
+        appendText(left, top - 7.0, 6, "Ideal route legs - course-object distances include mandatory bends", bold = true)
+        val tableTop = top - LegTitleHeight
+        val legWidth = LegTableWidth - 61.0
+        val widths = listOf(legWidth, 61.0)
         val headers = listOf("Ideal-order leg", "Distance")
-        val headerBottom = tableTop - 20.0
+        val headerBottom = tableTop - TableHeaderHeight
         appendLine("0.90 0.90 0.90 rg")
-        appendLine("${number(Left)} ${number(headerBottom)} ${number(ContentWidth)} 20 re f")
+        appendLine("${number(left)} ${number(headerBottom)} ${number(LegTableWidth)} ${number(TableHeaderHeight)} re f")
         appendLine("0.45 0.45 0.45 RG")
-        appendLine("0.5 w")
-        appendLine("${number(Left)} ${number(headerBottom)} ${number(ContentWidth)} 20 re S")
-        var x = Left
+        appendLine("0.4 w")
+        appendLine("${number(left)} ${number(headerBottom)} ${number(LegTableWidth)} ${number(TableHeaderHeight)} re S")
+        var x = left
         widths.zip(headers).forEach { (width, header) ->
-            appendText(x + 4.0, tableTop - 14.0, 8, fitText(header, width, 8), bold = true)
+            appendText(x + 2.0, tableTop - 6.5, 6, fitText(header, width, 6), bold = true)
             x += width
         }
         legs.forEachIndexed { index, leg ->
@@ -184,58 +184,66 @@ internal object DesktopCourseReportPdf {
             val rowBottom = rowTop - TableRowHeight
             if (index % 2 == 1) {
                 appendLine("0.97 0.97 0.97 rg")
-                appendLine("${number(Left)} ${number(rowBottom)} ${number(ContentWidth)} ${number(TableRowHeight)} re f")
+                appendLine("${number(left)} ${number(rowBottom)} ${number(LegTableWidth)} ${number(TableRowHeight)} re f")
             }
             val values = listOf(
                 "${leg.fromLabel} -> ${leg.toLabel}",
                 DesktopCourseAnalyzer.summaryLengthText(leg.distanceMeters)
             )
-            x = Left
+            x = left
             widths.zip(values).forEach { (width, value) ->
-                appendText(x + 4.0, rowTop - 12.0, 8, fitText(value, width, 8))
+                appendText(x + 2.0, rowTop - 6.5, 6, fitText(value, width, 6))
                 x += width
             }
             appendLine("0.82 0.82 0.82 RG")
-            appendLine("${number(Left)} ${number(rowBottom)} m ${number(Left + ContentWidth)} ${number(rowBottom)} l S")
+            appendLine("${number(left)} ${number(rowBottom)} m ${number(left + LegTableWidth)} ${number(rowBottom)} l S")
         }
-        x = Left
+        x = left
         widths.forEach { width ->
             appendLine("${number(x)} ${number(tableTop)} m ${number(x)} ${number(headerBottom - legs.size * TableRowHeight)} l S")
             x += width
         }
         appendLine("${number(x)} ${number(tableTop)} m ${number(x)} ${number(headerBottom - legs.size * TableRowHeight)} l S")
-        return headerBottom - legs.size * TableRowHeight
     }
 
-    private fun StringBuilder.appendGraphics(report: DesktopCourseBriefReport) {
-        appendText(Left, 690.0, 13, "2D route depiction", bold = true)
+    private fun StringBuilder.appendGraphics(report: DesktopCourseBriefReport, top: Double) {
+        val profileLeft = Left + GraphicWidth + GraphicGap
+        appendText(Left, top - 7.0, 7, "2D route depiction", bold = true)
         report.routeMap?.let { map ->
-            appendText(Left, 674.0, 9, map.northOrientationText().replace("°", " degrees"))
-            appendRouteMap(map, Left, 420.0, ContentWidth, 240.0)
-        } ?: run {
-            appendPlaceholder(Left, 420.0, ContentWidth, 240.0, "Course graphic unavailable.")
+            appendText(Left, top - 15.0, 5, map.northOrientationText().replace("°", " degrees"))
         }
-
-        appendText(Left, 385.0, 13, "Elevation profile", bold = true)
+        appendText(profileLeft, top - 7.0, 7, "Elevation profile", bold = true)
         report.elevationProfile?.let { profile ->
             val minElevation = profile.profile.minOf { it.elevationMeters }
             val maxElevation = profile.profile.maxOf { it.elevationMeters }
             val distance = profile.profile.lastOrNull()?.distanceMeters ?: 0
-            appendText(Left, 369.0, 9, "0.00 km to ${twoDecimals(distance / 1000.0)} km, ${minElevation.roundToInt()} m to ${maxElevation.roundToInt()} m")
-            appendElevationProfile(profile, Left, 105.0, ContentWidth, 245.0)
+            appendText(profileLeft, top - 15.0, 5,
+                "0.00-${twoDecimals(distance / 1000.0)} km, ${minElevation.roundToInt()}-${maxElevation.roundToInt()} m")
+        }
+
+        val frameTop = top - GraphicsLabelHeight
+        val frameBottom = frameTop - GraphicFrameHeight
+        report.routeMap?.let { map ->
+            appendRouteMap(map, Left, frameBottom, GraphicWidth, GraphicFrameHeight)
         } ?: run {
-            appendPlaceholder(Left, 105.0, ContentWidth, 245.0, "Elevation profile unavailable: route elevation data is incomplete.")
+            appendPlaceholder(Left, frameBottom, GraphicWidth, GraphicFrameHeight, "Course graphic unavailable.")
+        }
+        report.elevationProfile?.let { profile ->
+            appendElevationProfile(profile, profileLeft, frameBottom, GraphicWidth, GraphicFrameHeight)
+        } ?: run {
+            appendPlaceholder(profileLeft, frameBottom, GraphicWidth, GraphicFrameHeight,
+                "Elevation profile unavailable: route elevation data is incomplete.")
         }
     }
 
     private fun StringBuilder.appendPlaceholder(left: Double, bottom: Double, width: Double, height: Double, text: String) {
         appendLine("0.78 0.78 0.78 RG")
         appendLine("${number(left)} ${number(bottom)} ${number(width)} ${number(height)} re S")
-        appendText(left + 12.0, bottom + height / 2.0, 10, text)
+        appendText(left + 6.0, bottom + height / 2.0, 6, fitText(text, width - 12.0, 6))
     }
 
     private fun StringBuilder.appendRouteMap(map: DesktopCourseRouteMap, left: Double, bottom: Double, width: Double, height: Double) {
-        val inset = 12.0
+        val inset = 6.0
         val drawingLeft = left + inset
         val drawingBottom = bottom + inset
         val drawingWidth = width - inset * 2
@@ -251,8 +259,9 @@ internal object DesktopCourseReportPdf {
             val (red, green, blue) = line.strokeColorArgb?.let(DesktopCourseRouteMapStyle::pdfRgb)
                 ?: DesktopCourseRouteMapStyle.linePdfRgb()
             appendLine("${number(red)} ${number(green)} ${number(blue)} RG")
-            appendLine("${number((line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels).toDouble())} w")
-            if (line.dashed) appendLine("[10 5] 0 d") else appendLine("[] 0 d")
+            val stroke = (line.strokeWidthPixels ?: DesktopCourseRouteMapStyle.GraphicLineStrokePixels).toDouble() * 0.55
+            appendLine("${number(stroke)} w")
+            if (line.dashed) appendLine("[6 3] 0 d") else appendLine("[] 0 d")
             line.points.firstOrNull()?.let { first ->
                 appendLine("${number(x(first))} ${number(y(first))} m")
                 line.points.drop(1).forEach { point -> appendLine("${number(x(point))} ${number(y(point))} l") }
@@ -263,25 +272,25 @@ internal object DesktopCourseReportPdf {
         map.pointsForDrawing().forEach { point ->
             val (red, green, blue) = DesktopCourseRouteMapStyle.pdfRgb(point.type)
             appendLine("${number(red)} ${number(green)} ${number(blue)} rg")
-            appendCircle(x(point), y(point), 4.2)
-            appendText(x(point) + 6.0, y(point) + 5.0, 8, point.label)
+            appendCircle(x(point), y(point), 2.5)
+            appendText(x(point) + 3.5, y(point) + 2.5, 5, point.label)
         }
-        appendNorthArrow(left + width - 28.0, bottom + height - 22.0)
+        appendNorthArrow(left + width - 14.0, bottom + height - 10.0)
         DesktopCourseRouteMapStyle.scaleBar(map.xRangeMeters, drawingWidth)?.let { scale ->
-            val barY = bottom + 12.0
+            val barY = bottom + 6.0
             appendLine("0 0 0 RG")
-            appendLine("1.4 w")
+            appendLine("0.8 w")
             appendLine("${number(drawingLeft)} ${number(barY)} m ${number(drawingLeft + scale.drawingLength)} ${number(barY)} l S")
-            appendText(drawingLeft, barY + 5.0, 7, scale.label)
+            appendText(drawingLeft, barY + 2.0, 5, scale.label)
         }
     }
 
     private fun StringBuilder.appendNorthArrow(x: Double, y: Double) {
         appendLine("0 0 0 RG")
-        appendLine("1.4 w")
-        appendLine("${number(x)} ${number(y - 36.0)} m ${number(x)} ${number(y)} l S")
-        appendLine("${number(x)} ${number(y)} m ${number(x - 5.0)} ${number(y - 9.0)} l ${number(x + 5.0)} ${number(y - 9.0)} l f")
-        appendText(x - 3.0, y + 4.0, 8, "N", bold = true)
+        appendLine("0.8 w")
+        appendLine("${number(x)} ${number(y - 18.0)} m ${number(x)} ${number(y)} l S")
+        appendLine("${number(x)} ${number(y)} m ${number(x - 3.0)} ${number(y - 5.0)} l ${number(x + 3.0)} ${number(y - 5.0)} l f")
+        appendText(x - 2.0, y + 2.0, 5, "N", bold = true)
     }
 
     private fun StringBuilder.appendElevationProfile(
@@ -292,10 +301,10 @@ internal object DesktopCourseReportPdf {
         height: Double
     ) {
         val profile = summary.profile
-        val plotLeft = left + 38.0
-        val plotBottom = bottom + 30.0
-        val plotWidth = width - 50.0
-        val plotHeight = height - 45.0
+        val plotLeft = left + 22.0
+        val plotBottom = bottom + 16.0
+        val plotWidth = width - 28.0
+        val plotHeight = height - 24.0
         val minElevation = profile.minOf { it.elevationMeters }
         val maxElevation = profile.maxOf { it.elevationMeters }
         val totalDistance = max(1.0, profile.lastOrNull()?.distanceMeters?.toDouble() ?: 1.0)
@@ -311,19 +320,19 @@ internal object DesktopCourseReportPdf {
             appendLine("${number(plotLeft)} ${number(gridY)} m ${number(plotLeft + plotWidth)} ${number(gridY)} l S")
         }
         appendLine("0.00 0.35 0.72 RG")
-        appendLine("2.2 w")
+        appendLine("1.2 w")
         profile.zipWithNext().forEach { (start, end) ->
             appendLine("${number(x(start.distanceMeters))} ${number(y(start.elevationMeters))} m ${number(x(end.distanceMeters))} ${number(y(end.elevationMeters))} l S")
         }
         summary.markers.forEach { marker ->
             appendLine("1.00 0.54 0.00 rg")
-            appendCircle(x(marker.distanceMeters), y(marker.elevationMeters), 3.5)
+            appendCircle(x(marker.distanceMeters), y(marker.elevationMeters), 2.2)
         }
         val markerText = summary.markers.joinToString("  ") { marker ->
             "${marker.label} ${twoDecimals(marker.distanceMeters / 1000.0)} km"
         }
-        wrap(markerText, 95).take(2).forEachIndexed { index, line ->
-            appendText(left + 4.0, bottom + 14.0 - index * 10.0, 7, line)
+        wrap(markerText, 72).take(2).forEachIndexed { index, line ->
+            appendText(left + 3.0, bottom + 7.0 - index * 6.0, 5, line)
         }
     }
 
@@ -373,6 +382,7 @@ internal object DesktopCourseReportPdf {
         return lines
     }
 
+    private fun reportName(report: DesktopCourseBriefReport): String = report.courseName.ifBlank { "Unnamed course" }
     private fun twoDecimals(value: Double): String = String.format(Locale.ROOT, "%.2f", value)
     private fun number(value: Double): String = DesktopPdfDocument.number(value)
 }
