@@ -120,4 +120,43 @@ class CourseControlLocationEditsTest {
         assertEquals(900, changes.single().previousHorizontalLengthMeters)
         assertNull(changes.single().updatedHorizontalLengthMeters)
     }
+
+    @Test
+    fun controlFieldReviewAndMutationUseOneSharedRequest() {
+        val emptyProject = EventProjectFactory.createEmptyProject(
+            "race",
+            "Control edit fixture",
+            "2026-09-26T09:00"
+        )
+        val project = emptyProject.copy(raceData = emptyProject.raceData.copy(controls = listOf(control)))
+        val edit = CourseControlEditRequest(
+            controlId = control.id,
+            label = "",
+            siCode = 141,
+            type = ControlPointType.BEACON,
+            scored = false,
+            publicLabel = "Beacon",
+            notes = "Reviewed",
+            location = CourseControlLocation(40.25, -75.5)
+        )
+
+        val changes = CourseControlEdits.changes(
+            control = control,
+            currentLocation = CourseControlLocation(40.0, -75.0),
+            edit = edit
+        )
+        assertEquals(
+            setOf("SI code", "Role", "Public label", "Notes", "Latitude", "Longitude"),
+            changes.map { it.field }.toSet()
+        )
+
+        val updated = CourseControlEdits.applyDetails(project, edit)
+        assertEquals(131, project.raceData.controls.single().siCode)
+        with(updated.raceData.controls.single()) {
+            assertEquals(141, siCode)
+            assertEquals(ControlPointType.BEACON, type)
+            assertEquals("Beacon", publicLabel)
+            assertEquals("Reviewed", notes)
+        }
+    }
 }

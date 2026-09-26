@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
@@ -12,26 +13,29 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun DesktopControlLocationReviewDialog(
-    review: DesktopControlLocationReview,
+internal fun DesktopControlEditReviewDialog(
+    review: DesktopControlEditReview,
     onAccept: () -> Unit,
-    onReject: () -> Unit
+    onReject: () -> Unit,
+    onCancel: () -> Unit
 ) {
     DesktopAlertDialog(
-        onDismissRequest = onReject,
-        modifier = Modifier.testTag("control-location-review"),
-        title = { Text("Review Control Location Change") },
+        // Closing the window has Cancel semantics so the user's row drafts remain available.
+        onDismissRequest = onCancel,
+        modifier = Modifier.testTag("control-edit-review"),
+        title = { Text("Review Control Changes") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "${review.controlLabel}: " +
-                        "${review.previousLatitude.decimalText()}, ${review.previousLongitude.decimalText()} → " +
-                        "${review.updatedLatitude.decimalText()}, ${review.updatedLongitude.decimalText()}"
-                )
-                Text(
+                Text(review.controlLabel, style = MaterialTheme.typography.subtitle1)
+                review.fieldChanges.forEach { change ->
+                    Text("${change.field}: ${change.previousValue} → ${change.updatedValue}")
+                }
+                Text(if (review.courseChanges.isEmpty()) {
+                    "No stored course calculations change. Accept applies only the control fields shown above."
+                } else {
                     "The following calculated routes and measurements will replace the current course data. " +
                         "Accept applies the same revised course data used by reports, results, exports, and Course Analyzer."
-                )
+                })
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     review.courseChanges.forEach { change ->
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -49,10 +53,17 @@ internal fun DesktopControlLocationReviewDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onReject) { Text("Reject") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onReject, modifier = Modifier.testTag("reject-control-edit")) {
+                    Text("Reject")
+                }
+                TextButton(onClick = onCancel, modifier = Modifier.testTag("cancel-control-edit")) {
+                    Text("Cancel")
+                }
+            }
         },
         confirmButton = {
-            Button(onClick = onAccept, modifier = Modifier.testTag("accept-control-location")) {
+            Button(onClick = onAccept, modifier = Modifier.testTag("accept-control-edit")) {
                 Text("Accept Changes")
             }
         }

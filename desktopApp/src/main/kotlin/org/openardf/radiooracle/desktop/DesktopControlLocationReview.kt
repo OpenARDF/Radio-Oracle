@@ -1,75 +1,140 @@
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.CourseControlEditRequest
+import org.openardf.radiooracle.shared.event.CourseControlEdits
+import org.openardf.radiooracle.shared.event.CourseControlFieldChange
 import org.openardf.radiooracle.shared.event.CourseControlLocationCourseChange
 import org.openardf.radiooracle.shared.event.CourseControlLocationEdits
+import org.openardf.radiooracle.shared.event.CourseControlLocationUpdate
 import org.openardf.radiooracle.shared.event.CourseControlResolver
+import org.openardf.radiooracle.shared.event.CourseCoordinateRules
 import org.openardf.radiooracle.shared.event.CourseResolutionStatus
 import org.openardf.radiooracle.shared.event.EventCourseDrafts
 import org.openardf.radiooracle.shared.event.EventProjectFile
 
-internal class DesktopControlLocationReview internal constructor(
+internal class DesktopControlEditReview internal constructor(
     internal val baseProject: EventProjectFile,
-    internal val stagedProject: EventProjectFile,
-    internal val preparedDesign: DesktopPreparedCourseDesign,
+    internal val candidateProject: EventProjectFile,
     val controlId: String,
     val controlLabel: String,
-    val previousLatitude: Double,
-    val previousLongitude: Double,
-    val updatedLatitude: Double,
-    val updatedLongitude: Double,
+    val fieldChanges: List<CourseControlFieldChange>,
     val courseChanges: List<CourseControlLocationCourseChange>
 )
 
-/** Builds a complete, temporary course revision without changing the open Race File. */
-internal object DesktopControlLocationReviewer {
+/** Builds a complete control-edit candidate without changing the open Race File. */
+internal object DesktopControlEditReviewer {
     fun prepare(
         projectFile: EventProjectFile,
-        controlId: String,
-        latitudeText: String,
-        longitudeText: String,
+        edit: CourseControlEditRequest,
         password: String?,
         elevationLookup: (CourseGeoPoint) -> Double? = { null },
         checkCancelled: () -> Unit = {}
-    ): DesktopControlLocationReview {
+    ): DesktopControlEditReview {
         EventCourseDrafts.requireCurrent(projectFile)
         require(projectFile.raceData.courseDraft == null) {
-            "Apply or discard the current course draft before reviewing a control location change."
+            "Apply or discard the current course draft before reviewing control changes."
         }
         val baseCandidate = EventCourseDrafts.candidate(projectFile)
         val storagePassword = baseCandidate.courseDataPassword(password)
         val beforeState = decryptedProtectedCourseState(baseCandidate, password.orEmpty())
-        val control = requireNotNull(baseCandidate.raceData.controls.firstOrNull { it.id == controlId }) {
-            "Control was not found: $controlId"
+        val control = requireNotNull(baseCandidate.raceData.controls.firstOrNull { it.id == edit.controlId }) {
+            "Control was not found: ${edit.controlId}"
         }
         val previousLocation = CourseControlResolver.resolve(
             control,
             beforeState.protectedCourseInfoByCategoryId.values.toList()
         )
-        require(previousLocation.status == CourseResolutionStatus.RESOLVED && previousLocation.location != null) {
-            previousLocation.explanation ?: "This control does not have one accepted course location to edit."
-        }
+        val previousResolvedLocation = previousLocation.location
+        val fieldChanges = CourseControlEdits.changes(control, previousResolvedLocation, edit)
+        require(fieldChanges.isNotEmpty()) { "No control changes were made." }
 
-        val locationUpdate = DesktopProtectedControlLocationUpdater.applyControlLocation(
+        val detailsCandidate = DesktopProtectedControlEditor.applyDetails(
             projectFile = baseCandidate,
-            courseInfoByCategoryId = beforeState.protectedCourseInfoByCategoryId,
-            controlId = controlId,
-            latitudeText = latitudeText,
-            longitudeText = longitudeText,
-            password = storagePassword,
-            elevationLookup = elevationLookup
+            courseState = beforeState,
+            edit = edit,
+            password = storagePassword
         )
-        require(locationUpdate.affectedCategoryIds.isNotEmpty()) {
-            "This control is not used by a stored course, so there are no protected course locations to update."
-        }
-        val stagedProject = EventCourseDrafts.edit(projectFile) { candidate ->
-            require(EventCourseDrafts.snapshotHash(candidate) == EventCourseDrafts.snapshotHash(baseCandidate)) {
-                "Course data changed while the location review was being prepared."
+        val detailsState = decryptedProtectedCourseState(detailsCandidate, password.orEmpty())
+        val requestedLocation = edit.location
+        val locationChanged = requestedLocation != null && (
+            previousResolvedLocation == null ||
+                !CourseCoordinateRules.same(previousResolvedLocation.latitude, requestedLocation.latitude) ||
+                !CourseCoordinateRules.same(previousResolvedLocation.longitude, requestedLocation.longitude)
+            )
+
+        val directlyAffectedCategoryIds = linkedSetOf<String>()
+        val candidateProject = if (locationChanged) {
+            require(previousLocation.status == CourseResolutionStatus.RESOLVED && previousResolvedLocation != null) {
+                previousLocation.explanation ?: "This control does not have one accepted course location to edit."
             }
-            locationUpdate.projectFile
+            val locationUpdate = DesktopProtectedControlLocationUpdater.applyControlLocations(
+                projectFile = detailsCandidate,
+                courseInfoByCategoryId = detailsState.protectedCourseInfoByCategoryId,
+                updates = listOf(
+                    CourseControlLocationUpdate(
+                        controlId = edit.controlId,
+                        latitude = requestedLocation.latitude,
+                        longitude = requestedLocation.longitude
+                    )
+                ),
+                password = storagePassword,
+                elevationLookup = elevationLookup
+            )
+            require(locationUpdate.affectedCategoryIds.isNotEmpty()) {
+                "This control is not used by a stored course, so there are no protected course locations to update."
+            }
+            directlyAffectedCategoryIds += locationUpdate.affectedCategoryIds
+            recalculateLocationCourses(
+                sourceProject = projectFile,
+                baseCandidate = baseCandidate,
+                stagedCandidate = locationUpdate.projectFile,
+                affectedCategoryIds = locationUpdate.affectedCategoryIds,
+                password = storagePassword,
+                elevationLookup = elevationLookup,
+                checkCancelled = checkCancelled
+            )
+        } else {
+            detailsCandidate
         }
-        val stagedCandidate = EventCourseDrafts.candidate(stagedProject)
-        val stagedState = decryptedProtectedCourseState(stagedCandidate, password.orEmpty())
-        val stationChoices = courseStationChoices(stagedCandidate, stagedState.protectedCourseInfoByCategoryId)
+        checkCancelled()
+
+        val afterState = decryptedProtectedCourseState(candidateProject, password.orEmpty())
+        val changes = CourseControlLocationEdits.changes(
+            race = baseCandidate.raceData,
+            beforeByCategoryId = beforeState.protectedCourseInfoByCategoryId,
+            afterByCategoryId = afterState.protectedCourseInfoByCategoryId,
+            directlyAffectedCategoryIds = directlyAffectedCategoryIds
+        )
+        val updatedControl = candidateProject.raceData.controls.first { it.id == edit.controlId }
+        return DesktopControlEditReview(
+            baseProject = projectFile,
+            candidateProject = candidateProject,
+            controlId = edit.controlId,
+            controlLabel = updatedControl.publicLabel?.trim()?.takeIf(String::isNotEmpty)
+                ?: updatedControl.label.ifBlank { updatedControl.siCode.toString() },
+            fieldChanges = fieldChanges,
+            courseChanges = changes
+        )
+    }
+
+    private fun recalculateLocationCourses(
+        sourceProject: EventProjectFile,
+        baseCandidate: EventProjectFile,
+        stagedCandidate: EventProjectFile,
+        affectedCategoryIds: List<String>,
+        password: String?,
+        elevationLookup: (CourseGeoPoint) -> Double?,
+        checkCancelled: () -> Unit
+    ): EventProjectFile {
+        val stagedProject = EventCourseDrafts.edit(sourceProject) { currentCandidate ->
+            require(EventCourseDrafts.snapshotHash(currentCandidate) == EventCourseDrafts.snapshotHash(baseCandidate)) {
+                "Course data changed while the control review was being prepared."
+            }
+            stagedCandidate
+        }
+        val candidate = EventCourseDrafts.candidate(stagedProject)
+        val courseState = decryptedProtectedCourseState(candidate, password.orEmpty())
+        val stationChoices = courseStationChoices(candidate, courseState.protectedCourseInfoByCategoryId)
         val unresolved = stationChoices.filter { it.controlId == null }
         require(unresolved.isEmpty()) {
             "Review the course station assignment for ${unresolved.first().categoryName} before changing control locations."
@@ -77,17 +142,17 @@ internal object DesktopControlLocationReviewer {
         val bindingsByCategoryId = stationChoices
             .groupBy { it.categoryId }
             .mapValues { (_, choices) -> choices.associate { it.placementId to requireNotNull(it.controlId) } }
-        val acceptedCategoryId = locationUpdate.affectedCategoryIds.first { it in stagedState.protectedCourseInfoByCategoryId }
-        val acceptedInfo = stagedState.protectedCourseInfoByCategoryId.getValue(acceptedCategoryId)
+        val acceptedCategoryId = affectedCategoryIds.first { it in courseState.protectedCourseInfoByCategoryId }
+        val acceptedInfo = courseState.protectedCourseInfoByCategoryId.getValue(acceptedCategoryId)
         checkCancelled()
         val application = requireNotNull(
             DesktopCourseAnalyzer.analyze(
-                projectFile = stagedCandidate,
+                projectFile = candidate,
                 categoryId = acceptedCategoryId,
                 protectedCourseInfo = acceptedInfo,
-                protectedIdealOrderText = stagedCandidate.raceData
+                protectedIdealOrderText = candidate.raceData
                     .let { race -> (race.categories + race.courseMappings).first { it.category.id == acceptedCategoryId } }
-                    .category.storedIdealOrder(storagePassword),
+                    .category.storedIdealOrder(password),
                 elevationLookup = elevationLookup,
                 allowFoxRenumbering = false,
                 prepareApplication = true,
@@ -102,36 +167,12 @@ internal object DesktopControlLocationReviewer {
                 controlIdsByPlacementId = bindingsByCategoryId.getValue(acceptedCategoryId)
             ),
             reviewedBindingsByCategoryId = bindingsByCategoryId,
-            password = storagePassword,
+            password = password,
             elevationLookup = elevationLookup,
             checkCancelled = checkCancelled
         )
         checkCancelled()
-
-        val revisedProject = prepared.candidate
-        val afterState = decryptedProtectedCourseState(revisedProject, password.orEmpty())
-        val changes = CourseControlLocationEdits.changes(
-            race = baseCandidate.raceData,
-            beforeByCategoryId = beforeState.protectedCourseInfoByCategoryId,
-            afterByCategoryId = afterState.protectedCourseInfoByCategoryId,
-            directlyAffectedCategoryIds = locationUpdate.affectedCategoryIds.toSet()
-        )
-        val updatedLocation = CourseControlResolver.resolve(
-            control,
-            locationUpdate.courseInfoByCategoryId.values.toList()
-        ).location ?: error("The revised control location could not be read back.")
-        val previousResolvedLocation = requireNotNull(previousLocation.location)
-        return DesktopControlLocationReview(
-            baseProject = projectFile,
-            stagedProject = stagedProject,
-            preparedDesign = prepared,
-            controlId = controlId,
-            controlLabel = locationUpdate.controlLabel,
-            previousLatitude = previousResolvedLocation.latitude,
-            previousLongitude = previousResolvedLocation.longitude,
-            updatedLatitude = updatedLocation.latitude,
-            updatedLongitude = updatedLocation.longitude,
-            courseChanges = changes
-        )
+        // Commit here is still pure: stagedProject is temporary and the live session is untouched.
+        return DesktopCourseAnalysisApplier.commit(stagedProject, prepared)
     }
 }

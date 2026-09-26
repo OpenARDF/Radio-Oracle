@@ -164,7 +164,9 @@ import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
+import org.openardf.radiooracle.shared.event.CourseControlEditRequest
 import org.openardf.radiooracle.shared.event.CourseControlLocationEdits
+import org.openardf.radiooracle.shared.event.CourseControlLocation
 import org.openardf.radiooracle.shared.event.CourseControlLocationSummary
 import org.openardf.radiooracle.shared.event.CourseCoordinateRules
 import org.openardf.radiooracle.shared.event.EventAwardDetails
@@ -876,7 +878,7 @@ private val ControlTableColumns = listOf(
     FixedTableColumn("Role", 120.dp),
     FixedTableColumn("Public label", 160.dp),
     FixedTableColumn("Notes", 220.dp),
-    FixedTableColumn("", 104.dp)
+    FixedTableColumn("Apply", 104.dp)
 )
 
 private val UnlockedControlTableColumns = listOf(
@@ -886,7 +888,7 @@ private val UnlockedControlTableColumns = listOf(
     FixedTableColumn("Latitude", 152.dp),
     FixedTableColumn("Longitude", 152.dp),
     FixedTableColumn("Notes", 220.dp),
-    FixedTableColumn("Location", 104.dp)
+    FixedTableColumn("Apply", 104.dp)
 )
 
 private fun controlTableColumns(showLocations: Boolean): List<FixedTableColumn> =
@@ -897,9 +899,9 @@ private val ControlTableColumnHints = mapOf(
     "Role" to "How this station is interpreted for scoring. Radio-o Fox controls score 1 point; Beacon is a required zero-point punch. Sprint Spectator is optional for a course, but when assigned it is a required zero-point loop-transition punch in addition to the Beacon.",
     "Public label" to "Optional public-facing name used on tickets, readout displays, course lists, and exported results. Short labels can also be typed in category Controls fields.",
     "Latitude" to "Accepted protected control location in decimal degrees. Coordinates are shown only while course data is unlocked.",
-    "Longitude" to "Accepted protected control location in decimal degrees. Choose Review after editing either coordinate.",
+    "Longitude" to "Accepted protected control location in decimal degrees. Choose Apply after editing either coordinate.",
     "Notes" to "Private organizer notes for this logical control.",
-    "Location" to "Calculates every affected course and shows route measurement changes before acceptance."
+    "Apply" to "Reviews the control-field changes and recalculates every affected course before acceptance."
 )
 
 private fun currentDesktopAwardDisplayMode(): EventAwardDisplayMode =
@@ -1116,8 +1118,10 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             mutableStateOf<PendingProtectedCourseActionRequest?>(null)
         }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
-        var pendingControlLocationReview by remember { mutableStateOf<DesktopControlLocationReview?>(null) }
-        var controlLocationReviewJob by remember { mutableStateOf<Job?>(null) }
+        var pendingControlEditReview by remember { mutableStateOf<DesktopControlEditReview?>(null) }
+        var controlEditReviewJob by remember { mutableStateOf<Job?>(null) }
+        // Reject resets row drafts to the accepted model; Cancel deliberately leaves them untouched.
+        var controlEditResetRevision by remember { mutableStateOf(0) }
         var pendingControlsCsvSyncUnlockReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var pendingBulkCategoryAction by remember { mutableStateOf<BulkCategoryAction?>(null) }
         var isDeleteAllControlsDialogVisible by remember { mutableStateOf(false) }
@@ -3233,20 +3237,18 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             projectStatusText
         }
 
-        fun updateProtectedControlLocation(controlId: String, latitudeText: String, longitudeText: String): String {
+        fun reviewControlEdit(edit: CourseControlEditRequest): String {
             val projectSnapshot = projectSession.currentProject
-                ?: return "Control location update failed: Load a Race File before updating control locations."
+                ?: return "Control update failed: Load a Race File before updating controls."
             val passwordSnapshot = protectedCoursePassword
-            controlLocationReviewJob?.cancel()
-            projectStatusText = "Calculating affected course changes for review…"
-            controlLocationReviewJob = appCoroutineScope.launch {
+            controlEditReviewJob?.cancel()
+            projectStatusText = "Preparing the mandatory control-change review…"
+            controlEditReviewJob = appCoroutineScope.launch {
                 val result = runCatching {
                     withContext(Dispatchers.Default) {
-                        DesktopControlLocationReviewer.prepare(
+                        DesktopControlEditReviewer.prepare(
                             projectFile = projectSnapshot,
-                            controlId = controlId,
-                            latitudeText = latitudeText,
-                            longitudeText = longitudeText,
+                            edit = edit,
                             password = passwordSnapshot,
                             elevationLookup = DesktopVenueElevationCache::elevationMeters,
                             checkCancelled = { if (!isActive) throw CancellationException() }
@@ -3260,33 +3262,78 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     return@launch
                 }
                 result.onSuccess { review ->
-                    pendingControlLocationReview = review
-                    projectStatusText = "Review the calculated course changes for ${review.controlLabel}. No changes have been applied."
+                    pendingControlEditReview = review
+                    projectStatusText = "Review the proposed changes for ${review.controlLabel}. Nothing has been applied."
                 }.onFailure { error ->
                     if (error !is CancellationException) {
-                        projectStatusText = "Control location update failed: ${error.message ?: error::class.simpleName}"
+                        projectStatusText = "Control update failed: ${error.message ?: error::class.simpleName}"
                     }
                 }
             }
             return projectStatusText
         }
 
-        fun acceptControlLocationReview(review: DesktopControlLocationReview) {
+        fun updateProtectedControlLocation(controlId: String, latitudeText: String, longitudeText: String): String {
+            val current = projectSession.currentProject?.raceData?.controls?.firstOrNull { it.id == controlId }
+                ?: return "Control update failed: Control was not found: $controlId"
+            return runCatching {
+                reviewControlEdit(
+                    CourseControlEditRequest(
+                        controlId = current.id,
+                        label = current.label,
+                        siCode = current.siCode,
+                        type = current.type,
+                        scored = current.scored,
+                        publicLabel = current.publicLabel.orEmpty(),
+                        notes = current.notes.orEmpty(),
+                        location = CourseControlLocation(
+                            latitude = CourseCoordinateRules.requireLatitude(latitudeText),
+                            longitude = CourseCoordinateRules.requireLongitude(longitudeText)
+                        )
+                    )
+                )
+            }.getOrElse { error ->
+                "Control update failed: ${error.message ?: error::class.simpleName}"
+            }
+        }
+
+        fun acceptControlEditReview(review: DesktopControlEditReview) {
             runCatching {
                 projectFile = projectSession.updateCurrentProject { currentProject ->
                     require(currentProject == review.baseProject) {
-                        "The Race File changed after this review was calculated. Review the location change again."
+                        "The Race File changed after this review was calculated. Apply the control changes again."
                     }
-                    DesktopCourseAnalysisApplier.commit(review.stagedProject, review.preparedDesign)
+                    review.candidateProject
                 }
-                pendingControlLocationReview = null
+                pendingControlEditReview = null
+                controlEditResetRevision += 1
                 projectFile?.let { syncProtectedCourseState(it, protectedCoursePassword) }
                 hasUnsavedChanges = projectSession.hasUnsavedChanges
-                recordActivity("Updated ${review.controlLabel} location and recalculated affected courses.")
-                projectStatusText = "Accepted ${review.controlLabel} location change. Recalculated and applied ${review.courseChanges.size} updated course(s). Unsaved changes."
+                val acceptedProject = requireNotNull(projectFile)
+                val acceptedControl = acceptedProject.raceData.controls.first { it.id == review.controlId }
+                val previousControls = review.baseProject.raceData.controls
+                pendingControlRoleWarning = combinedControlRoleWarning(
+                    controlRoleMismatchWarning(acceptedControl.type, acceptedControl.publicLabel.orEmpty()),
+                    duplicateControlRoleWarning(acceptedProject.raceData.controls, acceptedControl.type)
+                        .takeUnless { it == duplicateControlRoleWarning(previousControls, acceptedControl.type) },
+                    controlCourseRuleWarning(
+                        controls = acceptedProject.raceData.controls,
+                        raceType = acceptedProject.raceData.race.raceType,
+                        changedRole = acceptedControl.type,
+                        previousControls = previousControls
+                    )
+                )
+                recordActivity("Accepted reviewed changes to ${review.controlLabel}.")
+                projectStatusText = buildString {
+                    append("Accepted changes to ${review.controlLabel}.")
+                    if (review.courseChanges.isNotEmpty()) {
+                        append(" Recalculated and applied ${review.courseChanges.size} updated course(s).")
+                    }
+                    append(" Unsaved changes.")
+                }
                 scheduleLocalResultsWebPageRefresh()
             }.onFailure { error ->
-                projectStatusText = "Control location update failed: ${error.message ?: error::class.simpleName}"
+                projectStatusText = "Control update failed: ${error.message ?: error::class.simpleName}"
             }
         }
 
@@ -7442,13 +7489,18 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             hasUnsavedChanges = projectSession.hasUnsavedChanges
             scheduleLocalResultsWebPageRefresh()
         }) {
-        pendingControlLocationReview?.let { review ->
-            DesktopControlLocationReviewDialog(
+        pendingControlEditReview?.let { review ->
+            DesktopControlEditReviewDialog(
                 review = review,
-                onAccept = { acceptControlLocationReview(review) },
+                onAccept = { acceptControlEditReview(review) },
                 onReject = {
-                    pendingControlLocationReview = null
-                    projectStatusText = "Control location change rejected. No changes were applied."
+                    pendingControlEditReview = null
+                    controlEditResetRevision += 1
+                    projectStatusText = "Control changes rejected. Previous control settings restored."
+                },
+                onCancel = {
+                    pendingControlEditReview = null
+                    projectStatusText = "Control review canceled. Draft field changes are still available."
                 }
             )
         }
@@ -7535,6 +7587,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             onNavAction = ::handleNavAction,
             isProtectedCourseOrderUnlocked =
                 isProtectedCourseStateAvailable(),
+            controlEditResetRevision = controlEditResetRevision,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             recentImportReport = recentImportReport,
@@ -8053,77 +8106,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 }
                 result.isSuccess
             },
-            onUpdateControl = { controlId, label, siCode, type, scored, publicLabel, notes ->
-                runCatching {
-                    var affectedAssignedCategories = 0
-                    var affectedProtectedCourses = 0
-                    var identityChanged = false
-                    var lockedCourseWarning = ""
-                    var roleWarning: String? = null
-                    projectFile = projectSession.updateCurrentProject { currentProject ->
-                        val existingControl = currentProject.raceData.controls.firstOrNull { it.id == controlId }
-                        identityChanged = existingControl?.let { control ->
-                            control.siCode.toString() != siCode.trim() ||
-                                control.type != type ||
-                                control.publicLabel.orEmpty() != publicLabel.trim() ||
-                                control.label != label.trim()
-                        } == true
-                        if (identityChanged) {
-                            val controlIds = setOf(controlId)
-                            affectedAssignedCategories = DesktopImportPreviews.assignedCategoryUseCount(currentProject, controlIds)
-                            affectedProtectedCourses = DesktopImportPreviews.protectedCourseUseCount(
-                                protectedCourseInfoByCategoryId,
-                                controlIds
-                            )
-                            lockedCourseWarning = currentProject.lockedProtectedCourseWarning(
-                                isProtectedCourseStateAvailable(currentProject)
-                            )
-                        }
-                        val updatedProject = EventProjectEditor.updateControl(
-                            currentProject,
-                            controlId,
-                            label,
-                            siCode,
-                            type,
-                            scored,
-                            publicLabel,
-                            notes
-                        )
-                        roleWarning = combinedControlRoleWarning(
-                            controlRoleMismatchWarning(type, publicLabel),
-                            duplicateControlRoleWarning(updatedProject.raceData.controls, type)
-                                .takeUnless { it == duplicateControlRoleWarning(currentProject.raceData.controls, type) },
-                            controlCourseRuleWarning(
-                                controls = updatedProject.raceData.controls,
-                                raceType = updatedProject.raceData.race.raceType,
-                                changedRole = type,
-                                previousControls = currentProject.raceData.controls
-                            )
-                        )
-                        updatedProject
-                    }
-                    // Analyzer must see the refreshed roles and bindings immediately, including
-                    // when unrelated courses in the same race remain encrypted.
-                    val plainCategories = projectFile!!.let { it.raceData.categories + it.raceData.courseMappings }
-                        .filter { it.category.encryptedCourseInfo == null }
-                    protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId - plainCategories.map { it.category.id }.toSet() +
-                        plainCategories.mapNotNull { data -> data.category.courseInfo?.let { data.category.id to it } }.toMap()
-                    protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId + plainCategories
-                        .filter { it.category.encryptedIdealOrder == null }.associate { it.category.id to it.category.idealOrder.orEmpty() }
-                    hasUnsavedChanges = projectSession.hasUnsavedChanges
-                    projectStatusText = if (identityChanged) {
-                        recordActivity("Updated control identity.")
-                        val impactWarning = projectFile?.resultImpactWarning("Control identity changed") ?: ""
-                        "Control SI ${siCode.trim()} updated. This control is used by $affectedAssignedCategories assigned categor${if (affectedAssignedCategories == 1) "y" else "ies"} and $affectedProtectedCourses stored course${if (affectedProtectedCourses == 1) "" else "s"}.$lockedCourseWarning$impactWarning"
-                    } else {
-                        recordActivity("Updated control details.")
-                        "Unsaved changes."
-                    }
-                    pendingControlRoleWarning = roleWarning
-                }.onFailure { error ->
-                    projectStatusText = "Edit failed: ${error.message ?: error::class.simpleName}"
-                }
-            },
+            onApplyControlEdit = ::reviewControlEdit,
             onAddControl = { label, siCode, type, scored, publicLabel, notes ->
                 var roleWarning: String? = null
                 val result = runCatching {
@@ -12153,7 +12136,7 @@ private fun RadioOManagerDesktopApp(
     onPreviewFinishTicket: (String) -> String = { "" },
     onPrintFinishTicket: (String) -> Unit = {},
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean = { _, _, _, _, _, _ -> false },
-    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit = { _, _, _, _, _, _, _ -> },
+    onApplyControlEdit: (CourseControlEditRequest) -> String = { "" },
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean = { _, _, _, _, _, _ -> false },
     onRemoveControl: (String) -> Unit = {},
     onImportControlsRouteKmlKmz: () -> Unit = {},
@@ -12164,6 +12147,7 @@ private fun RadioOManagerDesktopApp(
     onSetReadoutAlertSoundEnabled: (Boolean) -> Unit = {},
     onSetAliasesEnabled: (Boolean) -> Unit = {},
     isProtectedCourseOrderUnlocked: Boolean = false,
+    controlEditResetRevision: Int = 0,
     protectedIdealOrderByCategoryId: Map<String, String> = emptyMap(),
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo> = emptyMap(),
     recentImportReport: DesktopImportReport? = null,
@@ -12489,7 +12473,7 @@ private fun RadioOManagerDesktopApp(
                                     isReadingCompetitorSiCard = isReadingCompetitorSiCard,
                                     siDownloadStatusText = siDownloadStatusText,
                                     onAddManualReadout = onAddManualReadout,
-                                    onUpdateControl = onUpdateControl,
+                                    onApplyControlEdit = onApplyControlEdit,
                                     onAddControl = onAddControl,
                                     onRemoveControl = onRemoveControl,
                                     onImportControlsRouteKmlKmz = onImportControlsRouteKmlKmz,
@@ -12515,6 +12499,7 @@ private fun RadioOManagerDesktopApp(
                                     onSetAliasesEnabled = onSetAliasesEnabled,
                                     onSetAwardDisplayMode = ::setAwardDisplayMode,
                                     isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
+                                    controlEditResetRevision = controlEditResetRevision,
                                     protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
                                     protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
                                     courseAnalysisResult = courseAnalysisResult,
@@ -13764,7 +13749,7 @@ private fun SectionWorkspace(
     isReadingCompetitorSiCard: Boolean,
     siDownloadStatusText: String?,
     onAddManualReadout: (String?, String, String, String, String, ResultStatus) -> Boolean,
-    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
+    onApplyControlEdit: (CourseControlEditRequest) -> String,
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
     onRemoveControl: (String) -> Unit,
     onImportControlsRouteKmlKmz: () -> Unit,
@@ -13790,6 +13775,7 @@ private fun SectionWorkspace(
     onSetAliasesEnabled: (Boolean) -> Unit,
     onSetAwardDisplayMode: (EventAwardDisplayMode) -> Unit,
     isProtectedCourseOrderUnlocked: Boolean,
+    controlEditResetRevision: Int,
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     courseAnalysisResult: DesktopCourseAnalysisSummary?,
@@ -13895,6 +13881,7 @@ private fun SectionWorkspace(
             isContinuousSiReadoutActive = isContinuousSiReadoutActive,
             isReadingCompetitorSiCard = isReadingCompetitorSiCard,
             isProtectedCourseOrderUnlocked = isProtectedCourseOrderUnlocked,
+            controlEditResetRevision = controlEditResetRevision,
             protectedIdealOrderByCategoryId = protectedIdealOrderByCategoryId,
             protectedCourseInfoByCategoryId = protectedCourseInfoByCategoryId,
             seriesStartFairnessSummary = seriesStartFairnessSummary,
@@ -13929,7 +13916,7 @@ private fun SectionWorkspace(
             onReadCompetitorSiCardForAddRow = onReadCompetitorSiCardForAddRow,
             onAssignCompetitorCategory = onAssignCompetitorCategory,
             onRemoveCompetitor = onRemoveCompetitor,
-            onUpdateControl = onUpdateControl,
+            onApplyControlEdit = onApplyControlEdit,
             onAddControl = onAddControl,
             onRemoveControl = onRemoveControl,
             onUpdateStartDrawSettings = onUpdateStartDrawSettings,
@@ -14250,6 +14237,7 @@ private fun SetupSectionWorkspaceContent(
     isContinuousSiReadoutActive: Boolean,
     isReadingCompetitorSiCard: Boolean,
     isProtectedCourseOrderUnlocked: Boolean,
+    controlEditResetRevision: Int,
     protectedIdealOrderByCategoryId: Map<String, String>,
     protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
     seriesStartFairnessSummary: DesktopEventSeriesStartFairnessSummary?,
@@ -14284,7 +14272,7 @@ private fun SetupSectionWorkspaceContent(
     onReadCompetitorSiCardForAddRow: suspend () -> DesktopCompetitorSiCardDraft,
     onAssignCompetitorCategory: (String, String?) -> Unit,
     onRemoveCompetitor: (String, Boolean) -> Unit,
-    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
+    onApplyControlEdit: (CourseControlEditRequest) -> String,
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
     onRemoveControl: (String) -> Unit,
     onUpdateStartDrawSettings: (String, StartDrawOptions) -> Unit,
@@ -14389,13 +14377,13 @@ private fun SetupSectionWorkspaceContent(
             categories = projectFile.raceData.categories,
             raceType = projectFile.raceData.race.raceType,
             showLocations = isProtectedCourseOrderUnlocked,
+            editResetRevision = controlEditResetRevision,
             locationSummaries = if (isProtectedCourseOrderUnlocked) {
                 CourseControlLocationEdits.summaries(locationProject.raceData, locationCourseInfo)
             } else {
                 emptyList()
             },
-            onUpdateControlLocation = onUpdateProtectedControlLocation,
-            onUpdateControl = onUpdateControl,
+            onApplyControlEdit = onApplyControlEdit,
             onAddControl = onAddControl,
             onRemoveControl = onRemoveControl
         )
@@ -19445,14 +19433,14 @@ private fun CategoryPicker(
 
 /** Shows editable global logical controls backed by shared Race File editing rules. */
 @Composable
-private fun ControlDetailsPanel(
+internal fun ControlDetailsPanel(
     controls: List<EventControlDetails>,
     categories: List<EventCategoryData>,
     raceType: RaceType,
     showLocations: Boolean,
+    editResetRevision: Int,
     locationSummaries: List<CourseControlLocationSummary>,
-    onUpdateControlLocation: (String, String, String) -> String,
-    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
+    onApplyControlEdit: (CourseControlEditRequest) -> String,
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
     onRemoveControl: (String) -> Unit
 ) {
@@ -19550,9 +19538,9 @@ private fun ControlDetailsPanel(
                                 tableColumns = tableColumns,
                                 locationSummary = locationSummaries.firstOrNull { it.controlId == control.id },
                                 showLocation = showLocations,
+                                editResetRevision = editResetRevision,
                                 warningReasons = warningReasons,
-                                onUpdateControlLocation = onUpdateControlLocation,
-                                onUpdateControl = onUpdateControl
+                                onApplyControlEdit = onApplyControlEdit
                             )
                         }
                     }
@@ -22603,59 +22591,54 @@ private fun ControlDetailRow(
     tableColumns: List<FixedTableColumn>,
     locationSummary: CourseControlLocationSummary?,
     showLocation: Boolean,
+    editResetRevision: Int,
     warningReasons: List<String>,
-    onUpdateControlLocation: (String, String, String) -> String,
-    onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit
+    onApplyControlEdit: (CourseControlEditRequest) -> String
 ) {
-    var siCodeDraft by remember(control.id) { mutableStateOf(control.siCodeText) }
-    var isSiCodeFocused by remember(control.id) { mutableStateOf(false) }
-    var publicLabelDraft by remember(control.id) { mutableStateOf(control.publicLabel) }
-    var isPublicLabelFocused by remember(control.id) { mutableStateOf(false) }
+    // Every editable cell stays local until Apply starts the mandatory review transaction.
+    val draftKey = arrayOf<Any?>(
+        control.id,
+        control.siCodeText,
+        control.type.name,
+        control.publicLabel,
+        control.notes,
+        locationSummary?.latitude,
+        locationSummary?.longitude,
+        editResetRevision
+    )
+    var siCodeDraft by remember(*draftKey) { mutableStateOf(control.siCodeText) }
+    var typeDraft by remember(*draftKey) { mutableStateOf(control.type) }
+    var publicLabelDraft by remember(*draftKey) { mutableStateOf(control.publicLabel) }
+    var notesDraft by remember(*draftKey) { mutableStateOf(control.notes) }
+    var latitudeDraft by remember(*draftKey) { mutableStateOf(locationSummary?.latitude?.decimalText().orEmpty()) }
+    var longitudeDraft by remember(*draftKey) { mutableStateOf(locationSummary?.longitude?.decimalText().orEmpty()) }
+    val parsedSiCode = siCodeDraft.trim().toIntOrNull()
+    val parsedLatitude = latitudeDraft.takeIf { showLocation }?.let(CourseCoordinateRules::latitudeOrNull)
+    val parsedLongitude = longitudeDraft.takeIf { showLocation }?.let(CourseCoordinateRules::longitudeOrNull)
+    val acceptedLatitude = locationSummary?.latitude
+    val acceptedLongitude = locationSummary?.longitude
+    val locationInputPresent = hasControlLocationInput(
+        showLocation, acceptedLatitude, acceptedLongitude, latitudeDraft, longitudeDraft
+    )
+    val detailsChanged = parsedSiCode != control.siCode ||
+        typeDraft != control.type ||
+        publicLabelDraft.trim() != control.publicLabel ||
+        notesDraft.trim() != control.notes
+    val locationChanged = showLocation && parsedLatitude != null && parsedLongitude != null && (
+        acceptedLatitude == null ||
+            acceptedLongitude == null ||
+            !CourseCoordinateRules.same(acceptedLatitude, parsedLatitude) ||
+            !CourseCoordinateRules.same(acceptedLongitude, parsedLongitude)
+        )
+    val canApply = parsedSiCode != null &&
+        (!locationInputPresent || parsedLatitude != null && parsedLongitude != null) &&
+        (detailsChanged || locationChanged)
 
-    LaunchedEffect(control.siCodeText, isSiCodeFocused) {
-        if (!isSiCodeFocused) siCodeDraft = control.siCodeText
-    }
-    LaunchedEffect(control.publicLabel, isPublicLabelFocused) {
-        if (!isPublicLabelFocused) publicLabelDraft = control.publicLabel
-    }
-
-    fun updateControl(
-        siCodeText: String = control.siCodeText,
-        type: ControlPointType = control.type,
-        scored: Boolean = control.scored,
-        publicLabel: String = control.publicLabel,
-        notes: String = control.notes
-    ) {
-        if (siCodeText.trim().toIntOrNull() == null) {
-            return
-        }
-        val nextLabel = if (siCodeText != control.siCodeText || type != control.type) {
-            ""
-        } else {
-            control.label
-        }
-        onUpdateControl(control.id, nextLabel, siCodeText, type, scored, publicLabel, notes)
-    }
-
-    fun commitSiCodeDraft() {
-        val normalizedDraft = siCodeDraft.trim()
-        if (normalizedDraft == control.siCodeText) {
-            return
-        }
-        if (normalizedDraft.toIntOrNull() == null) {
-            siCodeDraft = control.siCodeText
-            return
-        }
-        updateControl(siCodeText = normalizedDraft)
-    }
-
-    fun commitPublicLabelDraft() {
-        val normalizedDraft = publicLabelDraft.trim()
-        if (normalizedDraft == control.publicLabel) {
-            publicLabelDraft = control.publicLabel
-            return
-        }
-        updateControl(publicLabel = normalizedDraft)
+    fun applyDraft() {
+        if (!canApply) return
+        onApplyControlEdit(controlEditRequest(control, typeDraft, publicLabelDraft, notesDraft,
+            requireNotNull(parsedSiCode), parsedLatitude, parsedLongitude,
+            showLocation && parsedLatitude != null && parsedLongitude != null))
     }
 
     val warningText = warningReasons.joinToString(separator = "\n")
@@ -22675,14 +22658,8 @@ private fun ControlDetailRow(
                     onValueChange = { siCodeDraft = it },
                     modifier = Modifier
                         .width(tableColumns[0].width)
-                        .onFocusChanged { focusState ->
-                            val wasFocused = isSiCodeFocused
-                            isSiCodeFocused = focusState.isFocused
-                            if (wasFocused && !focusState.isFocused) {
-                                commitSiCodeDraft()
-                            }
-                        }
-                        .commitOnEnter(::commitSiCodeDraft),
+                        .testTag("control-si-${control.id}")
+                        .commitOnEnter(::applyDraft),
                     singleLine = true,
                     label = { Text("SI Code", color = rowTextColor) },
                     textStyle = textFieldStyle
@@ -22690,9 +22667,9 @@ private fun ControlDetailRow(
             }
             ControlWarningTooltip(warningText) {
                 ControlTypeDropdown(
-                    type = control.type,
+                    type = typeDraft,
                     raceType = raceType,
-                    onTypeChange = { updateControl(type = it, scored = it.defaultScored()) },
+                    onTypeChange = { typeDraft = it },
                     modifier = Modifier.width(tableColumns[1].width),
                     textColor = rowTextColor
                 )
@@ -22703,103 +22680,98 @@ private fun ControlDetailRow(
                     onValueChange = { publicLabelDraft = it },
                     modifier = Modifier
                         .width(tableColumns[2].width)
-                        .onFocusChanged { focusState ->
-                            val wasFocused = isPublicLabelFocused
-                            isPublicLabelFocused = focusState.isFocused
-                            if (wasFocused && !focusState.isFocused) {
-                                commitPublicLabelDraft()
-                            }
-                        }
-                        .commitOnEnter(::commitPublicLabelDraft),
+                        .testTag("control-public-label-${control.id}")
+                        .commitOnEnter(::applyDraft),
                     singleLine = true,
                     label = { Text("Public Label", color = rowTextColor) },
                     textStyle = textFieldStyle
                 )
             }
             if (showLocation) {
-                ControlLocationEditors(
-                    controlId = control.id,
-                    locationSummary = locationSummary,
-                    tableColumns = tableColumns,
+                ControlWarningTooltip(warningText) {
+                    TextField(
+                        value = latitudeDraft,
+                        onValueChange = { latitudeDraft = it },
+                        modifier = Modifier.width(tableColumns[3].width).commitOnEnter(::applyDraft),
+                        singleLine = true,
+                        label = { Text("Latitude", color = rowTextColor) },
+                        textStyle = textFieldStyle
+                    )
+                }
+                ControlWarningTooltip(warningText) {
+                    TextField(
+                        value = longitudeDraft,
+                        onValueChange = { longitudeDraft = it },
+                        modifier = Modifier.width(tableColumns[4].width).commitOnEnter(::applyDraft),
+                        singleLine = true,
+                        label = { Text("Longitude", color = rowTextColor) },
+                        textStyle = textFieldStyle
+                    )
+                }
+                ControlNotesEditor(
+                    notes = notesDraft,
+                    width = tableColumns[5].width,
                     warningText = warningText,
                     textColor = rowTextColor,
-                    notesContent = {
-                        ControlNotesEditor(
-                            notes = control.notes,
-                            width = tableColumns[5].width,
-                            warningText = warningText,
-                            textColor = rowTextColor,
-                            onNotesChange = { updateControl(notes = it) }
-                        )
-                    },
-                    onUpdateControlLocation = onUpdateControlLocation
+                    onNotesChange = { notesDraft = it }
                 )
             } else {
                 ControlNotesEditor(
-                    notes = control.notes,
+                    notes = notesDraft,
                     width = tableColumns[3].width,
                     warningText = warningText,
                     textColor = rowTextColor,
-                    onNotesChange = { updateControl(notes = it) }
+                    onNotesChange = { notesDraft = it }
                 )
-                Spacer(modifier = Modifier.width(tableColumns.last().width))
+            }
+            Button(
+                onClick = ::applyDraft,
+                enabled = canApply,
+                modifier = Modifier.width(tableColumns.last().width)
+                    .testTag("apply-control-${control.id}")
+            ) {
+                ButtonLabel("Apply")
             }
         }
     }
 }
 
-@Composable
-private fun ControlLocationEditors(
-    controlId: String,
-    locationSummary: CourseControlLocationSummary?,
-    tableColumns: List<FixedTableColumn>,
-    warningText: String,
-    textColor: Color,
-    notesContent: @Composable () -> Unit,
-    onUpdateControlLocation: (String, String, String) -> String
-) {
-    var latitudeDraft by remember(controlId, locationSummary?.latitude) {
-        mutableStateOf(locationSummary?.latitude?.decimalText().orEmpty())
-    }
-    var longitudeDraft by remember(controlId, locationSummary?.longitude) {
-        mutableStateOf(locationSummary?.longitude?.decimalText().orEmpty())
-    }
-    val parsedLatitude = CourseCoordinateRules.latitudeOrNull(latitudeDraft)
-    val parsedLongitude = CourseCoordinateRules.longitudeOrNull(longitudeDraft)
-    val hasLocationChange = parsedLatitude != locationSummary?.latitude ||
-        parsedLongitude != locationSummary?.longitude
-    val canReviewLocation = hasLocationChange && parsedLatitude != null && parsedLongitude != null
-    val textFieldStyle = LocalTextStyle.current.copy(color = textColor)
+/** Blank coordinate cells do not block detail-only edits when no location has been accepted. */
+private fun hasControlLocationInput(
+    showLocation: Boolean,
+    acceptedLatitude: Double?,
+    acceptedLongitude: Double?,
+    latitudeDraft: String,
+    longitudeDraft: String
+): Boolean = showLocation && (
+    acceptedLatitude != null || acceptedLongitude != null ||
+        latitudeDraft.isNotBlank() || longitudeDraft.isNotBlank()
+    )
 
-    ControlWarningTooltip(warningText) {
-        TextField(
-            value = latitudeDraft,
-            onValueChange = { latitudeDraft = it },
-            modifier = Modifier.width(tableColumns[3].width),
-            singleLine = true,
-            label = { Text("Latitude", color = textColor) },
-            textStyle = textFieldStyle
-        )
+/** Converts validated row drafts into the shared request consumed by every review implementation. */
+private fun controlEditRequest(
+    control: EventControlDetails,
+    type: ControlPointType,
+    publicLabel: String,
+    notes: String,
+    siCode: Int,
+    latitude: Double?,
+    longitude: Double?,
+    includeLocation: Boolean
+): CourseControlEditRequest = CourseControlEditRequest(
+    controlId = control.id,
+    label = if (siCode != control.siCode || type != control.type) "" else control.label,
+    siCode = siCode,
+    type = type,
+    scored = if (type != control.type) type.defaultScored() else control.scored,
+    publicLabel = publicLabel,
+    notes = notes,
+    location = if (includeLocation) {
+        CourseControlLocation(requireNotNull(latitude), requireNotNull(longitude))
+    } else {
+        null
     }
-    ControlWarningTooltip(warningText) {
-        TextField(
-            value = longitudeDraft,
-            onValueChange = { longitudeDraft = it },
-            modifier = Modifier.width(tableColumns[4].width),
-            singleLine = true,
-            label = { Text("Longitude", color = textColor) },
-            textStyle = textFieldStyle
-        )
-    }
-    notesContent()
-    Button(
-        onClick = { onUpdateControlLocation(controlId, latitudeDraft, longitudeDraft) },
-        enabled = canReviewLocation,
-        modifier = Modifier.width(tableColumns.last().width)
-    ) {
-        ButtonLabel("Review")
-    }
-}
+)
 
 @Composable
 private fun ControlNotesEditor(

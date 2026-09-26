@@ -1,5 +1,6 @@
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import kotlin.math.abs
 
 /** One portable definition of valid decimal-degree course coordinates. */
@@ -64,6 +65,92 @@ data class CourseControlLocationCourseChange(
     val previousEffectiveLengthMeters: Int?,
     val updatedEffectiveLengthMeters: Int?
 )
+
+/** One validated Controls-row edit that can be reviewed identically on every platform. */
+data class CourseControlEditRequest(
+    val controlId: String,
+    val label: String,
+    val siCode: Int,
+    val type: ControlPointType,
+    val scored: Boolean,
+    val publicLabel: String,
+    val notes: String,
+    val location: CourseControlLocation? = null
+)
+
+/** A user-visible before/after value for the mandatory control-edit review. */
+data class CourseControlFieldChange(
+    val field: String,
+    val previousValue: String,
+    val updatedValue: String
+)
+
+/** Portable control-row comparison and catalog mutation shared by platform UIs. */
+object CourseControlEdits {
+    fun changes(
+        control: EventControl,
+        currentLocation: CourseControlLocation?,
+        edit: CourseControlEditRequest
+    ): List<CourseControlFieldChange> {
+        require(control.id == edit.controlId) { "Control edit does not match the selected control." }
+        edit.location?.let { location ->
+            require(CourseCoordinateRules.isValidLatitude(location.latitude)) {
+                "Latitude must be between -90 and 90."
+            }
+            require(CourseCoordinateRules.isValidLongitude(location.longitude)) {
+                "Longitude must be between -180 and 180."
+            }
+        }
+        return buildList {
+            addChange("SI code", control.siCode.toString(), edit.siCode.toString())
+            addChange("Role", control.type.name, edit.type.name)
+            addChange("Public label", control.publicLabel.orEmpty().trim(), edit.publicLabel.trim())
+            addChange("Notes", control.notes.orEmpty().trim(), edit.notes.trim())
+            edit.location?.let { location ->
+                addCoordinateChange("Latitude", currentLocation?.latitude, location.latitude)
+                addCoordinateChange("Longitude", currentLocation?.longitude, location.longitude)
+            }
+        }
+    }
+
+    fun applyDetails(projectFile: EventProjectFile, edit: CourseControlEditRequest): EventProjectFile =
+        EventProjectEditor.updateControl(
+            projectFile = projectFile,
+            controlId = edit.controlId,
+            label = edit.label,
+            siCode = edit.siCode.toString(),
+            type = edit.type,
+            scored = edit.scored,
+            publicLabel = edit.publicLabel,
+            notes = edit.notes
+        )
+
+    private fun MutableList<CourseControlFieldChange>.addChange(
+        field: String,
+        previousValue: String,
+        updatedValue: String
+    ) {
+        if (previousValue != updatedValue) {
+            add(CourseControlFieldChange(field, previousValue.ifBlank { "Blank" }, updatedValue.ifBlank { "Blank" }))
+        }
+    }
+
+    private fun MutableList<CourseControlFieldChange>.addCoordinateChange(
+        field: String,
+        previousValue: Double?,
+        updatedValue: Double
+    ) {
+        if (previousValue == null || !CourseCoordinateRules.same(previousValue, updatedValue)) {
+            add(
+                CourseControlFieldChange(
+                    field = field,
+                    previousValue = previousValue?.toString() ?: "Unavailable",
+                    updatedValue = updatedValue.toString()
+                )
+            )
+        }
+    }
+}
 
 /** Portable course-location mutation and review projections used by every platform. */
 object CourseControlLocationEdits {

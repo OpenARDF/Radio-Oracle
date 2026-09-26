@@ -2,6 +2,7 @@ package org.openardf.radiooracle.desktop
 
 import org.junit.Test
 import org.junit.Assert.*
+import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.event.*
 import org.openardf.radiooracle.shared.sportident.*
 import java.nio.file.Files
@@ -23,28 +24,107 @@ class DesktopCourseApplicationTest {
             listOf(info)
         ).location!!
 
-        val review = DesktopControlLocationReviewer.prepare(
+        val editedControl = applied.raceData.controls.single { it.id == boundControl.controlId }
+        val review = DesktopControlEditReviewer.prepare(
             projectFile = applied,
-            controlId = boundControl.controlId,
-            latitudeText = (oldLocation.latitude + 0.001).toString(),
-            longitudeText = oldLocation.longitude.toString(),
+            edit = CourseControlEditRequest(
+                controlId = editedControl.id,
+                label = editedControl.label,
+                siCode = editedControl.siCode,
+                type = editedControl.type,
+                scored = editedControl.scored,
+                publicLabel = editedControl.publicLabel.orEmpty(),
+                notes = editedControl.notes.orEmpty(),
+                location = CourseControlLocation(oldLocation.latitude + 0.001, oldLocation.longitude)
+            ),
             password = null,
             elevationLookup = { 100.0 }
         )
 
         assertEquals(before, EventProjectFileJson.encode(applied))
         assertEquals(listOf("M21"), review.courseChanges.map { it.categoryName })
-        assertEquals(oldLocation.latitude + 0.001, review.updatedLatitude, 0.0000001)
-        val accepted = DesktopCourseAnalysisApplier.commit(review.stagedProject, review.preparedDesign)
+        assertEquals(listOf("Latitude"), review.fieldChanges.map { it.field })
+        val accepted = review.candidateProject
         val acceptedInfo = accepted.raceData.categories.single().category.courseInfo!!
         val acceptedLocation = CourseControlResolver.resolve(
             accepted.raceData.controls.single { it.id == boundControl.controlId },
             listOf(acceptedInfo)
         ).location!!
-        assertEquals(review.updatedLatitude, acceptedLocation.latitude, 0.0000001)
+        assertEquals(oldLocation.latitude + 0.001, acceptedLocation.latitude, 0.0000001)
         assertEquals(review.courseChanges.single().updatedHorizontalLengthMeters, acceptedInfo.lengthMeters)
         assertEquals(review.courseChanges.single().updatedEffectiveLengthMeters, acceptedInfo.effectiveLengthMeters())
         assertNotEquals(before, EventProjectFileJson.encode(accepted))
+    }
+
+    @Test fun controlDetailReviewPreservesEncryptedStorageUntilAccepted() {
+        val imported = imported()
+        val applied = DesktopCourseAnalysisApplier.commit(
+            imported,
+            DesktopCourseAnalysisApplier.prepare(imported, listOf(selection(imported)), null)
+        )
+        val password = "fixture-password"
+        val protected = DesktopProtectedCourseOrder.protectProjectCourseData(applied, password)
+        val before = EventProjectFileJson.encode(protected)
+        val control = protected.raceData.controls.first { it.type == ControlPointType.CONTROL }
+
+        val review = DesktopControlEditReviewer.prepare(
+            projectFile = protected,
+            edit = CourseControlEditRequest(
+                controlId = control.id,
+                label = control.label,
+                siCode = control.siCode,
+                type = control.type,
+                scored = control.scored,
+                publicLabel = "Reviewed ${control.publicLabel.orEmpty()}",
+                notes = "Reviewed note"
+            ),
+            password = password
+        )
+
+        // Preparing, canceling, or rejecting is represented by ignoring the candidate.
+        assertEquals(before, EventProjectFileJson.encode(protected))
+        assertEquals(setOf("Public label", "Notes"), review.fieldChanges.map { it.field }.toSet())
+        assertTrue(review.candidateProject.hasEncryptedCategoryData())
+        assertFalse(review.candidateProject.hasUnencryptedCategoryData())
+        assertEquals("Reviewed note", review.candidateProject.raceData.controls.first { it.id == control.id }.notes)
+    }
+
+    @Test fun controlIdentityReviewPreservesAnEmptyEncryptedCourseMarker() {
+        val imported = imported()
+        val markerProject = imported.copy(
+            raceData = imported.raceData.copy(
+                categories = imported.raceData.categories.map { data ->
+                    data.copy(
+                        category = data.category.copy(idealOrder = "", courseInfo = null)
+                    )
+                }
+            )
+        )
+        val password = "fixture-password"
+        val protected = DesktopProtectedCourseOrder.protectProjectCourseData(markerProject, password)
+        val control = protected.raceData.controls.first { it.type == ControlPointType.CONTROL }
+
+        val review = DesktopControlEditReviewer.prepare(
+            projectFile = protected,
+            edit = CourseControlEditRequest(
+                controlId = control.id,
+                label = "",
+                siCode = control.siCode + 100,
+                type = control.type,
+                scored = control.scored,
+                publicLabel = control.publicLabel.orEmpty(),
+                notes = control.notes.orEmpty()
+            ),
+            password = password
+        )
+
+        assertTrue(protected.hasEncryptedCategoryData())
+        assertTrue(review.candidateProject.hasEncryptedCategoryData())
+        assertFalse(review.candidateProject.hasUnencryptedCategoryData())
+        assertEquals(
+            "",
+            review.candidateProject.raceData.categories.single().category.storedIdealOrder(password)
+        )
     }
 
     @Test fun applyingCalculatedWithoutRenumberingKeepsNumberedStationsAtTheirLocationsAcrossCourses() {
