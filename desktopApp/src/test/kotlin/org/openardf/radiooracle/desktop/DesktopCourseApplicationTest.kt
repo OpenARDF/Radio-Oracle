@@ -7,6 +7,46 @@ import org.openardf.radiooracle.shared.sportident.*
 import java.nio.file.Files
 
 class DesktopCourseApplicationTest {
+    @Test fun controlLocationReviewIsNonMutatingAndCommitsRecalculatedCourseDataOnlyAfterAcceptance() {
+        val imported = imported()
+        val applied = DesktopCourseAnalysisApplier.commit(
+            imported,
+            DesktopCourseAnalysisApplier.prepare(imported, listOf(selection(imported)), null)
+        )
+        val before = EventProjectFileJson.encode(applied)
+        val info = applied.raceData.categories.single().category.courseInfo!!
+        val boundControl = info.appliedBindings!!.controls.first {
+            it.type == org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL
+        }
+        val oldLocation = CourseControlResolver.resolve(
+            applied.raceData.controls.single { it.id == boundControl.controlId },
+            listOf(info)
+        ).location!!
+
+        val review = DesktopControlLocationReviewer.prepare(
+            projectFile = applied,
+            controlId = boundControl.controlId,
+            latitudeText = (oldLocation.latitude + 0.001).toString(),
+            longitudeText = oldLocation.longitude.toString(),
+            password = null,
+            elevationLookup = { 100.0 }
+        )
+
+        assertEquals(before, EventProjectFileJson.encode(applied))
+        assertEquals(listOf("M21"), review.courseChanges.map { it.categoryName })
+        assertEquals(oldLocation.latitude + 0.001, review.updatedLatitude, 0.0000001)
+        val accepted = DesktopCourseAnalysisApplier.commit(review.stagedProject, review.preparedDesign)
+        val acceptedInfo = accepted.raceData.categories.single().category.courseInfo!!
+        val acceptedLocation = CourseControlResolver.resolve(
+            accepted.raceData.controls.single { it.id == boundControl.controlId },
+            listOf(acceptedInfo)
+        ).location!!
+        assertEquals(review.updatedLatitude, acceptedLocation.latitude, 0.0000001)
+        assertEquals(review.courseChanges.single().updatedHorizontalLengthMeters, acceptedInfo.lengthMeters)
+        assertEquals(review.courseChanges.single().updatedEffectiveLengthMeters, acceptedInfo.effectiveLengthMeters())
+        assertNotEquals(before, EventProjectFileJson.encode(accepted))
+    }
+
     @Test fun applyingCalculatedWithoutRenumberingKeepsNumberedStationsAtTheirLocationsAcrossCourses() {
         val base = imported()
         val first = base.raceData.categories.single()

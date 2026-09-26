@@ -22,14 +22,16 @@
 
 package org.openardf.radiooracle.desktop
 
+import org.openardf.radiooracle.shared.event.CourseCoordinateRules
+
 internal fun Double?.finiteCourseValueOrNull(): Double? =
     this?.takeIf { it.isFinite() }
 
 internal fun Double?.validLatitudeOrNull(): Double? =
-    finiteCourseValueOrNull()?.takeIf { it in -90.0..90.0 }
+    this?.takeIf(CourseCoordinateRules::isValidLatitude)
 
 internal fun Double?.validLongitudeOrNull(): Double? =
-    finiteCourseValueOrNull()?.takeIf { it in -180.0..180.0 }
+    this?.takeIf(CourseCoordinateRules::isValidLongitude)
 
 internal fun Double.isValidLatitude(): Boolean =
     validLatitudeOrNull() != null

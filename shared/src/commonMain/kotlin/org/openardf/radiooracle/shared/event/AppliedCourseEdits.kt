@@ -36,7 +36,25 @@ object AppliedCourseEdits {
             sampledPointCount = if (roleChanged) 0 else info.sampledPointCount,
             resultControlLabelsById = emptyMap()
         )
-        return prepare(renamed, controls, binding.controls.associate { it.placementId to it.controlId }, binding.orderedPlacementIds)
+        return prepare(
+            renamed,
+            controls,
+            binding.controls.associate { it.placementId to it.controlId },
+            binding.orderedPlacementIds,
+            "catalog-edit"
+        )
+    }
+
+    /** Rebinds deliberately moved geometry without duplicating binding fingerprint rules in platform code. */
+    fun refreshLocations(info: ProtectedCourseInfo, controls: List<EventControl>): ProtectedCourseInfo {
+        val binding = info.appliedBindings ?: return info
+        return prepare(
+            info.copy(appliedBindings = null),
+            controls,
+            binding.controls.associate { it.placementId to it.controlId },
+            binding.orderedPlacementIds,
+            "control-location-update"
+        )
     }
 
     /** Uses only explicit accepted IDs, never labels, aliases, station numbers, or inactive draft geometry. */
@@ -83,7 +101,7 @@ object AppliedCourseEdits {
             idealOrder = "", controlPoints = points.map { ProtectedCourseControlPoint(it.id, it.label, it.latitude, it.longitude,
                 it.type.controlRole()!!, it.elevationMeters, it.speedFactor, it.description) }, courseObjects = objects,
             resultControlLabelsById = emptyMap()
-        ), race.controls, points.associate { it.id to it.id }, retainedOrder)
+        ), race.controls, points.associate { it.id to it.id }, retainedOrder, "catalog-edit")
         return data.copy(category = data.category.copy(courseInfo = updated,
             idealOrder = null, encryptedIdealOrder = null, lengthMeters = 0, climbMeters = 0))
     }
@@ -100,8 +118,14 @@ object AppliedCourseEdits {
             courseMappings = race.courseMappings.map { reassign(race, it) }))
     }
 
-    private fun prepare(info: ProtectedCourseInfo, controls: List<EventControl>, ids: Map<String, String>, order: List<String>): ProtectedCourseInfo {
-        val prepared = CourseDesignBindings.prepare(info, controls, ids, order, "catalog-edit")
+    private fun prepare(
+        info: ProtectedCourseInfo,
+        controls: List<EventControl>,
+        ids: Map<String, String>,
+        order: List<String>,
+        revision: String
+    ): ProtectedCourseInfo {
+        val prepared = CourseDesignBindings.prepare(info, controls, ids, order, revision)
         return prepared.copy(appliedBindings = prepared.appliedBindings!!.copy(revision = prepared.appliedBindings.inputFingerprint))
     }
 }

@@ -32,6 +32,8 @@ import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
+import org.openardf.radiooracle.shared.event.CourseControlLocationUpdate
+import org.openardf.radiooracle.shared.event.CourseCoordinateRules
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
@@ -1931,7 +1933,7 @@ object DesktopCourseKmlImporter {
         matchedControls: List<CourseMatchedControl>,
         courseInfoByCategoryId: Map<String, ProtectedCourseInfo>,
         ignoredCategoryIds: Set<String> = emptySet()
-    ): List<DesktopProtectedControlLocationUpdate> {
+    ): List<CourseControlLocationUpdate> {
         return matchedControls
             .distinctBy { it.controlId }
             .mapNotNull { matchedControl ->
@@ -1944,17 +1946,17 @@ object DesktopCourseKmlImporter {
                         ?: setOf(matchedControl.controlId)
                     courseInfo.controlPoints.any { controlPoint ->
                         controlPoint.controlId in placementIds &&
-                            (!sameCoordinate(controlPoint.latitude, matchedControl.point.latitude) ||
-                                !sameCoordinate(controlPoint.longitude, matchedControl.point.longitude))
+                            (!CourseCoordinateRules.same(controlPoint.latitude, matchedControl.point.latitude) ||
+                                !CourseCoordinateRules.same(controlPoint.longitude, matchedControl.point.longitude))
                     } ||
                         courseInfo.courseObjects.any { courseObject ->
                             courseObject.id in placementIds &&
-                                (!sameCoordinate(courseObject.latitude, matchedControl.point.latitude) ||
-                                    !sameCoordinate(courseObject.longitude, matchedControl.point.longitude))
+                                (!CourseCoordinateRules.same(courseObject.latitude, matchedControl.point.latitude) ||
+                                    !CourseCoordinateRules.same(courseObject.longitude, matchedControl.point.longitude))
                         }
                 }
                 if (protectedLocationDiffers) {
-                    DesktopProtectedControlLocationUpdate(
+                    CourseControlLocationUpdate(
                         controlId = matchedControl.controlId,
                         latitude = matchedControl.point.latitude,
                         longitude = matchedControl.point.longitude
@@ -2190,9 +2192,6 @@ object DesktopCourseKmlImporter {
             }
         )
     }
-
-    private fun sameCoordinate(first: Double, second: Double): Boolean =
-        kotlin.math.abs(first - second) < 0.0000001
 
     private fun orientedRoutePoints(
         routePoints: List<CourseGeoPoint>,

@@ -30,7 +30,7 @@ class DesktopCourseMovementTest {
         for (password in listOf(null, "fixture-password")) {
             val original = project(password)
             val result = DesktopProtectedControlLocationUpdater.applyControlLocations(original, emptyMap(),
-                listOf(DesktopProtectedControlLocationUpdate("fox1", 40.1, -75.0)), password)
+                listOf(CourseControlLocationUpdate("fox1", 40.1, -75.0)), password)
             assertEquals(setOf("m21", "w55"), result.affectedCategoryIds.toSet())
             assertEquals(2, result.affectedCategoryCount)
             val categories = result.projectFile.raceData.categories + result.projectFile.raceData.courseMappings
@@ -47,7 +47,7 @@ class DesktopCourseMovementTest {
             }
             assertEquals(original.raceData.categories.last(), result.projectFile.raceData.categories.last())
             val repeated = DesktopProtectedControlLocationUpdater.applyControlLocations(result.projectFile, emptyMap(),
-                listOf(DesktopProtectedControlLocationUpdate("fox1", 40.1, -75.0)), password)
+                listOf(CourseControlLocationUpdate("fox1", 40.1, -75.0)), password)
             assertEquals(result.projectFile, repeated.projectFile)
             assertTrue(repeated.affectedCategoryIds.isEmpty())
         }
@@ -58,12 +58,12 @@ class DesktopCourseMovementTest {
         assertThrows(IllegalArgumentException::class.java) {
             DesktopProtectedControlLocationUpdater.applyControlLocations(original,
                 mapOf("m21" to course(controls[0]).copy(lengthMeters = 123)),
-                listOf(DesktopProtectedControlLocationUpdate("fox1", 40.1, -75.0)), null)
+                listOf(CourseControlLocationUpdate("fox1", 40.1, -75.0)), null)
         }
         assertThrows(IllegalArgumentException::class.java) {
             DesktopProtectedControlLocationUpdater.applyControlLocations(original, emptyMap(), listOf(
-                DesktopProtectedControlLocationUpdate("fox1", 40.1, -75.0),
-                DesktopProtectedControlLocationUpdate("fox1", 40.2, -75.0)), null)
+                CourseControlLocationUpdate("fox1", 40.1, -75.0),
+                CourseControlLocationUpdate("fox1", 40.2, -75.0)), null)
         }
         assertEquals(900, original.raceData.categories.first().category.courseInfo?.lengthMeters)
     }

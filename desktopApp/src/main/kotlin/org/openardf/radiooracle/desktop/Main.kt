@@ -140,6 +140,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -163,6 +164,9 @@ import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.course.ControlPointValidationException
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
+import org.openardf.radiooracle.shared.event.CourseControlLocationEdits
+import org.openardf.radiooracle.shared.event.CourseControlLocationSummary
+import org.openardf.radiooracle.shared.event.CourseCoordinateRules
 import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
 import org.openardf.radiooracle.shared.event.EventAwardScope
@@ -875,11 +879,27 @@ private val ControlTableColumns = listOf(
     FixedTableColumn("", 104.dp)
 )
 
+private val UnlockedControlTableColumns = listOf(
+    FixedTableColumn("SI code", 112.dp),
+    FixedTableColumn("Role", 120.dp),
+    FixedTableColumn("Public label", 160.dp),
+    FixedTableColumn("Latitude", 152.dp),
+    FixedTableColumn("Longitude", 152.dp),
+    FixedTableColumn("Notes", 220.dp),
+    FixedTableColumn("Location", 104.dp)
+)
+
+private fun controlTableColumns(showLocations: Boolean): List<FixedTableColumn> =
+    if (showLocations) UnlockedControlTableColumns else ControlTableColumns
+
 private val ControlTableColumnHints = mapOf(
     "SI code" to "Physical SPORTident control code recorded by the station. Category control lists can refer to this code, the generated control label, or the Public label.",
     "Role" to "How this station is interpreted for scoring. Radio-o Fox controls score 1 point; Beacon is a required zero-point punch. Sprint Spectator is optional for a course, but when assigned it is a required zero-point loop-transition punch in addition to the Beacon.",
     "Public label" to "Optional public-facing name used on tickets, readout displays, course lists, and exported results. Short labels can also be typed in category Controls fields.",
-    "Notes" to "Private organizer notes for this logical control."
+    "Latitude" to "Accepted protected control location in decimal degrees. Coordinates are shown only while course data is unlocked.",
+    "Longitude" to "Accepted protected control location in decimal degrees. Choose Review after editing either coordinate.",
+    "Notes" to "Private organizer notes for this logical control.",
+    "Location" to "Calculates every affected course and shows route measurement changes before acceptance."
 )
 
 private fun currentDesktopAwardDisplayMode(): EventAwardDisplayMode =
@@ -1096,6 +1116,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             mutableStateOf<PendingProtectedCourseActionRequest?>(null)
         }
         var pendingProtectedControlDeleteId by remember { mutableStateOf<String?>(null) }
+        var pendingControlLocationReview by remember { mutableStateOf<DesktopControlLocationReview?>(null) }
+        var controlLocationReviewJob by remember { mutableStateOf<Job?>(null) }
         var pendingControlsCsvSyncUnlockReview by remember { mutableStateOf<PendingControlsCsvImportReview?>(null) }
         var pendingBulkCategoryAction by remember { mutableStateOf<BulkCategoryAction?>(null) }
         var isDeleteAllControlsDialogVisible by remember { mutableStateOf(false) }
@@ -3212,30 +3234,59 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun updateProtectedControlLocation(controlId: String, latitudeText: String, longitudeText: String): String {
-            return runCatching {
-                val currentProject = projectFile?.let(org.openardf.radiooracle.shared.event.EventCourseDrafts::candidate)
-                    ?: throw IllegalStateException("Load a Race File before updating control locations.")
-                val draftCourseInfo = decryptedProtectedCourseState(currentProject, protectedCoursePassword.orEmpty()).protectedCourseInfoByCategoryId
-                val result = DesktopProtectedControlLocationUpdater.applyControlLocation(
-                    projectFile = currentProject,
-                    courseInfoByCategoryId = draftCourseInfo,
-                    controlId = controlId,
-                    latitudeText = latitudeText,
-                    longitudeText = longitudeText,
-                    password = protectedCoursePassword,
-                    elevationLookup = DesktopVenueElevationCache::elevationMeters
-                )
-                projectFile = projectSession.updateCourseDraft(currentProject) { result.projectFile }
-                hasUnsavedChanges = projectSession.hasUnsavedChanges
-                projectStatusText = if (result.affectedCategoryCount > 0) {
-                    "Updated draft ${result.controlLabel} location in ${result.affectedCategoryCount} course(s). Analyze and Apply Calculated Course to replace the applied design. Unsaved changes."
-                } else {
-                    "Updated ${result.controlLabel} location. No stored courses referenced it. Unsaved changes."
+            val projectSnapshot = projectSession.currentProject
+                ?: return "Control location update failed: Load a Race File before updating control locations."
+            val passwordSnapshot = protectedCoursePassword
+            controlLocationReviewJob?.cancel()
+            projectStatusText = "Calculating affected course changes for review…"
+            controlLocationReviewJob = appCoroutineScope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.Default) {
+                        DesktopControlLocationReviewer.prepare(
+                            projectFile = projectSnapshot,
+                            controlId = controlId,
+                            latitudeText = latitudeText,
+                            longitudeText = longitudeText,
+                            password = passwordSnapshot,
+                            elevationLookup = DesktopVenueElevationCache::elevationMeters,
+                            checkCancelled = { if (!isActive) throw CancellationException() }
+                        )
+                    }
                 }
-                projectStatusText
-            }.getOrElse { error ->
+                if (projectSession.currentProject != projectSnapshot || protectedCoursePassword != passwordSnapshot) {
+                    if (result.isSuccess) {
+                        projectStatusText = "Control location review canceled because the Race File changed."
+                    }
+                    return@launch
+                }
+                result.onSuccess { review ->
+                    pendingControlLocationReview = review
+                    projectStatusText = "Review the calculated course changes for ${review.controlLabel}. No changes have been applied."
+                }.onFailure { error ->
+                    if (error !is CancellationException) {
+                        projectStatusText = "Control location update failed: ${error.message ?: error::class.simpleName}"
+                    }
+                }
+            }
+            return projectStatusText
+        }
+
+        fun acceptControlLocationReview(review: DesktopControlLocationReview) {
+            runCatching {
+                projectFile = projectSession.updateCurrentProject { currentProject ->
+                    require(currentProject == review.baseProject) {
+                        "The Race File changed after this review was calculated. Review the location change again."
+                    }
+                    DesktopCourseAnalysisApplier.commit(review.stagedProject, review.preparedDesign)
+                }
+                pendingControlLocationReview = null
+                projectFile?.let { syncProtectedCourseState(it, protectedCoursePassword) }
+                hasUnsavedChanges = projectSession.hasUnsavedChanges
+                recordActivity("Updated ${review.controlLabel} location and recalculated affected courses.")
+                projectStatusText = "Accepted ${review.controlLabel} location change. Recalculated and applied ${review.courseChanges.size} updated course(s). Unsaved changes."
+                scheduleLocalResultsWebPageRefresh()
+            }.onFailure { error ->
                 projectStatusText = "Control location update failed: ${error.message ?: error::class.simpleName}"
-                projectStatusText
             }
         }
 
@@ -7391,6 +7442,17 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             hasUnsavedChanges = projectSession.hasUnsavedChanges
             scheduleLocalResultsWebPageRefresh()
         }) {
+        pendingControlLocationReview?.let { review ->
+            DesktopControlLocationReviewDialog(
+                review = review,
+                onAccept = { acceptControlLocationReview(review) },
+                onReject = {
+                    pendingControlLocationReview = null
+                    projectStatusText = "Control location change rejected. No changes were applied."
+                }
+            )
+        }
+
         DesktopCourseDesignHost(projectFile, protectedCoursePassword, projectSession, courseDesignUi, onChanged = { updated, status ->
             projectFile = updated
             hasUnsavedChanges = projectSession.hasUnsavedChanges
@@ -11759,14 +11821,6 @@ private data class VenueElevationCacheProgressUiState(
     val cancelRequested: Boolean = false
 )
 
-private data class ProtectedControlLocationSummary(
-    val controlId: String,
-    val label: String,
-    val latitude: Double?,
-    val longitude: Double?,
-    val affectedCategoryCount: Int
-)
-
 private data class DesktopCompetitorSiCardDraft(
     val siNumber: Int,
     val firstName: String? = null,
@@ -14326,10 +14380,21 @@ private fun SetupSectionWorkspaceContent(
         )
     }
     if (section == DesktopSection.Controls && projectFile != null) {
+        val courseDesign = LocalCourseDesign.current
+        val locationProject = courseDesign?.project ?: projectFile
+        val locationCourseInfo = courseDesign?.courseState?.protectedCourseInfoByCategoryId
+            ?: protectedCourseInfoByCategoryId
         ControlDetailsPanel(
             controls = EventControlDetails.from(projectFile.raceData),
             categories = projectFile.raceData.categories,
             raceType = projectFile.raceData.race.raceType,
+            showLocations = isProtectedCourseOrderUnlocked,
+            locationSummaries = if (isProtectedCourseOrderUnlocked) {
+                CourseControlLocationEdits.summaries(locationProject.raceData, locationCourseInfo)
+            } else {
+                emptyList()
+            },
+            onUpdateControlLocation = onUpdateProtectedControlLocation,
             onUpdateControl = onUpdateControl,
             onAddControl = onAddControl,
             onRemoveControl = onRemoveControl
@@ -19384,12 +19449,16 @@ private fun ControlDetailsPanel(
     controls: List<EventControlDetails>,
     categories: List<EventCategoryData>,
     raceType: RaceType,
+    showLocations: Boolean,
+    locationSummaries: List<CourseControlLocationSummary>,
+    onUpdateControlLocation: (String, String, String) -> String,
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit,
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
     onRemoveControl: (String) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
-    val tableWidth = fixedTableWidth(ControlTableColumns)
+    val tableColumns = controlTableColumns(showLocations)
+    val tableWidth = fixedTableWidth(tableColumns)
     val orderedControls = remember(controls, raceType) { controls.customaryDisplayOrder(raceType) }
     val warningReasonsByControlId = remember(controls, categories) {
         controlSuspicionReasonsByControlId(controls, categories)
@@ -19436,6 +19505,8 @@ private fun ControlDetailsPanel(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ControlAddRow(
+                        tableColumns = tableColumns,
+                        showLocations = showLocations,
                         siCodeDraft = siCodeDraft,
                         onSiCodeChange = { siCodeDraft = it },
                         typeDraft = typeDraft,
@@ -19451,7 +19522,7 @@ private fun ControlDetailsPanel(
                             }
                         }
                     )
-                    FixedDetailHeaderRow(ControlTableColumns, ControlTableColumnHints)
+                    FixedDetailHeaderRow(tableColumns, ControlTableColumnHints)
                 }
             }
         }
@@ -19476,7 +19547,11 @@ private fun ControlDetailsPanel(
                             ControlDetailRow(
                                 control = control,
                                 raceType = raceType,
+                                tableColumns = tableColumns,
+                                locationSummary = locationSummaries.firstOrNull { it.controlId == control.id },
+                                showLocation = showLocations,
                                 warningReasons = warningReasons,
+                                onUpdateControlLocation = onUpdateControlLocation,
                                 onUpdateControl = onUpdateControl
                             )
                         }
@@ -22442,6 +22517,8 @@ internal fun twoDecimalText(value: Double): String =
 
 @Composable
 private fun ControlAddRow(
+    tableColumns: List<FixedTableColumn>,
+    showLocations: Boolean,
     siCodeDraft: String,
     onSiCodeChange: (String) -> Unit,
     typeDraft: ControlPointType,
@@ -22454,7 +22531,7 @@ private fun ControlAddRow(
     onCommit: () -> Unit
 ) {
     Column(
-        modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
+        modifier = Modifier.width(fixedTableWidth(tableColumns)),
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -22464,7 +22541,7 @@ private fun ControlAddRow(
                 value = siCodeDraft,
                 onValueChange = onSiCodeChange,
                 modifier = Modifier
-                    .width(ControlTableColumns[0].width)
+                    .width(tableColumns[0].width)
                     .commitOnEnter(onCommit),
                 singleLine = true,
                 label = { Text("SI Code") }
@@ -22473,27 +22550,48 @@ private fun ControlAddRow(
                 type = typeDraft,
                 raceType = raceType,
                 onTypeChange = onTypeChange,
-                modifier = Modifier.width(ControlTableColumns[1].width)
+                modifier = Modifier.width(tableColumns[1].width)
             )
             TextField(
                 value = publicLabelDraft,
                 onValueChange = onPublicLabelChange,
                 modifier = Modifier
-                    .width(ControlTableColumns[2].width)
+                    .width(tableColumns[2].width)
                     .commitOnEnter(onCommit),
                 singleLine = true,
                 label = { Text("Public Label") }
             )
+            if (showLocations) {
+                TextField(
+                    value = "",
+                    onValueChange = {},
+                    modifier = Modifier.width(tableColumns[3].width),
+                    enabled = false,
+                    singleLine = true,
+                    label = { Text("Latitude") },
+                    placeholder = { Text("Add first") }
+                )
+                TextField(
+                    value = "",
+                    onValueChange = {},
+                    modifier = Modifier.width(tableColumns[4].width),
+                    enabled = false,
+                    singleLine = true,
+                    label = { Text("Longitude") },
+                    placeholder = { Text("Add first") }
+                )
+            }
+            val notesColumnIndex = if (showLocations) 5 else 3
             TextField(
                 value = notesDraft,
                 onValueChange = onNotesChange,
                 modifier = Modifier
-                    .width(ControlTableColumns[3].width)
+                    .width(tableColumns[notesColumnIndex].width)
                     .commitOnEnter(onCommit),
                 singleLine = true,
                 label = { Text("Notes") }
             )
-            Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
+            Spacer(modifier = Modifier.width(tableColumns.last().width))
         }
     }
 }
@@ -22502,7 +22600,11 @@ private fun ControlAddRow(
 private fun ControlDetailRow(
     control: EventControlDetails,
     raceType: RaceType,
+    tableColumns: List<FixedTableColumn>,
+    locationSummary: CourseControlLocationSummary?,
+    showLocation: Boolean,
     warningReasons: List<String>,
+    onUpdateControlLocation: (String, String, String) -> String,
     onUpdateControl: (String, String, String, ControlPointType, Boolean, String, String) -> Unit
 ) {
     var siCodeDraft by remember(control.id) { mutableStateOf(control.siCodeText) }
@@ -22511,14 +22613,10 @@ private fun ControlDetailRow(
     var isPublicLabelFocused by remember(control.id) { mutableStateOf(false) }
 
     LaunchedEffect(control.siCodeText, isSiCodeFocused) {
-        if (!isSiCodeFocused) {
-            siCodeDraft = control.siCodeText
-        }
+        if (!isSiCodeFocused) siCodeDraft = control.siCodeText
     }
     LaunchedEffect(control.publicLabel, isPublicLabelFocused) {
-        if (!isPublicLabelFocused) {
-            publicLabelDraft = control.publicLabel
-        }
+        if (!isPublicLabelFocused) publicLabelDraft = control.publicLabel
     }
 
     fun updateControl(
@@ -22565,7 +22663,7 @@ private fun ControlDetailRow(
     val textFieldStyle = LocalTextStyle.current.copy(color = rowTextColor)
 
     Column(
-        modifier = Modifier.width(fixedTableWidth(ControlTableColumns)),
+        modifier = Modifier.width(fixedTableWidth(tableColumns)),
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -22576,7 +22674,7 @@ private fun ControlDetailRow(
                     value = siCodeDraft,
                     onValueChange = { siCodeDraft = it },
                     modifier = Modifier
-                        .width(ControlTableColumns[0].width)
+                        .width(tableColumns[0].width)
                         .onFocusChanged { focusState ->
                             val wasFocused = isSiCodeFocused
                             isSiCodeFocused = focusState.isFocused
@@ -22595,7 +22693,7 @@ private fun ControlDetailRow(
                     type = control.type,
                     raceType = raceType,
                     onTypeChange = { updateControl(type = it, scored = it.defaultScored()) },
-                    modifier = Modifier.width(ControlTableColumns[1].width),
+                    modifier = Modifier.width(tableColumns[1].width),
                     textColor = rowTextColor
                 )
             }
@@ -22604,7 +22702,7 @@ private fun ControlDetailRow(
                     value = publicLabelDraft,
                     onValueChange = { publicLabelDraft = it },
                     modifier = Modifier
-                        .width(ControlTableColumns[2].width)
+                        .width(tableColumns[2].width)
                         .onFocusChanged { focusState ->
                             val wasFocused = isPublicLabelFocused
                             isPublicLabelFocused = focusState.isFocused
@@ -22618,18 +22716,108 @@ private fun ControlDetailRow(
                     textStyle = textFieldStyle
                 )
             }
-            ControlWarningTooltip(warningText) {
-                TextField(
-                    value = control.notes,
-                    onValueChange = { updateControl(notes = it) },
-                    modifier = Modifier.width(ControlTableColumns[3].width),
-                    singleLine = true,
-                    label = { Text("Notes", color = rowTextColor) },
-                    textStyle = textFieldStyle
+            if (showLocation) {
+                ControlLocationEditors(
+                    controlId = control.id,
+                    locationSummary = locationSummary,
+                    tableColumns = tableColumns,
+                    warningText = warningText,
+                    textColor = rowTextColor,
+                    notesContent = {
+                        ControlNotesEditor(
+                            notes = control.notes,
+                            width = tableColumns[5].width,
+                            warningText = warningText,
+                            textColor = rowTextColor,
+                            onNotesChange = { updateControl(notes = it) }
+                        )
+                    },
+                    onUpdateControlLocation = onUpdateControlLocation
                 )
+            } else {
+                ControlNotesEditor(
+                    notes = control.notes,
+                    width = tableColumns[3].width,
+                    warningText = warningText,
+                    textColor = rowTextColor,
+                    onNotesChange = { updateControl(notes = it) }
+                )
+                Spacer(modifier = Modifier.width(tableColumns.last().width))
             }
-            Spacer(modifier = Modifier.width(ControlTableColumns[4].width))
         }
+    }
+}
+
+@Composable
+private fun ControlLocationEditors(
+    controlId: String,
+    locationSummary: CourseControlLocationSummary?,
+    tableColumns: List<FixedTableColumn>,
+    warningText: String,
+    textColor: Color,
+    notesContent: @Composable () -> Unit,
+    onUpdateControlLocation: (String, String, String) -> String
+) {
+    var latitudeDraft by remember(controlId, locationSummary?.latitude) {
+        mutableStateOf(locationSummary?.latitude?.decimalText().orEmpty())
+    }
+    var longitudeDraft by remember(controlId, locationSummary?.longitude) {
+        mutableStateOf(locationSummary?.longitude?.decimalText().orEmpty())
+    }
+    val parsedLatitude = CourseCoordinateRules.latitudeOrNull(latitudeDraft)
+    val parsedLongitude = CourseCoordinateRules.longitudeOrNull(longitudeDraft)
+    val hasLocationChange = parsedLatitude != locationSummary?.latitude ||
+        parsedLongitude != locationSummary?.longitude
+    val canReviewLocation = hasLocationChange && parsedLatitude != null && parsedLongitude != null
+    val textFieldStyle = LocalTextStyle.current.copy(color = textColor)
+
+    ControlWarningTooltip(warningText) {
+        TextField(
+            value = latitudeDraft,
+            onValueChange = { latitudeDraft = it },
+            modifier = Modifier.width(tableColumns[3].width),
+            singleLine = true,
+            label = { Text("Latitude", color = textColor) },
+            textStyle = textFieldStyle
+        )
+    }
+    ControlWarningTooltip(warningText) {
+        TextField(
+            value = longitudeDraft,
+            onValueChange = { longitudeDraft = it },
+            modifier = Modifier.width(tableColumns[4].width),
+            singleLine = true,
+            label = { Text("Longitude", color = textColor) },
+            textStyle = textFieldStyle
+        )
+    }
+    notesContent()
+    Button(
+        onClick = { onUpdateControlLocation(controlId, latitudeDraft, longitudeDraft) },
+        enabled = canReviewLocation,
+        modifier = Modifier.width(tableColumns.last().width)
+    ) {
+        ButtonLabel("Review")
+    }
+}
+
+@Composable
+private fun ControlNotesEditor(
+    notes: String,
+    width: Dp,
+    warningText: String,
+    textColor: Color,
+    onNotesChange: (String) -> Unit
+) {
+    ControlWarningTooltip(warningText) {
+        TextField(
+            value = notes,
+            onValueChange = onNotesChange,
+            modifier = Modifier.width(width),
+            singleLine = true,
+            label = { Text("Notes", color = textColor) },
+            textStyle = LocalTextStyle.current.copy(color = textColor)
+        )
     }
 }
 
@@ -23202,7 +23390,7 @@ private fun ProtectedControlLocationUpdatePanel(
     onUpdateControlLocation: (String, String, String) -> String
 ) {
     val summaries = remember(projectFile.raceData.controls, protectedCourseInfoByCategoryId) {
-        protectedControlLocationSummaries(projectFile, protectedCourseInfoByCategoryId)
+        CourseControlLocationEdits.summaries(projectFile.raceData, protectedCourseInfoByCategoryId)
     }
     var selectedControlId by remember(projectFile.raceData.race.id, summaries.map { it.controlId }) {
         mutableStateOf(summaries.firstOrNull()?.controlId)
@@ -23293,7 +23481,7 @@ private fun ProtectedControlLocationUpdatePanel(
 @Composable
 private fun ProtectedControlLocationPicker(
     selectedControlId: String?,
-    summaries: List<ProtectedControlLocationSummary>,
+    summaries: List<CourseControlLocationSummary>,
     onControlSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -24962,33 +25150,6 @@ private fun raceOpsPreflightWarning(
         }
 }
 
-private fun protectedControlLocationSummaries(
-    projectFile: EventProjectFile,
-    protectedCourseInfoByCategoryId: Map<String, ProtectedCourseInfo>
-): List<ProtectedControlLocationSummary> {
-    val protectedControlPointsById = protectedCourseInfoByCategoryId.values
-        .flatMap { it.controlPoints }
-        .groupBy { it.controlId }
-    val affectedCategoryCounts = projectFile.raceData.controls.associate { control ->
-        control.id to protectedCourseInfoByCategoryId.values.count { courseInfo ->
-            courseInfo.controlPoints.any { it.controlId == control.id } ||
-                courseInfo.courseObjects.any { it.id == control.id }
-        }
-    }
-    return projectFile.raceData.controls
-        .sortedWith(compareBy<EventControl> { it.siCode }.thenBy { it.publicDisplayLabel() })
-        .map { control ->
-            val protectedPoint = protectedControlPointsById[control.id]?.firstOrNull()
-            ProtectedControlLocationSummary(
-                controlId = control.id,
-                label = control.publicDisplayLabel().ifBlank { control.siCode.toString() },
-                latitude = protectedPoint?.latitude,
-                longitude = protectedPoint?.longitude,
-                affectedCategoryCount = affectedCategoryCounts[control.id] ?: 0
-            )
-        }
-}
-
 private fun EventControlDetails.publicDisplayLabel(): String =
     publicLabel.trim().ifEmpty { label }
 
@@ -25538,7 +25699,7 @@ private fun List<CourseGeoPoint>.venueBoundingBoxOrNull(): DesktopVenueElevation
         )
     }
 
-private fun Double.decimalText(): String =
+internal fun Double.decimalText(): String =
     "%.${6}f".format(this)
 
 private fun bytesText(bytes: Long): String =

@@ -18,8 +18,10 @@ fun ProtectedCourseObjectType.controlRole(): ControlPointType? = when (this) {
     else -> null
 }
 
-internal fun CourseControlLocation.isValid(): Boolean = latitude.isFinite() && latitude in -90.0..90.0 &&
-    longitude.isFinite() && longitude in -180.0..180.0 && (elevationMeters == null || elevationMeters.isFinite())
+internal fun CourseControlLocation.isValid(): Boolean =
+    CourseCoordinateRules.isValidLatitude(latitude) &&
+        CourseCoordinateRules.isValidLongitude(longitude) &&
+        (elevationMeters == null || elevationMeters.isFinite())
 
 fun ProtectedCourseInfo.validatedPlacements(): Map<String, ProtectedCourseObjectPoint> =
     placements().groupBy { it.id }.mapValues { (_, representations) ->
