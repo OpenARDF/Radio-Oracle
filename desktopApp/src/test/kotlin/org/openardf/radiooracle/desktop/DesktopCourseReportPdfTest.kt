@@ -52,6 +52,8 @@ class DesktopCourseReportPdfTest {
             "Page 1 of 1"
         ).forEach { expected -> assertTrue("Missing PDF text: $expected", raw.contains(expected)) }
         assertEquals(1, Regex("/Type /Page\\b").findAll(raw).count())
+        assertTrue("Leg distances must use meters", raw.contains("430 m"))
+        assertTrue("Leg distances must not use kilometers", !raw.contains("0.43 km"))
         assertTrue("Mandatory bend labels must not appear in the PDF table", !raw.contains("Mandatory bend"))
         assertEquals(
             "Course report course report.pdf",

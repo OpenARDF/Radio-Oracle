@@ -188,7 +188,7 @@ internal object DesktopCourseReportPdf {
             }
             val values = listOf(
                 "${leg.fromLabel} -> ${leg.toLabel}",
-                DesktopCourseAnalyzer.summaryLengthText(leg.distanceMeters)
+                leg.distanceText
             )
             x = left
             widths.zip(values).forEach { (width, value) ->

@@ -28,7 +28,11 @@ internal data class DesktopCourseBriefLeg(
     val fromLabel: String,
     val toLabel: String,
     val distanceMeters: Int?
-)
+) {
+    /** Leg tables use compact meter values while whole-course lengths remain in kilometers. */
+    val distanceText: String
+        get() = distanceMeters?.let { "$it m" } ?: "Unknown"
+}
 
 /** A read-only summary of active courses, independent of the CSV's control-set grouping. */
 internal object DesktopCourseBriefReports {

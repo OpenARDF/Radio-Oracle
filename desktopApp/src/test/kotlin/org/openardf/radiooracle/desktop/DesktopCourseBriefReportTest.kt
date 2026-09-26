@@ -267,6 +267,7 @@ class DesktopCourseBriefReportTest {
             DesktopCourseRouteMetricsCalculator.horizontalLengthMeters(listOf(start, bend, fox)).roundToInt(),
             firstLeg.distanceMeters
         )
+        assertEquals("${firstLeg.distanceMeters} m", firstLeg.distanceText)
         assertTrue(firstLeg.distanceMeters!! > start.distanceMetersTo(fox).roundToInt())
     }
 }

@@ -168,6 +168,7 @@ class DesktopCourseBriefReportUiTest {
 
     @Test fun coursesPdfExportIsEnabledAboveTheFirstCalculatedReportAndLegTableIsVisible() {
         val project = courseReportFixtureWithMandatoryBend()
+        val firstLegDistance = DesktopCourseBriefReports.build(project, emptyMap()).first().idealRouteLegs.first().distanceText
         rule.setContent {
             MaterialTheme { Surface(Modifier.fillMaxSize()) {
                 DesktopWorkspaceScroll(Modifier.fillMaxSize()) {
@@ -184,6 +185,7 @@ class DesktopCourseBriefReportUiTest {
         listOf("Ideal route legs", "Ideal-order leg", "S → Fox1").forEach { text ->
             rule.onAllNodesWithText(text, substring = true).onFirst().assertExists()
         }
+        rule.onAllNodesWithText(firstLegDistance, substring = false).onFirst().assertExists()
         rule.onNodeWithText("Mandatory bend", substring = true).assertDoesNotExist()
     }
 

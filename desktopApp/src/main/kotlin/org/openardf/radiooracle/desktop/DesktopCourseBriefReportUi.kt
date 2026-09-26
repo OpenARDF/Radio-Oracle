@@ -95,7 +95,7 @@ private fun CourseBriefLegDistanceTable(report: DesktopCourseBriefReport) {
         report.idealRouteLegs.forEach { leg ->
             CourseBriefLegDistanceRow(
                 "${leg.fromLabel} → ${leg.toLabel}",
-                DesktopCourseAnalyzer.summaryLengthText(leg.distanceMeters)
+                leg.distanceText
             )
         }
     }
