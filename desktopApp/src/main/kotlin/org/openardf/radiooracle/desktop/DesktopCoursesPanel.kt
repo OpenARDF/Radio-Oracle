@@ -78,7 +78,6 @@ internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
         Text("Courses", style = MaterialTheme.typography.h6)
         Text("Every imported course is listed here. Assign an unassigned course to one or more categories, create a category for it, or delete it. Use Controls to manage the shared control list.")
         message?.let { Text(it) }
-        restriction?.let { Text(it, color = MaterialTheme.colors.error) }
         if (locked) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(password, { password = it }, label = { Text("Race Password") }, singleLine = true,
                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
@@ -149,12 +148,13 @@ internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
         DesktopAlertDialog(onDismissRequest = { deletingId = null }, title = { Text("Delete ${source.category.name}?") },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("This removes the unassigned course from this race. Categories and shared controls are kept.")
-                restriction?.let { Text(it, color = MaterialTheme.colors.error) }
             } },
-            confirmButton = { Button(enabled = restriction == null, onClick = {
-                message = onEdit(DesktopCourseLibraryEdit.Delete(source.category.id)) ?: "Course deleted. Save Race to keep these changes."
-                deletingId = null
-            }) { Text("Delete course") } },
+            confirmButton = { DisabledReasonTooltip(restriction) {
+                Button(enabled = restriction == null, onClick = {
+                    message = onEdit(DesktopCourseLibraryEdit.Delete(source.category.id)) ?: "Course deleted. Save Race to keep these changes."
+                    deletingId = null
+                }) { Text("Delete course") }
+            } },
             dismissButton = { TextButton(onClick = { deletingId = null }) { Text("Cancel") } })
     }
 }

@@ -168,7 +168,8 @@ data class DesktopNavigationReadiness(
     val competitorCount: Int = 0,
     val unassignedCompetitorCount: Int = 0,
     val unscheduledCompetitorCount: Int = 0,
-    val courseImportDisabledReason: String? = null
+    val courseImportDisabledReason: String? = null,
+    val controlEditDisabledReason: String? = null
 ) {
     val isSetupComplete: Boolean
         get() = hasEventFile &&
@@ -207,6 +208,7 @@ data class DesktopNavigationReadiness(
                 hasStartList = hasCompetitors && unscheduledCompetitorCount == 0,
                 hasRaceOpsData = org.openardf.radiooracle.shared.event.EventCourseDrafts.hasRecordedActivity(raceData),
                 courseImportDisabledReason = DesktopCourseImportAvailability.disabledReason(projectFile),
+                controlEditDisabledReason = DesktopCourseImportAvailability.controlEditDisabledReason(projectFile),
                 hasSeriesContext = projectFile.seriesLink != null,
                 raceType = raceData.race.raceType,
                 raceLevel = raceData.race.raceLevel,
@@ -313,6 +315,8 @@ object DesktopNavigation {
     private const val EventSeriesSettingsMenuId = "setup.event-file.series-settings"
     private const val ToolsMenuId = "setup.tools"
     private const val CourseToolsMenuId = "setup.courses.course-tools"
+    private const val ControlsMenuId = "setup.controls"
+    private const val ControlsImportMenuId = "setup.controls.import"
 
     val roots: Map<DesktopWorkflow, List<DesktopNavItem>> =
         DesktopWorkflow.entries.associateWith(::rootItems)
@@ -1058,6 +1062,10 @@ object DesktopNavigation {
         }
         if (item.action in DesktopCourseImportAvailability.designImportActions &&
             (readiness.courseImportDisabledReason != null || readiness.hasRaceOpsData)) return false
+        if (item.id == ControlsImportMenuId &&
+            (readiness.courseImportDisabledReason != null || readiness.hasRaceOpsData)) return false
+        if ((item.id == ControlsMenuId || item.action == DesktopNavAction.DeleteAllControls) &&
+            (readiness.controlEditDisabledReason != null || readiness.hasRaceOpsData)) return false
         return when {
             item.id.startsWith("setup.categories") -> readiness.hasControls
             item.id.startsWith("setup.competitors") -> readiness.hasControls && readiness.hasCategories
@@ -1123,6 +1131,15 @@ object DesktopNavigation {
             (readiness.courseImportDisabledReason != null || readiness.hasRaceOpsData)) {
             return readiness.courseImportDisabledReason ?: DesktopCourseImportAvailability.ReadoutRestriction
         }
+        if (item.id == ControlsImportMenuId &&
+            (readiness.courseImportDisabledReason != null || readiness.hasRaceOpsData)) {
+            return readiness.courseImportDisabledReason ?: DesktopCourseImportAvailability.ReadoutRestriction
+        }
+        if ((item.id == ControlsMenuId || item.action == DesktopNavAction.DeleteAllControls) &&
+            (readiness.controlEditDisabledReason != null || readiness.hasRaceOpsData)) {
+            return readiness.controlEditDisabledReason
+                ?: DesktopCourseImportAvailability.ControlEditReadoutRestriction
+        }
         return when {
             item.id.startsWith("setup.categories") ->
                 "Enter controls before working with categories."
@@ -1141,7 +1158,10 @@ object DesktopNavigation {
     }
 
     fun canLongClickOverrideDisabledMenu(item: DesktopNavItem, readiness: DesktopNavigationReadiness): Boolean =
-        item.action == null && !isItemEnabled(item, readiness)
+        item.action == null &&
+            item.id != ControlsMenuId &&
+            item.id != ControlsImportMenuId &&
+            !isItemEnabled(item, readiness)
 
     fun isPreResultsCloudflareItem(item: DesktopNavItem): Boolean =
         item.id in setOf(

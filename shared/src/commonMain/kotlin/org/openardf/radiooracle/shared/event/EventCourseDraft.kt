@@ -25,6 +25,9 @@ data class EventCourseDraft(
 
 /** Keeps the existing race model authoritative for scoring/outputs while course tools edit a candidate. */
 object EventCourseDrafts {
+    const val RecordedActivityDesignRestriction =
+        "This race has recorded activity. Start a new race copy without readouts before changing its course design."
+
     private val json = Json { encodeDefaults = true }
 
     fun start(project: EventProjectFile): EventProjectFile = if (project.raceData.courseDraft != null) project else
@@ -61,9 +64,7 @@ object EventCourseDrafts {
     /** Called only after the normal application service has validated the complete candidate. */
     fun commit(project: EventProjectFile, validatedCandidate: EventProjectFile, expectedCandidateHash: String): EventProjectFile {
         require(project.raceData.race.id == validatedCandidate.raceData.race.id) { "The prepared design belongs to a different race." }
-        require(!hasRecordedActivity(project.raceData)) {
-            "This race has recorded activity. Start a new race copy without readouts before replacing its design."
-        }
+        requireDesignEditable(project)
         requireCurrent(project)
         if (project.raceData.courseDraft == null && snapshotHash(project) == snapshotHash(validatedCandidate)) return project
         require(snapshotHash(candidate(project)) == expectedCandidateHash) {
@@ -74,6 +75,11 @@ object EventCourseDrafts {
 
     fun hasRecordedActivity(race: EventRaceData): Boolean = race.unmatchedReadoutData.isNotEmpty() ||
         race.competitorData.any { it.readoutData != null }
+
+    /** Canonical guard reused by shared and platform-specific course-design mutation paths. */
+    fun requireDesignEditable(project: EventProjectFile) {
+        require(!hasRecordedActivity(project.raceData)) { RecordedActivityDesignRestriction }
+    }
 
     fun capture(race: EventRaceData) = EventCourseDesignState(
         controls = race.controls, aliases = race.aliases,

@@ -20,8 +20,24 @@ class DesktopCourseImportAvailabilityTest {
         }
         val csv = items.single { it.action == DesktopNavAction.ImportControlsCsv }
         assertFalse(DesktopNavigation.isItemEnabled(csv, readiness))
+        val importMenu = items.single { it.id == "setup.controls.import" }
+        val controlsMenu = items.single { it.id == "setup.controls" }
+        val deleteAll = items.single { it.action == DesktopNavAction.DeleteAllControls }
+        assertFalse(DesktopNavigation.isItemEnabled(importMenu, readiness))
+        assertEquals(DesktopCourseImportAvailability.ReadoutRestriction,
+            DesktopNavigation.disabledItemReasonWithMenuOverrideHint(importMenu, readiness))
+        assertFalse(DesktopNavigation.canLongClickOverrideDisabledMenu(importMenu, readiness))
+        for (item in listOf(controlsMenu, deleteAll)) {
+            assertFalse(DesktopNavigation.isItemEnabled(item, readiness))
+            assertEquals(DesktopCourseImportAvailability.ControlEditReadoutRestriction,
+                DesktopNavigation.disabledItemReasonWithMenuOverrideHint(item, readiness))
+        }
+        assertFalse(DesktopNavigation.canLongClickOverrideDisabledMenu(controlsMenu, readiness))
         val freshReadiness = DesktopNavigationReadiness.from(project())
         imports.forEach { assertTrue(it.label, DesktopNavigation.isItemEnabled(it, freshReadiness)) }
+        assertTrue(DesktopNavigation.isItemEnabled(importMenu, freshReadiness))
+        assertTrue(DesktopNavigation.isItemEnabled(controlsMenu, freshReadiness))
+        assertTrue(DesktopNavigation.isItemEnabled(deleteAll, freshReadiness))
     }
 
     @Test fun readoutBlocksPreparationAndLateAcceptanceWithoutChangingRace() {
@@ -37,6 +53,8 @@ class DesktopCourseImportAvailabilityTest {
             assertThrows(IllegalArgumentException::class.java) { transaction.applyTo(recorded) { transformed = true; it } }.message)
         assertFalse(transformed)
         assertEquals(before, EventProjectFileJson.encode(recorded))
+        assertEquals(EventCourseDrafts.RecordedActivityDesignRestriction,
+            assertThrows(IllegalArgumentException::class.java) { EventCourseDrafts.requireDesignEditable(recorded) }.message)
         assertNull(DesktopCourseImportAvailability.disabledReason(EventProjectFactory.copyForCourseRedesign(recorded,
             "new-race", "New race", "2026-09-15T09:00")))
     }

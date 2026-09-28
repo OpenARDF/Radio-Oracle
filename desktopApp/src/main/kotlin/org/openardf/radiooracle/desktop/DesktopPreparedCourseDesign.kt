@@ -65,9 +65,7 @@ internal fun prepareAllCourseDesigns(
 
 internal fun prepareCourseDesign(project: EventProjectFile, selections: List<DesktopCourseRouteSelection>, password: String?): DesktopPreparedCourseDesign {
     EventCourseDrafts.requireCurrent(project)
-    require(!EventCourseDrafts.hasRecordedActivity(project.raceData)) {
-        "This race has recorded activity. Start a new race copy without readouts before replacing its design."
-    }
+    EventCourseDrafts.requireDesignEditable(project)
     require(selections.isNotEmpty()) { "Select courses to apply." }
     val source = EventCourseDrafts.candidate(project)
     val token = EventCourseDrafts.snapshotHash(source)

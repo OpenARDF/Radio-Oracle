@@ -8,7 +8,7 @@ internal fun repairCourseStationPairs(
     project: EventProjectFile, referenceControls: List<EventControl>, password: String?
 ): EventProjectFile {
     require(project.raceData.courseDraft == null) { "Apply or discard the pending draft before repairing the applied design." }
-    require(!EventCourseDrafts.hasRecordedActivity(project.raceData)) { "A race with recorded activity cannot have its station assignments replaced." }
+    EventCourseDrafts.requireDesignEditable(project)
     val reference = referenceControls.associateBy { it.id }
     require(reference.size == referenceControls.size && reference.keys == project.raceData.controls.map { it.id }.toSet()) {
         "The reference must contain exactly the same station IDs as the affected race."

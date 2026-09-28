@@ -100,4 +100,56 @@ class DesktopControlEditFlowTest {
         rule.onNodeWithText("Accept Changes").performClick()
         rule.runOnIdle { assertEquals("accept", action) }
     }
+
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    @Test fun roundedAcceptedCoordinatesDoNotEnableApplyAndDisabledApplyExplainsWhy() {
+        val control = control()
+        rule.setContent {
+            MaterialTheme {
+                ControlDetailsPanel(
+                    controls = listOf(control), categories = emptyList(), raceType = RaceType.CLASSIC,
+                    showLocations = true, editResetRevision = 0,
+                    locationSummaries = listOf(CourseControlLocationSummary(
+                        control.id, control.publicLabel, 40.12345649, -75.98765449, 1
+                    )),
+                    onApplyControlEdit = { "Review prepared" },
+                    onAddControl = { _, _, _, _, _, _ -> false }, onRemoveControl = {}
+                )
+            }
+        }
+
+        val apply = rule.onNodeWithTag("apply-control-${control.id}")
+        apply.performScrollTo().assertIsNotEnabled().performMouseInput { enter(center) }
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.onNodeWithText("Change at least one control field before applying.").assertExists()
+    }
+
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    @Test fun recordedActivityDisablesControlActionsAndExplainsTheRestriction() {
+        val control = control()
+        val reason = DesktopCourseImportAvailability.ControlEditReadoutRestriction
+        rule.setContent {
+            MaterialTheme {
+                ControlDetailsPanel(
+                    controls = listOf(control), categories = emptyList(), raceType = RaceType.CLASSIC,
+                    showLocations = false, editResetRevision = 0, editingDisabledReason = reason,
+                    locationSummaries = emptyList(), onApplyControlEdit = { "Review prepared" },
+                    onAddControl = { _, _, _, _, _, _ -> false }, onRemoveControl = {}
+                )
+            }
+        }
+
+        rule.onNodeWithText("Add").assertIsNotEnabled()
+        rule.onNodeWithTag("apply-control-${control.id}").assertIsNotEnabled()
+        rule.onNodeWithText("Delete").assertIsNotEnabled().performMouseInput { enter(center) }
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.onNodeWithText(reason).assertExists()
+        rule.onNodeWithTag("control-public-label-${control.id}").assertIsNotEnabled()
+    }
+
+    private fun control() = EventControlDetails(
+        id = "fox-1", label = "Fox1", siCode = 131, siCodeText = "131",
+        type = ControlPointType.CONTROL, typeLabel = "Fox", scored = true,
+        publicLabel = "Fox 1", notes = ""
+    )
 }

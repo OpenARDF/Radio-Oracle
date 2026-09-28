@@ -1354,6 +1354,10 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 projectStatusText = "Edit failed: Load a Race File before deleting controls."
                 return false
             }
+            DesktopCourseImportAvailability.controlEditDisabledReason(currentProject)?.let { reason ->
+                projectStatusText = "Edit failed: $reason"
+                return false
+            }
             if (currentProject.hasLockedProtectedCourseData(isProtectedCourseStateAvailable(currentProject))) {
                 val controlLabel = currentProject.raceData.controls
                     .firstOrNull { it.id == controlId }
@@ -3096,6 +3100,10 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun deleteAllControls(): Boolean {
             val currentProject = projectSession.currentProject ?: return false
+            DesktopCourseImportAvailability.controlEditDisabledReason(currentProject)?.let { reason ->
+                projectStatusText = "Edit failed: $reason"
+                return false
+            }
             val affectedCategoryCount = currentProject.raceData.categories.count { categoryData ->
                 categoryData.controlPoints.isNotEmpty() ||
                     categoryData.publicControlIds.isNotEmpty() ||
@@ -3240,6 +3248,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         fun reviewControlEdit(edit: CourseControlEditRequest): String {
             val projectSnapshot = projectSession.currentProject
                 ?: return "Control update failed: Load a Race File before updating controls."
+            DesktopCourseImportAvailability.controlEditDisabledReason(projectSnapshot)?.let { reason ->
+                return "Control update failed: $reason"
+            }
             val passwordSnapshot = protectedCoursePassword
             controlEditReviewJob?.cancel()
             projectStatusText = "Preparing the mandatory control-change review…"
@@ -3303,6 +3314,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     require(currentProject == review.baseProject) {
                         "The Race File changed after this review was calculated. Apply the control changes again."
                     }
+                    DesktopCourseImportAvailability.requireControlEditsAvailable(currentProject)
                     review.candidateProject
                 }
                 pendingControlEditReview = null
@@ -6160,6 +6172,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 DesktopNavAction.ShowAbout -> true
                 DesktopNavAction.SaveEventFile -> canSaveEventFile()
                 DesktopNavAction.StopContinuousSiReadout -> isContinuousSiReadoutActive
+                DesktopNavAction.DeleteAllControls ->
+                    DesktopCourseImportAvailability.controlEditDisabledReason(projectFile) == null
                 DesktopNavAction.OpenLocalResultsWebPage,
                 DesktopNavAction.PreviewLocalResultsWebPage,
                 DesktopNavAction.StartLocalResultsWebServer -> projectFile != null
@@ -6187,6 +6201,9 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         fun disabledNavActionReason(action: DesktopNavAction): String? {
             if (action in DesktopCourseImportAvailability.designImportActions) {
                 return DesktopCourseImportAvailability.disabledReason(projectFile)
+            }
+            if (action == DesktopNavAction.DeleteAllControls) {
+                return DesktopCourseImportAvailability.controlEditDisabledReason(projectFile)
             }
             if (isNavActionEnabled(action)) {
                 return null
@@ -8111,6 +8128,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 var roleWarning: String? = null
                 val result = runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
+                        DesktopCourseImportAvailability.requireControlEditsAvailable(currentProject)
                         val updatedProject = EventProjectEditor.addControl(
                             currentProject,
                             UUID.randomUUID().toString(),
@@ -14378,6 +14396,7 @@ private fun SetupSectionWorkspaceContent(
             raceType = projectFile.raceData.race.raceType,
             showLocations = isProtectedCourseOrderUnlocked,
             editResetRevision = controlEditResetRevision,
+            editingDisabledReason = DesktopCourseImportAvailability.controlEditDisabledReason(projectFile),
             locationSummaries = if (isProtectedCourseOrderUnlocked) {
                 CourseControlLocationEdits.summaries(locationProject.raceData, locationCourseInfo)
             } else {
@@ -19439,6 +19458,7 @@ internal fun ControlDetailsPanel(
     raceType: RaceType,
     showLocations: Boolean,
     editResetRevision: Int,
+    editingDisabledReason: String? = null,
     locationSummaries: List<CourseControlLocationSummary>,
     onApplyControlEdit: (CourseControlEditRequest) -> String,
     onAddControl: (String, String, ControlPointType, Boolean, String, String) -> Boolean,
@@ -19480,12 +19500,16 @@ internal fun ControlDetailsPanel(
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
             verticalAlignment = Alignment.Top
         ) {
-            Button(
-                onClick = ::addControl,
-                modifier = fixedActionRailModifier(),
-                enabled = siCodeDraft.isNotBlank()
-            ) {
-                ButtonLabel("Add")
+            val addDisabledReason = editingDisabledReason
+                ?: if (siCodeDraft.isBlank()) "Enter an SI code before adding a control." else null
+            DisabledReasonTooltip(addDisabledReason) {
+                Button(
+                    onClick = ::addControl,
+                    modifier = fixedActionRailModifier(),
+                    enabled = addDisabledReason == null
+                ) {
+                    ButtonLabel("Add")
+                }
             }
             Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                 Column(
@@ -19504,6 +19528,8 @@ internal fun ControlDetailsPanel(
                         onPublicLabelChange = { publicLabelDraft = it },
                         notesDraft = notesDraft,
                         onNotesChange = { notesDraft = it },
+                        enabled = editingDisabledReason == null,
+                        disabledReason = editingDisabledReason,
                         onCommit = {
                             if (siCodeDraft.isNotBlank()) {
                                 addControl()
@@ -19529,7 +19555,7 @@ internal fun ControlDetailsPanel(
                         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ControlDeleteButton(control, onRemoveControl)
+                        ControlDeleteButton(control, editingDisabledReason, onRemoveControl)
                         Box(modifier = Modifier.weight(1f).horizontalScroll(horizontalScrollState)) {
                             val warningReasons = warningReasonsByControlId[control.id].orEmpty()
                             ControlDetailRow(
@@ -19540,6 +19566,7 @@ internal fun ControlDetailsPanel(
                                 showLocation = showLocations,
                                 editResetRevision = editResetRevision,
                                 warningReasons = warningReasons,
+                                editingDisabledReason = editingDisabledReason,
                                 onApplyControlEdit = onApplyControlEdit
                             )
                         }
@@ -22516,6 +22543,8 @@ private fun ControlAddRow(
     onPublicLabelChange: (String) -> Unit,
     notesDraft: String,
     onNotesChange: (String) -> Unit,
+    enabled: Boolean,
+    disabledReason: String?,
     onCommit: () -> Unit
 ) {
     Column(
@@ -22531,21 +22560,26 @@ private fun ControlAddRow(
                 modifier = Modifier
                     .width(tableColumns[0].width)
                     .commitOnEnter(onCommit),
+                enabled = enabled,
                 singleLine = true,
                 label = { Text("SI Code") }
             )
-            ControlTypeDropdown(
-                type = typeDraft,
-                raceType = raceType,
-                onTypeChange = onTypeChange,
-                modifier = Modifier.width(tableColumns[1].width)
-            )
+            DisabledReasonTooltip(disabledReason) {
+                ControlTypeDropdown(
+                    type = typeDraft,
+                    raceType = raceType,
+                    onTypeChange = onTypeChange,
+                    modifier = Modifier.width(tableColumns[1].width),
+                    enabled = enabled
+                )
+            }
             TextField(
                 value = publicLabelDraft,
                 onValueChange = onPublicLabelChange,
                 modifier = Modifier
                     .width(tableColumns[2].width)
                     .commitOnEnter(onCommit),
+                enabled = enabled,
                 singleLine = true,
                 label = { Text("Public Label") }
             )
@@ -22576,6 +22610,7 @@ private fun ControlAddRow(
                 modifier = Modifier
                     .width(tableColumns[notesColumnIndex].width)
                     .commitOnEnter(onCommit),
+                enabled = enabled,
                 singleLine = true,
                 label = { Text("Notes") }
             )
@@ -22593,6 +22628,7 @@ private fun ControlDetailRow(
     showLocation: Boolean,
     editResetRevision: Int,
     warningReasons: List<String>,
+    editingDisabledReason: String?,
     onApplyControlEdit: (CourseControlEditRequest) -> String
 ) {
     // Every editable cell stays local until Apply starts the mandatory review transaction.
@@ -22610,8 +22646,10 @@ private fun ControlDetailRow(
     var typeDraft by remember(*draftKey) { mutableStateOf(control.type) }
     var publicLabelDraft by remember(*draftKey) { mutableStateOf(control.publicLabel) }
     var notesDraft by remember(*draftKey) { mutableStateOf(control.notes) }
-    var latitudeDraft by remember(*draftKey) { mutableStateOf(locationSummary?.latitude?.decimalText().orEmpty()) }
-    var longitudeDraft by remember(*draftKey) { mutableStateOf(locationSummary?.longitude?.decimalText().orEmpty()) }
+    val acceptedLatitudeText = locationSummary?.latitude?.decimalText().orEmpty()
+    val acceptedLongitudeText = locationSummary?.longitude?.decimalText().orEmpty()
+    var latitudeDraft by remember(*draftKey) { mutableStateOf(acceptedLatitudeText) }
+    var longitudeDraft by remember(*draftKey) { mutableStateOf(acceptedLongitudeText) }
     val parsedSiCode = siCodeDraft.trim().toIntOrNull()
     val parsedLatitude = latitudeDraft.takeIf { showLocation }?.let(CourseCoordinateRules::latitudeOrNull)
     val parsedLongitude = longitudeDraft.takeIf { showLocation }?.let(CourseCoordinateRules::longitudeOrNull)
@@ -22620,19 +22658,18 @@ private fun ControlDetailRow(
     val locationInputPresent = hasControlLocationInput(
         showLocation, acceptedLatitude, acceptedLongitude, latitudeDraft, longitudeDraft
     )
-    val detailsChanged = parsedSiCode != control.siCode ||
-        typeDraft != control.type ||
-        publicLabelDraft.trim() != control.publicLabel ||
-        notesDraft.trim() != control.notes
-    val locationChanged = showLocation && parsedLatitude != null && parsedLongitude != null && (
-        acceptedLatitude == null ||
-            acceptedLongitude == null ||
-            !CourseCoordinateRules.same(acceptedLatitude, parsedLatitude) ||
-            !CourseCoordinateRules.same(acceptedLongitude, parsedLongitude)
-        )
-    val canApply = parsedSiCode != null &&
-        (!locationInputPresent || parsedLatitude != null && parsedLongitude != null) &&
-        (detailsChanged || locationChanged)
+    val detailsChanged = controlDetailsChanged(
+        control, parsedSiCode, typeDraft, publicLabelDraft, notesDraft
+    )
+    val locationChanged = controlLocationChanged(
+        showLocation, acceptedLatitude, acceptedLongitude, acceptedLatitudeText, acceptedLongitudeText,
+        parsedLatitude, parsedLongitude
+    )
+    val applyDisabledReason = controlApplyDisabledReason(
+        editingDisabledReason, parsedSiCode, locationInputPresent,
+        parsedLatitude, parsedLongitude, detailsChanged, locationChanged
+    )
+    val canApply = applyDisabledReason == null
 
     fun applyDraft() {
         if (!canApply) return
@@ -22660,19 +22697,23 @@ private fun ControlDetailRow(
                         .width(tableColumns[0].width)
                         .testTag("control-si-${control.id}")
                         .commitOnEnter(::applyDraft),
+                    enabled = editingDisabledReason == null,
                     singleLine = true,
                     label = { Text("SI Code", color = rowTextColor) },
                     textStyle = textFieldStyle
                 )
             }
             ControlWarningTooltip(warningText) {
-                ControlTypeDropdown(
-                    type = typeDraft,
-                    raceType = raceType,
-                    onTypeChange = { typeDraft = it },
-                    modifier = Modifier.width(tableColumns[1].width),
-                    textColor = rowTextColor
-                )
+                DisabledReasonTooltip(editingDisabledReason) {
+                    ControlTypeDropdown(
+                        type = typeDraft,
+                        raceType = raceType,
+                        onTypeChange = { typeDraft = it },
+                        modifier = Modifier.width(tableColumns[1].width),
+                        textColor = rowTextColor,
+                        enabled = editingDisabledReason == null
+                    )
+                }
             }
             ControlWarningTooltip(warningText) {
                 TextField(
@@ -22682,6 +22723,7 @@ private fun ControlDetailRow(
                         .width(tableColumns[2].width)
                         .testTag("control-public-label-${control.id}")
                         .commitOnEnter(::applyDraft),
+                    enabled = editingDisabledReason == null,
                     singleLine = true,
                     label = { Text("Public Label", color = rowTextColor) },
                     textStyle = textFieldStyle
@@ -22693,6 +22735,7 @@ private fun ControlDetailRow(
                         value = latitudeDraft,
                         onValueChange = { latitudeDraft = it },
                         modifier = Modifier.width(tableColumns[3].width).commitOnEnter(::applyDraft),
+                        enabled = editingDisabledReason == null,
                         singleLine = true,
                         label = { Text("Latitude", color = rowTextColor) },
                         textStyle = textFieldStyle
@@ -22703,35 +22746,35 @@ private fun ControlDetailRow(
                         value = longitudeDraft,
                         onValueChange = { longitudeDraft = it },
                         modifier = Modifier.width(tableColumns[4].width).commitOnEnter(::applyDraft),
+                        enabled = editingDisabledReason == null,
                         singleLine = true,
                         label = { Text("Longitude", color = rowTextColor) },
                         textStyle = textFieldStyle
                     )
                 }
-                ControlNotesEditor(
-                    notes = notesDraft,
-                    width = tableColumns[5].width,
-                    warningText = warningText,
-                    textColor = rowTextColor,
-                    onNotesChange = { notesDraft = it }
-                )
-            } else {
-                ControlNotesEditor(
-                    notes = notesDraft,
-                    width = tableColumns[3].width,
-                    warningText = warningText,
-                    textColor = rowTextColor,
-                    onNotesChange = { notesDraft = it }
-                )
             }
-            Button(
-                onClick = ::applyDraft,
-                enabled = canApply,
-                modifier = Modifier.width(tableColumns.last().width)
-                    .testTag("apply-control-${control.id}")
-            ) {
-                ButtonLabel("Apply")
-            }
+            ControlNotesEditor(
+                notes = notesDraft,
+                width = tableColumns[if (showLocation) 5 else 3].width,
+                warningText = warningText,
+                textColor = rowTextColor,
+                enabled = editingDisabledReason == null,
+                onNotesChange = { notesDraft = it }
+            )
+            ControlApplyButton(control.id, tableColumns.last().width, applyDisabledReason, ::applyDraft)
+        }
+    }
+}
+
+@Composable
+private fun ControlApplyButton(controlId: String, width: Dp, disabledReason: String?, onApply: () -> Unit) {
+    DisabledReasonTooltip(disabledReason) {
+        Button(
+            onClick = onApply,
+            enabled = disabledReason == null,
+            modifier = Modifier.width(width).testTag("apply-control-$controlId")
+        ) {
+            ButtonLabel("Apply")
         }
     }
 }
@@ -22747,6 +22790,53 @@ private fun hasControlLocationInput(
     acceptedLatitude != null || acceptedLongitude != null ||
         latitudeDraft.isNotBlank() || longitudeDraft.isNotBlank()
     )
+
+private fun controlDetailsChanged(
+    control: EventControlDetails,
+    siCode: Int?,
+    type: ControlPointType,
+    publicLabel: String,
+    notes: String
+): Boolean = siCode != control.siCode || type != control.type ||
+    publicLabel.trim() != control.publicLabel.trim() || notes.trim() != control.notes.trim()
+
+private fun controlLocationChanged(
+    showLocation: Boolean,
+    acceptedLatitude: Double?,
+    acceptedLongitude: Double?,
+    acceptedLatitudeText: String,
+    acceptedLongitudeText: String,
+    latitude: Double?,
+    longitude: Double?
+): Boolean = showLocation && latitude != null && longitude != null && (
+    controlCoordinateChanged(acceptedLatitude, acceptedLatitudeText.toDoubleOrNull(), latitude) ||
+        controlCoordinateChanged(acceptedLongitude, acceptedLongitudeText.toDoubleOrNull(), longitude)
+    )
+
+private fun controlApplyDisabledReason(
+    editingDisabledReason: String?,
+    siCode: Int?,
+    locationInputPresent: Boolean,
+    latitude: Double?,
+    longitude: Double?,
+    detailsChanged: Boolean,
+    locationChanged: Boolean
+): String? = when {
+    editingDisabledReason != null -> editingDisabledReason
+    siCode == null -> "Enter a whole-number SI code before applying changes."
+    locationInputPresent && (latitude == null || longitude == null) ->
+        "Enter valid decimal-degree latitude and longitude values before applying changes."
+    !detailsChanged && !locationChanged -> "Change at least one control field before applying."
+    else -> null
+}
+
+/** Six-decimal display rounding must not make an untouched accepted coordinate look edited. */
+private fun controlCoordinateChanged(accepted: Double?, displayedAccepted: Double?, draft: Double): Boolean =
+    accepted == null ||
+        !CourseCoordinateRules.same(accepted, draft) &&
+        displayedAccepted?.let { displayed ->
+            !CourseCoordinateRules.same(displayed, draft)
+        } != false
 
 /** Converts validated row drafts into the shared request consumed by every review implementation. */
 private fun controlEditRequest(
@@ -22779,6 +22869,7 @@ private fun ControlNotesEditor(
     width: Dp,
     warningText: String,
     textColor: Color,
+    enabled: Boolean,
     onNotesChange: (String) -> Unit
 ) {
     ControlWarningTooltip(warningText) {
@@ -22786,6 +22877,7 @@ private fun ControlNotesEditor(
             value = notes,
             onValueChange = onNotesChange,
             modifier = Modifier.width(width),
+            enabled = enabled,
             singleLine = true,
             label = { Text("Notes", color = textColor) },
             textStyle = LocalTextStyle.current.copy(color = textColor)
@@ -22814,16 +22906,20 @@ private fun ControlWarningTooltip(
 @Composable
 private fun ControlDeleteButton(
     control: EventControlDetails,
+    disabledReason: String?,
     onRemoveControl: (String) -> Unit
 ) {
     var showDeleteDialog by remember(control.id) { mutableStateOf(false) }
     val displayLabel = control.publicLabel.takeIf { it.isNotBlank() } ?: control.label
 
-    Button(
-        onClick = { showDeleteDialog = true },
-        modifier = fixedActionRailModifier()
-    ) {
-        ButtonLabel("Delete")
+    DisabledReasonTooltip(disabledReason) {
+        Button(
+            onClick = { showDeleteDialog = true },
+            modifier = fixedActionRailModifier(),
+            enabled = disabledReason == null
+        ) {
+            ButtonLabel("Delete")
+        }
     }
 
     if (showDeleteDialog) {
@@ -22856,13 +22952,15 @@ private fun ControlTypeDropdown(
     raceType: RaceType,
     onTypeChange: (ControlPointType) -> Unit,
     modifier: Modifier = Modifier,
-    textColor: Color = Color.Black
+    textColor: Color = Color.Black,
+    enabled: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
         Button(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = controlRoleBackgroundColor(type),
                 contentColor = textColor
