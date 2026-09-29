@@ -66,6 +66,7 @@ jobs:
           ./scripts/gradle-sequential.sh :app:bundleDebug :app:assembleDebug
           node --test scripts/check-android-native-compatibility.test.mjs
           node scripts/check-android-native-compatibility.mjs app/build/outputs/bundle/debug/app-debug.aab
+          ./gradlew --stop
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -78,5 +79,7 @@ jobs:
           target: google_apis_ps16k
           arch: x86_64
           profile: pixel_7
+          # The Google APIs image exhausts the Pixel 7 profile default during its first-boot service initialization.
+          ram-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: node scripts/android-16kb-device-smoke.mjs app/build/outputs/apk/debug/app-debug.apk
