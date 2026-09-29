@@ -183,15 +183,23 @@ internal fun racePasswordInput(context: Context) = TextInputEditText(context).ap
     isSaveEnabled = false
 }
 
+/**
+ * Retains the dialog resizing behavior used on API 26+ without changing this focused IME fix to
+ * the materially different edge-to-edge window-insets contract introduced on newer Android.
+ */
+@Suppress("DEPRECATION")
+internal const val LEGACY_SOFT_INPUT_ADJUST_RESIZE = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+
 /** AlertDialog initially contains no editor, so it blocks the IME until the form is added. */
 internal fun Dialog.enableRacePasswordInput(password: TextInputEditText) {
     window?.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
-    window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    window?.setSoftInputMode(LEGACY_SOFT_INPUT_ADJUST_RESIZE)
     password.requestFocus()
     password.post {
         if (password.isAttachedToWindow && password.hasFocus()) {
             val keyboard = password.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            keyboard.showSoftInput(password, InputMethodManager.SHOW_IMPLICIT)
+            // SHOW_IMPLICIT is deprecated and now equivalent to the default flags.
+            keyboard.showSoftInput(password, 0)
         }
     }
 }

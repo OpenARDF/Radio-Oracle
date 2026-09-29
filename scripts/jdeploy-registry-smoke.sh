@@ -14,7 +14,9 @@ RADIO_ORACLE_PID=""
 
 # shellcheck disable=SC2329
 cleanup() {
-	osascript -e 'tell application "Radio-Oracle" to quit' >/dev/null 2>&1 || true
+	# Stop only this smoke's uniquely addressed app; preserve any separately running user session.
+	pkill -f "$APP_PROCESS_PATTERN" >/dev/null 2>&1 || true
+	pkill -f "$JAR_PROCESS_PATTERN" >/dev/null 2>&1 || true
 	if [[ -n "$RADIO_ORACLE_PID" ]]; then
 		kill "$RADIO_ORACLE_PID" >/dev/null 2>&1 || true
 	fi

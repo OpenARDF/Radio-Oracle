@@ -37,3 +37,8 @@
 -dontwarn org.w3c.dom.ls.LSSerializerFilter
 -dontwarn org.w3c.dom.ranges.**
 -dontwarn org.w3c.dom.traversal.**
+
+# Xerces also ships two legacy property-style descriptors in META-INF/services.
+# Their filenames are not Java interfaces, but R8 otherwise reports them as missing classes.
+-dontwarn org.w3c.dom.DOMImplementationSourceList
+-dontwarn org.xml.sax.driver

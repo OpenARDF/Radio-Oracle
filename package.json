@@ -1,6 +1,6 @@
 {
   "name": "@openardf/radio-oracle",
-  "version": "1.0.49",
+  "version": "1.0.50",
   "description": "Desktop race administration shell for Radio-Oracle.",
   "author": "OpenARDF",
   "homepage": "https://github.com/OpenARDF/Radio-Oracle",
@@ -45,8 +45,11 @@
   "dependencies": {
     "node-fetch": "^2.7.0",
     "shelljs": "^0.10.0",
-    "tar": "^7.5.16",
+    "tar": "^7.5.22",
     "yauzl": "^3.3.2"
+  },
+  "overrides": {
+    "brace-expansion": "1.1.21"
   },
   "bundledDependencies": [
     "node-fetch",

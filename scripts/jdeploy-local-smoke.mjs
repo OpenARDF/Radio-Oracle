@@ -54,7 +54,10 @@ function isRadioOracleRunning() {
 
 function cleanup() {
   if (platform() === "darwin") {
-    spawnSync("osascript", ["-e", 'tell application "Radio-Oracle" to quit'], { stdio: "ignore" });
+    // Target only this smoke's unique project argument; another Radio-Oracle instance may contain
+    // unsaved user work and must not be closed by release verification.
+    spawnSync("pkill", ["-f", `Radio-Oracle.app/Contents/MacOS/Client4JLauncher ${sampleProject}`], { stdio: "ignore" });
+    spawnSync("pkill", ["-f", `Radio-Oracle-jdeploy.jar ${sampleProject}`], { stdio: "ignore" });
   } else if (platform() === "win32") {
     spawnSync("taskkill.exe", ["/IM", "Radio-Oracle.exe", "/F"], { stdio: "ignore" });
   }

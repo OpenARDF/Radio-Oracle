@@ -8,6 +8,7 @@ import org.openardf.radiooracle.shared.publicresults.ProtectedCourseCipher
 import kotlin.test.*
 
 class AppliedCourseBindingsTest {
+    private val jsonWithDefaults = Json { encodeDefaults = true }
     private val controls = (1..2).map { EventControl("race-$it", "race", "Fox$it", 130 + it, ControlPointType.CONTROL) }
     private fun info() = ProtectedCourseInfo(sourceName = "input.kml", idealOrder = "Fox2 Fox1", controlPoints = listOf(
         ProtectedCourseControlPoint("old-fox1", "Fox2", 40.0, -75.0),
@@ -58,7 +59,7 @@ class AppliedCourseBindingsTest {
         val staleMembership = EventProjectEditor.replaceCategoryAssignedControls(project, "m21", listOf("race-1")) { "cp-$it" }
         for (stale in listOf(staleCatalog, staleMembership)) {
             assertFailsWith<IllegalArgumentException> { EventProjectFileJson.encode(stale) }
-            assertFailsWith<IllegalArgumentException> { EventProjectFileJson.decode(Json { encodeDefaults = true }.encodeToString(stale)) }
+            assertFailsWith<IllegalArgumentException> { EventProjectFileJson.decode(jsonWithDefaults.encodeToString(stale)) }
         }
         val encrypted = EventProjectEditor.updateCategoryEncryptedCourseInfo(project, "m21",
             ProtectedCourseCipher.encryptCourseInfo(applied(), "fixture-password"))

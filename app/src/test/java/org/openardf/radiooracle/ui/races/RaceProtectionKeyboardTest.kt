@@ -35,7 +35,7 @@ class RaceProtectionKeyboardTest {
             assertTrue(password.hasFocus())
             assertTrue(password.transformationMethod is PasswordTransformationMethod)
             assertFalse(password.isSaveEnabled)
-            assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+            assertEquals(LEGACY_SOFT_INPUT_ADJUST_RESIZE,
                 dialog.window!!.attributes.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST)
         } finally {
             dialog.dismiss()
