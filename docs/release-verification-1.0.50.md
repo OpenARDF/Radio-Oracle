@@ -27,10 +27,18 @@ The preserved unfiltered test XML is under `desktopApp/build/reports/release-1.0
 
 The upload certificate is intentionally self-signed. Java's ordinary JAR-signature verification passes; its strict public-chain check is not applicable to this private Android upload key.
 
+### Post-release native compatibility follow-up
+
+On 2026-09-29, `just android-native-compat-check` inspected the unchanged signed
+1.0.50 AAB. Its bundle configuration requests 16 KB native-library packaging
+alignment, and every packaged arm64-v8a and x86_64 ELF load segment is aligned
+to at least 16 KB. This follow-up verified the published candidate without
+rebuilding or modifying it; it was not part of the original candidate gates.
+
 ## Documented toolchain notices
 
-- Android Gradle Plugin 8.13.2 reports that its published compatibility testing ends at SDK 36.1 while Radio-Oracle intentionally compiles against SDK 37. No suppression was added; debug/release compilation, lint, signing, and unit suites passed.
-- Android packaging cannot strip symbols from prebuilt Firebase Crashlytics and AndroidX DataStore native libraries. They are packaged unchanged, as reported by AGP.
+- Android Gradle Plugin 8.13.2 reports that its published compatibility testing ends at SDK 36.1 while Radio-Oracle intentionally compiles against SDK 37; the newer SDK command-line tools also emit an SDK XML-version compatibility notice. No suppression was added because neither notice represents verified SDK 37 support; debug/release compilation, lint, signing, and unit suites passed.
+- Post-release diagnostic clarification: AGP packaged the prebuilt Firebase Crashlytics and AndroidX DataStore native libraries unchanged because this release Mac did not have the requested NDK `27.0.12077973` strip tool. The warning did not identify incompatible or intrinsically unstrippable binaries; most were already stripped, and only the small Crashlytics trampoline binaries retained debug information.
 - The current jDeploy toolchain still installs its own deprecated `shelljs` 0.8, `glob` 7, and `inflight` development dependencies. Radio-Oracle overrides vulnerable `brace-expansion` with 1.1.21, updates bundled `tar` to 7.5.22, keeps a valid npm dependency tree, and has zero reported npm vulnerabilities.
 - JVM test workers report that class-data sharing is unavailable when their bootstrap classpath is modified. This is a test-VM runtime notice, not a source warning or test failure.
 - GitHub reports that `actions/setup-node@v4`, `actions/upload-artifact@v4`, `android-actions/setup-android@v3`, and `xresloader/upload-to-github-release@v1.6.0` still target Node 20 and are being forced onto Node 24. It also announced a future `ubuntu-latest` image migration. These hosted-action notices did not fail the release workflows and are retained for future CI maintenance rather than changing the immutable release candidate.

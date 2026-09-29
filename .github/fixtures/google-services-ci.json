@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "100000000000",
+    "project_id": "radio-oracle-ci",
+    "storage_bucket": "radio-oracle-ci.invalid"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:100000000000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "org.openardf.radiooracle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "CI_FAKE_KEY_NOT_VALID_FOR_ANY_FIREBASE_PROJECT"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

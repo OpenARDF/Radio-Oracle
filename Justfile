@@ -41,6 +41,11 @@ android-test filter="":
 
 android-check: android-compile android-test
 
+# Verify the AAB's 16 KB packaging request and every packaged 64-bit ELF load alignment.
+android-native-compat-check bundle="app/build/outputs/bundle/release/app-release.aab":
+    node --test scripts/check-android-native-compatibility.test.mjs
+    node scripts/check-android-native-compatibility.mjs {{quote(bundle)}}
+
 android-si-status serial="":
     @ADB="${ANDROID_ADB:-adb}"; \
     if [ -n {{quote(serial)}} ]; then \

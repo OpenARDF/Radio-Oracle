@@ -1,7 +1,7 @@
 # Radio-Oracle Multiplatform Roadmap
 
-Status reviewed: 2026-09-17 against the current source, regression coverage, and
-release history through 1.0.48. This review does not replace hardware acceptance.
+Status reviewed: 2026-09-29 against the current source, regression coverage, and
+release history through 1.0.50. This review does not replace hardware acceptance.
 
 Radio-Oracle is no longer an Android-only app with a hypothetical desktop beta.
 It is a shared Kotlin project with Android race-day workflows, a desktop Race
@@ -76,9 +76,20 @@ Use focused recipes when the change affects those surfaces:
 ```shell
 just android-test
 just android-compile
+just android-native-compat-check
 just jdeploy-preflight
 just jdeploy-smoke
 ```
+
+Run `android-native-compat-check` against the signed, Firebase-enabled AAB before
+an Android release and whenever AGP, the target SDK, Firebase, AndroidX DataStore,
+or another packaged native dependency changes. The automated monthly workflow
+also builds with nonfunctional CI Firebase metadata, checks the AAB's 16 KB
+packaging request and 64-bit ELF alignment, and launches the app on a 16 KB
+Android emulator. Its latest passing run must postdate relevant Android
+toolchain or native-dependency changes before release. Follow Android's
+[16 KB page-size compatibility guidance](https://developer.android.com/guide/practices/page-sizes)
+when updating this gate.
 
 The lower-level Gradle tasks still matter when diagnosing failures or validating
 a specific layer:
@@ -206,6 +217,22 @@ These are deliberate limits in the current app, not necessarily defects.
   terrain-cost or barrier-aware model.
 
 ## Near-Term Roadmap
+
+### Android Native Dependency Maintenance
+
+- In the next maintenance commit, replace `firebase-crashlytics-ndk` with
+  ordinary `firebase-crashlytics`. Radio-Oracle has no Android JNI/C++ code of
+  its own, so retain Java/Kotlin crash, non-fatal, and ANR reporting without
+  carrying the native Crashlytics reporter solely for third-party binaries.
+  Confirm the resulting runtime dependency graph and packaged `.so` inventory,
+  then run Android regression, release-bundle, and 16 KB compatibility gates.
+- Keep the monthly 16 KB emulator smoke workflow and run it on relevant Android
+  build or dependency changes. Before a full Android release, require a passing
+  run newer than those changes; during each major Android preview cycle, update
+  or add a preview-system-image run once a suitable 16 KB image is available.
+- Treat the static bundle/ELF check as a release gate, not as a substitute for
+  launching the app on a 16 KB device or emulator. Record any skipped device or
+  preview validation explicitly in the release verification document.
 
 ### Cloudflare Settings Transfer
 
