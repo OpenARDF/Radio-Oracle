@@ -46,7 +46,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.findNavController
+import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
 import androidx.preference.PreferenceManager
 import com.google.android.material.navigation.NavigationBarView
@@ -200,7 +200,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val navController = findNavController(R.id.nav_host_fragment_activity_main)
+        // FragmentContainerView does not guarantee that Activity.findNavController can resolve
+        // the host during onCreate; obtain the controller from the inflated host fragment.
+        val navHostFragment = supportFragmentManager.findFragmentById(
+            R.id.nav_host_fragment_activity_main
+        ) as NavHostFragment
+        val navController = navHostFragment.navController
         navView.setupWithNavController(navController)
 
         navController.addOnDestinationChangedListener { _, destination, _ ->
