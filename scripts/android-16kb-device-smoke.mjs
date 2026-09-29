@@ -27,6 +27,31 @@ function adb(args, options = {}) {
   return typeof output === "string" ? output.trim() : "";
 }
 
+function adbResult(args) {
+  try {
+    return { ok: true, output: adb(args) };
+  } catch (error) {
+    const stdout = typeof error.stdout === "string" ? error.stdout.trim() : "";
+    const stderr = typeof error.stderr === "string" ? error.stderr.trim() : "";
+    return { ok: false, output: [stdout, stderr].filter(Boolean).join("\n") };
+  }
+}
+
+function failureDiagnostics() {
+  // Preserve both Java crashes and low-level process-exit reasons; either can end a native-heavy app before pidof observes it.
+  const crashLog = adbResult(["logcat", "-b", "crash", "-d"]);
+  const exitInfo = adbResult(["shell", "dumpsys", "activity", "exit-info", packageName]);
+  const systemLog = adbResult(["logcat", "-d", "-v", "brief", "AndroidRuntime:E", "ActivityManager:I", "*:S"]);
+  return [
+    "Crash buffer:",
+    crashLog.output || "(empty)",
+    "Recent process exit information:",
+    exitInfo.output || "(unavailable)",
+    "Relevant system log:",
+    systemLog.output || "(empty)",
+  ].join("\n");
+}
+
 function sleep(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
@@ -43,8 +68,10 @@ const launch = adb(["shell", "am", "start", "-W", "-n", activityName]);
 if (!/^Status: ok$/m.test(launch)) fail(`Activity launch did not report success:\n${launch}`);
 
 await sleep(5000);
-const processId = adb(["shell", "pidof", packageName]);
-if (!/^\d+(?:\s+\d+)*$/.test(processId)) fail("Radio-Oracle process is not running after launch");
+const processResult = adbResult(["shell", "pidof", packageName]);
+if (!processResult.ok || !/^\d+(?:\s+\d+)*$/.test(processResult.output)) {
+  fail(`Radio-Oracle process is not running after launch.\n${failureDiagnostics()}`);
+}
 
 const crashLog = adb(["logcat", "-b", "crash", "-d"]);
 if (crashLog.includes(`Process: ${packageName}`) || crashLog.includes(packageName)) {
