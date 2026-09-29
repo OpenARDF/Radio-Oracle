@@ -83,7 +83,11 @@ class IofXmlExportsTest {
 
         assertEquals("IOF & Start Race", imported.parsedData.eventName)
         assertEquals(listOf("M21", "W21"), imported.parsedData.categories.map { it.category.name })
-        assertEquals(listOf(31, 32), imported.parsedData.categories.first().controlPoints.map { it.siCode })
+        val controlsById = imported.parsedData.controls.associateBy { it.id }
+        assertEquals(
+            listOf(31, 32),
+            imported.parsedData.categories.first().controlPoints.map { controlsById.getValue(it.controlId).siCode }
+        )
         assertTrue(imported.unsupportedItems.any { it.reason.contains("coordinates are missing") })
         assertTrue(imported.unsupportedItems.none { it.reason.contains("Start controls") || it.reason.contains("Finish controls") })
     }

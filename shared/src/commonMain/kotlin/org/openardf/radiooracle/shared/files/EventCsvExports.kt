@@ -32,6 +32,7 @@ import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlDetails
 import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardDisplayMode
@@ -47,6 +48,8 @@ object EventCsvExports {
     fun categories(raceData: EventRaceData, includeEncryptedIdealOrder: Boolean = false): String =
         categories(raceData.categories, raceData.controls, includeEncryptedIdealOrder)
 
+    // Android's legacy Room-only export has no race catalog; keep that fallback isolated here.
+    @Suppress("DEPRECATION")
     fun categories(categories: List<EventCategoryData>, controls: List<EventControl> = emptyList(),
         includeEncryptedIdealOrder: Boolean = false): String =
         EventCsvFormat.Category.header(includeEncryptedIdealOrder) + "\n" + categories
@@ -59,11 +62,11 @@ object EventCsvExports {
                             ControlPointDefinition(control.siCode, control.type, 0)
                         }
                     }
+                } else if (controls.isNotEmpty()) {
+                    EventControlCatalog.assignedControlDefinitions(categoryData, controls)
                 } else {
                     categoryData.controlPoints
-                    .map {
-                        ControlPointDefinition(it.siCode, it.type, it.order)
-                    }
+                        .map { ControlPointDefinition(it.siCode, it.type, it.order) }
                 }
                 val controlPoints = exportControlPoints
                     .sortedBy { it.siCode }

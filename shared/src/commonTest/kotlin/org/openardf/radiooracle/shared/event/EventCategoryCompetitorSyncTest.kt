@@ -50,6 +50,17 @@ class EventCategoryCompetitorSyncTest {
     }
 
     @Test
+    fun courseDataDetectionPreservesModernAndLegacyStorage() {
+        val empty = categoryData(category("empty", "Empty"))
+        val legacy = categoryData(category("legacy", "Legacy").copy(controlPointsString = "31"))
+        val plaintext = categoryData(category("plaintext", "Plaintext").copy(courseInfo = ProtectedCourseInfo()))
+
+        assertFalse(empty.hasCourseData())
+        assertTrue(legacy.hasCourseData())
+        assertTrue(plaintext.hasCourseData())
+    }
+
+    @Test
     fun addsNeededCategoriesAndRemovesSelectedEmptyCategories() {
         val m21 = category("m21", "M21")
         val w21 = category("w21", "W21")

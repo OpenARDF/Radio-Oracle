@@ -83,14 +83,13 @@ data class EventCategoryDetails(
         ): String {
             val aliasesByCode = raceData.aliases.associateBy { it.siCode }
             val controlsById = raceData.controls.associateBy { it.id }
-            val controlsByLegacyDefinition = raceData.controls
-                .groupBy { it.siCode to it.type }
-                .mapValues { (_, controls) -> controls.singleOrNull() }
             val publicControlPoints = if (controlPoints.isNotEmpty()) {
                 controlPoints
             } else if (publicControlIds.isNotEmpty()) {
-                publicControlIds.mapIndexedNotNull { index, controlId ->
-                    val control = controlsById[controlId] ?: return@mapIndexedNotNull null
+                publicControlIds.mapIndexed { index, controlId ->
+                    val control = requireNotNull(controlsById[controlId]) {
+                        "${category.name} references an unknown assigned control ID."
+                    }
                     EventControlPoint(
                         id = "public-$controlId",
                         categoryId = category.id,
@@ -108,22 +107,25 @@ data class EventCategoryDetails(
             } else {
                 EventAssignedControlOrder.sort(publicControlPoints, controlsById, raceType)
             }
+            val sortedControls = sortedControlPoints.map { controlPoint ->
+                requireNotNull(controlsById[controlPoint.controlId]) {
+                    "${category.name} references an unknown control ID."
+                }
+            }
             if (!useAliases || raceType == RaceType.ORIENTEERING) {
                 return ControlPointRules.formatControlPoints(
-                    sortedControlPoints.map {
-                        ControlPointDefinition(it.siCode, it.type, it.order)
+                    sortedControlPoints.zip(sortedControls).map { (controlPoint, control) ->
+                        ControlPointDefinition(control.siCode, control.type, controlPoint.order)
                     }
                 )
             }
             return ControlPointRules.formatEditableDisplayTokens(
-                sortedControlPoints.map { controlPoint ->
-                    val control = controlsById[controlPoint.controlId]
-                        ?: controlsByLegacyDefinition[controlPoint.siCode to controlPoint.type]
+                sortedControls.map { control ->
                     ControlPointDisplayToken(
-                        siCode = controlPoint.siCode,
-                        aliasName = control?.publicLabel
-                            ?: aliasesByCode[controlPoint.siCode]?.name
-                            ?: control?.label
+                        siCode = control.siCode,
+                        aliasName = control.publicLabel
+                            ?: aliasesByCode[control.siCode]?.name
+                            ?: control.label
                     )
                 },
                 useAlias = useAliases

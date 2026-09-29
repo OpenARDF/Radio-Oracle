@@ -24,10 +24,37 @@
 
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.course.ControlPointDefinition
 import org.openardf.radiooracle.shared.domain.ControlPointType
 
 /** Builds and backfills the race-level logical control catalog. */
 object EventControlCatalog {
+    /** Resolves category assignments through the canonical race-level control catalog. */
+    fun assignedControls(
+        categoryData: EventCategoryData,
+        controls: List<EventControl>
+    ): List<EventControl> {
+        val controlsById = controls.associateBy { it.id }
+        return categoryData.controlPoints.sortedBy { it.order }.map { controlPoint ->
+            requireNotNull(controlsById[controlPoint.controlId]) {
+                "${categoryData.category.name} references an unknown control ID."
+            }
+        }
+    }
+
+    /** Resolves persisted course assignments through the race-level catalog, which owns station code and role. */
+    fun assignedControlDefinitions(
+        categoryData: EventCategoryData,
+        controls: List<EventControl>
+    ): List<ControlPointDefinition> {
+        val orderedAssignments = categoryData.controlPoints.sortedBy { it.order }
+        val assignedControlsById = assignedControls(categoryData, controls).associateBy { it.id }
+        return orderedAssignments.map { controlPoint ->
+            val control = assignedControlsById.getValue(controlPoint.controlId)
+            ControlPointDefinition(control.siCode, control.type, controlPoint.order)
+        }
+    }
+
     /** Race files reference controls explicitly; never guess identity from an alias or an SI number. */
     fun requireCanonical(project: EventProjectFile) {
         fun validate(controls: List<EventControl>, categories: List<EventCategoryData>, aliases: List<EventAlias>, draft: Boolean) {
@@ -118,9 +145,10 @@ object EventControlCatalog {
             )
 
     /** Derives a catalog from existing category courses and aliases without changing course behavior. */
+    @Suppress("DEPRECATION")
     fun deriveFromRaceData(raceData: EventRaceData): List<EventControl> {
         val aliasesByCode = raceData.aliases.associateBy { it.siCode }
-        val derivedControls = raceData.categories
+        val derivedControls = (raceData.categories + raceData.courseMappings)
             .flatMap { it.controlPoints }
             .map { controlPoint ->
                 val label = aliasesByCode[controlPoint.siCode]?.name ?: defaultLabel(controlPoint)
@@ -140,12 +168,13 @@ object EventControlCatalog {
     }
 
     /** Returns a copy with controls and course control references populated for schema migration. */
+    @Suppress("DEPRECATION")
     fun backfillControls(projectFile: EventProjectFile): EventProjectFile {
         val raceData = projectFile.raceData
         val controls = deriveFromRaceData(raceData)
         val controlsByLegacyKey = controls.associateBy { LegacyControlKey(it.siCode, it.type, it.label) }
         val aliasesByCode = raceData.aliases.associateBy { it.siCode }
-        val categories = raceData.categories.map { categoryData ->
+        fun backfillCategory(categoryData: EventCategoryData): EventCategoryData {
             val controlPoints = categoryData.controlPoints.map { controlPoint ->
                 if (controlPoint.controlId.isNotBlank()) {
                     controlPoint
@@ -163,11 +192,12 @@ object EventControlCatalog {
                     categoryData.category.effectiveRaceType(raceData.race)
                 ).map { it.controlId }
             }
-            categoryData.copy(controlPoints = controlPoints, publicControlIds = publicControlIds)
+            return categoryData.copy(controlPoints = controlPoints, publicControlIds = publicControlIds)
         }
         return projectFile.copy(
             raceData = raceData.copy(
-                categories = categories,
+                categories = raceData.categories.map(::backfillCategory),
+                courseMappings = raceData.courseMappings.map(::backfillCategory),
                 controls = controls
             )
         )
@@ -182,6 +212,7 @@ object EventControlCatalog {
      * ordinary controls are foxes, while Beacon and assigned Spectator controls
      * are zero-point controls.
      */
+    @Suppress("DEPRECATION")
     fun migrateLegacyControlScoring(projectFile: EventProjectFile): EventProjectFile =
         projectFile.copy(
             raceData = projectFile.raceData.copy(
@@ -233,9 +264,11 @@ object EventControlCatalog {
     private val EventControl.publicName: String
         get() = publicLabel?.takeIf { it.isNotBlank() } ?: label
 
+    @Suppress("DEPRECATION")
     private fun defaultLabel(controlPoint: EventControlPoint): String =
         defaultLabel(controlPoint.siCode, controlPoint.type)
 
+    @Suppress("DEPRECATION")
     private fun orderedAssignedControlPoints(
         controlPoints: List<EventControlPoint>,
         raceType: org.openardf.radiooracle.shared.domain.RaceType

@@ -30,13 +30,14 @@ class DesktopIofReimportAcceptanceTest {
         val acceptedSnapshot = EventProjectFileJson.encode(accepted)
         val output = Path.of("build/reports/iof-reimport-acceptance")
         Files.createDirectories(output)
+        val previewControlsById = preview.controls.associateBy { it.id }
         (accepted.raceData.categories + accepted.raceData.courseMappings).filter { it.category.id in ids }.forEachIndexed { index, data ->
             val expected = preview.categories.single { it.category.name == data.category.name }.category.courseInfo!!
             val info = data.category.courseInfo!!
             val importedData = preview.categories.single { it.category.name == data.category.name }
             val expectedByStation = importedData.controlPoints.associate { cp ->
                 val point = expected.courseObjects.single { it.id == cp.controlId }
-                cp.siCode to (point.latitude to point.longitude)
+                previewControlsById.getValue(cp.controlId).siCode to (point.latitude to point.longitude)
             }
             val actualByStation = info.controlPoints.associate { point ->
                 accepted.raceData.controls.single { it.id == point.controlId }.siCode to (point.latitude to point.longitude)

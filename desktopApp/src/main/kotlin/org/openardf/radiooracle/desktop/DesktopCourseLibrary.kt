@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.desktop
 
 import java.util.UUID
+import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.event.*
 
 internal sealed interface DesktopCourseLibraryEdit {
@@ -52,11 +53,14 @@ internal object DesktopCourseLibrary {
             targets += id
         }
         require(targets.isNotEmpty()) { "Select a category or enter a new category name." }
+        val sourceControlPointsText = ControlPointRules.formatControlPoints(
+            EventControlCatalog.assignedControlDefinitions(source, project.raceData.controls)
+        )
         val categories = candidate.raceData.categories.map { target ->
             if (target.category.id !in targets) target else target.copy(
                 category = target.category.copy(
                     lengthMeters = source.category.lengthMeters, climbMeters = source.category.climbMeters,
-                    controlPointsString = source.category.controlPointsString,
+                    controlPointsString = sourceControlPointsText,
                     courseInfo = source.category.courseInfo, encryptedCourseInfo = source.category.encryptedCourseInfo,
                     idealOrder = source.category.idealOrder, encryptedIdealOrder = source.category.encryptedIdealOrder),
                 controlPoints = source.controlPoints.mapIndexed { index, point -> point.copy(

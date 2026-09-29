@@ -13,9 +13,9 @@ class DesktopIofCourseAnalysisTest {
             .replace("<CourseControl><Control>32</Control>", "<CourseControl><Control>900</Control></CourseControl><CourseControl><Control>32</Control>")
             .replace("<LegLength>1500</LegLength>", "")
         val parsed = IofXmlImports.validatedCourseData(input, IofXmlSchemaResource.loadBundledSchema(), original.raceData.race).parsedData
-        assertTrue(parsed.categories.all { it.controlPoints.any { cp -> cp.siCode == 900 } })
+        assertTrue(900 in parsed.controlSiCodes())
         val bends = parsed.withCondesRouteBends()
-        assertTrue(bends.categories.all { it.controlPoints.none { cp -> cp.siCode == 900 } })
+        assertFalse(900 in bends.controlSiCodes())
         val imported = EventProjectEditor.importIofCourseData(original, bends).projectFile
         val prepared = DesktopIofCourseAnalysis.prepare(imported, imported.raceData.categories.map { it.category.id }.toSet(), null, elevationLookup = { 100.0 }).project
         assertFalse(prepared.raceData.controls.any { it.siCode == 900 })
@@ -61,9 +61,11 @@ class DesktopIofCourseAnalysisTest {
         assertEquals(before, EventProjectFileJson.encode(source))
         val result = EventProjectFileJson.decode(EventProjectFileJson.encode(transaction.applyTo(source) { prepared }))
         assertEquals(source.raceData.controls, result.raceData.controls)
+        val resultControlsById = result.raceData.controls.associateBy { it.id }
         result.raceData.categories.forEach { data ->
             val info = data.category.courseInfo!!
-            assertEquals(ControlPointType.BEACON, data.controlPoints.single { it.siCode == 79 }.type)
+            val assignedBeacon = data.controlPoints.single { resultControlsById[it.controlId]?.siCode == 79 }
+            assertEquals(ControlPointType.BEACON, resultControlsById.getValue(assignedBeacon.controlId).type)
             assertEquals(ControlPointType.BEACON, info.controlPoints.single { it.controlId == beacon.id }.type)
             assertEquals(ProtectedCourseObjectType.BEACON, info.courseObjects.single { it.id == beacon.id }.type)
             assertEquals(parsed.categories.first().category.courseInfo!!.courseObjects.associate { it.id to (it.latitude to it.longitude) },
@@ -96,9 +98,11 @@ class DesktopIofCourseAnalysisTest {
         updated = EventProjectEditor.updateControl(updated, beacon.id, "", "79", ControlPointType.BEACON, false, "", "")
         updated = EventProjectEditor.updateControl(updated, beacon.id, "", "79", ControlPointType.BEACON, false, "Beacon", "")
         updated = EventProjectFileJson.decode(EventProjectFileJson.encode(updated))
+        val updatedControlsById = updated.raceData.controls.associateBy { it.id }
         (updated.raceData.categories + updated.raceData.courseMappings).forEach { data ->
             val info = data.category.courseInfo!!
-            assertEquals(ControlPointType.BEACON, data.controlPoints.single { it.controlId == beacon.id }.type)
+            val assignedBeacon = data.controlPoints.single { it.controlId == beacon.id }
+            assertEquals(ControlPointType.BEACON, updatedControlsById.getValue(assignedBeacon.controlId).type)
             assertEquals(ProtectedCourseObjectType.BEACON, info.courseObjects.single { it.id == beacon.id }.type)
             assertNull(CourseDesignBindings.validationError(info))
             assertEquals(0, data.category.lengthMeters)

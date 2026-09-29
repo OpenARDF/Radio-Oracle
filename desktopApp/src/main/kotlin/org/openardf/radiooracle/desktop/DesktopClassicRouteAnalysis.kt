@@ -118,10 +118,7 @@ internal object DesktopClassicRouteAnalysis {
     /** Presentation only: use the same assigned identities and ignored punches as the saved calculation. */
     private fun missingAssignedPunches(project: EventProjectFile, data: EventCompetitorData, snapshot: ClassicRouteSnapshot): Boolean {
         val category = project.raceData.categories.firstOrNull { it.category.id == snapshot.categoryId } ?: return false
-        val assignedIds = category.controlPoints.mapNotNull { point ->
-            (project.raceData.controls.firstOrNull { it.id == point.controlId }
-                ?: project.raceData.controls.filter { it.siCode == point.siCode && it.type == point.type }.singleOrNull())?.id
-        }
+        val assignedIds = EventControlCatalog.assignedControls(category, project.raceData.controls).map { it.id }
         val visitedIds = controlPunches(data).filterIndexed { index, _ -> index !in snapshot.ignoredControlPunchIndexes }
             .mapNotNull { punch -> project.raceData.controls.filter { it.siCode == punch.siCode }.singleOrNull()?.id }.toSet()
         return assignedIds.any { it !in visitedIds }
@@ -262,11 +259,7 @@ internal object DesktopClassicRouteAnalysis {
         }
         val start = endpoint(ProtectedCourseObjectType.START)
         val finish = endpoint(ProtectedCourseObjectType.FINISH)
-        val assigned = category.controlPoints.map { point ->
-            project.raceData.controls.firstOrNull { it.id == point.controlId }
-                ?: project.raceData.controls.filter { it.siCode == point.siCode && it.type == point.type }.singleOrNull()
-                ?: throw IllegalArgumentException("Assigned control is unresolved.")
-        }.distinctBy { it.id }
+        val assigned = EventControlCatalog.assignedControls(category, project.raceData.controls).distinctBy { it.id }
         val beacons = assigned.filter { it.type == ControlPointType.BEACON }
         require(beacons.size == 1) { "A unique assigned terminal Beacon is required." }
         val permuted = assigned.filter { it.type != ControlPointType.BEACON }

@@ -69,10 +69,27 @@ data class IofCourseDataPreview(
     /** Ordinary, unnamed numeric controls carry no explicit ARDF role in IOF XML. */
     val unspecifiedRoleSiCodes: Set<Int> = emptySet(),
     /** Public names explicitly confirmed in the control-mapping review. */
-    val reviewedControlNames: Map<Int, String> = emptyMap()
-)
+    val reviewedControlNames: Map<Int, String> = emptyMap(),
+    /** Transient catalog for resolving preview control IDs before the import is installed in a Race File. */
+    val controls: List<EventControl> = emptyList()
+) {
+    fun controlSiCodes(): Set<Int> {
+        val controlsById = controls.associateBy { it.id }
+        return categories.flatMap { it.controlPoints }
+            .mapTo(mutableSetOf()) { controlPoint ->
+                requireNotNull(controlsById[controlPoint.controlId]) {
+                    "IOF CourseData preview references an unknown control ID."
+                }.siCode
+            }
+    }
+}
 
 typealias IofCourseDataImportResult = IofXmlImportResult<IofCourseDataPreview>
+
+private data class ParsedIofCourse(
+    val categoryData: EventCategoryData,
+    val controls: List<EventControl>
+)
 
 /** IOF person identity fields common to start and result import previews. */
 data class IofPersonPreview(
@@ -278,7 +295,7 @@ object IofXmlImports {
 
         val definitions = raceCourseData.children("Control").associateBy { it.childText("Id").orEmpty() }
         val courseNodes = raceCourseData.children("Course")
-        val courses = courseNodes.mapIndexed { index, course ->
+        val parsedCourses = courseNodes.mapIndexed { index, course ->
             course.toCategoryData(
                 race = race,
                 index = index,
@@ -288,6 +305,7 @@ object IofXmlImports {
                 mappings = mappings
             )
         }
+        val courses = parsedCourses.map { it.categoryData }
         val (categories, assignedCategoryIds) = assignedCourses(raceCourseData, courseNodes, courses, idFactory, warnings)
 
         return IofXmlImportResult(
@@ -296,6 +314,7 @@ object IofXmlImports {
                 startDate = startTime?.childText("Date"),
                 startTime = startTime?.childText("Time"),
                 categories = categories,
+                controls = parsedCourses.flatMap { it.controls }.distinctBy { it.id },
                 assignedCategoryIds = assignedCategoryIds,
                 unspecifiedRoleSiCodes = definitions.values.filter {
                     (it.attribute("type") ?: "Control") == "Control" &&
@@ -542,12 +561,13 @@ object IofXmlImports {
         race: EventRace, index: Int, idFactory: (String) -> String,
         warnings: MutableList<IofXmlUnsupportedItem>, definitions: Map<String, XmlNode>,
         mappings: Map<String, IofCourseControlMapping>? = null
-    ): EventCategoryData {
+    ): ParsedIofCourse {
         val courseName = childText("Name")?.takeIf { it.isNotBlank() }
             ?: throw IofXmlImportException("CourseData course name missing at /CourseData/RaceCourseData/Course[${index + 1}].")
         warnUnsupportedCoursePresentationData(index, warnings)
         val categoryId = idFactory("iof-course-category-$index-$courseName")
-        val controls = mutableListOf<EventControlPoint>()
+        val controlPoints = mutableListOf<EventControlPoint>()
+        val controls = mutableListOf<EventControl>()
         val objects = mutableListOf<ProtectedCourseObjectPoint>()
         val legs = mutableListOf<ProtectedCourseLegLength>()
         var previousId: String? = null
@@ -579,9 +599,12 @@ object IofXmlImports {
             val control = if (type == "Control") EventControlCatalog.controlForDefinition(race.id,
                 ControlPointDefinition(requireNotNull(siCode), role, visit + 1)) else null
             val id = control?.id ?: idFactory("iof-placement-$type-$code")
-            if (control != null) controls += EventControlPoint(
-                id = idFactory("iof-course-control-$categoryId-$visit"), categoryId = categoryId,
-                siCode = control.siCode, type = role, order = controls.size + 1, controlId = id)
+            if (control != null) {
+                controls += control
+                controlPoints += EventControlPoint(
+                    id = idFactory("iof-course-control-$categoryId-$visit"), categoryId = categoryId,
+                    siCode = control.siCode, type = role, order = controlPoints.size + 1, controlId = id)
+            }
             node.childText("LegLength")?.let { text ->
                 val length = text.toDoubleOrNull()
                 require(length != null && length.isFinite() && length >= 0) { "Invalid leg length for $code in $courseName." }
@@ -608,11 +631,14 @@ object IofXmlImports {
                 ProtectedCourseControlPoint(it.id, it.label, it.latitude, it.longitude,
                     requireNotNull(it.type.controlRole()), it.elevationMeters)
             }, suppliedLegLengths = legs)
-        return EventCategoryData(category = EventCategory(id = categoryId, raceId = race.id, name = courseName,
-            isMan = StandardCategoryRules.inferIsManFromName(courseName) ?: true, maxAge = null,
-            lengthMeters = info.lengthMeters ?: 0, climbMeters = info.climbMeters ?: 0, order = index,
-            differentProperties = false, raceType = null, raceBand = null, timeLimitSeconds = null,
-            controlPointsString = "", courseInfo = info), controlPoints = controls, competitors = emptyList())
+        return ParsedIofCourse(
+            categoryData = EventCategoryData(category = EventCategory(id = categoryId, raceId = race.id, name = courseName,
+                isMan = StandardCategoryRules.inferIsManFromName(courseName) ?: true, maxAge = null,
+                lengthMeters = info.lengthMeters ?: 0, climbMeters = info.climbMeters ?: 0, order = index,
+                differentProperties = false, raceType = null, raceBand = null, timeLimitSeconds = null,
+                controlPointsString = "", courseInfo = info), controlPoints = controlPoints, competitors = emptyList()),
+            controls = controls.distinctBy { it.id }
+        )
     }
 
     private fun XmlNode.toCompetitorImportRow(

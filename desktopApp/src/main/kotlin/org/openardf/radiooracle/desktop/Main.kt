@@ -231,6 +231,7 @@ import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.defaultScored
 import org.openardf.radiooracle.shared.event.defaultTimeLimitMinutes
 import org.openardf.radiooracle.shared.event.effectiveStartDrawSettings
+import org.openardf.radiooracle.shared.event.hasCourseData
 import org.openardf.radiooracle.shared.event.readoutIssueExplanation
 import org.openardf.radiooracle.shared.event.resultPublicationNotice
 import org.openardf.radiooracle.shared.event.toDisplayLabel
@@ -3104,17 +3105,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 projectStatusText = "Edit failed: $reason"
                 return false
             }
-            val affectedCategoryCount = currentProject.raceData.categories.count { categoryData ->
-                categoryData.controlPoints.isNotEmpty() ||
-                    categoryData.publicControlIds.isNotEmpty() ||
-                    categoryData.category.controlPointsString.isNotBlank() ||
-                    categoryData.category.lengthMeters != 0 ||
-                    categoryData.category.climbMeters != 0 ||
-                    categoryData.category.encryptedIdealOrder?.isNotBlank() == true ||
-                    categoryData.category.encryptedCourseInfo?.isNotBlank() == true ||
-                    categoryData.category.idealOrder?.isNotBlank() == true ||
-                    categoryData.category.courseInfo != null
-            }
+            val affectedCategoryCount = currentProject.raceData.categories.count { it.hasCourseData() }
             if (currentProject.raceData.controls.isEmpty() && affectedCategoryCount == 0) {
                 projectStatusText = "No controls to delete."
                 return false
@@ -5115,9 +5106,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 val outcome = EventProjectEditor.importIofCourseData(currentProject, courseDataToImport)
                 val importedProject = DesktopIofControlMappingReview.refreshSharedNames(currentProject, outcome.projectFile,
                     courseDataToImport.reviewedControlNames, currentProject.courseDataPassword(protectedCoursePassword))
-                val importedSiCodes = courseDataToImport.categories
-                    .flatMap { categoryData -> categoryData.controlPoints.map { it.siCode } }
-                    .toSet()
+                val importedSiCodes = courseDataToImport.controlSiCodes()
                 val importedControlIds = importedProject.raceData.controls
                     .filter { it.siCode in importedSiCodes }
                     .mapTo(mutableSetOf()) { it.id }
@@ -7244,17 +7233,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             val currentProject = projectSession.currentProject
             DeleteAllControlsDialog(
                 controlCount = currentProject?.raceData?.controls?.size ?: 0,
-                affectedCategoryCount = currentProject?.raceData?.categories?.count { categoryData ->
-                    categoryData.controlPoints.isNotEmpty() ||
-                        categoryData.publicControlIds.isNotEmpty() ||
-                        categoryData.category.controlPointsString.isNotBlank() ||
-                        categoryData.category.lengthMeters != 0 ||
-                        categoryData.category.climbMeters != 0 ||
-                        categoryData.category.encryptedIdealOrder?.isNotBlank() == true ||
-                        categoryData.category.encryptedCourseInfo?.isNotBlank() == true ||
-                        categoryData.category.idealOrder?.isNotBlank() == true ||
-                        categoryData.category.courseInfo != null
-                } ?: 0,
+                affectedCategoryCount = currentProject?.raceData?.categories?.count { it.hasCourseData() } ?: 0,
                 hasProtectedCategoryData = currentProject?.hasProtectedCategoryData() == true,
                 onConfirm = {
                     if (deleteAllControls()) {
@@ -9486,7 +9465,7 @@ internal fun IofCourseDataImportReviewDialog(
     onCancel: () -> Unit
 ) {
     var useRouteBends by remember(review) { mutableStateOf(review.useRouteBends) }
-    val hasRouteBendCodes = review.courseData.categories.any { data -> data.controlPoints.any { it.siCode in 900..999 } }
+    val hasRouteBendCodes = review.courseData.controlSiCodes().any { it in 900..999 }
     val selectedData = remember(review, useRouteBends) { runCatching {
         if (useRouteBends) review.courseData.withCondesRouteBends() else review.courseData
     } }
@@ -15713,7 +15692,7 @@ private fun CoursePasswordSettingsPanel(
                 label = { Text(if (hasCoursePassword) "New Race Password" else "Race Password") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                enabled = projectFile != null && !isPasswordOperationInProgress,
+                enabled = !isPasswordOperationInProgress,
                 modifier = Modifier
                     .width(190.dp)
                     .commitOnEnter(::submitPasswordChange)
@@ -15724,7 +15703,7 @@ private fun CoursePasswordSettingsPanel(
                 label = { Text("Confirm") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                enabled = projectFile != null && !isPasswordOperationInProgress,
+                enabled = !isPasswordOperationInProgress,
                 modifier = Modifier
                     .width(190.dp)
                     .commitOnEnter(::submitPasswordChange)
@@ -15732,7 +15711,7 @@ private fun CoursePasswordSettingsPanel(
             DisabledReasonTooltip(coursePasswordSubmitDisabledReason(projectFile, hasCoursePassword, oldPasswordDraft, newPasswordDraft, confirmPasswordDraft)) {
                 Button(
                     onClick = ::submitPasswordChange,
-                    enabled = projectFile != null && canSubmit && !isPasswordOperationInProgress
+                    enabled = canSubmit && !isPasswordOperationInProgress
                 ) {
                     ButtonLabel(if (hasCoursePassword) "Reset Race Password" else "Encrypt Race")
                 }
@@ -25352,23 +25331,12 @@ internal fun EventProjectFile.categoryImportRows(): List<CategoryCsvImportRow> =
                 raceType = null,
                 timeLimitMinutes = null,
                 raceBand = null,
-                controlPointsText = categoryData.importControlPointsText(),
+                controlPointsText = ControlPointRules.formatControlPoints(
+                    EventControlCatalog.assignedControlDefinitions(categoryData, raceData.controls)
+                ),
                 encryptedIdealOrder = category.encryptedIdealOrder
             )
         }
-
-private fun EventCategoryData.importControlPointsText(): String =
-    ControlPointRules.formatControlPoints(
-        controlPoints
-            .sortedBy { it.order }
-            .map { controlPoint ->
-                ControlPointDefinition(
-                    siCode = controlPoint.siCode,
-                    type = controlPoint.type,
-                    order = controlPoint.order
-                )
-            }
-    )
 
 internal fun EventProjectFile.competitorImportRows(): List<CompetitorCsvImportRow> {
     val categoriesById = raceData.categories.associateBy { it.category.id }

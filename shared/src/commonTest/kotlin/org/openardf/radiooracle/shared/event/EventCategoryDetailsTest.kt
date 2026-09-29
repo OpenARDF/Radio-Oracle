@@ -274,6 +274,10 @@ class EventCategoryDetailsTest {
                 )
             ),
             aliases = listOf(EventAlias("alias-31", "race", 31, "Foxhole")),
+            controls = listOf(
+                EventControl("control-31", "race", "31", 31, ControlPointType.CONTROL),
+                EventControl("control-32", "race", "32", 32, ControlPointType.CONTROL)
+            ),
             competitorData = emptyList(),
             unmatchedReadoutData = emptyList()
         )
@@ -303,8 +307,8 @@ class EventCategoryDetailsTest {
                 controlPointsString = "31 32"
             ),
             controlPoints = listOf(
-                EventControlPoint("cp-31-$name", name, 31, ControlPointType.CONTROL, 0),
-                EventControlPoint("cp-32-$name", name, 32, ControlPointType.CONTROL, 1)
+                EventControlPoint("cp-31-$name", name, 31, ControlPointType.CONTROL, 0, "control-31"),
+                EventControlPoint("cp-32-$name", name, 32, ControlPointType.CONTROL, 1, "control-32")
             ),
             competitors = emptyList()
         )

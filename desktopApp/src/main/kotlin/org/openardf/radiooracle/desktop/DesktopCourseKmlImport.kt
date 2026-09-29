@@ -1976,18 +1976,12 @@ object DesktopCourseKmlImporter {
         elevationProvider: (CourseGeoPoint) -> Double?
     ): ControlsOnlyProtectedCourseInfoImportResult? {
         val matchedControlsById = matchedControls.associateBy { it.controlId }
-        val matchedControlsByLegacyDefinition = matchedControls
-            .groupBy { it.siCode to it.type }
-            .mapValues { (_, controls) -> controls.distinctBy { it.controlId }.singleOrNull() }
         val elevationByControlId = mutableMapOf<String, Double?>()
         var updatedProject = projectFile
         val affectedCategoryIds = linkedSetOf<String>()
         val updatedControlIds = linkedSetOf<String>()
         projectFile.raceData.categories.forEach { categoryData ->
-            val categoryControls = categoryData.controlsOnlyProtectedImportControls(
-                matchedControlsById = matchedControlsById,
-                matchedControlsByLegacyDefinition = matchedControlsByLegacyDefinition
-            )
+            val categoryControls = categoryData.controlsOnlyProtectedImportControls(matchedControlsById)
             if (categoryControls.isEmpty()) {
                 return@forEach
             }
@@ -2035,13 +2029,11 @@ object DesktopCourseKmlImporter {
     }
 
     private fun EventCategoryData.controlsOnlyProtectedImportControls(
-        matchedControlsById: Map<String, CourseMatchedControl>,
-        matchedControlsByLegacyDefinition: Map<Pair<Int, ControlPointType>, CourseMatchedControl?>
+        matchedControlsById: Map<String, CourseMatchedControl>
     ): List<CourseMatchedControl> {
         val controls = when {
             controlPoints.isNotEmpty() -> controlPoints.mapNotNull { controlPoint ->
                 matchedControlsById[controlPoint.controlId]
-                    ?: matchedControlsByLegacyDefinition[controlPoint.siCode to controlPoint.type]
             }
             publicControlIds.isNotEmpty() -> publicControlIds.mapNotNull { controlId ->
                 matchedControlsById[controlId]

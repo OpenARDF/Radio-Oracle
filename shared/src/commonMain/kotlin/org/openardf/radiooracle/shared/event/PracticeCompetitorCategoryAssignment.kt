@@ -10,8 +10,8 @@ import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.results.CourseEvaluator
-import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
+import org.openardf.radiooracle.shared.results.evaluationControlPoints
 
 /** Shared category-selection rules for competitors discovered during Practice SI-card handling. */
 object PracticeCompetitorCategoryAssignment {
@@ -64,16 +64,4 @@ object PracticeCompetitorCategoryAssignment {
         controlPoints = raceData.evaluationControlPoints(categoryData)
     )
 
-    private fun EventRaceData.evaluationControlPoints(categoryData: EventCategoryData): List<EvaluationControlPoint> {
-        val controlsById = controls.associateBy { it.id }
-        return categoryData.controlPoints.map { controlPoint ->
-            val control = controlsById[controlPoint.controlId]
-            EvaluationControlPoint(
-                siCode = control?.siCode ?: controlPoint.siCode,
-                type = control?.type ?: controlPoint.type,
-                scored = control?.scored ?: controlPoint.type.defaultScored(),
-                label = control?.publicLabel ?: control?.label
-            )
-        }
-    }
 }

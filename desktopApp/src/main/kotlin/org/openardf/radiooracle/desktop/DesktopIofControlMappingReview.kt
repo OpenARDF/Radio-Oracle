@@ -29,9 +29,7 @@ internal object DesktopIofControlMappingReview {
         val parsed = IofXmlImports.courseDataWithControlMappings(review.xml, currentProject.raceData.race,
             mappings, useRouteBends)
         val warningLines = iofWarningLines(parsed.unsupportedItems)
-        val importedSiCodes = parsed.parsedData.categories
-            .flatMap { categoryData -> categoryData.controlPoints.map { it.siCode } }
-            .toSet()
+        val importedSiCodes = parsed.parsedData.controlSiCodes()
         val previewImportProject = DesktopIofControlMappingReview.refreshSharedNames(currentProject,
             EventProjectEditor.importIofCourseData(currentProject, parsed.parsedData).projectFile,
             parsed.parsedData.reviewedControlNames, password)

@@ -83,7 +83,7 @@ class DesktopIofControlMappingReviewTest {
         rule.onNodeWithTag("xml-mapping-route-bends").performScrollTo().performClick().assertIsOn()
         rule.onNodeWithText("Review Courses").assertIsEnabled().performClick()
         rule.runOnIdle {
-            assertTrue(candidate!!.categories.all { data -> data.controlPoints.none { it.siCode == 900 } })
+            assertFalse(900 in candidate!!.controlSiCodes())
             assertTrue(candidate!!.categories.all { data -> data.category.courseInfo!!.courseObjects.any { it.type == ProtectedCourseObjectType.WAYPOINT } })
         }
     }

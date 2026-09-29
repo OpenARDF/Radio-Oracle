@@ -93,7 +93,11 @@ class DesktopCourseKmlGeneratedCoverageTest {
             val appliedProject = DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(importedProject, summary.categoryAssignmentUpdates)
             testCase.expectedAssignedSiCodes.forEach { (categoryName, siCodes) ->
                 val category = appliedProject.raceData.categories.single { it.category.name == categoryName }
-                assertEquals("${testCase.name} assigned SI order for $categoryName", siCodes, category.controlPoints.map { it.siCode })
+                assertEquals(
+                    "${testCase.name} assigned SI order for $categoryName",
+                    siCodes,
+                    appliedProject.raceData.assignedSiCodesFor(category)
+                )
             }
         }
 

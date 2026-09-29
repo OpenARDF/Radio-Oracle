@@ -24,7 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
-import org.openardf.radiooracle.shared.event.resultCompetitorData
+import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
@@ -33,12 +33,14 @@ import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ResultRouteLength
 import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.event.resultCategories
+import org.openardf.radiooracle.shared.event.resultCompetitorData
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -124,7 +126,10 @@ object TextResultExports {
                 append("\tEffective length: ${effectiveLength / 1000.0} km")
             }
         }
-        appendLine("\tControls: ${categoryData.category.controlPointsString}")
+        val controlsText = ControlPointRules.formatControlPoints(
+            EventControlCatalog.assignedControlDefinitions(categoryData, raceData.controls)
+        )
+        appendLine("\tControls: $controlsText")
         appendLine(RULE)
         resultCompetitors.forEach { competitorData ->
             appendCompetitorRow(competitorData, includeSplits, controlLabelsByCode)

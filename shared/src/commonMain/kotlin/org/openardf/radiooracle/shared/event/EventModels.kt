@@ -335,6 +335,19 @@ data class EventCategoryData(
     val publicControlIds: List<String> = emptyList()
 )
 
+/** Includes legacy storage so compatibility data is not mistaken for an empty course. */
+@Suppress("DEPRECATION")
+fun EventCategoryData.hasCourseData(): Boolean =
+    controlPoints.isNotEmpty() ||
+        publicControlIds.isNotEmpty() ||
+        category.controlPointsString.isNotBlank() ||
+        category.lengthMeters != 0 ||
+        category.climbMeters != 0 ||
+        category.encryptedIdealOrder?.isNotBlank() == true ||
+        category.encryptedCourseInfo?.isNotBlank() == true ||
+        category.idealOrder?.isNotBlank() == true ||
+        category.courseInfo != null
+
 /** Portable competitor plus optional category aggregate used by result lists. */
 @Serializable
 data class EventCompetitorCategory(

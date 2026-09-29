@@ -232,7 +232,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(0, summary.changedControlLocationCount)
         assertEquals(0, summary.duplicateCategoryCount)
         assertTrue(summary.routeElevationPointCount > 0)
-        assertEquals("", category.controlPointsString)
+        assertEquals("", categoryData.legacyControlPointsText())
         assertTrue(categoryData.controlPoints.isEmpty())
         assertEquals("31 32", summary.categoryAssignmentUpdates.single().controlPointsText)
         assertNotNull(category.encryptedIdealOrder)
@@ -1694,16 +1694,16 @@ class DesktopCourseKmlImportTest {
 
         val categoryData = updated.raceData.categories.single()
         assertEquals(2, summary.assignedCategoryControlCount)
-        assertEquals("31 32 33", categoryData.category.controlPointsString)
-        assertEquals(listOf(31, 32, 33), categoryData.controlPoints.map { it.siCode })
+        assertEquals("32 33 31", categoryData.legacyControlPointsText())
+        assertEquals(listOf(32, 33, 31), updated.raceData.assignedSiCodesFor(categoryData))
 
         val applied = DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
             projectFile = updated,
             updates = summary.categoryAssignmentUpdates
         )
         val appliedCategoryData = applied.raceData.categories.single()
-        assertEquals("31 32", appliedCategoryData.category.controlPointsString)
-        assertEquals(listOf(31, 32), appliedCategoryData.controlPoints.map { it.siCode })
+        assertEquals("31 32", appliedCategoryData.legacyControlPointsText())
+        assertEquals(listOf(31, 32), applied.raceData.assignedSiCodesFor(appliedCategoryData))
     }
 
     @Test
@@ -1737,8 +1737,8 @@ class DesktopCourseKmlImportTest {
 
         assertEquals(originalPublicLabelsBySi, applied.raceData.controls.associate { it.siCode to it.publicLabel })
         val appliedCategory = applied.raceData.categories.single()
-        assertEquals(listOf(35, 34, 33, 32, 31, 99), appliedCategory.controlPoints.map { it.siCode })
-        assertEquals("35 34 33 32 31 99B", appliedCategory.category.controlPointsString)
+        assertEquals(listOf(35, 34, 33, 32, 31, 99), applied.raceData.assignedSiCodesFor(appliedCategory))
+        assertEquals("35 34 33 32 31 99B", appliedCategory.legacyControlPointsText())
         assertEquals("'Fox 1' 'Fox 2' 'Fox 3' 'Fox 4' 'Fox 5' B", EventCategoryDetails.from(applied.raceData).single().controlPointsText)
     }
 
@@ -2110,8 +2110,8 @@ class DesktopCourseKmlImportTest {
         assertEquals(listOf("41 (41)", "42 (42)", "90B (90)"), summary.deletedControlNames)
         assertFalse(updated.raceData.controls.any { it.siCode in setOf(41, 42, 90) })
         val updatedCategory = updated.raceData.categories.single { it.category.id == "cat-m21" }
-        assertEquals(listOf(31, 32, 33, 34, 35), updatedCategory.controlPoints.map { it.siCode })
-        assertEquals("31 32 33 34 35", updatedCategory.category.controlPointsString)
+        assertEquals(listOf(31, 32, 33, 34, 35), updated.raceData.assignedSiCodesFor(updatedCategory))
+        assertEquals("31 32 33 34 35", updatedCategory.legacyControlPointsText())
     }
 
     @Test
@@ -2468,7 +2468,7 @@ class DesktopCourseKmlImportTest {
         assertEquals(1, summary.duplicateCategoryCount)
         assertEquals(2, summary.assignedCategoryControlCount)
         assertEquals(false, summary.isDuplicateOnly)
-        assertEquals("", categoryData.category.controlPointsString)
+        assertEquals("", categoryData.legacyControlPointsText())
         assertTrue(categoryData.controlPoints.isEmpty())
 
         val applied = DesktopCourseKmlImporter.applyCategoryAssignmentUpdates(
@@ -2476,8 +2476,8 @@ class DesktopCourseKmlImportTest {
             updates = summary.categoryAssignmentUpdates
         )
         val appliedCategoryData = applied.raceData.categories.single()
-        assertEquals("31 32", appliedCategoryData.category.controlPointsString)
-        assertEquals(listOf(31, 32), appliedCategoryData.controlPoints.map { it.siCode })
+        assertEquals("31 32", appliedCategoryData.legacyControlPointsText())
+        assertEquals(listOf(31, 32), applied.raceData.assignedSiCodesFor(appliedCategoryData))
     }
 
     @Test

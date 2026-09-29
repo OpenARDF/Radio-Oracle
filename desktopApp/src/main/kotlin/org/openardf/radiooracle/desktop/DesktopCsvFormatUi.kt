@@ -4,20 +4,24 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.awt.datatransfer.StringSelection
+import kotlinx.coroutines.launch
 import org.openardf.radiooracle.shared.files.CsvFormatGuide
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun DesktopCsvFormatPanel(guide: CsvFormatGuide, onSaveTemplate: ((CsvFormatGuide) -> String?)? = null) {
     var details by remember(guide.id) { mutableStateOf(false) }
     var templateStatus by remember(guide.id) { mutableStateOf<String?>(null) }
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
     DesktopFileFormatBox("csv-format-${guide.id}-${if (guide.importable) "import" else "export"}") {
         Text("CSV format — ${guide.title}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
         Text(guide.organization, fontSize = 12.sp)
@@ -27,7 +31,9 @@ internal fun DesktopCsvFormatPanel(guide: CsvFormatGuide, onSaveTemplate: ((CsvF
         Text("Example row", fontWeight = FontWeight.Bold)
         SelectionContainer { Text(guide.exampleRow, fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { clipboard.setText(AnnotatedString(guide.headerRow)) }) {
+            TextButton(onClick = {
+                coroutineScope.launch { clipboard.setClipEntry(ClipEntry(StringSelection(guide.headerRow))) }
+            }) {
                 Text(if (guide.includesHeader) "Copy header" else "Copy column order")
             }
             if (guide.importable && onSaveTemplate != null) TextButton(onClick = {

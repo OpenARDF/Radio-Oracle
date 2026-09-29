@@ -6,6 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.event.*
 
 @Composable
@@ -38,7 +39,10 @@ internal fun DesktopCategoryCourseAssignment(project: EventProjectFile, isUnlock
                 TextButton(onClick = { sourceId = source.category.id; choosing = false },
                     modifier = Modifier.testTag("existing-course-${source.category.id}")) {
                     val locations = if (source.category.courseInfo == null && source.category.encryptedCourseInfo.isNullOrBlank()) " (no course locations)" else ""
-                    Text("${source.category.name} — ${source.category.controlPointsString.ifBlank { "${source.controlPoints.size} assigned controls" }}$locations")
+                    val assignedControlsText = ControlPointRules.formatControlPoints(
+                        EventControlCatalog.assignedControlDefinitions(source, project.raceData.controls)
+                    )
+                    Text("${source.category.name} — ${assignedControlsText.ifBlank { "${source.controlPoints.size} assigned controls" }}$locations")
                 }
             }
         } }, confirmButton = {}, dismissButton = { TextButton(onClick = { choosing = false }) { Text("Cancel") } })

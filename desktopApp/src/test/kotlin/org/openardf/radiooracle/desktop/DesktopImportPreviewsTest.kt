@@ -225,7 +225,7 @@ class DesktopImportPreviewsTest {
         assertFalse(result.projectFile.raceData.controls.any { it.siCode in setOf(41, 42, 90) })
         assertEquals(
             listOf(31, 32, 33, 34, 35, 99),
-            result.projectFile.raceData.categories.single().controlPoints.map { it.siCode }
+            result.projectFile.raceData.assignedSiCodesFor(result.projectFile.raceData.categories.single())
         )
     }
 

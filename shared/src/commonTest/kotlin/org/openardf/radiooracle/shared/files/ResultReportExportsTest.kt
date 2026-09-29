@@ -38,6 +38,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -154,7 +155,14 @@ class ResultReportExportsTest {
         )
         return EventRaceData(
             race = race,
-            categories = listOf(EventCategoryData(category, controlPoints = emptyList(), competitors = listOf(competitor))),
+            categories = listOf(EventCategoryData(
+                category,
+                controlPoints = listOf(
+                    EventControlPoint("cp-1", category.id, 1, ControlPointType.CONTROL, 1, "control-1"),
+                    EventControlPoint("cp-2", category.id, 2, ControlPointType.CONTROL, 2, "control-2")
+                ),
+                competitors = listOf(competitor)
+            )),
             aliases = emptyList(),
             competitorData = listOf(
                 EventCompetitorData(
@@ -163,7 +171,11 @@ class ResultReportExportsTest {
                 )
             ),
             unmatchedReadoutData = emptyList(),
-            controls = listOf(EventControl("control-31", "race", "F1", 31, ControlPointType.CONTROL, publicLabel = "Fox 1"))
+            controls = listOf(
+                EventControl("control-1", "race", "1", 1, ControlPointType.CONTROL),
+                EventControl("control-2", "race", "2", 2, ControlPointType.CONTROL),
+                EventControl("control-31", "race", "F1", 31, ControlPointType.CONTROL, publicLabel = "Fox 1")
+            )
         )
     }
 

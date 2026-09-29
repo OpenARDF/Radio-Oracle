@@ -260,6 +260,8 @@ private fun EventRace.toRoomRace(idMapper: RoomIdMapper): Race =
 fun EventCategory.toRoomCategory(): Category =
     toRoomCategory(RoomIdMapper())
 
+// Android still persists the deprecated text column for backward-compatible Room data.
+@Suppress("DEPRECATION")
 private fun EventCategory.toRoomCategory(idMapper: RoomIdMapper): Category =
     Category(
         id = idMapper.uuidFor(id),
@@ -286,6 +288,8 @@ private fun EventCategory.toRoomCategory(idMapper: RoomIdMapper): Category =
 fun EventControlPoint.toRoomControlPoint(): ControlPoint =
     toRoomControlPoint(RoomIdMapper(), emptyMap())
 
+// The fallback fields keep standalone and legacy conversions usable when no race catalog is available.
+@Suppress("DEPRECATION")
 private fun EventControlPoint.toRoomControlPoint(
     idMapper: RoomIdMapper,
     controlsById: Map<String, EventControl>

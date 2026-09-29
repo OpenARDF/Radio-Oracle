@@ -24,11 +24,12 @@
 
 package org.openardf.radiooracle.desktop
 
-import org.openardf.radiooracle.shared.event.registrations
+import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventProjectSummary
 import org.openardf.radiooracle.shared.event.EventValidationRules
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.registrations
 import org.openardf.radiooracle.shared.results.EventResultSending
 
 /** Read-only Race File and desktop-beta diagnostics shown in the Settings section. */
@@ -114,8 +115,7 @@ data class DesktopProjectDiagnostics(
 
             projectFile.raceData.categories.forEach { categoryData ->
                 val competitorCount = competitorCountsByCategoryId[categoryData.category.id] ?: 0
-                val hasPublicCourse = categoryData.controlPoints.isNotEmpty() ||
-                    categoryData.category.controlPointsString.isNotBlank()
+                val hasPublicCourse = categoryData.hasPublicCourseAssignments()
                 val protectedCourseInfo = protectedCourseInfoByCategoryId[categoryData.category.id]
                 val hasStoredCourse = protectedCourseInfo != null ||
                     categoryData.category.encryptedCourseInfo?.isNotBlank() == true
@@ -152,5 +152,10 @@ data class DesktopProjectDiagnostics(
 
             return issues
         }
+
+        /** Diagnostics also accept pre-migration fixtures and Race Files whose only course record is the legacy mirror. */
+        @Suppress("DEPRECATION")
+        private fun EventCategoryData.hasPublicCourseAssignments(): Boolean =
+            controlPoints.isNotEmpty() || category.controlPointsString.isNotBlank()
     }
 }

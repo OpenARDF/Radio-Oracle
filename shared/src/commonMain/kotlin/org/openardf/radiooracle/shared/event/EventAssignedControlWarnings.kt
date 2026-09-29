@@ -45,7 +45,7 @@ object EventAssignedControlWarnings {
         val categoryData = raceData.categories.firstOrNull { it.category.id == categoryId }
             ?: return null
         val raceType = categoryData.category.effectiveRaceType(raceData.race)
-        val assignedControls = categoryData.controlPoints
+        val assignedControls = EventControlCatalog.assignedControls(categoryData, raceData.controls)
         val hasNoAssignedFoxes = raceType != RaceType.ORIENTEERING &&
             assignedControls.none { it.type == ControlPointType.CONTROL }
         val isClearingAllAssignments = assignedControls.isEmpty()
@@ -57,7 +57,7 @@ object EventAssignedControlWarnings {
             listOf("Beacon").takeUnless { assignedControls.any { it.type == ControlPointType.BEACON } }.orEmpty()
         } else {
             requiredBeacons
-                .filterNot { control -> assignedControls.any { it.matches(control) } }
+                .filterNot { it in assignedControls }
                 .map { it.displayLabel() }
         }
 
@@ -74,8 +74,4 @@ object EventAssignedControlWarnings {
         publicLabel?.trim()?.takeIf { it.isNotEmpty() }
             ?: label.takeIf { it.isNotBlank() }
             ?: siCode.toString()
-
-    @Suppress("DEPRECATION")
-    private fun EventControlPoint.matches(control: EventControl): Boolean =
-        controlId == control.id || (siCode == control.siCode && type == control.type)
 }

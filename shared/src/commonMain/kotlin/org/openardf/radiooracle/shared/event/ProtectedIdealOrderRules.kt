@@ -83,10 +83,12 @@ object ProtectedIdealOrderRules {
         resolveControls(idealOrderText, controls).map { it.siCode }
 
     @Deprecated("Use global controls instead of aliases.")
+    @Suppress("DEPRECATION")
     fun firstControlCodeFromAliases(idealOrderText: String, aliases: List<EventAlias>): Int? =
         resolveControlCodesFromAliases(idealOrderText, aliases).firstOrNull()
 
     @Deprecated("Use global controls instead of aliases.")
+    @Suppress("DEPRECATION")
     fun validateFromAliases(idealOrderText: String, aliases: List<EventAlias>) {
         resolveControlCodesFromAliases(idealOrderText, aliases)
     }

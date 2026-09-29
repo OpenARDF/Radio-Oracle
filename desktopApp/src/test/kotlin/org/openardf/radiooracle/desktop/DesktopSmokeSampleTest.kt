@@ -63,7 +63,7 @@ class DesktopSmokeSampleTest {
         assertEquals(12, EventReadoutDetails.from(raceData).size)
         assertEquals(11, EventResultDetails.from(raceData).size)
         assertTrue(raceData.categories.all { category ->
-            category.category.controlPointsString.isBlank()
+            category.legacyControlPointsText().isBlank()
         })
         assertTrue(raceData.categories.all { category ->
             category.controlPoints.all { it.controlId.isNotBlank() }
@@ -72,8 +72,9 @@ class DesktopSmokeSampleTest {
             category.publicControlIds.containsAll(category.controlPoints.map { it.controlId })
         })
         assertTrue(raceData.categories.all { category ->
-            category.controlPoints.last().siCode == 90 &&
-                    category.controlPoints.last().type == ControlPointType.BEACON
+            raceData.assignedControlsFor(category).last().let { control ->
+                control.siCode == 90 && control.type == ControlPointType.BEACON
+            }
         })
         assertTrue(raceData.aliases.isEmpty())
         assertTrue(raceData.controls.isNotEmpty())
@@ -157,12 +158,15 @@ class DesktopSmokeSampleTest {
         assertEquals(5_400, readBack.raceData.race.timeLimitSeconds)
         assertEquals(listOf(categoryId), readBack.raceData.categories.map { it.category.id })
         assertEquals("M21E", readBack.raceData.categories.first { it.category.id == categoryId }.category.name)
-        assertEquals("31 32 36B", readBack.raceData.categories.first().category.controlPointsString)
+        assertEquals("31 32 36B", readBack.raceData.categories.first().legacyControlPointsText())
         assertEquals(
             listOf("edited-control-0", "edited-control-1", "edited-control-2"),
             readBack.raceData.categories.first().controlPoints.map { it.id }
         )
-        assertEquals(listOf(31, 32, 36), readBack.raceData.categories.first().controlPoints.map { it.siCode })
+        assertEquals(
+            listOf(31, 32, 36),
+            readBack.raceData.assignedSiCodesFor(readBack.raceData.categories.first())
+        )
         assertEquals(
             null,
             readBack.raceData.competitorData

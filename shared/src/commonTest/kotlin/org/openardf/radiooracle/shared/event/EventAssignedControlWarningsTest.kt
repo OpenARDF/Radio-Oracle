@@ -38,7 +38,7 @@ class EventAssignedControlWarningsTest {
         val warning = EventAssignedControlWarnings.forCategory(
             raceData(
                 raceType = RaceType.CLASSIC,
-                controls = listOf(beacon()),
+                controls = listOf(fox(), beacon()),
                 categoryControlPoints = listOf(controlPoint("cp-31", "control-31", 31, ControlPointType.CONTROL))
             ),
             "cat-1"
@@ -54,7 +54,7 @@ class EventAssignedControlWarningsTest {
         val warning = EventAssignedControlWarnings.forCategory(
             raceData(
                 raceType = RaceType.SPRINT,
-                controls = listOf(spectator(), beacon()),
+                controls = listOf(fox(), spectator(), beacon()),
                 categoryControlPoints = listOf(
                     controlPoint("cp-31", "control-31", 31, ControlPointType.CONTROL),
                     controlPoint("cp-99", "control-m", 99, ControlPointType.BEACON)
@@ -71,7 +71,7 @@ class EventAssignedControlWarningsTest {
         val warning = EventAssignedControlWarnings.forCategory(
             raceData(
                 raceType = RaceType.SPRINT,
-                controls = listOf(spectator(), beacon()),
+                controls = listOf(fox(), spectator(), beacon()),
                 categoryControlPoints = listOf(
                     controlPoint("cp-31", "control-31", 31, ControlPointType.CONTROL),
                     controlPoint("cp-s", "control-s", 46, ControlPointType.SEPARATOR)
@@ -89,7 +89,7 @@ class EventAssignedControlWarningsTest {
         val warning = EventAssignedControlWarnings.forCategory(
             raceData(
                 raceType = RaceType.SPRINT,
-                controls = listOf(spectator()),
+                controls = listOf(fox(), spectator()),
                 categoryControlPoints = listOf(
                     controlPoint("cp-31", "control-31", 31, ControlPointType.CONTROL),
                     controlPoint("cp-s", "control-s", 46, ControlPointType.SEPARATOR)
@@ -193,6 +193,9 @@ class EventAssignedControlWarningsTest {
 
     private fun spectator(): EventControl =
         EventControl("control-s", "race", "S", 46, ControlPointType.SEPARATOR, publicLabel = "Spectator")
+
+    private fun fox(): EventControl =
+        EventControl("control-31", "race", "1", 31, ControlPointType.CONTROL, publicLabel = "Fox 1")
 
     private fun beacon(): EventControl =
         EventControl("control-m", "race", "M", 99, ControlPointType.BEACON, publicLabel = "Beacon")

@@ -26,10 +26,7 @@ internal object DesktopClassicRouteHeading {
             }
             val start = endpoint(ProtectedCourseObjectType.START)
             val finish = endpoint(ProtectedCourseObjectType.FINISH)
-            val assigned = category.controlPoints.map { point ->
-                project.raceData.controls.firstOrNull { it.id == point.controlId }
-                    ?: project.raceData.controls.single { it.siCode == point.siCode && it.type == point.type }
-            }.distinctBy { it.id }
+            val assigned = EventControlCatalog.assignedControls(category, project.raceData.controls).distinctBy { it.id }
             val beacon = assigned.single { it.type == ControlPointType.BEACON }
             val controls = assigned.filter { it.type != ControlPointType.BEACON }
             require(controls.size in 1..8 && controls.all { it.type == ControlPointType.CONTROL || it.type == ControlPointType.SEPARATOR })

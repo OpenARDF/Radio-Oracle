@@ -12,6 +12,8 @@ internal fun encodePortableCourseData(race: EventRaceData): String {
 }
 
 /** Merge native edits through explicit references, then reuse the legacy adapter only for new/unreferenced rows. */
+// Deprecated station fields are intentionally read here to migrate Room rows that predate control IDs.
+@Suppress("DEPRECATION")
 internal fun restorePortableCourseData(native: EventRaceData, stored: String?, categoryIds: Map<String, String>): EventRaceData {
     if (stored == null) {
         val legacy = native.copy(categories = native.categories.map { category ->

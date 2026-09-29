@@ -24,7 +24,7 @@
 
 package org.openardf.radiooracle.shared.files
 
-import org.openardf.radiooracle.shared.event.resultCompetitorData
+import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAliasPunch
@@ -33,12 +33,14 @@ import org.openardf.radiooracle.shared.event.EventAwardDetails
 import org.openardf.radiooracle.shared.event.EventAwardWinnerDetails
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitorData
+import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import org.openardf.radiooracle.shared.event.ResultRouteLength
 import org.openardf.radiooracle.shared.event.awardsForScope
 import org.openardf.radiooracle.shared.event.effectiveLengthMeters
 import org.openardf.radiooracle.shared.event.resultCategories
+import org.openardf.radiooracle.shared.event.resultCompetitorData
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.time.DurationFormatter
 
@@ -65,6 +67,9 @@ object ResultReportExports {
                 .mapNotNull { categoryData ->
                     categoryReport(
                         categoryData = categoryData,
+                        controlsText = ControlPointRules.formatControlPoints(
+                            EventControlCatalog.assignedControlDefinitions(categoryData, raceData.controls)
+                        ),
                         competitors = placedByCategory[categoryData.category.id].orEmpty(),
                         controlLabelsByCode = controlLabelsByCode,
                         protectedCourseInfo = protectedCourseInfoByCategoryId?.get(categoryData.category.id),
@@ -183,6 +188,7 @@ object ResultReportExports {
 
     private fun categoryReport(
         categoryData: EventCategoryData,
+        controlsText: String,
         competitors: List<EventCompetitorData>,
         controlLabelsByCode: Map<Int, String>,
         protectedCourseInfo: ProtectedCourseInfo?,
@@ -200,7 +206,7 @@ object ResultReportExports {
             lengthKmText = category.lengthMeters.takeIf { includePublicCourseStats && it > 0 }?.let(::kilometersText),
             effectiveLengthKmText = effectiveLengthMeters?.let(::kilometersText),
             climbMeters = if (includePublicCourseStats) category.climbMeters.takeIf { it > 0 } else protectedCourseInfo?.climbMeters,
-            controlsText = category.controlPointsString,
+            controlsText = controlsText,
             results = resultCompetitors.map { competitorData ->
                 competitorReport(competitorData, controlLabelsByCode).copy(routeLength = routeLengths[competitorData.readoutData?.result?.id])
             }

@@ -254,8 +254,10 @@ class ArdfJsonExportsTest {
         val categoryData = EventCategoryData(
             category = category,
             controlPoints = categoryControlPoints ?: listOf(
-                EventControlPoint("control-1", category.id, 31, ControlPointType.CONTROL, 1),
-                EventControlPoint("control-2", category.id, 90, ControlPointType.BEACON, 2)
+                EventControlPoint("control-1", category.id, 31, ControlPointType.CONTROL, 1,
+                    controls.singleOrNull { it.siCode == 31 }?.id.orEmpty()),
+                EventControlPoint("control-2", category.id, 90, ControlPointType.BEACON, 2,
+                    controls.singleOrNull { it.siCode == 90 }?.id.orEmpty())
             ),
             competitors = listOf(competitor)
         )
@@ -284,7 +286,7 @@ class ArdfJsonExportsTest {
             )
         )
 
-        return EventRaceData(
+        val raceData = EventRaceData(
             race = race,
             categories = listOf(categoryData),
             aliases = listOf(EventAlias("alias-90", race.id, 90, "M")),
@@ -297,6 +299,9 @@ class ArdfJsonExportsTest {
             unmatchedReadoutData = emptyList(),
             controls = controls
         )
+        return org.openardf.radiooracle.shared.event.EventControlCatalog.backfillControls(
+            org.openardf.radiooracle.shared.event.EventProjectFile(raceData = raceData)
+        ).raceData
     }
 
     private fun category(): EventCategory =

@@ -35,6 +35,7 @@ import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFactory
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
+import org.openardf.radiooracle.shared.event.hasCourseData
 import org.openardf.radiooracle.shared.files.CsvCodec
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import java.io.ByteArrayInputStream
@@ -1440,15 +1441,6 @@ object DesktopSpreadsheetCompetitorImporter {
         val autoSelectable: Boolean = true
     )
 }
-
-private fun EventCategoryData.hasCourseData(): Boolean =
-    controlPoints.isNotEmpty() ||
-        publicControlIds.isNotEmpty() ||
-        category.controlPointsString.isNotBlank() ||
-        category.lengthMeters != 0 ||
-        category.climbMeters != 0 ||
-        category.encryptedIdealOrder?.isNotBlank() == true ||
-        category.encryptedCourseInfo?.isNotBlank() == true
 
 private fun String.matchTokens(): Set<String> =
     lowercase()

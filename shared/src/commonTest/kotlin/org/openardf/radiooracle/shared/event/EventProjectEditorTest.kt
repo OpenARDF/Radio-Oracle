@@ -169,7 +169,7 @@ class EventProjectEditorTest {
         assertEquals("W21", category.name)
         assertEquals(5, category.order)
         assertEquals(false, category.differentProperties)
-        assertEquals("", category.controlPointsString)
+        assertEquals("", updated.raceData.categories.last().legacyControlPointsText())
     }
 
     @Test
@@ -348,7 +348,7 @@ class EventProjectEditorTest {
 
         assertEquals(listOf("cat-2", "cat-3"), updated.raceData.categories.map { it.category.id })
         assertEquals(listOf(0, 1), updated.raceData.categories.map { it.category.order })
-        assertEquals(listOf(31), updated.raceData.categories.first().controlPoints.map { it.siCode })
+        assertEquals(listOf(31), updated.raceData.assignedSiCodes(updated.raceData.categories.first()))
         assertEquals(null, updated.raceData.competitorData[0].competitorCategory.competitor.categoryId)
         assertEquals(null, updated.raceData.competitorData[0].competitorCategory.category)
         assertEquals(null, updated.raceData.competitorData[0].readoutData?.result?.categoryId)
@@ -410,7 +410,7 @@ class EventProjectEditorTest {
         assertEquals(listOf("M21", "W21"), updated.raceData.categories.map { it.category.name })
         assertTrue(updated.raceData.categories.all { it.controlPoints.isEmpty() })
         assertTrue(updated.raceData.categories.all { it.publicControlIds.isEmpty() })
-        assertTrue(updated.raceData.categories.all { it.category.controlPointsString.isBlank() })
+        assertTrue(updated.raceData.categories.all { it.legacyControlPointsText().isBlank() })
         assertTrue(updated.raceData.categories.all { it.category.lengthMeters == 0 })
         assertTrue(updated.raceData.categories.all { it.category.climbMeters == 0 })
         assertTrue(updated.raceData.categories.all { it.category.encryptedIdealOrder == null })
@@ -450,7 +450,7 @@ class EventProjectEditorTest {
         assertTrue(updated.raceData.categories.single().publicControlIds.isEmpty())
         assertEquals(0, updated.raceData.categories.single().category.lengthMeters)
         assertEquals(0, updated.raceData.categories.single().category.climbMeters)
-        assertEquals("", updated.raceData.categories.single().category.controlPointsString)
+        assertEquals("", updated.raceData.categories.single().legacyControlPointsText())
         assertEquals(null, updated.raceData.categories.single().category.encryptedIdealOrder)
         assertEquals(null, updated.raceData.categories.single().category.encryptedCourseInfo)
         assertEquals("cat-1", updated.raceData.competitorData.single().competitorCategory.competitor.categoryId)
@@ -514,11 +514,14 @@ class EventProjectEditorTest {
         }
 
         val categoryData = updated.raceData.categories.single()
-        assertEquals("31 32 36B", categoryData.category.controlPointsString)
+        assertEquals("31 32 36B", categoryData.legacyControlPointsText())
         assertEquals(listOf("control-0", "control-1", "control-2"), categoryData.controlPoints.map { it.id })
-        assertEquals(listOf(31, 32, 36), categoryData.controlPoints.map { it.siCode })
+        assertEquals(listOf(31, 32, 36), updated.raceData.assignedSiCodes(categoryData))
         assertEquals(listOf(1, 2, 3), categoryData.controlPoints.map { it.order })
-        assertEquals(listOf(ControlPointType.CONTROL, ControlPointType.CONTROL, ControlPointType.BEACON), categoryData.controlPoints.map { it.type })
+        assertEquals(
+            listOf(ControlPointType.CONTROL, ControlPointType.CONTROL, ControlPointType.BEACON),
+            updated.raceData.assignedControlTypes(categoryData)
+        )
     }
 
     @Test
@@ -550,7 +553,7 @@ class EventProjectEditorTest {
 
         val categoryData = updated.raceData.categories.single()
         assertEquals(listOf("control-f1", "control-m"), categoryData.controlPoints.map { it.controlId })
-        assertEquals(listOf(41, 99), categoryData.controlPoints.map { it.siCode })
+        assertEquals(listOf(41, 99), updated.raceData.assignedSiCodes(categoryData))
         assertEquals(listOf("control-f1", "control-m"), categoryData.publicControlIds)
     }
 
@@ -575,7 +578,7 @@ class EventProjectEditorTest {
 
         val categoryData = updated.raceData.categories.single()
         assertEquals(listOf("control-m"), categoryData.controlPoints.map { it.controlId })
-        assertEquals(listOf(ControlPointType.BEACON), categoryData.controlPoints.map { it.type })
+        assertEquals(listOf(ControlPointType.BEACON), updated.raceData.assignedControlTypes(categoryData))
     }
 
     @Test
@@ -605,7 +608,7 @@ class EventProjectEditorTest {
             listOf("control-slow-1", "control-slow-2", "control-s", "control-fast-1", "control-fast-2", "control-m"),
             categoryData.controlPoints.map { it.controlId }
         )
-        assertEquals("31 32 46! 41 42 99B", categoryData.category.controlPointsString)
+        assertEquals("31 32 46! 41 42 99B", categoryData.legacyControlPointsText())
     }
 
     @Test
@@ -617,7 +620,7 @@ class EventProjectEditorTest {
         }
 
         val categoryData = updated.raceData.categories.single()
-        assertEquals("", categoryData.category.controlPointsString)
+        assertEquals("", categoryData.legacyControlPointsText())
         assertEquals(emptyList(), categoryData.controlPoints)
     }
 
@@ -657,9 +660,9 @@ class EventProjectEditorTest {
 
         val categoryData = updated.raceData.categories.single()
         assertEquals(listOf(control32.id, beacon.id), categoryData.controlPoints.map { it.controlId })
-        assertEquals(listOf(32, 99), categoryData.controlPoints.map { it.siCode })
-        assertEquals(listOf(ControlPointType.CONTROL, ControlPointType.BEACON), categoryData.controlPoints.map { it.type })
-        assertEquals("32 99B", categoryData.category.controlPointsString)
+        assertEquals(listOf(32, 99), updated.raceData.assignedSiCodes(categoryData))
+        assertEquals(listOf(ControlPointType.CONTROL, ControlPointType.BEACON), updated.raceData.assignedControlTypes(categoryData))
+        assertEquals("32 99B", categoryData.legacyControlPointsText())
         assertEquals(listOf(control32.id, beacon.id), categoryData.publicControlIds)
     }
 
@@ -778,9 +781,9 @@ class EventProjectEditorTest {
 
         val updatedControlPoint = updated.raceData.categories.single().controlPoints.single()
         assertEquals(control.id, updatedControlPoint.controlId)
-        assertEquals(99, updatedControlPoint.siCode)
-        assertEquals(ControlPointType.BEACON, updatedControlPoint.type)
-        assertEquals("99B", updated.raceData.categories.single().category.controlPointsString)
+        assertEquals(99, updatedControlPoint.legacySiCode())
+        assertEquals(ControlPointType.BEACON, updatedControlPoint.legacyType())
+        assertEquals("99B", updated.raceData.categories.single().legacyControlPointsText())
         assertEquals(listOf(control.id), updated.raceData.categories.single().publicControlIds)
     }
 
@@ -1259,9 +1262,9 @@ class EventProjectEditorTest {
         assertEquals("cat-2", imported.category.id)
         assertEquals("W21", imported.category.name)
         assertEquals(4, imported.category.order)
-        assertEquals("31 32 90B", imported.category.controlPointsString)
-        assertEquals(listOf(31, 32, 90), imported.controlPoints.map { it.siCode })
-        assertEquals(ControlPointType.BEACON, imported.controlPoints.last().type)
+        assertEquals("31 32 90B", imported.legacyControlPointsText())
+        assertEquals(listOf(31, 32, 90), updated.raceData.assignedSiCodes(imported))
+        assertEquals(ControlPointType.BEACON, updated.raceData.assignedControlTypes(imported).last())
     }
 
     @Test
@@ -1347,8 +1350,8 @@ class EventProjectEditorTest {
         assertEquals("cat-1", updated.category.id)
         assertEquals(7, updated.category.order)
         assertEquals(true, updated.category.isMan)
-        assertEquals("32 90B", updated.category.controlPointsString)
-        assertEquals(listOf(32, 90), updated.controlPoints.map { it.siCode })
+        assertEquals("32 90B", updated.legacyControlPointsText())
+        assertEquals(listOf(32, 90), outcome.projectFile.raceData.assignedSiCodes(updated))
         assertEquals("encrypted-order", updated.category.encryptedIdealOrder)
         assertEquals("encrypted-course", updated.category.encryptedCourseInfo)
     }
@@ -1374,7 +1377,7 @@ class EventProjectEditorTest {
         assertEquals("M21", updated.category.name)
         assertEquals(7, updated.category.order)
         assertEquals(true, updated.category.isMan)
-        assertEquals("32 90B", updated.category.controlPointsString)
+        assertEquals("32 90B", updated.legacyControlPointsText())
     }
 
     @Test
@@ -1428,18 +1431,18 @@ class EventProjectEditorTest {
         assertEquals(7, updatedExisting.category.order)
         assertEquals(4500, updatedExisting.category.lengthMeters)
         assertEquals(120, updatedExisting.category.climbMeters)
-        assertEquals("32 33", updatedExisting.category.controlPointsString)
-        assertEquals(listOf(32, 33), updatedExisting.controlPoints.map { it.siCode })
+        assertEquals("32 33", updatedExisting.legacyControlPointsText())
+        assertEquals(listOf(32, 33), outcome.projectFile.raceData.assignedSiCodes(updatedExisting))
         assertEquals(listOf(existingCompetitor), updatedExisting.competitors)
         assertEquals(null, updatedExisting.category.encryptedIdealOrder)
         assertEquals(null, updatedExisting.category.encryptedCourseInfo)
         assertEquals("W21", added.category.name)
         assertEquals(false, added.category.isMan)
         assertEquals(8, added.category.order)
-        assertEquals(listOf(34), added.controlPoints.map { it.siCode })
+        assertEquals(listOf(34), outcome.projectFile.raceData.assignedSiCodes(added))
         assertEquals(added.controlPoints.map { it.controlId }, added.publicControlIds)
         assertTrue(added.controlPoints.all { it.controlId.isNotBlank() })
-        assertEquals(listOf(32, 33, 34), outcome.projectFile.raceData.controls.map { it.siCode })
+        assertEquals(listOf(31, 32, 33, 34), outcome.projectFile.raceData.controls.map { it.siCode })
     }
 
     @Test
@@ -1625,7 +1628,7 @@ class EventProjectEditorTest {
         assertEquals(emptyList<EventCompetitor>(), courseOnly.competitors)
 
         val imported = outcome.projectFile.raceData.categories.single { it.category.name == "W55" }
-        assertEquals(listOf(31, 32), imported.controlPoints.map { it.siCode })
+        assertEquals(listOf(31, 32), outcome.projectFile.raceData.assignedSiCodes(imported))
         assertEquals(listOf("cat-w55-control-0", "cat-w55-control-1"), imported.controlPoints.map { it.id })
         assertEquals(listOf("Line 1: created placeholder category 'W55' from source category 'W-55'.", "Line 1: applied course mapping 'Course A' to category 'W55'."), outcome.warnings)
         assertEquals("cat-w55", outcome.projectFile.raceData.competitorData.single().competitorCategory.competitor.categoryId)
@@ -1663,7 +1666,7 @@ class EventProjectEditorTest {
         assertEquals(listOf("W75"), outcome.projectFile.raceData.categories.map { it.category.name })
         assertEquals(emptyList(), outcome.projectFile.raceData.courseMappings)
         val imported = outcome.projectFile.raceData.categories.single()
-        assertEquals(listOf(31, 32), imported.controlPoints.map { it.siCode })
+        assertEquals(listOf(31, 32), outcome.projectFile.raceData.assignedSiCodes(imported))
         assertEquals(listOf("cat-w75-control-0", "cat-w75-control-1"), imported.controlPoints.map { it.id })
         assertEquals("encrypted-order", imported.category.encryptedIdealOrder)
         assertEquals("encrypted-course", imported.category.encryptedCourseInfo)
@@ -3700,9 +3703,15 @@ class EventProjectEditorTest {
             punchIdFactory = { index, type -> "punch-$index-${type.name}" }
         )
         val sent = EventProjectEditor.markReadoutsSent(withReadout, setOf("result-1"))
+        val changedDefinition = projectFile(
+            raceType = RaceType.ORIENTEERING,
+            categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31, 33))),
+            controls = sent.raceData.controls
+        ).raceData
         val changedCourse = sent.copy(
             raceData = sent.raceData.copy(
-                categories = listOf(categoryData("cat-1", "M21", controlSiCodes = listOf(31, 33)))
+                categories = changedDefinition.categories,
+                controls = changedDefinition.controls
             )
         )
 
@@ -4916,7 +4925,7 @@ class EventProjectEditorTest {
         aliases: List<EventAlias> = emptyList(),
         unmatchedReadouts: List<EventReadoutData> = emptyList()
     ): EventProjectFile =
-        EventProjectFile(
+        EventControlCatalog.backfillControls(EventProjectFile(
             raceData = EventRaceData(
                 race = EventRace(
                     id = "race",
@@ -4935,7 +4944,7 @@ class EventProjectEditorTest {
                 competitorData = competitors,
                 unmatchedReadoutData = unmatchedReadouts
             )
-        )
+        ))
 
     private fun categoryData(
         id: String,
@@ -5185,4 +5194,20 @@ class EventProjectEditorTest {
             siCode = siCode,
             name = name
         )
+
+    private fun EventRaceData.assignedSiCodes(categoryData: EventCategoryData): List<Int> =
+        EventControlCatalog.assignedControls(categoryData, controls).map { it.siCode }
+
+    private fun EventRaceData.assignedControlTypes(categoryData: EventCategoryData): List<ControlPointType> =
+        EventControlCatalog.assignedControls(categoryData, controls).map { it.type }
+
+    /** Compatibility assertions intentionally verify the serialized mirrors retained for older consumers. */
+    @Suppress("DEPRECATION")
+    private fun EventCategoryData.legacyControlPointsText(): String = category.controlPointsString
+
+    @Suppress("DEPRECATION")
+    private fun EventControlPoint.legacySiCode(): Int = siCode
+
+    @Suppress("DEPRECATION")
+    private fun EventControlPoint.legacyType(): ControlPointType = type
 }

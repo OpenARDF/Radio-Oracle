@@ -42,7 +42,11 @@ class IofXmlImportsTest {
         assertEquals("2011-07-30", result.parsedData.startDate)
         assertEquals("10:00:00", result.parsedData.startTime)
         assertEquals(listOf("A"), result.parsedData.categories.map { it.category.name })
-        assertEquals(listOf(31, 32), result.parsedData.categories.single().controlPoints.map { it.siCode })
+        assertEquals(listOf(31, 32), result.parsedData.controlSiCodes().sorted())
+        assertEquals(
+            result.parsedData.categories.single().controlPoints.map { it.controlId }.toSet(),
+            result.parsedData.controls.map { it.id }.toSet()
+        )
         assertTrue(result.unsupportedItems.any { it.reason.contains("coordinates are missing") })
     }
 
@@ -140,10 +144,12 @@ class IofXmlImportsTest {
         val xml = iofExample("CourseData_Individual_Step2.xml") ?: return
 
         val result = IofXmlImports.courseData(xml, race())
+        val controlsById = result.parsedData.controls.associateBy { it.id }
 
         assertEquals("Example event", result.parsedData.eventName)
         assertEquals(listOf("A", "B"), result.parsedData.categories.map { it.category.name })
-        assertEquals(listOf(31, 32, 33), result.parsedData.categories.first().controlPoints.take(3).map { it.siCode })
+        assertEquals(listOf(31, 32, 33), result.parsedData.categories.first().controlPoints.take(3)
+            .map { controlsById.getValue(it.controlId).siCode })
         assertTrue(result.parsedData.categories.first().category.courseInfo!!.courseObjects.isNotEmpty())
         assertTrue(result.unsupportedItems.any { it.reason.contains("Class-course assignments") })
         assertTrue(result.parsedData.categories.first().category.courseInfo!!.suppliedLegLengths.isNotEmpty())

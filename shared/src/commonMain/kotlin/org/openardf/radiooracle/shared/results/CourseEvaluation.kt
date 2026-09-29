@@ -29,6 +29,9 @@ import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.event.EventCategoryData
+import org.openardf.radiooracle.shared.event.EventControlCatalog
+import org.openardf.radiooracle.shared.event.EventRaceData
 
 /** Control definition reduced to the fields needed by the course evaluator. */
 data class EvaluationControlPoint(
@@ -53,6 +56,17 @@ data class EvaluationPunch(
     val siCode: Int,
     val type: SIRecordType
 )
+
+/** Builds evaluator inputs from the race-level catalog, the authoritative source for station code and role. */
+fun EventRaceData.evaluationControlPoints(categoryData: EventCategoryData): List<EvaluationControlPoint> =
+    EventControlCatalog.assignedControls(categoryData, controls).map { control ->
+        EvaluationControlPoint(
+            siCode = control.siCode,
+            type = control.type,
+            scored = control.scored,
+            label = control.publicLabel ?: control.label
+        )
+    }
 
 /** Course evaluation output: point total, final result status, and per-punch statuses. */
 data class CourseEvaluation(

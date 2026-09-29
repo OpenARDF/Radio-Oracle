@@ -37,6 +37,7 @@ import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorCategory
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventPunch
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -104,6 +105,10 @@ class TextResultExportsTest {
         resultStatus: ResultStatus = ResultStatus.OK,
         controls: List<EventControl> = emptyList()
     ): EventRaceData {
+        val canonicalControls = (controls + listOf(
+            EventControl("control-31", "race", "31", 31, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL),
+            EventControl("control-32", "race", "32", 32, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL)
+        )).distinctBy { it.siCode }
         val race = EventRace(
             id = "race",
             name = "Text Result Race",
@@ -146,7 +151,14 @@ class TextResultExportsTest {
         )
         return EventRaceData(
             race = race,
-            categories = listOf(EventCategoryData(category, controlPoints = emptyList(), competitors = listOf(competitor))),
+            categories = listOf(EventCategoryData(
+                category,
+                controlPoints = listOf(
+                    EventControlPoint("cp-31", category.id, 31, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL, 1, canonicalControls.single { it.siCode == 31 }.id),
+                    EventControlPoint("cp-32", category.id, 32, org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL, 2, canonicalControls.single { it.siCode == 32 }.id)
+                ),
+                competitors = listOf(competitor)
+            )),
             aliases = emptyList(),
             competitorData = listOf(
                 EventCompetitorData(
@@ -155,7 +167,7 @@ class TextResultExportsTest {
                 )
             ),
             unmatchedReadoutData = emptyList(),
-            controls = controls
+            controls = canonicalControls
         )
     }
 

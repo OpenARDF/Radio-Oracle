@@ -46,6 +46,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
@@ -142,15 +143,17 @@ object FinalResultJsonExports {
     }
 
     private fun EventControlPoint.toFinalControlPoint(controlsById: Map<String, EventControl>): FinalControlPointJson {
-        val control = controlsById[controlId]
+        val control = requireNotNull(controlsById[controlId]) {
+            "Final result export encountered an unknown control ID."
+        }
         return FinalControlPointJson(
-            siCode = control?.siCode ?: siCode,
-            controlType = control?.type ?: type
+            siCode = control.siCode,
+            controlType = control.type
         )
     }
 
     internal fun androidAliases(raceData: EventRaceData): List<FinalAliasJson> =
-        org.openardf.radiooracle.shared.event.EventControlCatalog.resolvedAliases(raceData)
+        EventControlCatalog.resolvedAliases(raceData)
             .map { it.toFinalAlias() }
             .filter { it.aliasName != it.aliasSiCode.toString() }
 

@@ -67,6 +67,41 @@ class EventControlCatalogTest {
     }
 
     @Test
+    fun assignedControlsUseCourseOrderAndCanonicalControlCodeAndRole() {
+        val control31 = EventControl("control-31", "race", "1", 31, ControlPointType.CONTROL)
+        val control32 = EventControl("control-32", "race", "2", 32, ControlPointType.BEACON)
+        val category = categoryData(
+            categoryId = "m21",
+            controlPoints = listOf(
+                EventControlPoint(
+                    id = "point-31",
+                    categoryId = "m21",
+                    siCode = 999,
+                    type = ControlPointType.SEPARATOR,
+                    order = 2,
+                    controlId = control31.id
+                ),
+                EventControlPoint(
+                    id = "point-32",
+                    categoryId = "m21",
+                    siCode = 998,
+                    type = ControlPointType.SEPARATOR,
+                    order = 1,
+                    controlId = control32.id
+                )
+            )
+        )
+        val controls = listOf(control31, control32)
+
+        val assignedControls = EventControlCatalog.assignedControls(category, controls)
+        val definitions = EventControlCatalog.assignedControlDefinitions(category, controls)
+
+        assertEquals(listOf(32, 31), assignedControls.map { it.siCode })
+        assertEquals(listOf(32, 31), definitions.map { it.siCode })
+        assertEquals(listOf(ControlPointType.BEACON, ControlPointType.CONTROL), definitions.map { it.type })
+    }
+
+    @Test
     fun derivesControlsFromExistingCoursesAndAliases() {
         val raceData = raceData(
             categories = listOf(

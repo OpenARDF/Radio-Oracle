@@ -191,13 +191,4 @@ object EventCategoryCompetitorSync {
     private fun EventCompetitorData.effectiveCategoryId(): String? =
         competitorCategory.category?.id ?: competitorCategory.competitor.categoryId
 
-    @Suppress("DEPRECATION")
-    private fun EventCategoryData.hasCourseData(): Boolean =
-        controlPoints.isNotEmpty() ||
-            publicControlIds.isNotEmpty() ||
-            category.controlPointsString.isNotBlank() ||
-            category.lengthMeters != 0 ||
-            category.climbMeters != 0 ||
-            category.encryptedIdealOrder?.isNotBlank() == true ||
-            category.encryptedCourseInfo?.isNotBlank() == true
 }

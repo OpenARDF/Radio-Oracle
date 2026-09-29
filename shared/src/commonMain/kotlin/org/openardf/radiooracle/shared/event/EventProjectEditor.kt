@@ -49,10 +49,10 @@ import org.openardf.radiooracle.shared.importing.ImportValidationRules
 import org.openardf.radiooracle.shared.files.IofXmlCompetitorMatchIssue
 import org.openardf.radiooracle.shared.files.IofXmlImportMatcher
 import org.openardf.radiooracle.shared.results.CourseEvaluator
-import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
 import org.openardf.radiooracle.shared.results.EventResultPlacement
 import org.openardf.radiooracle.shared.results.IofResultStatus
+import org.openardf.radiooracle.shared.results.evaluationControlPoints
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
 import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 import org.openardf.radiooracle.shared.sportident.SportIdentReadoutTiming
@@ -671,11 +671,11 @@ object EventProjectEditor {
             )
         }
         val formattedControlPoints = ControlPointRules.formatControlPoints(
-            controlPoints.map { controlPoint ->
+            controls.mapIndexed { index, control ->
                 ControlPointDefinition(
-                    siCode = controlPoint.siCode,
-                    type = controlPoint.type,
-                    order = controlPoint.order
+                    siCode = control.siCode,
+                    type = control.type,
+                    order = index + 1
                 )
             }
         )
@@ -859,7 +859,7 @@ object EventProjectEditor {
             require(!identityChanged || !assigned || data.category.encryptedCourseInfo == null) {
                 "Remove course protection before changing this control, or edit and apply the protected course design."
             }
-            val updated = data.withUpdatedControlDefinition(updatedControl)
+            val updated = data.withUpdatedControlDefinition(updatedControl, controls)
             val info = updated.category.courseInfo ?: return updated
             if (info.appliedBindings?.controls?.none { it.controlId == controlId } != false) return updated
             val roleChanged = info.appliedBindings.controls.any { bound -> controls.any { it.id == bound.controlId && it.type != bound.type } }
@@ -928,7 +928,10 @@ object EventProjectEditor {
         )
     }
 
-    private fun EventCategoryData.withUpdatedControlDefinition(control: EventControl): EventCategoryData {
+    private fun EventCategoryData.withUpdatedControlDefinition(
+        control: EventControl,
+        controls: List<EventControl>
+    ): EventCategoryData {
         var changed = false
         val updatedControlPoints = controlPoints.map { controlPoint ->
             if (controlPoint.controlId == control.id) {
@@ -945,13 +948,7 @@ object EventProjectEditor {
         // Category assignments are stored by control ID; siCode/type and the legacy
         // text field are derived copies that must follow the definitive Controls table.
         val updatedControlPointsText = ControlPointRules.formatControlPoints(
-            updatedControlPoints.map {
-                ControlPointDefinition(
-                    siCode = it.siCode,
-                    type = it.type,
-                    order = it.order
-                )
-            }
+            EventControlCatalog.assignedControlDefinitions(copy(controlPoints = updatedControlPoints), controls)
         )
         return copy(
             category = category.copy(controlPointsString = updatedControlPointsText),
@@ -1003,6 +1000,7 @@ object EventProjectEditor {
         require(projectFile.raceData.controls.any { it.id == controlId }) {
             "Control was not found: $controlId"
         }
+        val remainingControls = projectFile.raceData.controls.filterNot { it.id == controlId }
         fun clearControlFromCategoryData(categoryData: EventCategoryData): EventCategoryData {
             val remainingControlPoints = categoryData.controlPoints
                 .filterNot { it.controlId == controlId }
@@ -1014,9 +1012,10 @@ object EventProjectEditor {
                 return categoryData
             } else {
                 val remainingControlPointsString = ControlPointRules.formatControlPoints(
-                    remainingControlPoints.map {
-                        ControlPointDefinition(it.siCode, it.type, it.order)
-                    }
+                    EventControlCatalog.assignedControlDefinitions(
+                        categoryData.copy(controlPoints = remainingControlPoints),
+                        remainingControls
+                    )
                 )
                 return categoryData.copy(
                     category = categoryData.category.copy(
@@ -1041,7 +1040,7 @@ object EventProjectEditor {
         val courseMappings = projectFile.raceData.courseMappings.map(::clearControlFromCategoryData)
         return projectFile.copy(
             raceData = projectFile.raceData.copy(
-                controls = projectFile.raceData.controls.filterNot { it.id == controlId },
+                controls = remainingControls,
                 categories = categories,
                 courseMappings = courseMappings
             )
@@ -1757,8 +1756,10 @@ object EventProjectEditor {
                 input = row.controlPointsText,
                 raceType = category.effectiveRaceType(projectFile.raceData.race)
             )
-            val controlPoints = definitions.mapIndexed { index, definition ->
-                val control = EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
+            val rowControls = definitions.map { definition ->
+                EventControlCatalog.controlForDefinition(projectFile.raceData.race.id, definition)
+            }
+            val controlPoints = definitions.zip(rowControls).mapIndexed { index, (definition, control) ->
                 EventControlPoint(
                     id = controlPointIdFactory(categoryId, index),
                     categoryId = categoryId,
@@ -1775,19 +1776,7 @@ object EventProjectEditor {
                 publicControlIds = controlPoints.map { it.controlId }
             )
 
-            importedControls += updatedCategoryData.controlPoints.map { controlPoint ->
-                EventControl(
-                    id = controlPoint.controlId,
-                    raceId = projectFile.raceData.race.id,
-                    label = when (controlPoint.type) {
-                        org.openardf.radiooracle.shared.domain.ControlPointType.BEACON -> "${controlPoint.siCode}B"
-                        org.openardf.radiooracle.shared.domain.ControlPointType.SEPARATOR -> "${controlPoint.siCode}S"
-                        org.openardf.radiooracle.shared.domain.ControlPointType.CONTROL -> controlPoint.siCode.toString()
-                    },
-                    siCode = controlPoint.siCode,
-                    type = controlPoint.type
-                )
-            }
+            importedControls += rowControls
 
             if (existingIndex >= 0) {
                 categories[existingIndex] = updatedCategoryData
@@ -1821,6 +1810,10 @@ object EventProjectEditor {
         require(duplicateImportNames.isEmpty()) {
             "Duplicate category names in IOF CourseData import: ${duplicateImportNames.joinToString()}."
         }
+        val previewControlsById = preview.controls.associateBy { it.id }
+        require(previewControlsById.size == preview.controls.size) {
+            "IOF CourseData preview contains duplicate control IDs."
+        }
 
         var nextCategoryOrder = (projectFile.raceData.categories.maxOfOrNull { it.category.order } ?: -1) + 1
         val activeIds = projectFile.raceData.categories.map { it.category.id }.toMutableSet()
@@ -1837,7 +1830,10 @@ object EventProjectEditor {
             if (imported.category.id in preview.assignedCategoryIds) activeIds += categoryId
             val categoryOrder = existingCategoryData?.category?.order ?: nextCategoryOrder++
             val controlPoints = imported.controlPoints.mapIndexed { index, controlPoint ->
-                val definition = ControlPointDefinition(controlPoint.siCode, controlPoint.type, controlPoint.order)
+                val previewControl = requireNotNull(previewControlsById[controlPoint.controlId]) {
+                    "IOF CourseData preview references an unknown control ID."
+                }
+                val definition = ControlPointDefinition(previewControl.siCode, previewControl.type, controlPoint.order)
                 val matches = projectFile.raceData.controls.filter { it.siCode == definition.siCode }
                 require(matches.size <= 1) { "SI ${definition.siCode} matches more than one existing control. Review Controls before importing." }
                 val existing = matches.singleOrNull()
@@ -1877,7 +1873,12 @@ object EventProjectEditor {
                 },
                 suppliedLegLengths = info.suppliedLegLengths.map { it.copy(fromId = idMap[it.fromId] ?: it.fromId, toId = idMap[it.toId] ?: it.toId) }
             ) }
-            val definitions = controlPoints.map { ControlPointDefinition(it.siCode, it.type, it.order) }
+            val definitions = controlPoints.map { controlPoint ->
+                val control = requireNotNull(resolvedControls[controlPoint.controlId]) {
+                    "Imported course references an unknown control ID."
+                }
+                ControlPointDefinition(control.siCode, control.type, controlPoint.order)
+            }
             val updatedCategoryData = EventCategoryData(
                 category = imported.category.copy(
                     id = categoryId,
@@ -2233,15 +2234,6 @@ object EventProjectEditor {
                 data
             }
         }
-
-    private fun EventCategoryData.hasCourseData(): Boolean =
-        controlPoints.isNotEmpty() ||
-            publicControlIds.isNotEmpty() ||
-            category.controlPointsString.isNotBlank() ||
-            category.lengthMeters != 0 ||
-            category.climbMeters != 0 ||
-            category.encryptedIdealOrder?.isNotBlank() == true ||
-            category.encryptedCourseInfo?.isNotBlank() == true
 
     private fun importOutcome(
         projectFile: EventProjectFile,
@@ -3540,6 +3532,8 @@ object EventProjectEditor {
             IofXmlCompetitorMatchIssue.DUPLICATE_MATCH -> "Competitor match is not unique."
         }
 
+    // Accept the retired enum value as an input compatibility alias with its replacement's semantics.
+    @Suppress("DEPRECATION")
     private fun CompetitorCsvImportRow.existingCompetitorPosition(
         competitors: List<EventCompetitorData>,
         duplicatePolicy: CompetitorCsvImportDuplicatePolicy
@@ -3658,19 +3652,6 @@ object EventProjectEditor {
             publicLabel = trimmedPublicLabel.takeIf { it.isNotEmpty() },
             notes = trimmedNotes.takeIf { it.isNotEmpty() }
         )
-    }
-
-    private fun EventRaceData.evaluationControlPoints(categoryData: EventCategoryData): List<EvaluationControlPoint> {
-        val controlsById = controls.associateBy { it.id }
-        return categoryData.controlPoints.map { controlPoint ->
-            val control = controlsById[controlPoint.controlId]
-            EvaluationControlPoint(
-                siCode = control?.siCode ?: controlPoint.siCode,
-                type = control?.type ?: controlPoint.type,
-                scored = control?.scored ?: controlPoint.type.defaultScored(),
-                label = control?.publicLabel ?: control?.label
-            )
-        }
     }
 
     private fun EventRaceData.containsReadout(resultId: String): Boolean =

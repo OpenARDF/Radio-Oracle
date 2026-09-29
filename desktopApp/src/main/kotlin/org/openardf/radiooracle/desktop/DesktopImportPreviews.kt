@@ -84,7 +84,7 @@ object DesktopImportPreviews {
                 ) {
                     categoriesWithProtectedCoursePreservedCount++
                 }
-                if (existing.controlPoints.isNotEmpty() || existing.category.controlPointsString.isNotBlank()) {
+                if (existing.controlPoints.isNotEmpty() || existing.publicControlIds.isNotEmpty()) {
                     categoriesWithAssignedControlsReplacedCount++
                 }
             }
@@ -108,6 +108,8 @@ object DesktopImportPreviews {
         )
     }
 
+    // Android category previews may arrive before the portable race catalog is restored.
+    @Suppress("DEPRECATION")
     fun categoryDataPreview(
         projectFile: EventProjectFile,
         sourceName: String,
@@ -136,7 +138,7 @@ object DesktopImportPreviews {
                 ) {
                     categoriesWithProtectedCoursePreservedCount++
                 }
-                if (existing.controlPoints.isNotEmpty() || existing.category.controlPointsString.isNotBlank()) {
+                if (existing.controlPoints.isNotEmpty() || existing.publicControlIds.isNotEmpty()) {
                     categoriesWithAssignedControlsReplacedCount++
                 }
             }

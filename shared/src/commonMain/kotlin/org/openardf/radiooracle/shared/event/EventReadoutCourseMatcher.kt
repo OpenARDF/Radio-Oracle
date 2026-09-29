@@ -28,8 +28,8 @@ import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.results.CourseEvaluator
-import org.openardf.radiooracle.shared.results.EvaluationControlPoint
 import org.openardf.radiooracle.shared.results.EvaluationPunch
+import org.openardf.radiooracle.shared.results.evaluationControlPoints
 
 /** Comparable evidence that one configured course explains an SI-card readout. */
 data class EventReadoutCourseMatchQuality(
@@ -132,18 +132,4 @@ object EventReadoutCourseMatcher {
         )
     }
 
-    private fun EventRaceData.evaluationControlPoints(
-        categoryData: EventCategoryData
-    ): List<EvaluationControlPoint> {
-        val controlsById = controls.associateBy { it.id }
-        return categoryData.controlPoints.map { controlPoint ->
-            val control = controlsById[controlPoint.controlId]
-            EvaluationControlPoint(
-                siCode = control?.siCode ?: controlPoint.siCode,
-                type = control?.type ?: controlPoint.type,
-                scored = control?.scored ?: controlPoint.type.defaultScored(),
-                label = control?.publicLabel ?: control?.label
-            )
-        }
-    }
 }

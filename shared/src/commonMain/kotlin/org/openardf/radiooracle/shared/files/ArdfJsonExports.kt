@@ -40,6 +40,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCategorySort
 import org.openardf.radiooracle.shared.event.EventCompetitorData
 import org.openardf.radiooracle.shared.event.EventControl
+import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventControlPoint
 import org.openardf.radiooracle.shared.event.EventRaceData
 import org.openardf.radiooracle.shared.event.EventReadoutData
@@ -140,10 +141,12 @@ object ArdfJsonExports {
     }
 
     private fun EventControlPoint.toArdfControlPoint(controlsById: Map<String, EventControl>): ArdfControlPoint {
-        val control = controlsById[controlId]
+        val control = requireNotNull(controlsById[controlId]) {
+            "ARDF export encountered an unknown control ID."
+        }
         return ArdfControlPoint(
-            siCode = control?.siCode ?: siCode,
-            controlType = (control?.type ?: type).toArdfControlType()
+            siCode = control.siCode,
+            controlType = control.type.toArdfControlType()
         )
     }
 
@@ -229,12 +232,13 @@ object ArdfJsonExports {
 
     private fun EventRaceData.controlPointTypeFor(categoryId: String?, siCode: Int): ControlPointType? =
         categoryId?.let { id ->
-            val controlsById = controls.associateBy { it.id }
             categories
                 .firstOrNull { it.category.id == id }
-                ?.controlPoints
-                ?.firstOrNull { controlPoint -> (controlsById[controlPoint.controlId]?.siCode ?: controlPoint.siCode) == siCode }
-                ?.let { controlPoint -> controlsById[controlPoint.controlId]?.type ?: controlPoint.type }
+                ?.let { categoryData ->
+                    EventControlCatalog.assignedControls(categoryData, controls)
+                        .firstOrNull { it.siCode == siCode }
+                        ?.type
+                }
         }
 
     private fun EventRaceData.categoryNameFor(categoryId: String?): String =
