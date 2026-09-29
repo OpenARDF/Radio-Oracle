@@ -77,9 +77,11 @@ class RaceRecyclerViewAdapter(
         }
         holder.series.visibility = if (item.seriesName == null) View.GONE else View.VISIBLE
         holder.title.text = race.name
-        holder.date.text =
-            race.startDateTime.toLocalDate()
-                .toString() + " " + TimeProcessor.hoursMinutesFormatter(race.startDateTime)
+        holder.date.text = context.getString(
+            R.string.race_date_time,
+            race.startDateTime.toLocalDate().toString(),
+            TimeProcessor.hoursMinutesFormatter(race.startDateTime)
+        )
         holder.type.text = dataProcessor.raceTypeToString(race.raceType)
         holder.level.text = dataProcessor.raceLevelToString(
             race.raceLevel

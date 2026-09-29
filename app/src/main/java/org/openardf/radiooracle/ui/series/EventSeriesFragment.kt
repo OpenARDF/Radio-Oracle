@@ -184,8 +184,9 @@ class EventSeriesFragment : Fragment() {
                 progressDialog.dismiss()
                 Toast.makeText(
                     requireContext(),
-                    getString(
-                        R.string.event_series_import_success,
+                    resources.getQuantityString(
+                        R.plurals.event_series_import_success,
+                        eventSeriesImport.memberImports.size,
                         eventSeriesImport.series.name,
                         eventSeriesImport.memberImports.size
                     ),
@@ -272,8 +273,9 @@ class EventSeriesFragment : Fragment() {
                 progressDialog.dismiss()
                 Toast.makeText(
                     requireContext(),
-                    getString(
-                        R.string.event_series_import_success,
+                    resources.getQuantityString(
+                        R.plurals.event_series_import_success,
+                        eventSeriesImport.memberImports.size,
                         eventSeriesImport.series.name,
                         eventSeriesImport.memberImports.size
                     ),

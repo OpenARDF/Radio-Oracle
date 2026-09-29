@@ -49,6 +49,7 @@ import org.openardf.radiooracle.backend.room.enums.RaceLevel
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.ui.pickers.DatePickerFragment
 import org.openardf.radiooracle.ui.pickers.TimePickerFragment
+import org.openardf.radiooracle.ui.setInvariantNumber
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -204,7 +205,7 @@ class RaceEditDialogFragment : DialogFragment() {
             View.VISIBLE
         }
         startTimeView.setText(race.startDateTime.toLocalTime().withNano(0).toString())
-        limitEditText.setText(race.timeLimit.toMinutes().toString())
+        limitEditText.setInvariantNumber(race.timeLimit.toMinutes())
 
         raceTypePicker.setText(dataProcessor.raceTypeToString(race.raceType), false)
         raceLevelPicker.setText(dataProcessor.raceLevelToString(race.raceLevel), false)

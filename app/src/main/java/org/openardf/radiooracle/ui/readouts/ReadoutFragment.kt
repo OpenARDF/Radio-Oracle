@@ -237,23 +237,33 @@ class ReadoutFragment : Fragment() {
                 val statistics =
                     selectedRaceViewModel.getStatistics(raceId)
 
-                startedTextView.text = "${statistics.startedCompetitors}/${statistics.competitors}"
+                startedTextView.text = getString(
+                    R.string.statistics_ratio,
+                    statistics.startedCompetitors,
+                    statistics.competitors
+                )
                 startedProgressBar.progress = if (statistics.startedCompetitors != 0) {
                     ((statistics.startedCompetitors / statistics.competitors.toDouble()) * 100).toInt()
                 } else {
                     0
                 }
 
-                finishedTextView.text =
-                    "${statistics.finishedCompetitors}/${statistics.competitors}"
+                finishedTextView.text = getString(
+                    R.string.statistics_ratio,
+                    statistics.finishedCompetitors,
+                    statistics.competitors
+                )
                 finishedProgressBar.progress = if (statistics.finishedCompetitors != 0) {
                     ((statistics.finishedCompetitors / statistics.competitors.toDouble()) * 100).toInt()
                 } else {
                     0
                 }
 
-                limitTextView.text =
-                    "${statistics.inLimitCompetitors}/${statistics.startedCompetitors - statistics.finishedCompetitors}"
+                limitTextView.text = getString(
+                    R.string.statistics_ratio,
+                    statistics.inLimitCompetitors,
+                    statistics.startedCompetitors - statistics.finishedCompetitors
+                )
                 limitProgressBar.progress =
                     if (statistics.startedCompetitors - statistics.finishedCompetitors != 0) {
                         ((statistics.inLimitCompetitors / (statistics.startedCompetitors - statistics.finishedCompetitors).toDouble()) * 100).toInt()

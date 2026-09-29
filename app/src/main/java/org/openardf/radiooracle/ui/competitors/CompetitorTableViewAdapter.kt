@@ -37,6 +37,7 @@ import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
+import org.openardf.radiooracle.ui.setInvariantNumber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -86,8 +87,9 @@ class CompetitorTableViewAdapter(
 
             CompetitorTableDisplayType.OVERVIEW -> {
                 when (columnIndex) {
-                    0 -> cell.text =
-                        item.competitorCategory.competitor.startNumber.toString()
+                    0 -> cell.setInvariantNumber(
+                        item.competitorCategory.competitor.startNumber
+                    )
 
                     1 -> {
                         cell.text =
@@ -98,16 +100,17 @@ class CompetitorTableViewAdapter(
                     3 -> cell.text = item.competitorCategory.category?.name
                         ?: context.getString(R.string.no_category)
 
-                    4 -> cell.text =
-                        item.competitorCategory.competitor.siNumber?.toString()
-                            ?: "-"
+                    4 -> item.competitorCategory.competitor.siNumber?.let {
+                        cell.setInvariantNumber(it)
+                    } ?: cell.setText(R.string.general_not_available_symbol)
                 }
             }
 
             CompetitorTableDisplayType.START_LIST -> {
                 when (columnIndex) {
-                    0 -> cell.text =
-                        item.competitorCategory.competitor.startNumber.toString()
+                    0 -> cell.setInvariantNumber(
+                        item.competitorCategory.competitor.startNumber
+                    )
 
                     1 -> {
                         if (item.competitorCategory.competitor.drawnRelativeStartTime != null) {
@@ -117,7 +120,7 @@ class CompetitorTableViewAdapter(
                                     true
                                 )
                         } else {
-                            cell.text = "-"
+                            cell.setText(R.string.general_not_available_symbol)
                         }
                     }
 
@@ -127,9 +130,9 @@ class CompetitorTableViewAdapter(
                     3 -> cell.text = item.competitorCategory.category?.name
                         ?: context.getString(R.string.no_category)
 
-                    4 -> cell.text =
-                        item.competitorCategory.competitor.siNumber?.toString()
-                            ?: "-"
+                    4 -> item.competitorCategory.competitor.siNumber?.let {
+                        cell.setInvariantNumber(it)
+                    } ?: cell.setText(R.string.general_not_available_symbol)
                 }
             }
 

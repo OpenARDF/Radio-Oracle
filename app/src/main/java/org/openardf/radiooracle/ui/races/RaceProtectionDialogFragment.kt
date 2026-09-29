@@ -139,8 +139,13 @@ class RaceProtectionDialogFragment : DialogFragment() {
                             progress.progress = update.completedCategories
                             stop.isEnabled = !update.saving
                             status.text = if (update.saving) getString(R.string.race_protection_saving)
-                                else getString(R.string.race_protection_progress,
-                                    update.completedCategories, update.totalCategories, update.raceName)
+                                else resources.getQuantityString(
+                                    R.plurals.race_protection_progress,
+                                    update.totalCategories,
+                                    update.completedCategories,
+                                    update.totalCategories,
+                                    update.raceName
+                                )
                         }
                     }
                     password.text?.clear()

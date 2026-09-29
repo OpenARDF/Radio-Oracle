@@ -49,6 +49,7 @@ import org.openardf.radiooracle.backend.room.entity.ResultService
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ResultServiceData
 import org.openardf.radiooracle.backend.room.enums.ProviderType
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+import org.openardf.radiooracle.ui.setInvariantNumber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -139,7 +140,7 @@ class ResultServiceDialogFragment : DialogFragment() {
         }
 
         apiKeyInput.setText(apiKey)
-        intervalInput.setText(resultService.interval.seconds.toString())
+        intervalInput.setInvariantNumber(resultService.interval.seconds)
         enableSendAgainButton()
 
         // Result service observer

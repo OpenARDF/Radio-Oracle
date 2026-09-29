@@ -43,7 +43,13 @@ class DiagnosticLogsDialogFragment : DialogFragment() {
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(padding, 0, padding, 0)
-            addView(TextView(context).apply { text = getString(R.string.diagnostic_logs_description) + "\n\n" + DiagnosticReport.PRIVACY_NOTICE })
+            addView(TextView(context).apply {
+                text = getString(
+                    R.string.diagnostic_logs_description_with_privacy,
+                    getString(R.string.diagnostic_logs_description),
+                    getString(R.string.diagnostic_logs_privacy_notice)
+                )
+            })
             addView(Button(context).apply {
                 setText(R.string.diagnostic_logs_share)
                 setOnClickListener { shareLogs() }

@@ -32,7 +32,6 @@ import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
 import android.util.TypedValue
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -106,8 +105,7 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val view = LayoutInflater.from(requireContext())
-            .inflate(R.layout.dialog_sportident_time_sync, null)
+        val view = layoutInflater.inflate(R.layout.dialog_sportident_time_sync, null)
         computerTimeView = view.findViewById(R.id.sportident_time_sync_computer_time)
         stationStatusView = view.findViewById(R.id.sportident_time_sync_station_status)
         progressView = view.findViewById(R.id.sportident_time_sync_progress)
@@ -150,8 +148,6 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
     override fun onStart() {
         super.onStart()
         (dialog as? AlertDialog)?.let { alertDialog ->
-            alertDialog.findViewById<TextView>(resources.getIdentifier("alertTitle", "id", "android"))
-                ?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23f)
             alertDialog.getButton(AlertDialog.BUTTON_POSITIVE)
                 ?.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
         }
@@ -320,7 +316,11 @@ class SportIdentTimeSyncDialogFragment : DialogFragment() {
                 showBackupResults()
                 Toast.makeText(
                     requireContext(),
-                    getString(R.string.sportident_backup_complete, snapshot.records.size),
+                    resources.getQuantityString(
+                        R.plurals.sportident_backup_complete,
+                        snapshot.records.size,
+                        snapshot.records.size
+                    ),
                     Toast.LENGTH_LONG
                 ).show()
             }.onFailure { error ->

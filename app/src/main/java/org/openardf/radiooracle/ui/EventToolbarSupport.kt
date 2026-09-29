@@ -29,6 +29,8 @@ import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import androidx.core.view.get
+import androidx.core.view.size
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -116,8 +118,8 @@ object EventToolbarSupport {
     }
 
     private fun tintMenuIcons(menu: Menu, color: Int) {
-        for (index in 0 until menu.size()) {
-            val item = menu.getItem(index)
+        for (index in 0 until menu.size) {
+            val item = menu[index]
             item.icon = item.icon?.let { icon ->
                 tintIcon(icon, color)
             }

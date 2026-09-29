@@ -4,10 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Typeface
-import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.isGone
+import androidx.core.view.isVisible
+import org.openardf.radiooracle.R
 import org.openardf.radiooracle.shared.files.CsvFormatGuide
 
 /** Android view adapter for the same guide metadata used by Compose Desktop. */
@@ -20,44 +22,73 @@ class CsvFormatPanel @JvmOverloads constructor(context: Context, attrs: android.
 
     fun showGuide(guide: CsvFormatGuide?, saveTemplate: ((CsvFormatGuide) -> Unit)? = null) {
         removeAllViews()
-        visibility = if (guide == null) View.GONE else View.VISIBLE
+        isVisible = guide != null
         if (guide == null) return
-        label("CSV format — ${guide.title}", bold = true)
+        label(context.getString(R.string.csv_format_title, guide.title), bold = true)
         label(guide.organization)
         label(guide.orderRule)
-        label(if (guide.includesHeader) "Header" else "Column order (no header in the file)", bold = true)
+        label(
+            context.getString(
+                if (guide.includesHeader) R.string.csv_header
+                else R.string.csv_column_order_no_header
+            ),
+            bold = true
+        )
         label(guide.headerRow, code = true)
-        label("Example row", bold = true)
+        label(context.getString(R.string.csv_example_row), bold = true)
         label(guide.exampleRow, code = true)
         addView(Button(context).apply {
-            text = if (guide.includesHeader) "Copy header" else "Copy column order"
+            setText(
+                if (guide.includesHeader) R.string.csv_copy_header
+                else R.string.csv_copy_column_order
+            )
             setOnClickListener {
                 (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                    .setPrimaryClip(ClipData.newPlainText("CSV header", guide.headerRow))
+                    .setPrimaryClip(
+                        ClipData.newPlainText(
+                            context.getString(R.string.csv_clipboard_header_label),
+                            guide.headerRow
+                        )
+                    )
             }
         })
         if (guide.importable && saveTemplate != null) addView(Button(context).apply {
-            text = "Save template…"
+            setText(R.string.csv_save_template)
             setOnClickListener { saveTemplate(guide) }
         })
-        val details = LinearLayout(context).apply { orientation = VERTICAL; visibility = View.GONE }
+        val details = LinearLayout(context).apply { orientation = VERTICAL; isGone = true }
         guide.columns.forEachIndexed { index, column ->
             details.addView(TextView(context).apply {
-                val requirement = if (guide.importable && column in guide.requiredColumns) " (required)" else ""
-                text = "${index + 1}. $column$requirement — ${guide.description(column)}"
+                val requirement = if (guide.importable && column in guide.requiredColumns) {
+                    context.getString(R.string.csv_required_suffix)
+                } else {
+                    ""
+                }
+                text = context.getString(
+                    R.string.csv_column_detail,
+                    index + 1,
+                    column,
+                    requirement,
+                    guide.description(column)
+                )
                 setTextIsSelectable(true)
             })
         }
         guide.notes.forEach { note -> details.addView(TextView(context).apply { text = note }) }
-        if (guide.alternatives.isNotEmpty()) details.addView(TextView(context).apply { text = "Other accepted layouts" })
+        if (guide.alternatives.isNotEmpty()) details.addView(TextView(context).apply {
+            setText(R.string.csv_other_accepted_layouts)
+        })
         guide.alternatives.forEach { alternative ->
             details.addView(CsvFormatPanel(context).apply { showGuide(alternative, saveTemplate) })
         }
         addView(Button(context).apply {
-            text = "Show field details"
+            setText(R.string.csv_show_field_details)
             setOnClickListener {
-                details.visibility = if (details.visibility == View.GONE) View.VISIBLE else View.GONE
-                text = if (details.visibility == View.VISIBLE) "Hide field details" else "Show field details"
+                details.isGone = details.isVisible
+                setText(
+                    if (details.isVisible) R.string.csv_hide_field_details
+                    else R.string.csv_show_field_details
+                )
             }
         })
         addView(details)

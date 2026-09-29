@@ -25,6 +25,7 @@
 package org.openardf.radiooracle.backend.publicresults
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import java.security.MessageDigest
 
@@ -100,14 +101,13 @@ object AndroidCloudflarePagesSettingsStore {
 
     fun write(context: Context, settings: AndroidCloudflarePagesPublishSettings) {
         val value = settings.normalized()
-        PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
-            .edit()
-            .putString(PROJECT_NAME_KEY, value.projectName)
-            .putString(BRANCH_KEY, value.branch)
-            .putString(ACCOUNT_ID_KEY, value.accountId)
-            .putString(API_TOKEN_KEY, value.apiToken)
-            .putString(RETENTION_MODE_KEY, value.retentionMode.name)
-            .apply()
+        PreferenceManager.getDefaultSharedPreferences(context.applicationContext).edit {
+            putString(PROJECT_NAME_KEY, value.projectName)
+            putString(BRANCH_KEY, value.branch)
+            putString(ACCOUNT_ID_KEY, value.accountId)
+            putString(API_TOKEN_KEY, value.apiToken)
+            putString(RETENTION_MODE_KEY, value.retentionMode.name)
+        }
     }
 
     fun isRejected(
@@ -121,17 +121,15 @@ object AndroidCloudflarePagesSettingsStore {
     }
 
     fun recordRejection(context: Context, settings: AndroidCloudflarePagesPublishSettings) {
-        PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
-            .edit()
-            .putString(REJECTION_FINGERPRINT_KEY, settings.rejectionFingerprint())
-            .apply()
+        PreferenceManager.getDefaultSharedPreferences(context.applicationContext).edit {
+            putString(REJECTION_FINGERPRINT_KEY, settings.rejectionFingerprint())
+        }
     }
 
     fun clearRejection(context: Context) {
-        PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
-            .edit()
-            .remove(REJECTION_FINGERPRINT_KEY)
-            .apply()
+        PreferenceManager.getDefaultSharedPreferences(context.applicationContext).edit {
+            remove(REJECTION_FINGERPRINT_KEY)
+        }
     }
 
     private fun AndroidCloudflarePagesPublishSettings.rejectionFingerprint(): String {

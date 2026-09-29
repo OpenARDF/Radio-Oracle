@@ -49,6 +49,7 @@ import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+import org.openardf.radiooracle.ui.setInvariantNumber
 import kotlinx.coroutines.runBlocking
 import java.util.UUID
 
@@ -161,7 +162,7 @@ class CategoryEditDialogFragment : DialogFragment() {
                 dataProcessor.raceBandToString(race.raceBand),
                 false
             )
-            limitEditText.setText(race.timeLimit.toMinutes().toString())
+            limitEditText.setInvariantNumber(race.timeLimit.toMinutes())
 
             raceTypeLayout.isEnabled = false
             bandLayout.isEnabled = false
@@ -175,15 +176,15 @@ class CategoryEditDialogFragment : DialogFragment() {
             nameEditText.setText(category.name)
 
             if (category.maxAge != null) {
-                maxAgeEditText.setText(category.maxAge.toString())
+                maxAgeEditText.setInvariantNumber(category.maxAge)
             }
 
             if (category.length != 0) {
-                lengthEditText.setText(category.length.toString())
+                lengthEditText.setInvariantNumber(category.length)
             }
 
             if (category.climb != 0) {
-                climbEditText.setText(category.climb.toString())
+                climbEditText.setInvariantNumber(category.climb)
             }
 
             raceTypePicker.setText(
@@ -194,7 +195,7 @@ class CategoryEditDialogFragment : DialogFragment() {
                 dataProcessor.raceBandToString(race.raceBand),
                 false
             )
-            limitEditText.setText(race.timeLimit.toMinutes().toString())
+            limitEditText.setInvariantNumber(race.timeLimit.toMinutes())
         }
 
         samePropertiesCheckBox.isChecked = true

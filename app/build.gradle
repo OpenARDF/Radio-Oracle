@@ -125,6 +125,9 @@ android {
         ])
     }
 
+    // Runtime language switching needs both built-in locales available without Play delivery.
+    bundle.language.enableSplit = false
+
     testOptions {
         unitTests {
             includeAndroidResources = true

@@ -44,6 +44,7 @@
             android:layout_width="30dp"
             android:layout_height="40dp"
             android:background="@color/black"
+            android:contentDescription="@string/accessibility_add_alias"
             android:src="@drawable/ic_add_white" />
 
         <androidx.recyclerview.widget.RecyclerView

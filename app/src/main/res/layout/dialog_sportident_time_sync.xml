@@ -56,6 +56,7 @@
             android:textSize="18sp" />
 
         <LinearLayout
+            style="?android:attr/buttonBarStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
@@ -64,6 +65,7 @@
 
             <Button
                 android:id="@+id/sportident_time_sync_inspect"
+                style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:enabled="false"
@@ -72,6 +74,7 @@
 
             <Button
                 android:id="@+id/sportident_time_sync_run"
+                style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
@@ -111,17 +114,20 @@
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textSize="17sp" />
 
+        <!-- The optional SI-card filter is event data, not personal autofill data. -->
         <EditText
             android:id="@+id/sportident_backup_filter"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:hint="@string/sportident_backup_filter_hint"
+            android:importantForAutofill="no"
             android:inputType="number"
             android:maxLines="1"
             android:textSize="18sp" />
 
         <LinearLayout
+            style="?android:attr/buttonBarStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="end"
@@ -129,6 +135,7 @@
 
             <Button
                 android:id="@+id/sportident_backup_read"
+                style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:enabled="false"
@@ -137,6 +144,7 @@
 
             <Button
                 android:id="@+id/sportident_backup_show"
+                style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"

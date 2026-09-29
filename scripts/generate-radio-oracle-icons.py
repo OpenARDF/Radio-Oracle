@@ -246,10 +246,6 @@ def render_series_document_icon(size: int) -> Image.Image:
     return canvas
 
 
-def save_webp(path: Path, image: Image.Image) -> None:
-    image.save(path, "WEBP", quality=95, method=6)
-
-
 def write_ico(path: Path, images: list[tuple[int, Image.Image]]) -> None:
     encoded_images = []
     for size, image in images:
@@ -348,13 +344,6 @@ def write_desktop_packaging_icons(
 
 
 def main() -> None:
-    density_sizes = {
-        "mipmap-mdpi": 48,
-        "mipmap-hdpi": 72,
-        "mipmap-xhdpi": 96,
-        "mipmap-xxhdpi": 144,
-        "mipmap-xxxhdpi": 192,
-    }
     foreground_sizes = {
         "mipmap-mdpi": 108,
         "mipmap-hdpi": 162,
@@ -362,13 +351,6 @@ def main() -> None:
         "mipmap-xxhdpi": 324,
         "mipmap-xxxhdpi": 432,
     }
-
-    for folder, size in density_sizes.items():
-        out_dir = RES / folder
-        render_full_icon(size).save(out_dir / "ic_logo.png")
-        render_full_icon(size, rounded=True).save(out_dir / "ic_logo_round.png")
-        save_webp(out_dir / "ic_launcher.webp", render_full_icon(size))
-        save_webp(out_dir / "ic_launcher_round.webp", render_full_icon(size, rounded=True))
 
     for folder, size in foreground_sizes.items():
         render_foreground(size).save(RES / folder / "ic_runner_foreground.png")

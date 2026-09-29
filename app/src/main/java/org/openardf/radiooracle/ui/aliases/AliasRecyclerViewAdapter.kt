@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.ui.aliases
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.text.InputFilter
 import android.text.TextWatcher
@@ -175,6 +176,7 @@ class AliasRecyclerViewAdapter(
         }
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     fun addStandardAliases(international: Boolean) {
         val standard = ArrayList<AliasEditItemWrapper>()
 
@@ -237,6 +239,7 @@ class AliasRecyclerViewAdapter(
 
         values = standard
         sortAliases()
+        // The operation replaces and re-sorts the complete editable collection.
         notifyDataSetChanged()
     }
 

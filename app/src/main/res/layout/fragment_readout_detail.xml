@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
@@ -48,7 +49,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:text="TextView"
+                    tools:text="Competitor Name"
                     app:layout_constraintStart_toEndOf="@+id/textView5"
                     app:layout_constraintTop_toTopOf="parent" />
 
@@ -68,7 +69,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:layout_marginTop="8dp"
-                    android:text="TextView"
+                    tools:text="1234567"
                     app:layout_constraintStart_toEndOf="@+id/textView6"
                     app:layout_constraintTop_toBottomOf="@+id/readout_detail_competitor_name" />
 
@@ -88,7 +89,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:layout_marginTop="8dp"
-                    android:text="TextView"
+                    tools:text="Club"
                     app:layout_constraintStart_toEndOf="@+id/textView"
                     app:layout_constraintTop_toBottomOf="@+id/textView6" />
 
@@ -108,7 +109,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:layout_marginTop="8dp"
-                    android:text="TextView"
+                    tools:text="Person ID"
                     app:layout_constraintStart_toEndOf="@+id/textView7"
                     app:layout_constraintTop_toBottomOf="@+id/readout_detail_club" />
             </androidx.constraintlayout.widget.ConstraintLayout>
@@ -147,7 +148,6 @@
                         android:text="@string/general_check_time"
                         app:layout_constraintStart_toEndOf="@id/readout_detail_check_time_title"
                         app:layout_constraintTop_toTopOf="parent" />
-                    ;
                     <TextView
                         android:id="@+id/readout_detail_category_title"
                         android:layout_width="wrap_content"
@@ -165,7 +165,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:layout_marginTop="8dp"
-                        android:text="TextView"
+                        tools:text="M21"
                         app:layout_constraintStart_toEndOf="@+id/readout_detail_category_title"
                         app:layout_constraintTop_toBottomOf="@id/readout_detail_run_time_title" />
 
@@ -196,7 +196,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:layout_marginTop="8dp"
-                        android:text="TextView"
+                        tools:text="42"
                         app:layout_constraintStart_toEndOf="@+id/readout_detail_points_title"
                         app:layout_constraintTop_toBottomOf="@+id/readout_detail_status_title" />
 
@@ -206,7 +206,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:layout_marginTop="8dp"
-                        android:text="TextView"
+                        tools:text="1"
                         app:layout_constraintStart_toEndOf="@+id/readout_detail_place_title"
                         app:layout_constraintTop_toBottomOf="@+id/readout_detail_category_title" />
 
@@ -215,7 +215,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
-                        android:text="TextView"
+                        tools:text="01:23:45"
                         app:layout_constraintStart_toEndOf="@+id/readout_detail_run_time_title"
                         app:layout_constraintTop_toTopOf="parent" />
 
@@ -245,7 +245,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:layout_marginTop="8dp"
-                        android:text="TextView"
+                        tools:text="Valid"
                         app:layout_constraintStart_toEndOf="@id/readout_detail_status_title"
                         app:layout_constraintTop_toBottomOf="@+id/readout_detail_check_time_title" />
                 </androidx.constraintlayout.widget.ConstraintLayout>

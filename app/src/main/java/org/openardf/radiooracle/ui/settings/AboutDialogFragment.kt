@@ -27,17 +27,16 @@ package org.openardf.radiooracle.ui.settings
 import android.app.Dialog
 import android.content.Intent
 import android.graphics.Color
-import android.net.Uri
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextPaint
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.core.net.toUri
 import androidx.fragment.app.DialogFragment
 import org.openardf.radiooracle.BuildConfig
 import org.openardf.radiooracle.R
@@ -50,8 +49,7 @@ class AboutDialogFragment : DialogFragment() {
 
     /** Builds the about dialog from its custom layout. */
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val view: View = LayoutInflater.from(requireContext())
-            .inflate(R.layout.dialog_about_app, null)
+        val view: View = layoutInflater.inflate(R.layout.dialog_about_app, null)
 
         val context = requireContext()
         val packageManager = context.packageManager
@@ -87,7 +85,7 @@ class AboutDialogFragment : DialogFragment() {
         return AlertDialog.Builder(requireContext())
             .setTitle(R.string.about_app_menu_title)
             .setView(view)
-            .setPositiveButton("OK", null)
+            .setPositiveButton(R.string.general_ok, null)
             .create()
     }
 
@@ -101,7 +99,7 @@ class AboutDialogFragment : DialogFragment() {
         span.setSpan(
             object : ClickableSpan() {
                 override fun onClick(widget: View) {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
                 }
 
                 override fun updateDrawState(ds: TextPaint) {
