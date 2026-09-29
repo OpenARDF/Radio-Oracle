@@ -33,10 +33,20 @@ The upload certificate is intentionally self-signed. Java's ordinary JAR-signatu
 - Android packaging cannot strip symbols from prebuilt Firebase Crashlytics and AndroidX DataStore native libraries. They are packaged unchanged, as reported by AGP.
 - The current jDeploy toolchain still installs its own deprecated `shelljs` 0.8, `glob` 7, and `inflight` development dependencies. Radio-Oracle overrides vulnerable `brace-expansion` with 1.1.21, updates bundled `tar` to 7.5.22, keeps a valid npm dependency tree, and has zero reported npm vulnerabilities.
 - JVM test workers report that class-data sharing is unavailable when their bootstrap classpath is modified. This is a test-VM runtime notice, not a source warning or test failure.
+- GitHub reports that `actions/setup-node@v4`, `actions/upload-artifact@v4`, `android-actions/setup-android@v3`, and `xresloader/upload-to-github-release@v1.6.0` still target Node 20 and are being forced onto Node 24. It also announced a future `ubuntu-latest` image migration. These hosted-action notices did not fail the release workflows and are retained for future CI maintenance rather than changing the immutable release candidate.
 
 ## Publication verification
 
-The candidate commit, immutable tag, GitHub installer workflow, npm trusted-publish workflow, immutable-tag course workflow, public release assets, and registry install smoke are recorded here after the remote workflows finish.
+- Candidate commit and tag target: `34118167de62e1292467fe44f2f8c40626c7b858`, immutable tag `v1.0.50`.
+- [GitHub installer release workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36507304705): passed in 12m43s.
+- [npm trusted-publish workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36507326003): passed in 11m24s and published signed provenance to [Sigstore](https://search.sigstore.dev/?logIndex=2991460459).
+- [Immutable-tag course workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36507328187): passed in 8m32s.
+- [Development1 course workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36507271258): passed on the same candidate commit.
+- [GitHub release v1.0.50](https://github.com/OpenARDF/Radio-Oracle/releases/tag/v1.0.50): public, non-draft, non-prerelease, and targeted at the candidate commit. All 14 assets were downloaded into a fresh temporary directory and matched GitHub's SHA-256 digests. The GitHub-safe package archive contains version 1.0.50 and all six Linux, macOS, and Windows x64/ARM64 runtime jars; its SHA-256 is `c08cb6a39cb0bfbe8ca3eb5d9d32bcccaa1225ec55eae8000d0e3db82ee09d35`.
+- [npm package 1.0.50](https://www.npmjs.com/package/@openardf/radio-oracle/v/1.0.50): public with `latest` set to 1.0.50. Registry shasum: `60c299c590f7ead27eca249b177e9c8ff04d7c2d`; integrity: `sha512-2KWqc+zcCHXc4TP62EmL2GP6A0HAi0kfNNTw4jWH3Z0/Ffpcj4NSd8PJHMAlg8duM0SKUr9wjLv80YBAG73PCg==`.
+- A fresh temporary-directory install from the public npm registry launched Radio-Oracle successfully. Its targeted cleanup removed only the smoke instance; the separately running user app remained active.
+
+npm accepted the trusted publish at 01:30 UTC but held the 119.3 MB package in its asynchronous processing queue until 02:26 UTC. The release process did not issue a duplicate publish; public metadata, dist-tag, tarball, provenance, and fresh install were verified after processing completed.
 
 ## Explicitly unverified scope
 
