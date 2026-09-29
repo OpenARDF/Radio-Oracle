@@ -117,7 +117,7 @@ android {
     }
 
     packaging {
-        // Exclude duplicate OSGI MANIFEST entries from dependencies (okhttp logging-interceptor, jspecify etc.)
+        // Exclude duplicate OSGI MANIFEST entries from dependencies such as jspecify.
         // Keep these exclusions narrow to avoid removing useful metadata from other libs.
         resources.excludes.addAll([
             "META-INF/versions/**/OSGI-INF/MANIFEST.MF",
@@ -164,7 +164,7 @@ dependencies {
 
     if (firebaseEnabled) {
         implementation platform(libs.firebase.bom)
-        implementation(libs.firebase.crashlytics.ndk)
+        implementation(libs.firebase.crashlytics)
         implementation(libs.firebase.analytics)
     }
 
@@ -194,8 +194,6 @@ dependencies {
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)
     testImplementation(libs.xmlunit.core)
-
-    implementation(libs.okhttp.logging.interceptor)
 
 }
 

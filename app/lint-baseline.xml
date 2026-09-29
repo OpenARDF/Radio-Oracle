@@ -267,17 +267,6 @@
 
     <issue
         id="NewerVersionAvailable"
-        message="A newer version of com.squareup.okhttp3:logging-interceptor than 5.3.0 is available: 5.5.0"
-        errorLine1="okhttp-logging = &quot;5.3.0&quot;"
-        errorLine2="                 ~~~~~~~">
-        <location
-            file="$HOME/Documents/GitHub/Radio-Oracle/gradle/libs.versions.toml"
-            line="36"
-            column="18"/>
-    </issue>
-
-    <issue
-        id="NewerVersionAvailable"
         message="A newer version of org.robolectric:robolectric than 4.16 is available: 4.17"
         errorLine1="robolectric = &quot;4.16&quot;"
         errorLine2="              ~~~~~~">

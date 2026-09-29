@@ -49,9 +49,9 @@ Release verification must still confirm that neither
 `android.permission.ACCESS_ADSERVICES_AD_ID` appears in the merged app
 manifest.
 
-Until the roadmap migration from Crashlytics NDK to ordinary Crashlytics is
-complete, a release Mac without the requested NDK strip tool can also report
-that the prebuilt Crashlytics native libraries and AndroidX DataStore shared
-counter were packaged unchanged. Treat that as a narrowly waived toolchain
+Radio-Oracle uses ordinary Crashlytics because it has no Android JNI/C++ code
+of its own. The release bundle can still contain AndroidX DataStore's prebuilt
+shared counter. A release Mac without the requested NDK strip tool may report
+that library as packaged unchanged. Treat that as a narrowly waived toolchain
 warning only when the bundle's 16 KB packaging and ELF alignment checks pass;
-it is not evidence that the libraries are intrinsically unstrippable.
+it is not evidence that the library is intrinsically unstrippable.

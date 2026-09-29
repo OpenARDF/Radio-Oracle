@@ -220,12 +220,12 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Android Native Dependency Maintenance
 
-- In the next maintenance commit, replace `firebase-crashlytics-ndk` with
-  ordinary `firebase-crashlytics`. Radio-Oracle has no Android JNI/C++ code of
-  its own, so retain Java/Kotlin crash, non-fatal, and ANR reporting without
-  carrying the native Crashlytics reporter solely for third-party binaries.
-  Confirm the resulting runtime dependency graph and packaged `.so` inventory,
-  then run Android regression, release-bundle, and 16 KB compatibility gates.
+- Implemented: replaced `firebase-crashlytics-ndk` with ordinary
+  `firebase-crashlytics`. Radio-Oracle has no Android JNI/C++ code of its own,
+  so Java/Kotlin crash, non-fatal, and ANR reporting remains without carrying
+  the native Crashlytics reporter solely for third-party binaries. The
+  maintenance gate confirms the runtime dependency graph, packaged `.so`
+  inventory, Android regression and release bundle, and 16 KB compatibility.
 - Keep the monthly 16 KB emulator smoke workflow and run it on relevant Android
   build or dependency changes. Before a full Android release, require a passing
   run newer than those changes; during each major Android preview cycle, update

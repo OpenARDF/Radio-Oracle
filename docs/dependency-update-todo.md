@@ -31,9 +31,9 @@ Android while giving future desktop work a cleaner shared-code base.
   coordinates. Replace or isolate that table-view dependency and remove
   Jetifier before AGP 10; until then, accept only this specific deprecation
   warning rather than suppressing Android build warnings broadly.
-- Gate or remove production `HttpLoggingInterceptor.Level.BODY` logging so live
-  result publishing does not expose sensitive payloads or depend on verbose
-  logging behavior after OkHttp updates.
+- Done: removed production `HttpLoggingInterceptor.Level.BODY` logging and the
+  unused logging-interceptor dependency, so live result payloads are no longer
+  copied into verbose network logs.
 - Done: removed the unused `app/libs/android-tableview-kotlin-0.1.0-alpha`
   source tree. The Android app uses the published SortableTableView dependency
   instead of that historical vendored copy.
