@@ -24,7 +24,7 @@
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // Kotlin support is built into Android application modules beginning with AGP 9.
     id("com.google.devtools.ksp")
     id("androidx.navigation.safeargs")
 }
@@ -129,6 +129,11 @@ android {
         unitTests {
             includeAndroidResources = true
         }
+    }
+
+    lint {
+        // Pin known legacy findings so release lint blocks only newly introduced debt.
+        baseline = file("lint-baseline.xml")
     }
 }
 

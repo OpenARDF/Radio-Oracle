@@ -84,9 +84,10 @@ class PrintsFragment : PreferenceFragmentCompat() {
             findPreference<SwitchPreference>(requireContext().getString(R.string.key_prints_enabled))
 
         enablePrintingPreference?.setOnPreferenceChangeListener { _, enablePrints ->
+            val printsEnabled = enablePrints as Boolean
 
             // If printing is disabled -> let the PrintProcessor know
-            if (enablePrints as Boolean) {
+            if (printsEnabled) {
                 logInfo("Print settings enabled")
                 // Request bluetooth permissions if needed
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -106,10 +107,10 @@ class PrintsFragment : PreferenceFragmentCompat() {
 
             editor.putBoolean(
                 requireContext().getString(R.string.key_prints_enabled),
-                enablePrints as Boolean
+                printsEnabled
             )
             editor.apply()
-            enableOrDisablePreferences(enablePrints)
+            enableOrDisablePreferences(printsEnabled)
 
             true
         }

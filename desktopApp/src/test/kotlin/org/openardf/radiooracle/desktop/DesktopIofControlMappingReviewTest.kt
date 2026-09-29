@@ -41,9 +41,10 @@ class DesktopIofControlMappingReviewTest {
         rule.onNodeWithTag("xml-si-B").performScrollTo().performTextInput("79")
         rule.onNodeWithText("Review Courses").assertIsEnabled().performClick()
         rule.runOnIdle {
-            val beacon = candidate!!.raceData.controls.single { it.siCode == 79 }
+            val reviewedCandidate = requireNotNull(candidate)
+            val beacon = reviewedCandidate.raceData.controls.single { it.siCode == 79 }
             assertEquals("Finish Beacon", EventControlCatalog.displayLabel(beacon))
-            assertTrue(candidate!!.raceData.categories.all { it.controlPoints.any { it.controlId == beacon.id } })
+            assertTrue(reviewedCandidate.raceData.categories.all { it.controlPoints.any { it.controlId == beacon.id } })
             assertEquals(before, EventProjectFileJson.encode(original))
         }
         rule.onNodeWithTag("xml-role-B").performScrollTo().performClick()
@@ -83,8 +84,9 @@ class DesktopIofControlMappingReviewTest {
         rule.onNodeWithTag("xml-mapping-route-bends").performScrollTo().performClick().assertIsOn()
         rule.onNodeWithText("Review Courses").assertIsEnabled().performClick()
         rule.runOnIdle {
-            assertFalse(900 in candidate!!.controlSiCodes())
-            assertTrue(candidate!!.categories.all { data -> data.category.courseInfo!!.courseObjects.any { it.type == ProtectedCourseObjectType.WAYPOINT } })
+            val reviewedCandidate = requireNotNull(candidate)
+            assertFalse(900 in reviewedCandidate.controlSiCodes())
+            assertTrue(reviewedCandidate.categories.all { data -> data.category.courseInfo!!.courseObjects.any { it.type == ProtectedCourseObjectType.WAYPOINT } })
         }
     }
 

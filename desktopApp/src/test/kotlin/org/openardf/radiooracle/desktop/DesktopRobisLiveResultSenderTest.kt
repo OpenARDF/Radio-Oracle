@@ -61,8 +61,9 @@ class DesktopRobisLiveResultSenderTest {
 
         assertEquals(1, result.sentCount)
         assertEquals(200, result.statusCode)
-        assertEquals(NetworkEndpoints.ROBIS_RESULTS_API_URL, capturedRequest!!.url)
-        assertEquals("secret", capturedRequest!!.headers[NetworkHeaders.ROBIS_API_HEADER])
+        val request = requireNotNull(capturedRequest)
+        assertEquals(NetworkEndpoints.ROBIS_RESULTS_API_URL, request.url)
+        assertEquals("secret", request.headers[NetworkHeaders.ROBIS_API_HEADER])
         assertTrue(capturedPayload.contains("\"competitor_index\": \"alpha\""))
         assertFalse(capturedPayload.contains("\"competitor_index\": \"beta\""))
         assertTrue(result.projectFile.raceData.competitorData[0].readoutData!!.result.sent)

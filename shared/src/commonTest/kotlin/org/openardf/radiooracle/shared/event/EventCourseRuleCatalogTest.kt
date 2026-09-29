@@ -27,6 +27,7 @@ package org.openardf.radiooracle.shared.event
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.openardf.radiooracle.shared.domain.RaceType
@@ -50,19 +51,19 @@ class EventCourseRuleCatalogTest {
         assertTrue(EventCourseRuleCatalog.hasClimbLimit(RaceType.SPRINT))
         assertFalse(EventCourseRuleCatalog.hasClimbLimit(RaceType.ORIENTEERING))
 
-        val youthClassic = EventCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC, "W14")
-        assertEquals("Youth Classic", youthClassic?.formatLabel)
-        assertEquals(500, youthClassic?.startMinMeters)
-        assertEquals(400, youthClassic?.pairMinMeters)
-        assertTrue(youthClassic?.includeBeaconInStartCheck == true)
-        assertFalse(youthClassic?.includeSpectatorInPairCheck == true)
+        val youthClassic = assertNotNull(EventCourseRuleCatalog.spacingRuleSet(RaceType.CLASSIC, "W14"))
+        assertEquals("Youth Classic", youthClassic.formatLabel)
+        assertEquals(500, youthClassic.startMinMeters)
+        assertEquals(400, youthClassic.pairMinMeters)
+        assertTrue(youthClassic.includeBeaconInStartCheck)
+        assertFalse(youthClassic.includeSpectatorInPairCheck)
 
-        val sprint = EventCourseRuleCatalog.spacingRuleSet(RaceType.SPRINT, "M21")
-        assertEquals("Sprint", sprint?.formatLabel)
-        assertEquals(100, sprint?.startMinMeters)
-        assertEquals(100, sprint?.pairMinMeters)
-        assertFalse(sprint?.includeBeaconInStartCheck == true)
-        assertTrue(sprint?.includeSpectatorInPairCheck == true)
+        val sprint = assertNotNull(EventCourseRuleCatalog.spacingRuleSet(RaceType.SPRINT, "M21"))
+        assertEquals("Sprint", sprint.formatLabel)
+        assertEquals(100, sprint.startMinMeters)
+        assertEquals(100, sprint.pairMinMeters)
+        assertFalse(sprint.includeBeaconInStartCheck)
+        assertTrue(sprint.includeSpectatorInPairCheck)
 
         assertNull(EventCourseRuleCatalog.spacingRuleSet(RaceType.ORIENTEERING, "M21"))
     }

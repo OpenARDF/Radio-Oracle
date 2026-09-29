@@ -10920,7 +10920,7 @@ private fun AboutRadioOracleInfoRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = if (isLink) {
-                Modifier.clickable { onClick?.invoke() }
+                Modifier.clickable { onClick() }
             } else {
                 Modifier
             }

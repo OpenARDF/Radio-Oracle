@@ -1,12 +1,12 @@
 [versions]
-android-gradle-plugin = "8.13.2"
+android-gradle-plugin = "9.2.1"
 androidx-appcompat = "1.7.1"
 androidx-constraintlayout = "2.2.1"
 androidx-core = "1.18.0"
 androidx-espresso = "3.7.0"
 androidx-legacy-support = "1.0.0"
 androidx-lifecycle = "2.10.0"
-androidx-navigation-plugin = "2.9.2"
+androidx-navigation-plugin = "2.9.8"
 androidx-navigation-runtime = "2.9.8"
 androidx-preference = "1.2.1"
 androidx-room = "2.8.4"
@@ -22,11 +22,11 @@ google-services = "4.4.3"
 google-code-scanner = "16.1.0"
 junit = "4.13.2"
 jserialcomm = "2.11.4"
-kotlin = "2.2.0"
+kotlin = "2.4.20"
 kotlin-csv = "1.10.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
-ksp = "2.2.0-2.0.2"
+ksp = "2.3.12"
 skiko = "0.144.6"
 material = "1.14.0"
 mockito = "5.23.0"
@@ -89,11 +89,10 @@ zxing-javase = { module = "com.google.zxing:javase", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
-android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
+android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "android-gradle-plugin" }
 crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "crashlytics-plugin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

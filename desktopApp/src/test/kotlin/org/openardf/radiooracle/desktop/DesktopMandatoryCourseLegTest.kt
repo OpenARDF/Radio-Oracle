@@ -65,7 +65,8 @@ class DesktopMandatoryCourseLegTest {
         assertTrue("Elevation samples must not become mandatory vertices", info.route.size > vertices.size)
 
         val summary = analyze(project, info)
-        assertTrue(summary.calculatedRouteSection!!.explanation.contains("Other legs may need the same detour"))
+        val calculatedRouteSection = requireNotNull(summary.calculatedRouteSection)
+        assertTrue(calculatedRouteSection.explanation.contains("Other legs may need the same detour"))
         assertTrue(summary.courseRecommendation.paragraph.contains("conditional on the known leg constraints"))
         val application = requireNotNull(summary.calculatedRouteApplication)
         assertEquals("1 2 B", application.idealOrderText)
@@ -73,7 +74,7 @@ class DesktopMandatoryCourseLegTest {
         assertEquals(vertices.map { it.latitude to it.longitude }, folder.routeStops.map { it.point.latitude to it.point.longitude })
         val metrics = DesktopCourseRouteMetricsCalculator.metrics(folder.routePoints)
         assertEquals(metrics.horizontalLengthMeters.roundToInt(), application.routeLengthMeters)
-        assertEquals(metrics.effectiveLengthMeters!!.roundToInt(), (summary.calculatedRouteSection?.effectiveLengthMeters ?: summary.providedRouteSection?.effectiveLengthMeters))
+        assertEquals(metrics.effectiveLengthMeters!!.roundToInt(), (calculatedRouteSection.effectiveLengthMeters ?: summary.providedRouteSection?.effectiveLengthMeters))
         assertEquals(waypoints.map { it.id }, application.orderedPlacementIds.filter { id -> waypoints.any { it.id == id } })
 
         val path = Files.createTempFile("mandatory-leg-round-trip", ".kml")
@@ -148,7 +149,9 @@ class DesktopMandatoryCourseLegTest {
         val (project, info) = importRoute(vertices, hillElevation)
         val summary = analyze(project, info, hillElevation)
         assertEquals("2 1 B", summary.calculatedRouteApplication?.idealOrderText)
-        assertTrue(requireNotNull(summary.providedRouteSection?.effectiveLengthMeters) > requireNotNull((summary.calculatedRouteSection?.effectiveLengthMeters ?: summary.providedRouteSection?.effectiveLengthMeters)))
+        val providedRouteSection = requireNotNull(summary.providedRouteSection)
+        val calculatedRouteSection = requireNotNull(summary.calculatedRouteSection)
+        assertTrue(requireNotNull(providedRouteSection.effectiveLengthMeters) > requireNotNull((calculatedRouteSection.effectiveLengthMeters ?: providedRouteSection.effectiveLengthMeters)))
     }
 
     private fun analyze(project: EventProjectFile, info: ProtectedCourseInfo, elevation: (CourseGeoPoint) -> Double? = { 100.0 }) =

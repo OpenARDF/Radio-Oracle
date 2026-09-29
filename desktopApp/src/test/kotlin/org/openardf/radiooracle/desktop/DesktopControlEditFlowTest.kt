@@ -58,9 +58,9 @@ class DesktopControlEditFlowTest {
         rule.waitForIdle()
         rule.onNodeWithTag("apply-control-${control.id}").performScrollTo().assertIsEnabled().performClick()
         rule.runOnIdle {
-            assertNotNull(applied)
-            assertEquals("Updated Fox", applied!!.publicLabel)
-            assertNull(applied!!.location)
+            val appliedRequest = requireNotNull(applied)
+            assertEquals("Updated Fox", appliedRequest.publicLabel)
+            assertNull(appliedRequest.location)
         }
 
         // Cancel leaves the local draft intact; Reject increments the reset token used by the row.

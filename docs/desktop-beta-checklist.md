@@ -26,7 +26,7 @@ packaging is best-effort for this beta.
 
 ## Release Gates
 
-- `./gradlew :shared:check testDebugUnitTest :shared:desktopSmokeRun :desktopApp:test`
+- `./gradlew :shared:check :app:testDebugUnitTest :shared:desktopSmokeRun :desktopApp:test`
 - `git diff --check`
 - `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :desktopApp:checkRuntime`
 - `JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :desktopApp:createDistributable`

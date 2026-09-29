@@ -35,7 +35,7 @@ internal class DesktopCourseDesignUi {
                     val updated = EventProjectEditor.updateCourseAnalyzerSpeedCompensationFactor(current, factor)
                     // Only the applied analysis setting changed. Preserve the draft's own setting
                     // and design, and never make an already stale draft eligible for application.
-                    if (wasCurrent) updated.copy(raceData = updated.raceData.copy(courseDraft = draft!!.copy(
+                    if (wasCurrent) updated.copy(raceData = updated.raceData.copy(courseDraft = draft.copy(
                         baseSnapshotHash = EventCourseDrafts.snapshotHash(updated)))) else updated
                 }
             }
@@ -138,7 +138,7 @@ private fun DesktopCourseApplyFlow(
                 val byCategory = bindings.entries.groupBy { it.key.first }
                     .mapValues { (_, entries) -> entries.associate { it.key.second to it.value } }
                 DesktopCourseAnalysisApplier.prepareAll(applied,
-                    DesktopCourseRouteSelection(state!!.protectedCourseInfoByCategoryId.getValue(application.categoryId),
+                    DesktopCourseRouteSelection(state.protectedCourseInfoByCategoryId.getValue(application.categoryId),
                         application, byCategory.getValue(application.categoryId)), byCategory, password,
                     elevationLookup = DesktopVenueElevationCache::elevationMeters, checkCancelled = { ensureActive() })
             }

@@ -93,7 +93,8 @@
                 <data android:mimeType="application/vnd.openardf.radio-oracle-series+zip" />
             </intent-filter>
 
-            <intent-filter>
+            <!-- Content and file URIs do not have hosts; this is a file-open filter, not a web app link. -->
+            <intent-filter tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />

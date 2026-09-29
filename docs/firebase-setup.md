@@ -30,7 +30,7 @@ Keep that file local. It is ignored by Git.
 Without `app/google-services.json`, normal local builds run without Firebase:
 
 ```sh
-./gradlew shared:test desktopApp:test app:testDebugUnitTest
+./gradlew shared:testAndroidHostTest shared:desktopTest desktopApp:test app:testDebugUnitTest
 ```
 
 With `app/google-services.json` present, verify that the Firebase plugins and
@@ -39,3 +39,19 @@ Crashlytics wiring still process the Android config:
 ```sh
 ./gradlew app:processDebugGoogleServices app:testDebugUnitTest
 ```
+
+The app manifest deliberately removes the advertising-ID permissions added by
+Firebase Analytics. Android unit-test manifest processing can warn that each
+removal marker has no matching declaration because the main app merge has
+already removed it; this waiver applies only to those two named permissions.
+Release verification must still confirm that neither
+`com.google.android.gms.permission.AD_ID` nor
+`android.permission.ACCESS_ADSERVICES_AD_ID` appears in the merged app
+manifest.
+
+Until the roadmap migration from Crashlytics NDK to ordinary Crashlytics is
+complete, a release Mac without the requested NDK strip tool can also report
+that the prebuilt Crashlytics native libraries and AndroidX DataStore shared
+counter were packaged unchanged. Treat that as a narrowly waived toolchain
+warning only when the bundle's 16 KB packaging and ELF alignment checks pass;
+it is not evidence that the libraries are intrinsically unstrippable.

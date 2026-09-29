@@ -361,7 +361,7 @@ class PunchEditRecyclerViewAdapter(
                     val isEnter = event?.keyCode == KeyEvent.KEYCODE_ENTER
                     if (!isAction && !isEnter) return@setOnEditorActionListener false
                     // Consume both key events but advance only once.
-                    if (isEnter && event?.action == KeyEvent.ACTION_UP) return@setOnEditorActionListener true
+                    if (isEnter && event.action == KeyEvent.ACTION_UP) return@setOnEditorActionListener true
                     val item = boundItem ?: return@setOnEditorActionListener true
                     val next = when {
                         view == code -> if (item.isCodeValid) time else code

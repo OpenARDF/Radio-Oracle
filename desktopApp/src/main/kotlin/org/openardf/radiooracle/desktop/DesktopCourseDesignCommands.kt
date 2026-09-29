@@ -34,7 +34,7 @@ internal object DesktopCourseDesignCommands {
                 }
                 val info = infos.getValue(id)
                 val category = (candidate.raceData.categories + candidate.raceData.courseMappings).single { it.category.id == id }.category
-                val app = requireNotNull(DesktopCourseAnalyzer.analyze(candidate, id, info, category.storedIdealOrder(null) ?: info.idealOrder,
+                val app = requireNotNull(DesktopCourseAnalyzer.analyze(candidate, id, info, category.storedIdealOrder(null),
                     prepareApplication = true, routeSource = DesktopCourseRouteSource.Draft).calculatedRouteApplication) { "The selected course cannot be calculated." }
                 val prepared = DesktopCourseAnalysisApplier.prepareAll(project,
                     DesktopCourseRouteSelection(info, app, mappings.getValue(id)), mappings, null,

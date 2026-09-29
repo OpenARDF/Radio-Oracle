@@ -162,9 +162,10 @@ object DesktopFileReceiveUrlValidator {
                 if (pieces.isEmpty() || pieces[0].isEmpty()) {
                     null
                 } else {
-                    val key = URLDecoder.decode(pieces[0], StandardCharsets.UTF_8)
+                    // The charset-name overload is available throughout the Android 26+ support range.
+                    val key = URLDecoder.decode(pieces[0], StandardCharsets.UTF_8.name())
                     val value = if (pieces.size == 2) pieces[1] else ""
-                    key to URLDecoder.decode(value, StandardCharsets.UTF_8)
+                    key to URLDecoder.decode(value, StandardCharsets.UTF_8.name())
                 }
             }
             .toMap()

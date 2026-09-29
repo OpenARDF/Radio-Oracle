@@ -41,6 +41,10 @@ android-test filter="":
 
 android-check: android-compile android-test
 
+# Block new Android lint findings and verify the signed, shrunk release bundle.
+android-release-check:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:lintRelease :app:bundleRelease
+
 # Verify the AAB's 16 KB packaging request and every packaged 64-bit ELF load alignment.
 android-native-compat-check bundle="app/build/outputs/bundle/release/app-release.aab":
     node --test scripts/check-android-native-compatibility.test.mjs

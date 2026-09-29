@@ -140,12 +140,12 @@ internal class DesktopSportIdentTimeSyncService(
                 baudRate = connection.baudRate,
                 accessMode = accessMode
             )
-            val coupledStationClock = coupledStationClockResult?.getOrNull()
+            val coupledStationClock = coupledStationClockResult.getOrNull()
             val coupledStationInspectionError = if (coupledStationClock == null) {
                 if (accessMode == DesktopSportIdentTimeSyncAccessMode.RELAY_COUPLED) {
                     "No coupled station found."
                 } else {
-                    coupledStationClockResult?.exceptionOrNull()?.message
+                    coupledStationClockResult.exceptionOrNull()?.message
                         ?: "SPORTident station time read failed."
                 }
             } else {

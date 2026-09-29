@@ -307,6 +307,7 @@
     <plurals name="event_series_member_count">
         <item quantity="one">%d závod</item>
         <item quantity="few">%d závody</item>
+        <item quantity="many">%d závodů</item>
         <item quantity="other">%d závodů</item>
     </plurals>
 </resources>

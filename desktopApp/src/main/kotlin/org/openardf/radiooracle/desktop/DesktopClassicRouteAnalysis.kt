@@ -138,7 +138,7 @@ internal object DesktopClassicRouteAnalysis {
             val context = metadata?.contexts?.get(saved?.contextId)
             id to (ready[id]?.text ?: when {
                 saved == null -> "Not calculated"
-                metadata?.version == 1 && context?.method == METHOD && context.courseFingerprint == course &&
+                metadata.version == 1 && context?.method == METHOD && context.courseFingerprint == course &&
                     saved.inputFingerprint == inputFingerprint(data) -> saved.unavailableReason ?: "Unavailable"
                 else -> "Stale"
             })
@@ -268,7 +268,7 @@ internal object DesktopClassicRouteAnalysis {
         require(points.values.distinct().size == assigned.size) { "Assigned controls do not have unique field locations." }
         val savedIds = info.appliedBindings?.orderedControlIds ?: runCatching {
             DesktopCourseAnalyzer.resolveProtectedIdealOrderControlIds(
-                info.idealOrder?.takeIf { it.isNotBlank() } ?: category.category.idealOrder.orEmpty(),
+                info.idealOrder.takeIf { it.isNotBlank() } ?: category.category.idealOrder.orEmpty(),
                 assigned, info, project.raceData.race.raceType, DesktopCourseControlIdentityMode.RESULT_CONTROLS
             )
         }.getOrDefault(emptyList())

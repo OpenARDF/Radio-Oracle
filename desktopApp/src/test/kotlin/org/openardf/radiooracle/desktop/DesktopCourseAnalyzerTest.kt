@@ -203,7 +203,7 @@ class DesktopCourseAnalyzerTest {
         assertTrue(summary.missingElements.any { it.contains("Calculated route elevation samples are missing from the local elevation cache") })
         assertEquals(120, summary.calculatedRouteCount)
         assertEquals(listOf("S", "31", "32", "33", "34", "35", "B", "F"), requireNotNull(summary.calculatedRouteSection).routeOrder)
-        assertEquals(summary.calculatedRouteSection?.secondaryRouteOrder, summary.calculatedIdealOrder)
+        assertEquals(summary.calculatedRouteSection.secondaryRouteOrder, summary.calculatedIdealOrder)
         assertEquals(listOf("S", "35", "34", "33", "32", "31", "B", "F"), summary.providedIdealOrder)
         assertFalse(summary.idealOrderMatches!!)
         assertTrue(summary.calculatedStraightLineMeters!! < summary.providedStraightLineMeters!!)
@@ -826,7 +826,7 @@ class DesktopCourseAnalyzerTest {
             .ruleChecks
             .single { it.label == "Calculated route Sprint target time" }
             .value
-        assertNotEquals(summary.providedRouteSection!!.estimatedIdealSeconds, summary.calculatedRouteSection!!.estimatedIdealSeconds)
+        assertNotEquals(summary.providedRouteSection.estimatedIdealSeconds, summary.calculatedRouteSection.estimatedIdealSeconds)
         assertFalse(storedTargetTime.startsWith("Unknown"))
     }
 
@@ -1005,7 +1005,7 @@ class DesktopCourseAnalyzerTest {
 
         assertTrue(summary.calculatedRouteCount > 1)
         assertTrue(requireNotNull(summary.calculatedRouteSection).explanation.contains("non-exhaustive hybrid search"))
-        assertTrue(summary.calculatedRouteSection?.explanation.orEmpty().contains("rolling 5-control exhaustive-window"))
+        assertTrue(summary.calculatedRouteSection.explanation.contains("rolling 5-control exhaustive-window"))
     }
 
     @Test
@@ -2362,7 +2362,7 @@ class DesktopCourseAnalyzerTest {
             .map { it.label }
         assertEquals(setOf("1F", "2F"), routeMapLabels.toSet())
         assertEquals(2, routeMapLabels.size)
-        val routeMap = requireNotNull(summary.providedRouteSection?.routeMap)
+        val routeMap = requireNotNull(summary.providedRouteSection.routeMap)
         assertEquals(
             listOf("S", "1F", "2F", "B", "F"),
             routeMap.routePointIndexes.map { routeMap.points[it].label }
