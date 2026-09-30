@@ -1,0 +1,34 @@
+plugins {
+    id("com.android.library")
+}
+
+android {
+    namespace = "de.codecrafters.tableview"
+    compileSdk = 37
+
+    defaultConfig {
+        minSdk = 26
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        warningsAsErrors = true
+    }
+}
+
+dependencies {
+    implementation(libs.androidx.core)
+    implementation(libs.androidx.swiperefreshlayout)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.mockito.core)
+}
+
+// Keep warnings in the maintained compatibility source visible during every variant build.
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs.addAll(["-Xlint:all", "-Werror"])
+}
