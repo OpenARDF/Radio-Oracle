@@ -135,7 +135,8 @@ android {
     }
 
     lint {
-        // Pin known legacy findings so release lint blocks only newly introduced debt.
+        // Keep only the reviewed Gradle 9.8 notice: AGP 9.4's Gradle 9.6 default avoids
+        // upstream AGP, KSP, and Compose deprecations that Gradle 9.8 currently exposes.
         baseline = file("lint-baseline.xml")
     }
 }

@@ -33,6 +33,7 @@ import java.util.Locale
 import java.time.Instant
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
 kotlin {
     jvmToolchain(17)
@@ -173,6 +174,27 @@ configurations {
 }
 
 def desktopJdeployRuntimeClasspathFiles = configurations.desktopJdeployRuntimeClasspath
+
+// Compose can resolve distinct AndroidX and JetBrains artifacts with the same
+// jar name. Preserve both in the flat jDeploy lib directory by qualifying only
+// colliding names with their module coordinates.
+def desktopJdeployRuntimeArtifacts = configurations.desktopJdeployRuntimeClasspath.incoming.artifacts.resolvedArtifacts.map { resolvedArtifacts ->
+    def artifacts = resolvedArtifacts.toList()
+    def artifactNameCounts = artifacts.countBy { artifact -> artifact.file.name }
+
+    artifacts.collect { artifact ->
+        def stagedName = artifact.file.name
+        if (artifactNameCounts[stagedName] > 1) {
+            def componentIdentifier = artifact.id.componentIdentifier
+            def qualifier = componentIdentifier instanceof ModuleComponentIdentifier
+                    ? "${componentIdentifier.group}-${componentIdentifier.module}"
+                    : componentIdentifier.displayName
+            def safeQualifier = qualifier.replaceAll("[^A-Za-z0-9._-]", "-")
+            stagedName = "${safeQualifier}-${stagedName}"
+        }
+        [file: artifact.file, stagedName: stagedName]
+    }
+}
 
 dependencies {
     requiredJdeploySkikoRuntimeArtifacts.each { artifact ->
@@ -426,7 +448,17 @@ tasks.register("stageDesktopJdeployLibs", Sync) {
     group = "distribution"
     description = "Stages desktop runtime dependencies for the Radio-Oracle jDeploy bundle."
 
-    from(configurations.desktopJdeployRuntimeClasspath)
+    from(desktopJdeployRuntimeArtifacts.map { artifacts -> artifacts.collect { artifact -> artifact.file } }) {
+        eachFile { details ->
+            def artifact = desktopJdeployRuntimeArtifacts.get().find { candidate ->
+                candidate.file == details.file
+            }
+            if (artifact == null) {
+                throw new GradleException("Could not identify jDeploy runtime artifact ${details.file.absolutePath}.")
+            }
+            details.name = artifact.stagedName
+        }
+    }
     into(desktopJdeployLibsDir)
 }
 
@@ -448,9 +480,8 @@ tasks.register("desktopJdeployJar", Jar) {
     })
 
     doFirst {
-        def runtimeClasspathEntries = []
-        desktopJdeployRuntimeClasspathFiles.files.each { file ->
-            runtimeClasspathEntries.add("libs/${file.name}")
+        def runtimeClasspathEntries = desktopJdeployRuntimeArtifacts.get().collect { artifact ->
+            "libs/${artifact.stagedName}"
         }
         runtimeClasspathEntries.sort()
 

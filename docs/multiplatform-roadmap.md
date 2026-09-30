@@ -261,15 +261,15 @@ These are deliberate limits in the current app, not necessarily defects.
 ### Android Lint Debt
 
 - Keep `just android-release-check` as a blocking release gate. Maintain a
-  checked-in exact baseline for findings that predate the AGP 9 migration so
-  new lint errors and warnings fail immediately; do not regenerate the baseline
-  merely to make a new finding pass.
-- Retire the baseline in reviewable groups: Czech translations and plural
-  coverage; accessibility labels and content descriptions; hardcoded and
-  programmatic UI text; obsolete or unused resources and namespaces; then
-  remaining layout and API-style recommendations. Fix runtime compatibility
-  findings such as unsupported Android APIs immediately rather than baselining
-  them.
+  checked-in exact baseline so new lint errors and warnings fail immediately;
+  do not regenerate the baseline merely to make a new finding pass.
+- Implemented: retired all 27 dependency/tool availability entries after
+  updating them in reviewable compatibility groups. The sole remaining
+  baseline entry is the Gradle 9.8 availability notice: AGP 9.4's documented
+  Gradle 9.6 default is warning-free, while Gradle 9.8 currently exposes
+  upstream `Configuration.setVisible` deprecations in AGP, KSP, and Compose
+  tooling. Remove that final entry once the coupled plugins support 9.8 without
+  introducing replacement warnings.
 - Review dependency-version availability separately from source lint. Upgrade
   coupled AndroidX, Firebase, Kotlin, and plugin families through the dependency
   maintenance lane instead of mixing them into unrelated lint cleanup.

@@ -53,11 +53,17 @@ Android while giving future desktop work a cleaner shared-code base.
 - JVM unit-test workers can report that class-data sharing is unavailable when
   Mockito modifies the bootstrap classpath. This waiver applies only to that
   VM runtime notice when the affected test task completes successfully.
-- The Jetifier-removal change deliberately retains Android Gradle Plugin 9.2.1,
-  AndroidX Core 1.18.0, and SwipeRefreshLayout 1.0.0. Release lint reports newer
-  versions, but upgrading them is deferred so this compatibility-only change
-  does not combine toolchain or runtime-behavior changes with dependency
-  isolation. Revisit each version in a separate dependency-maintenance change.
+- Done: updated the release-lint version notices in compatibility groups after
+  Jetifier removal: AGP and Gradle; coupled AndroidX families; Firebase and
+  Google tooling; then independent runtime and test libraries. Android and
+  desktop gates passed after each applicable group.
+- Done: kept the jDeploy Skiko native runtimes coupled to Compose Multiplatform;
+  Compose 1.12.1 requires Skiko 0.150.1.
+- Keep Gradle 9.6 with AGP 9.4 for now. Gradle 9.6 is AGP 9.4's documented
+  default and compiles without Gradle deprecations. Gradle 9.8 exposes
+  `Configuration.setVisible` deprecations inside AGP 9.4.1, KSP 2.3.12, and
+  Compose tooling, so the exact Gradle 9.8 availability notice remains as the
+  sole lint-baseline entry until those upstream plugins are compatible.
 - Record dependency-update evidence in commit messages or release notes so the
   source development team can see what was changed, what was verified, and what
   remains deferred.
