@@ -280,15 +280,20 @@ These are deliberate limits in the current app, not necessarily defects.
   lane uses the repository's pinned jDeploy dependency plus local preparation
   and publication adapters, avoiding a moving action branch and its hidden
   runtime dependencies while preserving jDeploy metadata and installer assets.
+- Treat the first real tagged release through the repository-owned jDeploy
+  publisher as a monitored acceptance gate. Verify the preserved `jdeploy`
+  metadata assets, versioned installer assets, release notes, package tarball,
+  and public install page before considering the new publication path proven.
 - Keep all GitHub Actions on maintained Node 24-compatible revisions. Routine
   Linux jobs remain pinned to Ubuntu 24.04, with Ubuntu 26.04 exposed as a
-  manual input to the same workflows so it can be exercised before adoption;
-  macOS release builds remain pinned to macOS 26 rather than following a moving
-  `macos-latest` label.
-- Add conservative dependency-update automation for Gradle, npm, and GitHub
-  Actions. Group coupled Android/Kotlin/KSP, AndroidX, Firebase, and jDeploy
-  updates, and require the applicable platform and packaging gates before
-  merging them.
+  manual input to the same workflows. The course, Android 16 KB, and jDeploy
+  dry-run lanes pass on both images; make adoption of Ubuntu 26 as the default
+  an explicit maintenance decision rather than inheriting a moving runner
+  label. macOS release builds remain pinned to macOS 26.
+- Add conservative Renovate dependency-update automation for Gradle, npm, and
+  GitHub Actions. Group coupled Android/Kotlin/KSP, AndroidX, Firebase, and
+  jDeploy updates, and require the applicable platform and packaging gates
+  before merging them.
 - Evaluate the current jDeploy patch release in its own maintenance change.
   Do not combine that update with an AGP/KMP migration, and do not treat a patch
   update as resolving deprecated transitive packages unless the resulting npm
