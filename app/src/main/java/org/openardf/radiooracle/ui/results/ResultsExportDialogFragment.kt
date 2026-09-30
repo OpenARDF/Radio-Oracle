@@ -192,7 +192,10 @@ class ResultsExportDialogFragment : DialogFragment() {
                 } else org.openardf.radiooracle.shared.files.CsvFormatGuides.splits()
             }.getOrElse {
                 if (it is kotlinx.coroutines.CancellationException) throw it
-                errorText.text = "Could not show CSV format: ${it.message}"
+                errorText.text = getString(
+                    R.string.results_csv_format_error,
+                    it.message ?: it::class.simpleName
+                )
                 null
             }
             if (isActive) csvFormatPanel.showGuide(guide)

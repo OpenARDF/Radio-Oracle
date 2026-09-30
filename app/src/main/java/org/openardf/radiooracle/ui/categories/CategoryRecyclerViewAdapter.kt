@@ -73,10 +73,11 @@ class CategoryRecyclerViewAdapter(
         val item = values[position]
         holder.itemView.setBackgroundColor(categoryBackgroundColor(item.category.isMan))
         holder.title.text = item.category.name
-        holder.numCompeititors.text =
-            "(${item.competitors.size} ${
-                context.getString(R.string.general_competitors).lowercase()
-            })"
+        holder.numCompeititors.text = context.resources.getQuantityString(
+            R.plurals.category_competitor_count,
+            item.competitors.size,
+            item.competitors.size
+        )
         holder.type.text = dataProcessor.raceTypeToString(currentRaceType())
 
         holder.band.text = dataProcessor.raceBandToString(currentRaceBand())

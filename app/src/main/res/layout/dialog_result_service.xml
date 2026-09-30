@@ -14,6 +14,7 @@
             style="@style/dialog_dropdown"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:labelFor="@id/result_service_dialog_type"
             android:hint="@string/general_type"
             android:textColor="@color/black">
 

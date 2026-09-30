@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.ui
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -42,9 +43,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.edit
 import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.findNavController
+import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
 import androidx.preference.PreferenceManager
 import com.google.android.material.navigation.NavigationBarView
@@ -86,6 +88,8 @@ class MainActivity : AppCompatActivity() {
         private const val RESULTS_SCORING_REVISION = EventResultScoringFormat.CURRENT_REVISION
     }
 
+    // Language splits are disabled in app/build.gradle; lint does not recognize the AGP 9 setting.
+    @SuppressLint("AppBundleLocaleChanges")
     override fun attachBaseContext(newBase: Context?) {
 
         val languageCode: String = if (newBase != null) {
@@ -196,7 +200,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val navController = findNavController(R.id.nav_host_fragment_activity_main)
+        // FragmentContainerView does not guarantee that Activity.findNavController can resolve
+        // the host during onCreate; obtain the controller from the inflated host fragment.
+        val navHostFragment = supportFragmentManager.findFragmentById(
+            R.id.nav_host_fragment_activity_main
+        ) as NavHostFragment
+        val navController = navHostFragment.navController
         navView.setupWithNavController(navController)
 
         navController.addOnDestinationChangedListener { _, destination, _ ->
@@ -237,9 +246,9 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
                 dataProcessor.updateAllResults("scoring-revision-$RESULTS_SCORING_REVISION")
-                sharedPreferences.edit()
-                    .putInt(KEY_RESULTS_SCORING_REVISION, RESULTS_SCORING_REVISION)
-                    .apply()
+                sharedPreferences.edit {
+                    putInt(KEY_RESULTS_SCORING_REVISION, RESULTS_SCORING_REVISION)
+                }
             }.onFailure { error ->
                 DebugLog.error(
                     "Results",
@@ -303,8 +312,9 @@ class MainActivity : AppCompatActivity() {
             }.onSuccess { imported ->
                 Toast.makeText(
                     this@MainActivity,
-                    getString(
-                        R.string.event_series_import_success,
+                    resources.getQuantityString(
+                        R.plurals.event_series_import_success,
+                        imported.memberImports.size,
                         imported.series.name,
                         imported.memberImports.size
                     ),

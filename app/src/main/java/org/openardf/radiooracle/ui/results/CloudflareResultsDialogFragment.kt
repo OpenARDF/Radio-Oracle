@@ -27,7 +27,6 @@ package org.openardf.radiooracle.ui.results
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -38,6 +37,9 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.set
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -184,7 +186,12 @@ class CloudflareResultsDialogFragment : DialogFragment() {
         val value = target ?: return
         val settings = AndroidCloudflarePagesSettingsStore.read(requireContext())
         targetView.text = if (value.isSeries) {
-            getString(R.string.cloudflare_results_target_series, value.name, value.raceCount)
+            resources.getQuantityString(
+                R.plurals.cloudflare_results_target_series,
+                value.raceCount,
+                value.name,
+                value.raceCount
+            )
         } else {
             getString(R.string.cloudflare_results_target_race, value.name)
         }
@@ -342,15 +349,15 @@ class CloudflareResultsDialogFragment : DialogFragment() {
 
     private fun openSavedUrl() {
         val url = target?.savedUrl?.takeIf(String::isNotBlank) ?: return
-        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
     }
 
     private fun qrCode(value: String): Bitmap {
         val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, 720, 720)
-        val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
         for (y in 0 until matrix.height) {
             for (x in 0 until matrix.width) {
-                bitmap.setPixel(x, y, if (matrix[x, y]) 0xff000000.toInt() else 0xffffffff.toInt())
+                bitmap[x, y] = if (matrix[x, y]) 0xff000000.toInt() else 0xffffffff.toInt()
             }
         }
         return bitmap

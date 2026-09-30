@@ -192,10 +192,11 @@ class DesktopCourseDesignUiTest {
         rule.onNodeWithText("Analyze again").assertExists()
         val refreshed = analyze(EventCourseDrafts.candidate(updated))
         rule.runOnIdle { completed = refreshed }
-        rule.onNodeWithText(refreshed.sourceSnapshotHash!!).assertExists()
+        val refreshedSnapshotHash = requireNotNull(refreshed.sourceSnapshotHash)
+        rule.onNodeWithText(refreshedSnapshotHash).assertExists()
         // Saving the draft does not change its identity or make the refreshed report stale.
         rule.runOnIdle { current = EventProjectFileJson.decode(EventProjectFileJson.encode(updated)) }
-        rule.onNodeWithText(refreshed.sourceSnapshotHash!!).assertExists()
+        rule.onNodeWithText(refreshedSnapshotHash).assertExists()
     }
 
     @Test fun identicalGeometryDoesNotKeepAReportLabeledWithThePreviousDraftState() {

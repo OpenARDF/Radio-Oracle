@@ -26,12 +26,14 @@ Android while giving future desktop work a cleaner shared-code base.
 
 - Done: moved `androidx.test.ext:junit-ktx` out of app runtime dependencies
   and into the instrumentation-test dependency scope.
-- Checked: `android.enableJetifier=true` is still required while
+- Temporary AGP 9 waiver: `android.enableJetifier=true` is still required while
   `com.github.ISchwarz23:SortableTableView` brings in old support-library
-  coordinates. Revisit after replacing or isolating that table-view dependency.
-- Gate or remove production `HttpLoggingInterceptor.Level.BODY` logging so live
-  result publishing does not expose sensitive payloads or depend on verbose
-  logging behavior after OkHttp updates.
+  coordinates. Replace or isolate that table-view dependency and remove
+  Jetifier before AGP 10; until then, accept only this specific deprecation
+  warning rather than suppressing Android build warnings broadly.
+- Done: removed production `HttpLoggingInterceptor.Level.BODY` logging and the
+  unused logging-interceptor dependency, so live result payloads are no longer
+  copied into verbose network logs.
 - Done: removed the unused `app/libs/android-tableview-kotlin-0.1.0-alpha`
   source tree. The Android app uses the published SortableTableView dependency
   instead of that historical vendored copy.
@@ -41,12 +43,15 @@ Android while giving future desktop work a cleaner shared-code base.
 ## Verification Policy
 
 - Use the existing project gate for normal dependency-management changes:
-  `./gradlew :shared:check testDebugUnitTest :shared:desktopSmokeRun :app:assembleDebug :app:assembleDebugAndroidTest`.
+  `./gradlew :shared:check :app:testDebugUnitTest :shared:desktopSmokeRun :app:assembleDebug :app:assembleDebugAndroidTest`.
 - For dependency version updates, also run Android hardware checks when
   practical, including install, launch, foreground/logcat smoke, and SI reader
   connect/read/disconnect once hardware is available.
 - Fix or quarantine the stale CSV instrumentation assertions before treating
   `:app:connectedDebugAndroidTest` as a strict update gate.
+- JVM unit-test workers can report that class-data sharing is unavailable when
+  Mockito modifies the bootstrap classpath. This waiver applies only to that
+  VM runtime notice when the affected test task completes successfully.
 - Record dependency-update evidence in commit messages or release notes so the
   source development team can see what was changed, what was verified, and what
   remains deferred.

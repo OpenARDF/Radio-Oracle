@@ -23,15 +23,27 @@
  */
 
 plugins {
-    id("com.android.library")
     id("org.jetbrains.kotlin.multiplatform")
+    id("com.android.kotlin.multiplatform.library")
     alias(libs.plugins.kotlin.serialization)
 }
 
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
 
 kotlin {
-    androidTarget()
+    android {
+        namespace = "org.openardf.radiooracle.shared"
+        compileSdk = 37
+        minSdk = 26
+
+        // Preserve Android execution of common tests after moving to the single-variant Android-KMP plugin.
+        withHostTestBuilder {}.configure {}
+
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_17
+        }
+    }
     jvm("desktop")
 
     sourceSets {
@@ -59,13 +71,4 @@ tasks.register("desktopSmokeRun", JavaExec) {
     dependsOn(mainCompilation.compileTaskProvider)
     classpath(mainCompilation.runtimeDependencyFiles, mainCompilation.output.allOutputs)
     mainClass.set("org.openardf.radiooracle.shared.cli.DesktopSmokeCliKt")
-}
-
-android {
-    namespace = "org.openardf.radiooracle.shared"
-    compileSdk = 37
-
-    defaultConfig {
-        minSdk = 26
-    }
 }

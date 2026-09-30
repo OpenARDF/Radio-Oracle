@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.ui.results
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
@@ -102,18 +103,15 @@ class ResultsFragmentRecyclerViewAdapter(
         if (dataList.isChild == 0) {
             holder as CategoryViewHolder
             holder.apply {
-                if (dataList.displayLabel != null) {
-                    categoryName.text =
-                        "${dataList.displayLabel} (${dataList.finished}/${dataList.competitorData.size})"
-                } else if (dataList.category != null) {
-                    categoryName.text =
-                        "${dataList.category.name} (${dataList.finished}/${
-                            dataList.competitorData.size
-                        })"
-                } else {
-                    categoryName.text =
-                        "${context.getText(R.string.no_category)} (${dataList.finished}/${dataList.competitorData.size})"
-                }
+                val categoryLabel = dataList.displayLabel
+                    ?: dataList.category?.name
+                    ?: context.getString(R.string.no_category)
+                categoryName.text = context.getString(
+                    R.string.result_category_summary,
+                    categoryLabel,
+                    dataList.finished,
+                    dataList.competitorData.size
+                )
                 if (dataList.competitorData.isNotEmpty()) {
                     expandButton.visibility = View.VISIBLE
 
@@ -263,7 +261,10 @@ class ResultsFragmentRecyclerViewAdapter(
                 parentModel.competitorData.add(service)
                 values.add(++nextPosition, parentModel)
             }
-            notifyDataSetChanged()
+            notifyItemChanged(position)
+            if (competitors.isNotEmpty()) {
+                notifyItemRangeInserted(position + 1, competitors.size)
+            }
         }
     }
 
@@ -275,12 +276,17 @@ class ResultsFragmentRecyclerViewAdapter(
             services.forEach { _ ->
                 values.removeAt(position + 1)
             }
-            notifyDataSetChanged()
+            notifyItemChanged(position)
+            if (services.isNotEmpty()) {
+                notifyItemRangeRemoved(position + 1, services.size)
+            }
         }
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     fun expandAllItems() {
         values.expandAllResultParentRows()
+        // Expanding every category inserts disjoint child ranges throughout the list.
         notifyDataSetChanged()
     }
 

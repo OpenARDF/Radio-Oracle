@@ -24,7 +24,7 @@
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // Kotlin support is built into Android application modules beginning with AGP 9.
     id("com.google.devtools.ksp")
     id("androidx.navigation.safeargs")
 }
@@ -117,7 +117,7 @@ android {
     }
 
     packaging {
-        // Exclude duplicate OSGI MANIFEST entries from dependencies (okhttp logging-interceptor, jspecify etc.)
+        // Exclude duplicate OSGI MANIFEST entries from dependencies such as jspecify.
         // Keep these exclusions narrow to avoid removing useful metadata from other libs.
         resources.excludes.addAll([
             "META-INF/versions/**/OSGI-INF/MANIFEST.MF",
@@ -125,10 +125,18 @@ android {
         ])
     }
 
+    // Runtime language switching needs both built-in locales available without Play delivery.
+    bundle.language.enableSplit = false
+
     testOptions {
         unitTests {
             includeAndroidResources = true
         }
+    }
+
+    lint {
+        // Pin known legacy findings so release lint blocks only newly introduced debt.
+        baseline = file("lint-baseline.xml")
     }
 }
 
@@ -156,7 +164,7 @@ dependencies {
 
     if (firebaseEnabled) {
         implementation platform(libs.firebase.bom)
-        implementation(libs.firebase.crashlytics.ndk)
+        implementation(libs.firebase.crashlytics)
         implementation(libs.firebase.analytics)
     }
 
@@ -186,8 +194,6 @@ dependencies {
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)
     testImplementation(libs.xmlunit.core)
-
-    implementation(libs.okhttp.logging.interceptor)
 
 }
 

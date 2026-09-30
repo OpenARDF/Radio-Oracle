@@ -39,7 +39,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.delay
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import org.openardf.radiooracle.shared.results.EventResultSending
 import java.time.Duration
 import java.util.UUID
@@ -55,10 +54,8 @@ object ResultServiceProcessor {
         context: Context
     ): Job {
         return CoroutineScope(Dispatchers.IO).launch {
-
-            val inter = HttpLoggingInterceptor()
-            inter.setLevel(HttpLoggingInterceptor.Level.BODY)
-            val httpClient = OkHttpClient.Builder().addInterceptor(inter).build()
+            // Result payloads can contain competitor and event data, so do not log HTTP bodies.
+            val httpClient = OkHttpClient.Builder().build()
             var resultService: ResultService?
 
             while (true) {

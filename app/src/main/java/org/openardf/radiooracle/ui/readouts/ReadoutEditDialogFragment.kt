@@ -37,6 +37,7 @@ import android.widget.TextView
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResult
+import androidx.core.view.isVisible
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -60,6 +61,7 @@ import org.openardf.radiooracle.backend.shared.toSharedReadoutDisplayState
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.openardf.radiooracle.backend.wrappers.PunchEditItemWrapper
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+import org.openardf.radiooracle.ui.setInvariantNumber
 import kotlinx.coroutines.runBlocking
 import java.text.Collator
 import java.time.Duration
@@ -325,7 +327,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
         if (canEnterSiNumber) {
             val currentText = siNumberInput.text.toString().trim()
             if (currentText.isEmpty() || currentText == lastSuggestedSiNumber) {
-                siNumberInput.setText(siNumber?.toString().orEmpty())
+                siNumberInput.setInvariantNumber(siNumber)
             }
             lastSuggestedSiNumber = siNumber?.toString().orEmpty()
         }
@@ -366,7 +368,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
 
         okButton.setOnClickListener {
             if (validateFields()) {
-                if (siNumberInputLayout.visibility == View.VISIBLE) {
+                if (siNumberInputLayout.isVisible) {
                     result.siNumber = siNumberInput.text.toString().trim().toIntOrNull()
                 }
 
@@ -417,7 +419,7 @@ class ReadoutEditDialogFragment : DialogFragment() {
     private fun validateFields(): Boolean {
         var valid = true
 
-        if (siNumberInputLayout.visibility == View.VISIBLE) {
+        if (siNumberInputLayout.isVisible) {
             val error = readoutSiNumberInputError(siNumberInput.text.toString())
             siNumberInputLayout.error = error?.let { getString(it) }
             if (error != null) valid = false

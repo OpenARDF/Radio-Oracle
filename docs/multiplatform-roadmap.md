@@ -95,7 +95,7 @@ The lower-level Gradle tasks still matter when diagnosing failures or validating
 a specific layer:
 
 ```shell
-./gradlew :shared:check testDebugUnitTest :shared:desktopSmokeRun :desktopApp:test
+./gradlew :shared:check :app:testDebugUnitTest :shared:desktopSmokeRun :desktopApp:test
 ./gradlew :desktopApp:checkRuntime :desktopApp:createDistributable :desktopApp:verifyDesktopDistributable
 ./gradlew :desktopApp:prepareDesktopJdeployBundle :desktopApp:verifyDesktopJdeployBundle
 ```
@@ -220,12 +220,12 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Android Native Dependency Maintenance
 
-- In the next maintenance commit, replace `firebase-crashlytics-ndk` with
-  ordinary `firebase-crashlytics`. Radio-Oracle has no Android JNI/C++ code of
-  its own, so retain Java/Kotlin crash, non-fatal, and ANR reporting without
-  carrying the native Crashlytics reporter solely for third-party binaries.
-  Confirm the resulting runtime dependency graph and packaged `.so` inventory,
-  then run Android regression, release-bundle, and 16 KB compatibility gates.
+- Implemented: replaced `firebase-crashlytics-ndk` with ordinary
+  `firebase-crashlytics`. Radio-Oracle has no Android JNI/C++ code of its own,
+  so Java/Kotlin crash, non-fatal, and ANR reporting remains without carrying
+  the native Crashlytics reporter solely for third-party binaries. The
+  maintenance gate confirms the runtime dependency graph, packaged `.so`
+  inventory, Android regression and release bundle, and 16 KB compatibility.
 - Keep the monthly 16 KB emulator smoke workflow and run it on relevant Android
   build or dependency changes. Before a full Android release, require a passing
   run newer than those changes; during each major Android preview cycle, update
@@ -233,6 +233,91 @@ These are deliberate limits in the current app, not necessarily defects.
 - Treat the static bundle/ELF check as a release gate, not as a substitute for
   launching the app on a 16 KB device or emulator. Record any skipped device or
   preview validation explicitly in the release verification document.
+
+### Android Build-System Modernization
+
+- Implemented: migrated from Android Gradle Plugin 8.13 to an AGP 9 release
+  that officially supports compile SDK 37 while preserving JDK 17, the
+  existing Android application module, and the shared-code boundary.
+- Implemented: replaced the shared module's legacy `com.android.library` plus
+  Kotlin Multiplatform Android target with the supported
+  `com.android.kotlin.multiplatform.library` plugin. Its Android configuration
+  now lives in the KMP target and explicitly retains host-side execution of
+  shared tests.
+- Implemented: used AGP's built-in Kotlin support in the Android application
+  module and updated KSP for that supported path without legacy-API or
+  built-in-Kotlin opt-outs.
+- Replace or isolate `SortableTableView`, then remove
+  `android.enableJetifier=true` before AGP 10. During the AGP 9 migration,
+  document the dependency as the sole narrow exception to Jetifier's
+  deprecation instead of suppressing Android build warnings generally.
+- Validate the migration in stages: Gradle configuration and task discovery;
+  shared desktop and Android host tests; Android debug compilation and unit
+  tests; release lint, shrinking, signing, and AAB assembly; desktop tests and
+  packaging; jDeploy preflight; course-transfer workflows; and the static plus
+  emulator 16 KB gates. Treat changed task names as workflow-contract changes,
+  updating repo wrappers, CI, and durable documentation together.
+
+### Android Lint Debt
+
+- Keep `just android-release-check` as a blocking release gate. Maintain a
+  checked-in exact baseline for findings that predate the AGP 9 migration so
+  new lint errors and warnings fail immediately; do not regenerate the baseline
+  merely to make a new finding pass.
+- Retire the baseline in reviewable groups: Czech translations and plural
+  coverage; accessibility labels and content descriptions; hardcoded and
+  programmatic UI text; obsolete or unused resources and namespaces; then
+  remaining layout and API-style recommendations. Fix runtime compatibility
+  findings such as unsupported Android APIs immediately rather than baselining
+  them.
+- Review dependency-version availability separately from source lint. Upgrade
+  coupled AndroidX, Firebase, Kotlin, and plugin families through the dependency
+  maintenance lane instead of mixing them into unrelated lint cleanup.
+
+### Release Automation And Dependency Hygiene
+
+- Pin third-party release actions, including the jDeploy GitHub action, to
+  reviewed immutable commits instead of moving branches such as `master`.
+  Keep the action's requested jDeploy version synchronized with the tested npm
+  dependency.
+- Remove remaining Node-20-targeted GitHub Actions or replace their small setup
+  responsibilities with maintained Node 24-compatible steps. Pin established
+  release jobs to an explicit runner image and separately exercise the next
+  Ubuntu image before adopting it, rather than inheriting an unreviewed
+  `ubuntu-latest` migration.
+- Add conservative dependency-update automation for Gradle, npm, and GitHub
+  Actions. Group coupled Android/Kotlin/KSP, AndroidX, Firebase, and jDeploy
+  updates, and require the applicable platform and packaging gates before
+  merging them.
+- Evaluate the current jDeploy patch release in its own maintenance change.
+  Do not combine that update with an AGP/KMP migration, and do not treat a patch
+  update as resolving deprecated transitive packages unless the resulting npm
+  tree proves that they are gone.
+
+### Native Desktop Platform Acceptance
+
+- Add a Windows x64 installed-package smoke workflow that launches Radio-Oracle,
+  opens the sample Race File, performs representative CSV/JSON/XML exports, and
+  exits cleanly. Keep Windows packaged-app acceptance a desktop beta release
+  blocker and retain ARM64 acceptance when suitable hardware or runners are
+  available.
+- Add a Linux x64 installed-package launch and sample-file smoke on the pinned
+  Ubuntu runner. Keep Linux support explicitly best-effort until native x64 and
+  ARM64 acceptance is repeatable.
+- Continue macOS ARM64 package and isolated-launch validation, and add x64
+  acceptance when suitable hardware or runners are available. A bundle that
+  merely contains all six Skiko runtime jars is packaging evidence, not proof
+  that each native launcher works.
+
+### Release Hardware Acceptance
+
+- Before substantive Android releases, install the signed candidate on a
+  representative physical device and verify launch, Race File transfer,
+  SPORTident USB connect/read/disconnect, and Bluetooth finish-ticket printing.
+- Before desktop beta releases, retain the existing macOS SPORTident and system
+  printer checks and record the device, station, printer, and any waived steps
+  in the release verification document. Hardware checks remain explicit manual
+  evidence rather than simulated CI passes.
 
 ### Cloudflare Settings Transfer
 

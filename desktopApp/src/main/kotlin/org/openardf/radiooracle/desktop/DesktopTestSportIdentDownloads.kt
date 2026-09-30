@@ -126,7 +126,7 @@ internal object DesktopTestSportIdentDownloads {
         index: Int
     ): Long {
         val raceStartSeconds = raceStartSecondsOfDay(raceData.race.startDateTimeIso)
-        val generatedOffset = drawnStartTimeSeconds?.toLong()
+        val generatedOffset = drawnStartTimeSeconds
             ?: (FirstGeneratedStartOffsetSeconds + index * StartSpacingSeconds)
         val candidate = (raceStartSeconds + generatedOffset) % SportIdentCodes.SECONDS_DAY
         return if (candidate + BaseRunTimeSeconds + index * RunTimeSpacingSeconds < SportIdentCodes.SECONDS_DAY) {

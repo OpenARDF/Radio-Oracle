@@ -36,12 +36,14 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:baselineAligned="false"
             android:orientation="horizontal">
 
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/dialog_dropdown"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:labelFor="@id/category_gender"
                 android:layout_weight="1"
                 android:hint="@string/general_gender"
                 android:textColor="@color/black">
@@ -78,6 +80,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:baselineAligned="false"
             android:orientation="horizontal">
 
             <com.google.android.material.textfield.TextInputLayout
@@ -128,7 +131,7 @@
             style="@style/dialog_dropdown"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
+            android:labelFor="@id/category_dialog_type"
             android:hint="@string/race_type"
             android:textColor="@color/black">
 
@@ -144,6 +147,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:baselineAligned="false"
             android:orientation="horizontal">
 
             <com.google.android.material.textfield.TextInputLayout
@@ -151,6 +155,7 @@
                 style="@style/dialog_dropdown"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:labelFor="@id/category_dialog_band"
                 android:layout_weight="1"
                 android:hint="@string/general_band"
                 android:textColor="@color/black">

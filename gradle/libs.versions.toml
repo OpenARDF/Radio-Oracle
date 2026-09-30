@@ -1,12 +1,12 @@
 [versions]
-android-gradle-plugin = "8.13.2"
+android-gradle-plugin = "9.2.1"
 androidx-appcompat = "1.7.1"
 androidx-constraintlayout = "2.2.1"
 androidx-core = "1.18.0"
 androidx-espresso = "3.7.0"
 androidx-legacy-support = "1.0.0"
 androidx-lifecycle = "2.10.0"
-androidx-navigation-plugin = "2.9.2"
+androidx-navigation-plugin = "2.9.8"
 androidx-navigation-runtime = "2.9.8"
 androidx-preference = "1.2.1"
 androidx-room = "2.8.4"
@@ -22,18 +22,17 @@ google-services = "4.4.3"
 google-code-scanner = "16.1.0"
 junit = "4.13.2"
 jserialcomm = "2.11.4"
-kotlin = "2.2.0"
+kotlin = "2.4.20"
 kotlin-csv = "1.10.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
-ksp = "2.2.0-2.0.2"
+ksp = "2.3.12"
 skiko = "0.144.6"
 material = "1.14.0"
 mockito = "5.23.0"
 mockito-kotlin = "6.3.0"
 moshi = "1.15.2"
 okhttp = "5.3.2"
-okhttp-logging = "5.3.0"
 robolectric = "4.16"
 sortable-table-view = "2.8.1"
 usb-serial = "6.1.0"
@@ -64,7 +63,7 @@ escpos-printer = { module = "com.github.DantSu:ESCPOS-ThermalPrinter-Android", v
 expandable-fab = { module = "com.nambimobile.widgets:expandable-fab", version.ref = "expandable-fab" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
-firebase-crashlytics-ndk = { module = "com.google.firebase:firebase-crashlytics-ndk" }
+firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
 google-code-scanner = { module = "com.google.android.gms:play-services-code-scanner", version.ref = "google-code-scanner" }
 junit = { module = "junit:junit", version.ref = "junit" }
 jserialcomm = { module = "com.fazecast:jSerialComm", version.ref = "jserialcomm" }
@@ -76,7 +75,6 @@ mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockito-kotlin" }
 moshi-kotlin = { module = "com.squareup.moshi:moshi-kotlin", version.ref = "moshi" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
-okhttp-logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp-logging" }
 okhttp-mockwebserver = { module = "com.squareup.okhttp3:mockwebserver", version.ref = "okhttp" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 sortable-table-view = { module = "com.github.ISchwarz23:SortableTableView", version.ref = "sortable-table-view" }
@@ -89,11 +87,10 @@ zxing-javase = { module = "com.google.zxing:javase", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
-android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
+android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "android-gradle-plugin" }
 crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "crashlytics-plugin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

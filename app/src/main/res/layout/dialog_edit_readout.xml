@@ -30,6 +30,7 @@
                     style="@style/dialog_dropdown"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:labelFor="@id/readout_dialog_competitor"
                     android:hint="@string/general_competitor"
                     android:inputType="none">
 
@@ -47,6 +48,7 @@
                     style="@style/dialog_dropdown"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:labelFor="@id/readout_dialog_category"
                     android:layout_marginTop="4dp"
                     android:hint="@string/general_category"
                     android:inputType="none">
@@ -65,6 +67,7 @@
                     style="@style/dialog_dropdown"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:labelFor="@id/readout_dialog_status"
                     android:layout_marginTop="4dp"
                     android:hint="@string/readout_detail_status"
                     android:inputType="none"

@@ -62,7 +62,7 @@ jobs:
           ./gradlew \
             :shared:desktopTest \
             :desktopApp:test \
-            :shared:testDebugUnitTest \
+            :shared:testAndroidHostTest \
             :app:testDebugUnitTest \
             :app:assembleDebug \
             :desktopApp:checkRuntime \

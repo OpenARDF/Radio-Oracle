@@ -31,7 +31,7 @@
                 android:layout_marginStart="4dp"
                 android:layout_marginTop="4dp"
                 android:gravity="start"
-                android:text="TEST"
+                tools:text="M21"
                 app:layout_constraintStart_toEndOf="@+id/readout_title_category"
                 app:layout_constraintTop_toBottomOf="@+id/readout_item_club" />
 
@@ -42,7 +42,7 @@
                 android:gravity="start"
                 android:maxWidth="130dp"
                 android:maxLength="30"
-                android:text="TEST MAN"
+                tools:text="Competitor Name"
                 android:textSize="15sp"
                 android:textStyle="bold"
                 app:layout_constraintStart_toStartOf="parent"
@@ -57,7 +57,7 @@
                 android:layout_marginStart="4dp"
                 android:layout_marginTop="4dp"
                 android:gravity="start"
-                android:text="000000"
+                tools:text="1234567"
                 app:layout_constraintStart_toEndOf="@+id/readout_title_si_number"
                 app:layout_constraintTop_toBottomOf="@+id/readout_item_competitor" />
 
@@ -67,7 +67,7 @@
                 android:layout_height="wrap_content"
 
                 android:gravity="start"
-                android:text="00:00"
+                tools:text="01:23:45"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -141,7 +141,7 @@
                 android:layout_marginStart="4dp"
                 android:layout_marginTop="4dp"
 
-                android:text="-"
+                tools:text="Club"
                 app:layout_constraintStart_toEndOf="@id/readout_title_club"
                 app:layout_constraintTop_toBottomOf="@+id/readout_title_si_number" />
 
@@ -151,7 +151,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:layout_marginBottom="4dp"
-                android:text="TextView"
+                tools:text="10:00:00"
                 app:layout_constraintBottom_toTopOf="@+id/readout_item_finish_time"
                 app:layout_constraintStart_toEndOf="@+id/readout_title_start_time" />
 
@@ -161,7 +161,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:layout_marginBottom="4dp"
-                android:text="TextView"
+                tools:text="11:23:45"
                 app:layout_constraintBottom_toTopOf="@+id/readout_item_readout_time"
                 app:layout_constraintStart_toEndOf="@+id/readout_title_finish_time" />
 
@@ -170,7 +170,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
-                android:text="TextView"
+                tools:text="11:24:00"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintStart_toEndOf="@+id/readout_title_readout_time" />
         </androidx.constraintlayout.widget.ConstraintLayout>
@@ -181,6 +181,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
+            android:contentDescription="@string/general_more_options"
             android:minWidth="0dp"
             android:src="@drawable/ic_more" />
     </LinearLayout>

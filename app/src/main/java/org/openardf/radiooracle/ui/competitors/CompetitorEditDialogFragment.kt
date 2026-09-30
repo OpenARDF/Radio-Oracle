@@ -48,6 +48,7 @@ import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.sportident.SIConstants
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
+import org.openardf.radiooracle.ui.setInvariantNumber
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -159,14 +160,14 @@ class CompetitorEditDialogFragment : DialogFragment() {
             indexTextView.setText(competitor.index)
 
             if (competitor.birthYear != null) {
-                birthYearTextView.setText(competitor.birthYear.toString())
+                birthYearTextView.setInvariantNumber(competitor.birthYear)
             }
 
             //Pre-set SI number
             if (competitor.siNumber != null) {
-                siNumberTextView.setText(competitor.siNumber.toString())
+                siNumberTextView.setInvariantNumber(competitor.siNumber)
             }
-            startNumberTextView.setText(competitor.startNumber.toString())
+            startNumberTextView.setInvariantNumber(competitor.startNumber)
 
             //Preset gender
             if (competitor.isMan) {
@@ -202,7 +203,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
             ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, categoryArr)
 
         categoryPicker.setAdapter(categoriesAdapter)
-        startNumberTextView.setText(competitor.startNumber.toString())
+        startNumberTextView.setInvariantNumber(competitor.startNumber)
 
         manualGenderCheckBox.setOnCheckedChangeListener { _, checked ->
             competitor.isMan = checked
@@ -216,7 +217,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
         siNumberLayout.setEndIconOnClickListener {
             val last = selectedRaceViewModel.getLastReadCard()
             if (last != null) {
-                siNumberTextView.setText(last.toString())
+                siNumberTextView.setInvariantNumber(last)
             }
         }
 

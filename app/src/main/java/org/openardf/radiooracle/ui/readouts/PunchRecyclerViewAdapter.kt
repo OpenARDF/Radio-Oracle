@@ -35,6 +35,7 @@ import org.openardf.radiooracle.R
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.TimeProcessor
 import org.openardf.radiooracle.backend.room.entity.embeddeds.AliasPunch
+import org.openardf.radiooracle.ui.setInvariantNumber
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.SIRecordType
@@ -80,7 +81,7 @@ class PunchRecyclerViewAdapter(
             }
 
             else -> {
-                holder.punchOrder.text = position.toString()
+                holder.punchOrder.setInvariantNumber(position)
                 holder.punchSiCode.text = formatControlCode(item)
                 holder.punchStatus.text = when (item.punch.punchStatus) {
                     PunchStatus.VALID -> context.getString(R.string.punch_status_valid)

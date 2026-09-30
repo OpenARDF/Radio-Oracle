@@ -116,7 +116,8 @@ private fun contentDispositionFileName(header: String?): String? {
         .find(value)
         ?.groupValues
         ?.getOrNull(1)
-        ?.let { URLDecoder.decode(it, StandardCharsets.UTF_8) }
+        // The charset-name overload is available throughout the Android 26+ support range.
+        ?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
     if (!fileNameStar.isNullOrBlank()) {
         return safeDownloadFileName(fileNameStar)
     }
@@ -184,9 +185,9 @@ object EventFileTransferUrlValidator {
                 if (pieces.isEmpty() || pieces[0].isEmpty()) {
                     null
                 } else {
-                    val key = URLDecoder.decode(pieces[0], StandardCharsets.UTF_8)
+                    val key = URLDecoder.decode(pieces[0], StandardCharsets.UTF_8.name())
                     val value = if (pieces.size == 2) pieces[1] else ""
-                    key to URLDecoder.decode(value, StandardCharsets.UTF_8)
+                    key to URLDecoder.decode(value, StandardCharsets.UTF_8.name())
                 }
             }
             .toMap()

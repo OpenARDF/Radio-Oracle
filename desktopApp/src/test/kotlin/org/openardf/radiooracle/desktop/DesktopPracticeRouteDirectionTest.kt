@@ -92,16 +92,18 @@ class DesktopPracticeRouteDirectionTest {
         val exported = summary.kmlFolders.last()
         for (corner in listOf(corner1, corner2)) assertTrue(exported.routePoints.any { it.distanceMetersTo(corner) < 0.01 })
         val application = requireNotNull(summary.calculatedRouteApplication)
+        val providedRouteSection = requireNotNull(summary.providedRouteSection)
         assertEquals(2, application.courseObjects.count { it.type == ProtectedCourseObjectType.WAYPOINT })
         val expectedLength = DesktopCourseRouteMetricsCalculator.metrics(info.route.map {
             CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
         }).effectiveLengthMeters!!.roundToInt()
-        assertTrue(kotlin.math.abs(expectedLength - (summary.providedRouteSection!!.effectiveLengthMeters!!)) <= 1)
+        assertTrue(kotlin.math.abs(expectedLength - requireNotNull(providedRouteSection.effectiveLengthMeters)) <= 1)
 
         val normal = analyze(project.copy(raceData = project.raceData.copy(race = project.raceData.race.copy(raceLevel = RaceLevel.NATIONAL))))
         assertFalse(normal.idealOrderMatches == true)
-        assertTrue(normal.calculatedRouteSection!!.effectiveLengthMeters!! < (summary.providedRouteSection!!.effectiveLengthMeters!!))
-        assertFalse(normal.calculatedRouteSection!!.explanation.contains("Practice direction exception"))
+        val normalCalculatedRouteSection = requireNotNull(normal.calculatedRouteSection)
+        assertTrue(requireNotNull(normalCalculatedRouteSection.effectiveLengthMeters) < requireNotNull(providedRouteSection.effectiveLengthMeters))
+        assertFalse(normalCalculatedRouteSection.explanation.contains("Practice direction exception"))
     }
 
     @Test fun resultsUseSameDirectionAndInvalidateReferencesWhenPolicyInputsChange() = runBlocking {
@@ -209,11 +211,14 @@ class DesktopPracticeRouteDirectionTest {
             val alternative = requireNotNull(evaluated.calculatedRouteSection)
             if (!alternative.summaryOnly) {
                 improvements++
-                assertTrue(alternative.waitRenumbering!!.improvesWait)
+                val alternativeWait = requireNotNull(alternative.waitRenumbering)
+                val evaluatedWait = requireNotNull(evaluated.waitRenumbering)
+                val providedRouteSection = requireNotNull(evaluated.providedRouteSection)
+                assertTrue(alternativeWait.improvesWait)
                 assertEquals("Review Fox Renumbering", evaluated.courseRecommendation.actionLabel)
-                assertEquals(evaluated.waitRenumbering!!.currentTotalWaitSeconds, alternative.waitRenumbering!!.currentTotalWaitSeconds)
-                assertEquals(evaluated.providedRouteSection!!.climbMeters, alternative.climbMeters)
-                assertEquals(evaluated.providedRouteSection!!.effectiveLengthMeters, alternative.effectiveLengthMeters)
+                assertEquals(evaluatedWait.currentTotalWaitSeconds, alternativeWait.currentTotalWaitSeconds)
+                assertEquals(providedRouteSection.climbMeters, alternative.climbMeters)
+                assertEquals(providedRouteSection.effectiveLengthMeters, alternative.effectiveLengthMeters)
                 assertEquals(evaluated.kmlFolders.first().routePoints, evaluated.kmlFolders.last().routePoints)
             }
         }

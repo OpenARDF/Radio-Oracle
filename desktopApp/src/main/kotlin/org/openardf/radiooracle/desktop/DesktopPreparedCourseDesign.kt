@@ -48,7 +48,7 @@ internal fun prepareAllCourseDesigns(
         // Analyzer's route optimizer minimizes geometry/effective length. Numbering affects its wait report,
         // so suppress further numbering proposals and carry the accepted labels into the complete change set.
         val application = requireNotNull(DesktopCourseAnalyzer.analyze(source, category.category.id, info,
-            category.category.storedIdealOrder(password) ?: info.idealOrder,
+            category.category.storedIdealOrder(password),
             elevationLookup = elevationLookup, allowFoxRenumbering = false, prepareApplication = true, routeSource = DesktopCourseRouteSource.Draft).calculatedRouteApplication) {
             "A complete route could not be calculated for ${category.category.name}."
         }

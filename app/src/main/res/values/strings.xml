@@ -1,6 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name" translatable="false">Radio-Oracle</string>
     <string name="unknown" translatable="false">\?</string>
+    <string name="general_not_available_symbol" translatable="false">–</string>
 
     <!--General strings -->
     <string name="general_automatic">Automatic</string>
@@ -31,6 +32,36 @@
     <string name="general_main">Main</string>
     <string name="general_max_age">Maximal Age</string>
     <string name="general_more_options">More Options</string>
+    <string name="accessibility_add_alias">Add alias</string>
+    <string name="accessibility_delete_alias">Delete alias</string>
+    <string name="accessibility_move_category_up">Move category up</string>
+    <string name="accessibility_move_category_down">Move category down</string>
+    <string name="accessibility_add_punch">Add punch</string>
+    <string name="accessibility_delete_punch">Delete punch</string>
+    <string name="accessibility_expand_category">Expand category</string>
+    <string name="csv_format_title">CSV format — %1$s</string>
+    <string name="csv_header">Header</string>
+    <string name="csv_column_order_no_header">Column order (no header in the file)</string>
+    <string name="csv_example_row">Example row</string>
+    <string name="csv_copy_header">Copy header</string>
+    <string name="csv_copy_column_order">Copy column order</string>
+    <string name="csv_clipboard_header_label">CSV header</string>
+    <string name="csv_save_template">Save template…</string>
+    <string name="csv_required_suffix">" (required)"</string>
+    <string name="csv_column_detail">%1$d. %2$s%3$s — %4$s</string>
+    <string name="csv_other_accepted_layouts">Other accepted layouts</string>
+    <string name="csv_show_field_details">Show field details</string>
+    <string name="csv_hide_field_details">Hide field details</string>
+    <string name="diagnostic_logs_privacy_notice">Logs may contain SI card numbers, punch times, cardholder data stored on cards, and file or device details. Share them only with someone you trust.</string>
+    <string name="diagnostic_logs_description_with_privacy" translatable="false">%1$s\n\n%2$s</string>
+    <string name="race_date_time" translatable="false">%1$s %2$s</string>
+    <string name="statistics_ratio" translatable="false">%1$d/%2$d</string>
+    <string name="results_csv_format_error">Could not show CSV format: %1$s</string>
+    <string name="result_category_summary" translatable="false">%1$s (%2$d/%3$d)</string>
+    <plurals name="category_competitor_count">
+        <item quantity="one">(%1$d competitor)</item>
+        <item quantity="other">(%1$d competitors)</item>
+    </plurals>
     <string name="general_name">Name</string>
     <string name="general_ok" translatable="false">OK</string>
     <string name="general_points">Points</string>
@@ -73,12 +104,8 @@
     <string name="data_import_invalid_line">Invalid data at line %1$d: %2$s</string>
 
     <string name="data_import_category_duplicate">Duplicate category names: %1$s</string>
-    <string name="data_import_competitor_blank_name">Missing first/last name at line: %1$d</string>
-    <string name="data_import_competitor_invalid_si">Invalid SI number at line: %1$d</string>
     <string name="data_import_competitor_duplicate_si_file">Duplicate SI number in file: %1$d</string>
     <string name="data_import_competitor_duplicate_si_race">SI number already exists in race: %1$d</string>
-    <string name="data_import_competitor_duplicate_start_number_file">Duplicate start number in file: %1$d</string>
-    <string name="data_import_competitor_duplicate_start_number_race">Start number already exists in race: %1$d</string>
 
     <string name="data_import_race_blank_name">Race name can\'t be blank!</string>
     <string name="data_import_alias_name_duplicate">Duplicate alias names: %1$s</string>
@@ -94,19 +121,21 @@
     <string name="race_send_file_desktop">Send Picked File To Desktop</string>
     <string name="race_export_success">Race exported successfully</string>
     <string name="race_export_failure">Failed to export race</string>
-    <string name="race_import_success">Race imported successfully</string>
     <string name="race_import_failure">Failed to import race</string>
     <string name="event_series_import_title">Import Race Series</string>
     <string name="event_series_import_menu">Import Series</string>
-    <string name="event_series_import_progress">Importing Race Series...</string>
-    <string name="event_series_import_success">Imported series: %1$s (%2$d races)</string>
+    <string name="event_series_import_progress">Importing Race Series…</string>
+    <plurals name="event_series_import_success">
+        <item quantity="one">Imported series: %1$s (%2$d race)</item>
+        <item quantity="other">Imported series: %1$s (%2$d races)</item>
+    </plurals>
     <string name="event_series_import_invalid">Invalid Radio-Oracle Series File.</string>
     <string name="event_series_export">Export Race Series</string>
-    <string name="event_series_export_progress">Exporting Race Series...</string>
+    <string name="event_series_export_progress">Exporting Race Series…</string>
     <string name="event_series_export_success">Race Series exported successfully</string>
     <string name="event_series_send_desktop">Send Race Series To Desktop</string>
     <string name="event_series_receive_desktop">Get Race Series From Desktop</string>
-    <string name="event_series_receive_progress">Receiving Race Series...</string>
+    <string name="event_series_receive_progress">Receiving Race Series…</string>
     <string name="event_series_open_member">Open %1$s</string>
     <string name="event_series_add_event">Add To Series</string>
     <string name="event_series_add_race">Add Race</string>
@@ -152,15 +181,16 @@
     <string name="event_file_receive_message">Scan the desktop QR code, or enter the transfer URL. Use trusted Wi-Fi or a phone hotspot.</string>
     <string name="event_file_receive_scan_qr">Scan QR</string>
     <string name="event_file_receive_enter_url">Enter URL</string>
-    <string name="event_file_receive_url_hint">http://192.168.1.10:12345/...</string>
-    <string name="event_file_receive_progress">Receiving Race File...</string>
+    <!-- The three literal dots illustrate an arbitrary URL suffix, not prose punctuation. -->
+    <string name="event_file_receive_url_hint" translatable="false" tools:ignore="TypographyEllipsis">http://192.168.1.10:12345/...</string>
+    <string name="event_file_receive_progress">Receiving Race File…</string>
     <string name="event_file_receive_success">Imported race: %1$s</string>
     <string name="event_file_send_title">Send To Desktop</string>
     <string name="event_file_send_message">Start Receive from Android on the desktop, then scan its QR code or enter the receive URL.</string>
     <string name="event_file_send_scan_qr">Scan QR</string>
     <string name="event_file_send_enter_url">Enter URL</string>
-    <string name="event_file_send_url_hint">http://192.168.1.10:12345/radio-oracle/file-receive?token=...</string>
-    <string name="event_file_send_progress">Sending file...</string>
+    <string name="event_file_send_url_hint" translatable="false" tools:ignore="TypographyEllipsis">http://192.168.1.10:12345/radio-oracle/file-receive?token=...</string>
+    <string name="event_file_send_progress">Sending file…</string>
     <string name="event_file_send_success">Sent to desktop: %1$s</string>
 
     <!--Categories-->
@@ -218,7 +248,6 @@
     <string name="readout_missing_si_number_hint">Enter the card number if known.</string>
     <string name="readout_rented_si_number_title">Rented SI #</string>
 
-    <string name="competitor_hint_code">Code</string>
     <string name="readout_clock_entry_help">Time: HH:mm:ss or HHmmss (e.g. 123456). Each + adds a blank control and time; SI day/week carry forward.</string>
     <string name="readout_control_entry_hint">Alias / SI station</string>
     <string name="competitor_hint_time_format" translatable="false">HH:MM:SS</string>
@@ -234,10 +263,10 @@
     <string name="competitor_display_si_rent">SI Rent</string>
 
     <!--SI station display-->
-    <string name="si_service">SI Service</string>
     <string name="si_ready">SI service started</string>
-    <string name="si_connected">SI station %1$d connected</string>
-    <string name="si_connected_but_no_race">SI station %1$d connected. Select an event to enable SI card readout.</string>
+    <!-- These numeric placeholders are station identifiers, not quantities. -->
+    <string name="si_connected" tools:ignore="PluralsCandidate">SI station %1$d connected</string>
+    <string name="si_connected_but_no_race" tools:ignore="PluralsCandidate">SI station %1$d connected. Select an event to enable SI card readout.</string>
     <string name="si_connected_but_no_race_no_station">SI reader connected. Select an event to enable SI card readout.</string>
     <string name="si_station_wrong_mode_status">SI station %1$d is in %2$s mode</string>
     <string name="si_station_wrong_mode_title">SI Station Mode Warning</string>
@@ -245,7 +274,7 @@
     <string name="si_disconnected">SI station disconnected</string>
     <string name="si_usb_permission_missing">SI station needs USB access. Tap here to allow.</string>
     <string name="si_waiting_for_station">SI station detected. Waiting for station response.</string>
-    <string name="si_reading">SI station %1$d reading card %2$d </string>
+    <string name="si_reading" tools:ignore="PluralsCandidate">SI station %1$d reading card %2$d </string>
     <string name="si_card_error">SI station %1$d, error reading card %2$d </string>
     <string name="si_card_read">SI station %1$d, read card %2$d </string>
     <string name="si_last_card">Last read card: %1$s </string>
@@ -262,11 +291,12 @@
     <string name="readout_detail_split">Split</string>
     <string name="readout_detail_status">Status</string>
     <string name="readout_si_number" translatable="false">SI: %1$s</string>
-    <string name="readout_si_exists">Duplicate SI %1$d ignored. Readout already exists.</string>
-    <string name="readout_named_unmatched_si_exists">SI %1$d already has a named readout. Open Readouts to add the competitor.</string>
+    <!-- These numeric placeholders are card identifiers, not quantities. -->
+    <string name="readout_si_exists" tools:ignore="PluralsCandidate">Duplicate SI %1$d ignored. Readout already exists.</string>
+    <string name="readout_named_unmatched_si_exists" tools:ignore="PluralsCandidate">SI %1$d already has a named readout. Open Readouts to add the competitor.</string>
     <string name="readout_competitor_exists">Readout for this competitor already exists!</string>
     <string name="readout_add_card_competitor_title">Add Competitor?</string>
-    <string name="readout_add_card_competitor_message">SI card %2$d was read as %1$s. Add this competitor to the race?</string>
+    <string name="readout_add_card_competitor_message" tools:ignore="PluralsCandidate">SI card %2$d was read as %1$s. Add this competitor to the race?</string>
     <string name="readout_add_card_competitor_positive">Add Competitor</string>
     <string name="readout_unknown_category">Unknown Category</string>
     <string name="readout_unknown_competitor">Unknown Competitor</string>
@@ -323,7 +353,6 @@
     <!-- SPORTident tools -->
     <string name="sportident_menu_title" translatable="false">SPORTident</string>
     <string name="sportident_tools_title" translatable="false">SPORTident Tools</string>
-    <string name="sportident_time_sync_title" translatable="false">SPORTident Time Sync</string>
     <string name="sportident_time_sync_computer_time">Computer time: %1$s</string>
     <string name="sportident_time_sync_connecting">Connecting to the SPORTident reader service…</string>
     <string name="sportident_time_sync_disconnected">Connect a ready SPORTident download station.</string>
@@ -350,7 +379,10 @@
     <string name="sportident_backup_show">Filter</string>
     <string name="sportident_backup_ready">Couple the field station to the download station. Read History wakes it if needed and does not clear or change it.</string>
     <string name="sportident_backup_reading">Reading station punch history…</string>
-    <string name="sportident_backup_complete">Read %1$d punch-history record(s).</string>
+    <plurals name="sportident_backup_complete">
+        <item quantity="one">Read %1$d punch-history record.</item>
+        <item quantity="other">Read %1$d punch-history records.</item>
+    </plurals>
     <string name="sportident_backup_failed">Punch-history read failed: %1$s</string>
 
     <string name="preferences_general">General</string>
@@ -361,7 +393,7 @@
     <string name="preferences_general_keep_screen_open_hint">When selected, the screen remains on and the backlight stays at its current level.</string>
     <string name="preferences_general_show_log" tools:ignore="UnusedResources">Show Log</string>
     <string name="preferences_general_language">Language</string>
-    <string name="preferences_general_language_hint">Manually select a language of the app. The app needs to be restarted after.</string>
+    <string name="preferences_general_language_hint">Manually select the app language. Restart the app to apply the change.\n[%1$s]</string>
     <string name="preferences_screen_orientation">Screen Orientation</string>
     <string name="preferences_screen_orientation_portrait">Portrait</string>
     <string name="preferences_screen_orientation_landscape">Landscape</string>
@@ -424,7 +456,7 @@
     <string name="preferences_results_use_aliases">Use Aliases</string>
     <string name="preferences_results_use_aliases_hint">Use defined aliases for control points instead of SI codes</string>
     <string name="preferences_results_service">Result Service Sending</string>
-    <string name="preferences_results_service_hint">Select when to send the results with the result service.</string>
+    <string name="preferences_results_service_hint">Select when to send results with the result service.\n[%1$s]</string>
 
     <string name="preferences_result_service_matched">When Competitor Matched</string>
     <string name="preferences_result_service_always">Always</string>
@@ -469,7 +501,10 @@
     <string name="cloudflare_results_title">Cloudflare Public Results</string>
     <string name="cloudflare_results_target_loading">Loading race or series…</string>
     <string name="cloudflare_results_target_race">Race: %1$s</string>
-    <string name="cloudflare_results_target_series">Race Series: %1$s (%2$d races)</string>
+    <plurals name="cloudflare_results_target_series">
+        <item quantity="one">Race Series: %1$s (%2$d race)</item>
+        <item quantity="other">Race Series: %1$s (%2$d races)</item>
+    </plurals>
     <string name="cloudflare_results_settings_incomplete">Complete Cloudflare Settings before publishing or viewing results.</string>
     <string name="cloudflare_results_settings_rejected">Cloudflare rejected the saved account, project, or API token. Update and save Cloudflare Settings.</string>
     <string name="cloudflare_results_include_diagrams">Include 2D course diagrams</string>
@@ -488,7 +523,10 @@
     <string name="race_confirm_password">Confirm Race Password</string>
     <string name="race_password_mismatch">Passwords do not match.</string>
     <string name="race_protection_updating">Updating course protection. Please wait…</string>
-    <string name="race_protection_progress">Processing course data: %1$d of %2$d categories\n%3$s\nLarge series can take several minutes.</string>
+    <plurals name="race_protection_progress">
+        <item quantity="one">Processing course data: %1$d of %2$d category\n%3$s\nLarge series can take several minutes.</item>
+        <item quantity="other">Processing course data: %1$d of %2$d categories\n%3$s\nLarge series can take several minutes.</item>
+    </plurals>
     <string name="race_protection_saving">Saving updated course data…</string>
     <string name="race_protection_cancelling">Cancelling after the current category…</string>
     <string name="race_protection_cancelled">Cancelled. No course protection changes were saved.</string>
@@ -800,7 +838,7 @@
     <string name="diagnostic_logs_save">Save ZIP</string>
     <string name="diagnostic_logs_saved">Diagnostic ZIP saved. Attach it to your support message.</string>
     <string name="diagnostic_logs_error">Could not save or share logs. Check storage or try Save ZIP and attach it to your message.</string>
-    <string name="race_new_from_existing">New Race from Existing...</string>
+    <string name="race_new_from_existing">New Race from Existing…</string>
     <string name="race_copy_default_name">%1$s copy</string>
     <string name="race_copy_competitors">Include competitors</string>
     <string name="race_copy_help">Creates a standalone race with the same settings, categories, courses and controls. Results and drawn starts are cleared. You can add it to a series later.</string>

@@ -32,7 +32,7 @@ import org.openardf.radiooracle.shared.sportident.SportIdentProtocol
 
 fun main(args: Array<String>) {
     val input = when {
-        args.isEmpty() -> generateSequence(::readLine).joinToString("\n")
+        args.isEmpty() -> generateSequence(::readlnOrNull).joinToString("\n")
         args.size == 1 && Files.exists(Path.of(args[0])) -> Files.readString(Path.of(args[0]))
         else -> args.joinToString(" ")
     }

@@ -6,19 +6,19 @@
         android:id="@+id/result_menu_share_results"
         android:icon="@drawable/ic_share"
         android:title="@string/results_share"
-        app:showAsAction="always" />
+        app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/result_menu_results_service"
         android:icon="@drawable/ic_result_service_stopped"
         android:title="@string/results_service"
-        app:showAsAction="always" />
+        app:showAsAction="ifRoom" />
 
     <item
         android:id="@+id/result_menu_print_results"
         android:icon="@drawable/ic_print"
         android:title="@string/general_print"
-        app:showAsAction="always" />
+        app:showAsAction="ifRoom" />
     <item
         android:id="@+id/result_menu_recalculate_results"
         android:title="@string/results_recalculate" />

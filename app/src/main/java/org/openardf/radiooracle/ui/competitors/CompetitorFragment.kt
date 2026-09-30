@@ -25,7 +25,6 @@
 package org.openardf.radiooracle.ui.competitors
 
 import android.app.AlertDialog
-import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
@@ -37,6 +36,7 @@ import android.widget.CheckBox
 import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.appcompat.widget.Toolbar
+import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResultListener
@@ -281,14 +281,12 @@ class CompetitorFragment : Fragment() {
         competitorTableView.headerAdapter = adapter
 
         competitorTableView.setDataRowBackgroundProvider { rowIndex, competitorData ->
-            ColorDrawable(
-                requireContext().getColor(
-                    competitorRowBackgroundColorResource(
-                        rowIndex = rowIndex,
-                        isRentedSiCard = competitorData.competitorCategory.competitor.siRent
-                    )
+            requireContext().getColor(
+                competitorRowBackgroundColorResource(
+                    rowIndex = rowIndex,
+                    isRentedSiCard = competitorData.competitorCategory.competitor.siRent
                 )
-            )
+            ).toDrawable()
         }
     }
 

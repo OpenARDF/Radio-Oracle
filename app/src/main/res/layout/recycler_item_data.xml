@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
@@ -9,7 +10,7 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:padding="4dp"
-        android:text="TextView" />
+        tools:text="Column 1" />
 
     <TextView
         android:id="@+id/data_import_item_column_2"
@@ -17,7 +18,7 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:padding="4dp"
-        android:text="TextView" />
+        tools:text="Column 2" />
 
     <TextView
         android:id="@+id/data_import_item_column_3"
@@ -25,7 +26,7 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:padding="4dp"
-        android:text="TextView" />
+        tools:text="Column 3" />
 
     <TextView
         android:id="@+id/data_import_item_column_4"
@@ -33,5 +34,5 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:padding="4dp"
-        android:text="TextView" />
+        tools:text="Column 4" />
 </LinearLayout>

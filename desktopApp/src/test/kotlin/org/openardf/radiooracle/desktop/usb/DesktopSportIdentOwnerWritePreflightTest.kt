@@ -143,7 +143,7 @@ class DesktopSportIdentOwnerWritePreflightTest {
         val invalidPort = FakePort()
         val invalid = preflight(invalidPort)
         assertThrows(IllegalArgumentException::class.java) {
-            invalid.withFreshRead(request.copy(acceptPossiblePunchLoss = false)) { _, _, _ -> Unit }
+            invalid.withFreshRead(request.copy(acceptPossiblePunchLoss = false)) { _, _, _ -> }
         }
         assertEquals(0, invalidPort.openCount)
 

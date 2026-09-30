@@ -44,6 +44,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import androidx.core.view.get
+import androidx.core.view.size
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResultListener
@@ -223,8 +225,8 @@ class RaceSelectionFragment : Fragment() {
     }
 
     private fun tintMenuIcons(color: Int) {
-        for (index in 0 until toolbar.menu.size()) {
-            val item = toolbar.menu.getItem(index)
+        for (index in 0 until toolbar.menu.size) {
+            val item = toolbar.menu[index]
             item.icon = item.icon?.let { icon ->
                 DrawableCompat.wrap(icon.mutate()).apply {
                     DrawableCompat.setTint(this, color)
@@ -394,8 +396,9 @@ class RaceSelectionFragment : Fragment() {
                 progressDialog.dismiss()
                 Toast.makeText(
                     requireContext(),
-                    getString(
-                        R.string.event_series_import_success,
+                    resources.getQuantityString(
+                        R.plurals.event_series_import_success,
+                        eventSeriesImport.memberImports.size,
                         eventSeriesImport.series.name,
                         eventSeriesImport.memberImports.size
                     ),
@@ -486,8 +489,9 @@ class RaceSelectionFragment : Fragment() {
                     progressDialog.dismiss()
                     Toast.makeText(
                         requireContext(),
-                        getString(
-                            R.string.event_series_import_success,
+                        resources.getQuantityString(
+                            R.plurals.event_series_import_success,
+                            eventSeriesImport.memberImports.size,
                             eventSeriesImport.series.name,
                             eventSeriesImport.memberImports.size
                         ),

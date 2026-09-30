@@ -36,12 +36,14 @@
                 android:textStyle="bold"
                 android:textSize="14sp" />
 
+            <!-- Punch rows are event timing data and must not be offered to autofill. -->
             <EditText
                 android:id="@+id/punch_edit_item_si_code"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:hint="@string/readout_control_entry_hint"
+                android:importantForAutofill="no"
                 android:imeOptions="actionNext"
                 android:inputType="textNoSuggestions"
                 android:maxLength="32"
@@ -59,6 +61,7 @@
                 android:layout_height="wrap_content"
                 android:digits="0123456789:"
                 android:hint="@string/competitor_hint_time_format"
+                android:importantForAutofill="no"
                 android:imeOptions="actionNext"
                 android:inputType="textNoSuggestions"
                 android:maxLength="8"
@@ -79,6 +82,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:paddingStart="0dp"
                 android:paddingEnd="4dp"
                 android:text="@string/readout_punch_si_day_label"
                 android:textColor="@color/black"
@@ -90,9 +94,11 @@
                 android:layout_height="wrap_content"
                 android:digits="01234567"
                 android:hint="@string/competitor_hint_day"
+                android:importantForAutofill="no"
                 android:imeOptions="actionNext"
                 android:inputType="numberSigned"
                 android:maxLength="1"
+                android:paddingStart="0dp"
                 android:paddingEnd="5dp"
                 android:singleLine="true"
                 android:textColor="@color/black"
@@ -113,9 +119,11 @@
                 android:layout_height="wrap_content"
                 android:digits="0123"
                 android:hint="@string/competitor_hint_week"
+                android:importantForAutofill="no"
                 android:imeOptions="actionNext"
                 android:inputType="numberSigned"
                 android:maxLength="1"
+                android:paddingStart="0dp"
                 android:paddingEnd="5dp"
                 android:singleLine="true"
                 android:textColor="@color/black"
@@ -130,6 +138,7 @@
                 android:id="@+id/punch_edit_item_add_btn"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
+                android:contentDescription="@string/accessibility_add_punch"
                 android:src="@drawable/ic_add"
                 app:tint="@color/white" />
 
@@ -137,6 +146,7 @@
                 android:id="@+id/punch_edit_item_delete_btn"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
+                android:contentDescription="@string/accessibility_delete_punch"
                 android:src="@drawable/ic_delete"
                 app:tint="@color/white" />
         </LinearLayout>
