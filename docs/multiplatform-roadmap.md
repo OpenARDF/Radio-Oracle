@@ -276,15 +276,15 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Release Automation And Dependency Hygiene
 
-- Pin third-party release actions, including the jDeploy GitHub action, to
-  reviewed immutable commits instead of moving branches such as `master`.
-  Keep the action's requested jDeploy version synchronized with the tested npm
-  dependency.
-- Remove remaining Node-20-targeted GitHub Actions or replace their small setup
-  responsibilities with maintained Node 24-compatible steps. Pin established
-  release jobs to an explicit runner image and separately exercise the next
-  Ubuntu image before adopting it, rather than inheriting an unreviewed
-  `ubuntu-latest` migration.
+- Keep third-party actions on reviewed immutable commits. The GitHub release
+  lane uses the repository's pinned jDeploy dependency plus local preparation
+  and publication adapters, avoiding a moving action branch and its hidden
+  runtime dependencies while preserving jDeploy metadata and installer assets.
+- Keep all GitHub Actions on maintained Node 24-compatible revisions. Routine
+  Linux jobs remain pinned to Ubuntu 24.04, with Ubuntu 26.04 exposed as a
+  manual input to the same workflows so it can be exercised before adoption;
+  macOS release builds remain pinned to macOS 26 rather than following a moving
+  `macos-latest` label.
 - Add conservative dependency-update automation for Gradle, npm, and GitHub
   Actions. Group coupled Android/Kotlin/KSP, AndroidX, Firebase, and jDeploy
   updates, and require the applicable platform and packaging gates before

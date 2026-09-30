@@ -15,6 +15,14 @@ on:
         options:
           - dry-run
           - publish
+      runner:
+        description: "Runner image used for release-lane validation"
+        required: true
+        default: ubuntu-24.04
+        type: choice
+        options:
+          - ubuntu-24.04
+          - ubuntu-26.04
 
 permissions:
   contents: read
@@ -27,24 +35,25 @@ concurrency:
 jobs:
   publish:
     name: Publish @openardf/radio-oracle
-    runs-on: ubuntu-latest
+    # Release automation remains reproducible while Ubuntu 26 can be selected for a dry run.
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04' }}
     environment: npm-publish
     env:
       RADIO_ORACLE_ALLOW_JDEPLOY_PUBLISH: "1"
       RADIO_ORACLE_RELEASE_BUILD: "1"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up JDK 17
         id: setup-java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Node 24
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
 

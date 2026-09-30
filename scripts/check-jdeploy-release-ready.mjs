@@ -17,6 +17,8 @@ const readme = readFileSync("README.md", "utf8");
 const desktopPrep = readFileSync("docs/desktop-prep.md", "utf8");
 const npmPublishWorkflow = readFileSync(".github/workflows/publish-jdeploy.yml", "utf8");
 const githubReleaseWorkflow = readFileSync(".github/workflows/jdeploy-github-release.yml", "utf8");
+const githubReleasePrepareScript = readFileSync("scripts/prepare-jdeploy-github-release.mjs", "utf8");
+const githubReleasePublishScript = readFileSync("scripts/publish-jdeploy-github-release.sh", "utf8");
 const requiredJdeploySkikoRuntimeArtifacts = [
   "skiko-awt-runtime-linux-arm64",
   "skiko-awt-runtime-linux-x64",
@@ -230,12 +232,28 @@ requireIncludes("GitHub release workflow", githubReleaseWorkflow, "node-version:
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "RADIO_ORACLE_RELEASE_BUILD: \"1\"");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "Use GitHub-safe jDeploy package identity");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "const githubPackageName = \"radio-oracle\"");
-requireIncludes("GitHub release workflow", githubReleaseWorkflow, "deploy_target: github");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "prepare-jdeploy-github-release.mjs");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "publish-jdeploy-github-release.sh");
+requireIncludes("GitHub release workflow", githubReleaseWorkflow, "RADIO_ORACLE_ALLOW_GITHUB_RELEASE_PUBLISH: \"1\"");
+requireNotIncludes("GitHub release workflow", githubReleaseWorkflow, "shannah/jdeploy@");
+requireNotIncludes("GitHub release workflow", githubReleaseWorkflow, "@master");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "Patch macOS installer icons");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "patch-jdeploy-macos-installer-icons.mjs");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "gh release upload");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "radio-oracle-*.tgz");
 requireIncludes("GitHub release workflow", githubReleaseWorkflow, "gh release edit");
+requireIncludes("GitHub release preparation script", githubReleasePrepareScript, "github-prepare-release");
+requireIncludes("GitHub release preparation script", githubReleasePrepareScript, "validateReleaseFiles");
+requireIncludes("GitHub release publication script", githubReleasePublishScript, "RADIO_ORACLE_ALLOW_GITHUB_RELEASE_PUBLISH");
+requireIncludes("GitHub release publication script", githubReleasePublishScript, "package-info-2.json");
+requireIncludes("GitHub release publication script", githubReleasePublishScript, "current_digest");
+
+execFileSync(process.execPath, ["--test", "scripts/prepare-jdeploy-github-release.test.mjs"], {
+  stdio: "inherit"
+});
+execFileSync(process.execPath, ["--test", "scripts/publish-jdeploy-github-release.test.mjs"], {
+  stdio: "inherit"
+});
 
 const releaseBuildEnv = { RADIO_ORACLE_RELEASE_BUILD: "1" };
 runGradle([":desktopApp:verifyDesktopJdeployBundle"], releaseBuildEnv);
