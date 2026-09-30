@@ -247,10 +247,10 @@ These are deliberate limits in the current app, not necessarily defects.
 - Implemented: used AGP's built-in Kotlin support in the Android application
   module and updated KSP for that supported path without legacy-API or
   built-in-Kotlin opt-outs.
-- Replace or isolate `SortableTableView`, then remove
-  `android.enableJetifier=true` before AGP 10. During the AGP 9 migration,
-  document the dependency as the sole narrow exception to Jetifier's
-  deprecation instead of suppressing Android build warnings generally.
+- Implemented: isolated SortableTableView 2.8.1 as a pinned local AndroidX
+  compatibility module and removed `android.enableJetifier`. Preserve the
+  upstream package and API until a separate, behavior-focused table replacement
+  is justified.
 - Validate the migration in stages: Gradle configuration and task discovery;
   shared desktop and Android host tests; Android debug compilation and unit
   tests; release lint, shrinking, signing, and AAB assembly; desktop tests and

@@ -26,17 +26,18 @@ Android while giving future desktop work a cleaner shared-code base.
 
 - Done: moved `androidx.test.ext:junit-ktx` out of app runtime dependencies
   and into the instrumentation-test dependency scope.
-- Temporary AGP 9 waiver: `android.enableJetifier=true` is still required while
-  `com.github.ISchwarz23:SortableTableView` brings in old support-library
-  coordinates. Replace or isolate that table-view dependency and remove
-  Jetifier before AGP 10; until then, accept only this specific deprecation
-  warning rather than suppressing Android build warnings broadly.
+- Done: isolated SortableTableView 2.8.1 as a pinned, repository-owned AndroidX
+  compatibility module. Its package and public API remain unchanged while its
+  legacy Support Library references use AndroidX directly. The published JitPack
+  dependency, obsolete support transitives, and `android.enableJetifier` are no
+  longer part of the application build.
 - Done: removed production `HttpLoggingInterceptor.Level.BODY` logging and the
   unused logging-interceptor dependency, so live result payloads are no longer
   copied into verbose network logs.
-- Done: removed the unused `app/libs/android-tableview-kotlin-0.1.0-alpha`
-  source tree. The Android app uses the published SortableTableView dependency
-  instead of that historical vendored copy.
+- Done: removed the unrelated `app/libs/android-tableview-kotlin-0.1.0-alpha`
+  source tree. The current compatibility module is instead pinned directly to
+  the upstream Java 2.8.1 release and records its provenance and AndroidX-only
+  changes alongside the source.
 - Keep shared-module dependencies minimal so the desktop target remains easy to
   build and library updates do not drag Android-only APIs into shared code.
 
@@ -52,6 +53,11 @@ Android while giving future desktop work a cleaner shared-code base.
 - JVM unit-test workers can report that class-data sharing is unavailable when
   Mockito modifies the bootstrap classpath. This waiver applies only to that
   VM runtime notice when the affected test task completes successfully.
+- The Jetifier-removal change deliberately retains Android Gradle Plugin 9.2.1,
+  AndroidX Core 1.18.0, and SwipeRefreshLayout 1.0.0. Release lint reports newer
+  versions, but upgrading them is deferred so this compatibility-only change
+  does not combine toolchain or runtime-behavior changes with dependency
+  isolation. Revisit each version in a separate dependency-maintenance change.
 - Record dependency-update evidence in commit messages or release notes so the
   source development team can see what was changed, what was verified, and what
   remains deferred.

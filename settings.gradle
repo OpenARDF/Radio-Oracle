@@ -46,3 +46,6 @@ rootProject.name = "RadioOracle"
 include(":app")
 include(":desktopApp")
 include(":shared")
+// Keep the AndroidX compatibility fork isolated from Radio-Oracle application code.
+include(":sortableTableViewAndroidx")
+project(":sortableTableViewAndroidx").projectDir = file("third_party/sortable-table-view-androidx")

@@ -144,9 +144,9 @@ android {
 dependencies {
 
     implementation(project(":shared"))
+    implementation(project(":sortableTableViewAndroidx"))
 
     implementation(libs.androidx.work.runtime.ktx)
-    implementation(libs.androidx.legacy.support.v4)
     implementation(libs.androidx.preference.ktx)
 
     implementation(libs.androidx.room.runtime)
@@ -169,7 +169,6 @@ dependencies {
     }
 
     //External libraries
-    implementation(libs.sortable.table.view)
     implementation(libs.kotlin.csv.jvm)
     implementation(libs.usb.serial)
     implementation(libs.escpos.printer)
