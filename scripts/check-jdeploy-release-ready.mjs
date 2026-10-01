@@ -122,6 +122,8 @@ if (!existsSync("icon.png")) {
 if (!packageJson.files?.includes("icon.png")) {
   fail("package.json must include icon.png in files so jDeploy downloads show the app icon");
 }
+// jDeploy 6.1.5 changed plain `install` to npm-link mode; the smoke requires a real app bundle.
+requireIncludes("local jDeploy install script", packageJson.scripts?.["jdeploy:install-local"] || "", "install --native");
 const seriesDocumentType = packageJson.jdeploy?.documentTypes?.find(
   documentType => documentType.extension === "roseries"
 );
