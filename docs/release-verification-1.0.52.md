@@ -41,11 +41,14 @@ The upload certificate is intentionally self-signed. Ordinary JAR-signature veri
 
 ## Physical acceptance
 
-The complete instrumentation suite passed on the wirelessly connected Moto candidate. SPORTident reader connection and card read/store acceptance remain pending before publication.
+The complete instrumentation suite passed on the wirelessly connected Moto g 5G (2024), Android 15. Radio-Oracle then received USB permission for SI MASTER station 554900, reported readout readiness, read card 2005010 with 9 punches, and logged `SI Card read stored`. The card's deliberately unrelated test-race timing produced the expected non-blocking `FINISH_BEFORE_CONTROL` result. After the reader was unplugged, Radio-Oracle returned to `DISCONNECTED` with no Android runtime crash.
 
 ## Hosted installed-package acceptance
 
-The release candidate's Windows x64 and Linux x64 installed-package workflows remain pending before publication.
+- [Windows x64 installed-package workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36903711575): passed in 3m51s, including installation, export, and launch.
+- [Linux x64 installed-package workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36903711565): passed in 3m39s, including installation, export, and launch under Xvfb.
+- [Android native-compatibility workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36903712063): passed in 7m21s, including Firebase-enabled release inspection and Android 15 16 KB emulator launch.
+- [Course workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36903711536): passed in 8m38s, including lifecycle reports and desktop-Android-desktop archive transfer.
 
 ## Publication verification
 

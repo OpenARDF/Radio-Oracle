@@ -20,7 +20,7 @@ The local release gate passed 3,023 tests with zero failures or errors (6 skips)
 
 The signed Android App Bundle is `app/build/outputs/bundle/release/app-release.aab`, version name 1.0.52 and version code 60. Its SHA-256 is `9d5d42fcf3dadb037188e103aefe4da954cab309c6d840f595fe60c33942887f`, and its upload certificate SHA-256 fingerprint is `B1:0A:F4:2A:4A:61:64:23:84:CA:A4:8B:2E:43:9E:6D:22:16:23:11:0F:71:DB:A2:D7:89:20:22:57:DD:72:DA`.
 
-Physical Moto instrumentation passed on the release candidate. SPORTident card-read acceptance, hosted Windows/Linux installed-package results, immutable-tag workflows, publication evidence, and Google Play submission will be recorded in `docs/release-verification-1.0.52.md` as they complete.
+Physical Moto instrumentation and SPORTident card-read acceptance passed on the release candidate. Windows and Linux installed-package acceptance, the Android 15 16 KB emulator lane, and the hosted course workflow also passed. Immutable-tag workflows, publication evidence, and Google Play submission will be recorded in `docs/release-verification-1.0.52.md` as they complete.
 
 The isolated Android unit-test manifest reports two specifically waived Firebase permission-removal notices because Firebase Measurement is absent from that test merge. The final packaged manifest is checked instead and excludes both advertising-ID permissions. Mockito test workers also report that class-data sharing is unavailable after Mockito appends its bootstrap classpath; this affects only test-VM startup optimization. Release lint retains one reviewed Gradle-version notice because Android Gradle Plugin 9.4 defaults to Gradle 9.6 and newer Gradle versions currently expose upstream deprecations. These notices are not Radio-Oracle source warnings.
 
