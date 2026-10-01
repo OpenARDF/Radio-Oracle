@@ -70,5 +70,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
           path: |
+            ${{ env.HOME }}/.jdeploy/log/**
             ${{ env.HOME }}/.local/state/Radio-Oracle/logs/**
             desktopApp/build/reports/**

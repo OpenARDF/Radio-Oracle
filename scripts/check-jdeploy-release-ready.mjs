@@ -137,7 +137,8 @@ if (!seriesDocumentType) {
 requireEqual(
   "jDeploy .roseries MIME type",
   seriesDocumentType.mimetype,
-  "application/vnd.openardf.radio-oracle-series+zip"
+  // jDeploy 6.1.7's Linux installer rejects '+' even though it is valid in an archive MIME subtype.
+  "application/vnd.openardf.radio-oracle-series"
 );
 requireEqual("jDeploy .roseries editor role", seriesDocumentType.editor, true);
 requireEqual("jDeploy .roseries custom MIME registration", seriesDocumentType.custom, true);

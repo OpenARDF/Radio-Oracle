@@ -320,7 +320,11 @@ These are deliberate limits in the current app, not necessarily defects.
   installation, representative CSV/JSON/XML exports, sample-file launch, and
   process cleanup under a virtual display. Keep Linux support explicitly
   best-effort until the cloud lane is green and native x64 and ARM64 acceptance
-  is repeatable.
+  is repeatable. Its jDeploy desktop association uses
+  `application/vnd.openardf.radio-oracle-series` because jDeploy 6.1.7 rejects
+  `+` in Linux MIME subtypes; Radio-Oracle retains its existing standards-valid
+  `application/vnd.openardf.radio-oracle-series+zip` archive and transfer MIME
+  for compatibility.
 - Continue macOS ARM64 package and isolated-launch validation, and add x64
   acceptance when suitable hardware or runners are available. A bundle that
   merely contains all six Skiko runtime jars is packaging evidence, not proof
