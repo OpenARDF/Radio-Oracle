@@ -33,18 +33,23 @@ Android while giving future desktop work a cleaner shared-code base.
   repository's conservative configuration and merged to `main`, where Renovate
   requires its effective repository configuration. Mend subsequently reports
   Renovate as Interactive, and the GitHub App has read/write access to issues,
-  code, checks, commit statuses, pull requests, and workflows. The first
-  Dependency Dashboard is expected during the next configured first- or
-  third-Monday maintenance window; confirm it appears before approving any
-  update group. The onboarding scan's sole dependency-lookup warning was a
-  transient Maven Central rate limit; direct metadata confirmed Expandable FAB
-  1.2.1 is already current.
+  code, checks, commit statuses, pull requests, and workflows. Dependency
+  Dashboard issue #12 appeared on 2026-10-01. Its first single-update approval
+  created PR #14 for Android Emulator Runner 2.38.0; the 16 KB emulator and
+  course-workflow gates passed before it merged. All other dashboard candidates
+  remain approval-gated. The onboarding scan's sole dependency-lookup warning
+  was a transient Maven Central rate limit; direct metadata confirmed
+  Expandable FAB 1.2.1 is already current.
 - Consider Gradle dependency locking and dependency verification metadata,
   especially because several important dependencies are resolved through
   JitPack.
 
 ## Library Robustness
 
+- Done: removed the unused, relocated `kotlin-csv-jvm` dependency rather than
+  migrating an unnecessary runtime library. Android CSV code already delegates
+  to the shared `CsvCodec` and `EventCsv*` import, row, and export abstractions;
+  their existing round-trip suites remain the compatibility gate.
 - Done: moved `androidx.test.ext:junit-ktx` out of app runtime dependencies
   and into the instrumentation-test dependency scope.
 - Done: isolated SortableTableView 2.8.1 as a pinned, repository-owned AndroidX

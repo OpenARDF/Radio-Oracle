@@ -320,10 +320,16 @@ These are deliberate limits in the current app, not necessarily defects.
   #10 was reviewed with the repository's conservative configuration and merged
   to `main`, where Renovate requires its effective repository configuration.
   Mend subsequently reports Renovate as Interactive, and the GitHub App has the
-  required read/write access to repository issues and pull requests. Confirm the
-  first Dependency Dashboard during the next configured first- or third-Monday
-  maintenance window before approving any update group; no dependency update is
-  approved merely because Renovate reports it.
+  required read/write access to repository issues and pull requests. Dependency
+  Dashboard issue #12 appeared on 2026-10-01. Its first single-update approval
+  created PR #14 for Android Emulator Runner 2.38.0; the 16 KB emulator and
+  course-workflow gates passed before it merged. All other dashboard candidates
+  remain approval-gated; no dependency update is approved merely because
+  Renovate reports it.
+- Implemented: removed the unused, relocated `kotlin-csv-jvm` Android dependency
+  instead of migrating an unnecessary runtime library. The shared `CsvCodec` and
+  `EventCsv*` paths remain the production CSV implementation and compatibility
+  boundary across Android and desktop.
 - Implemented: updated the exactly pinned jDeploy tool from 6.1.3 to 6.1.7 in
   its own maintenance change. Keep local installation explicitly native because
   jDeploy 6.1.5 changed plain `install` to npm-link mode. The update retains
