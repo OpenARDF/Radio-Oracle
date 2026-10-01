@@ -36,7 +36,7 @@ export function localInstallPath(runtimePlatform = platform(), userHome = homedi
     return join(userHome, ".jdeploy", "apps", "@openardf", "radio-oracle", "Radio-Oracle.exe");
   }
   if (runtimePlatform === "linux") {
-    return join(userHome, ".jdeploy", "apps", "@openardf", "radio-oracle", "Radio-Oracle");
+    return join(userHome, ".jdeploy", "apps", "@openardf", "radio-oracle", "radio-oracle");
   }
   return null;
 }

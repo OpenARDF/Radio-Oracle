@@ -17,7 +17,7 @@ test("resolves native jDeploy launcher paths on every supported desktop platform
   );
   assert.equal(
     localInstallPath("linux", home),
-    join(home, ".jdeploy", "apps", "@openardf", "radio-oracle", "Radio-Oracle")
+    join(home, ".jdeploy", "apps", "@openardf", "radio-oracle", "radio-oracle")
   );
   assert.equal(localInstallPath("freebsd", home), null);
 });
