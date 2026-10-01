@@ -40,11 +40,13 @@ Crashlytics wiring still process the Android config:
 ./gradlew app:processDebugGoogleServices app:testDebugUnitTest
 ```
 
-The app manifest deliberately removes the advertising-ID permissions added by
-Firebase Analytics. Android unit-test manifest processing can warn that each
-removal marker has no matching declaration because the main app merge has
-already removed it; this waiver applies only to those two named permissions.
-Release verification must still confirm that neither
+The Firebase-only app manifest overlay deliberately removes the advertising-ID
+permissions added by Firebase Analytics. Keeping those markers out of the base
+manifest avoids irrelevant merger warnings in Firebase-free CI. A local
+Firebase-enabled Android unit-test manifest can still warn that each removal
+marker has no matching declaration because the main app merge has already
+removed it; this waiver applies only to those two named permissions. Release
+verification must still confirm that neither
 `com.google.android.gms.permission.AD_ID` nor
 `android.permission.ACCESS_ADSERVICES_AD_ID` appears in the merged app
 manifest.

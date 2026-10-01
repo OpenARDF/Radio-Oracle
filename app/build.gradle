@@ -68,6 +68,14 @@ android {
         manifestPlaceholders = [radioOracleCommandReceiverExported: "false"]
     }
 
+    sourceSets {
+        if (firebaseEnabled) {
+            // Only Firebase-enabled variants need to remove Measurement's advertising identifiers.
+            debug.manifest.srcFile("src/firebase/AndroidManifest.xml")
+            release.manifest.srcFile("src/firebase/AndroidManifest.xml")
+        }
+    }
+
     signingConfigs {
         if (releaseSigningConfigured) {
             release {

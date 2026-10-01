@@ -262,6 +262,7 @@ requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, 
 
 // Linux acceptance uses the same installed-app smoke under a virtual display on a pinned x64 image.
 requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "runs-on: ubuntu-24.04");
+requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "init.defaultBranch main");
 requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "xvfb-run");
 requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "npm run jdeploy:local-smoke");
 requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "branches: [Development1]");
