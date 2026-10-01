@@ -1,3 +1,5 @@
 # Firebase Android client configuration is local-only; no project API key is tracked.
 # Legacy Firebase client API key removed from current tree; keep new findings failing.
 fd063ffe3b38be1268239e1f027be2ff5bb70e47:app/google-services.json:gcp-api-key:18
+# Historical AES-256 enum selection is not an embedded credential.
+6b66b48227dce7fe8c9d07322d2d8ca8d50b4c33:desktopApp/src/main/kotlin/org/openardf/radiooracle/desktop/DesktopControlsRouteKmlKmzExport.kt:generic-api-key:70

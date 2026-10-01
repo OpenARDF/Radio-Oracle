@@ -601,7 +601,11 @@ tasks.register("desktopUsbCardPresenceProbe", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentCardPresenceProbeKt")
-    args(providers.gradleProperty("siOwnerStation").get(), providers.gradleProperty("siOwnerCard").get())
+    // Hardware parameters are intentionally resolved only when this task executes so Gradle help
+    // tasks can inspect the project without requiring parameters for an unrelated device action.
+    doFirst {
+        setArgs([providers.gradleProperty("siOwnerStation").get(), providers.gradleProperty("siOwnerCard").get()])
+    }
 }
 
 tasks.register("desktopUsbQueuedInputProbe", JavaExec) {
@@ -611,7 +615,9 @@ tasks.register("desktopUsbQueuedInputProbe", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentQueuedInputProbeKt")
-    args(providers.gradleProperty("siOwnerStation").get(), providers.gradleProperty("siOwnerCard").get())
+    doFirst {
+        setArgs([providers.gradleProperty("siOwnerStation").get(), providers.gradleProperty("siOwnerCard").get()])
+    }
 }
 
 tasks.register("desktopUsbCardLoopProbe", JavaExec) {
@@ -676,21 +682,23 @@ tasks.register("desktopSportIdentOwnerVerification", JavaExec) {
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentOwnerVerificationKt")
     workingDir(rootProject.projectDir)
-    def mode = providers.gradleProperty("siOwnerMode").orElse("help").get()
-    if (mode == "capture") {
-        args(mode, providers.gradleProperty("siOwnerStation").get(),
-            providers.gradleProperty("siOwnerCard").get(), providers.gradleProperty("siOwnerOutput").get())
-    } else if (mode == "compare") {
-        args(mode, providers.gradleProperty("siOwnerSdkRead").get(), providers.gradleProperty("siOwnerNativeRead").get())
-    } else if (mode == "diff-native") {
-        args(mode, providers.gradleProperty("siOwnerBeforeRead").get(), providers.gradleProperty("siOwnerAfterRead").get())
-    } else if (mode == "compare-plan") {
-        args(mode, providers.gradleProperty("siOwnerWriteRequest").get(),
-            providers.gradleProperty("siOwnerBeforeRead").get(), providers.gradleProperty("siOwnerAfterRead").get())
-    } else if (mode == "help") {
-        args("--help")
-    } else {
-        throw new GradleException("siOwnerMode must be capture, compare, diff-native, or compare-plan")
+    doFirst {
+        def mode = providers.gradleProperty("siOwnerMode").orElse("help").get()
+        if (mode == "capture") {
+            setArgs([mode, providers.gradleProperty("siOwnerStation").get(),
+                providers.gradleProperty("siOwnerCard").get(), providers.gradleProperty("siOwnerOutput").get()])
+        } else if (mode == "compare") {
+            setArgs([mode, providers.gradleProperty("siOwnerSdkRead").get(), providers.gradleProperty("siOwnerNativeRead").get()])
+        } else if (mode == "diff-native") {
+            setArgs([mode, providers.gradleProperty("siOwnerBeforeRead").get(), providers.gradleProperty("siOwnerAfterRead").get()])
+        } else if (mode == "compare-plan") {
+            setArgs([mode, providers.gradleProperty("siOwnerWriteRequest").get(),
+                providers.gradleProperty("siOwnerBeforeRead").get(), providers.gradleProperty("siOwnerAfterRead").get()])
+        } else if (mode == "help") {
+            setArgs(["--help"])
+        } else {
+            throw new GradleException("siOwnerMode must be capture, compare, diff-native, or compare-plan")
+        }
     }
 }
 
@@ -700,7 +708,9 @@ tasks.register("desktopSportIdentOwnerReadiness", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentOwnerReadinessKt")
-    args(providers.gradleProperty("siOwnerWriteRequest").get())
+    doFirst {
+        setArgs([providers.gradleProperty("siOwnerWriteRequest").get()])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerWrite", JavaExec) {
@@ -709,7 +719,9 @@ tasks.register("desktopSportIdentNativeOwnerWrite", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
-    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get())
+    doFirst {
+        setArgs(["--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get()])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerSevenWordTrial", JavaExec) {
@@ -718,8 +730,10 @@ tasks.register("desktopSportIdentNativeOwnerSevenWordTrial", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
-    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
-        "--allow-seven-word-trial")
+    doFirst {
+        setArgs(["--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+            "--allow-seven-word-trial"])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerSevenWordPacedTrial", JavaExec) {
@@ -728,8 +742,10 @@ tasks.register("desktopSportIdentNativeOwnerSevenWordPacedTrial", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
-    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
-        "--allow-seven-word-paced-trial")
+    doFirst {
+        setArgs(["--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+            "--allow-seven-word-paced-trial"])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerSixWordPacedTrial", JavaExec) {
@@ -738,8 +754,10 @@ tasks.register("desktopSportIdentNativeOwnerSixWordPacedTrial", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
-    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
-        "--allow-six-word-paced-trial")
+    doFirst {
+        setArgs(["--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+            "--allow-six-word-paced-trial"])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerThreeWordPacedTrial", JavaExec) {
@@ -748,8 +766,10 @@ tasks.register("desktopSportIdentNativeOwnerThreeWordPacedTrial", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
-    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
-        "--allow-three-word-paced-trial")
+    doFirst {
+        setArgs(["--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+            "--allow-three-word-paced-trial"])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerStopAfterOne", JavaExec) {
@@ -758,8 +778,10 @@ tasks.register("desktopSportIdentNativeOwnerStopAfterOne", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
-    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
-        "--stop-after-first-reply")
+    doFirst {
+        setArgs(["--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+            "--stop-after-first-reply"])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerStopAfterTwo", JavaExec) {
@@ -768,8 +790,10 @@ tasks.register("desktopSportIdentNativeOwnerStopAfterTwo", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
-    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
-        "--stop-after-second-reply")
+    doFirst {
+        setArgs(["--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+            "--stop-after-second-reply"])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerStopAfterThree", JavaExec) {
@@ -778,8 +802,10 @@ tasks.register("desktopSportIdentNativeOwnerStopAfterThree", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerWriteKt")
-    args("--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
-        "--stop-after-third-reply")
+    doFirst {
+        setArgs(["--execute-native-write", providers.gradleProperty("siOwnerWriteRequest").get(),
+            "--stop-after-third-reply"])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerRecovery", JavaExec) {
@@ -788,9 +814,11 @@ tasks.register("desktopSportIdentNativeOwnerRecovery", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerRecoveryKt")
-    args("--acknowledge-native-read", providers.gradleProperty("siOwnerReadEvidence").get(),
-        providers.gradleProperty("siOwnerObservedFirstName").get(),
-        providers.gradleProperty("siOwnerObservedLastName").get())
+    doFirst {
+        setArgs(["--acknowledge-native-read", providers.gradleProperty("siOwnerReadEvidence").get(),
+            providers.gradleProperty("siOwnerObservedFirstName").get(),
+            providers.gradleProperty("siOwnerObservedLastName").get()])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerAssess", JavaExec) {
@@ -799,7 +827,9 @@ tasks.register("desktopSportIdentNativeOwnerAssess", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerRecoveryKt")
-    args("--assess-native-read", providers.gradleProperty("siOwnerReadEvidence").get())
+    doFirst {
+        setArgs(["--assess-native-read", providers.gradleProperty("siOwnerReadEvidence").get()])
+    }
 }
 
 tasks.register("desktopSportIdentNativeOwnerRestoreProposal", JavaExec) {
@@ -808,7 +838,9 @@ tasks.register("desktopSportIdentNativeOwnerRestoreProposal", JavaExec) {
     dependsOn(tasks.named("classes"))
     classpath(sourceSets.main.runtimeClasspath)
     mainClass.set("org.openardf.radiooracle.desktop.usb.DesktopSportIdentNativeOwnerRecoveryKt")
-    args("--propose-native-restore", providers.gradleProperty("siOwnerReadEvidence").get())
+    doFirst {
+        setArgs(["--propose-native-restore", providers.gradleProperty("siOwnerReadEvidence").get()])
+    }
 }
 
 // Opt-in real-terrain acceptance can reproduce older snapshots retaining every venue grid.
