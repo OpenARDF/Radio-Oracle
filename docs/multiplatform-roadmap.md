@@ -313,14 +313,15 @@ These are deliberate limits in the current app, not necessarily defects.
 - Added: a pinned Windows 2025 x64 workflow builds the jDeploy
   bundle, performs a native installation, verifies the installed application,
   generates and checks representative CSV/JSON/XML exports, opens the sample
-  Race File, confirms the process starts, and closes the smoke instance. Keep a
-  passing cloud run as the remaining acceptance proof for these expanded checks;
-  retain ARM64 acceptance when suitable hardware or runners are available.
+  Race File, confirms the process starts, and closes the smoke instance. The
+  expanded workflow has passed its first Windows cloud run; retain ARM64
+  acceptance when suitable hardware or runners are available.
 - Added: a pinned Ubuntu 24.04 x64 workflow performs the same native jDeploy
   installation, representative CSV/JSON/XML exports, sample-file launch, and
-  process cleanup under a virtual display. Keep Linux support explicitly
-  best-effort until the cloud lane is green and native x64 and ARM64 acceptance
-  is repeatable. Its jDeploy desktop association uses
+  process cleanup under a virtual display. The workflow has passed its first
+  Linux x64 cloud run. Keep Linux support explicitly best-effort until x64
+  acceptance has repeated across maintenance cycles and ARM64 acceptance is
+  available. Its jDeploy desktop association uses
   `application/vnd.openardf.radio-oracle-series` because jDeploy 6.1.7 rejects
   `+` in Linux MIME subtypes; Radio-Oracle retains its existing standards-valid
   `application/vnd.openardf.radio-oracle-series+zip` archive and transfer MIME
