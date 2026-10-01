@@ -178,7 +178,6 @@ dependencies {
     }
 
     //External libraries
-    implementation(libs.kotlin.csv.jvm)
     implementation(libs.usb.serial)
     implementation(libs.escpos.printer)
     implementation(libs.moshi.kotlin)
