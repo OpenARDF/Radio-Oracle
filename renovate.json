@@ -1,0 +1,110 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "baseBranchPatterns": [
+    "Development1"
+  ],
+  "enabledManagers": [
+    "github-actions",
+    "gradle",
+    "gradle-wrapper",
+    "npm"
+  ],
+  "timezone": "America/New_York",
+  "schedule": [
+    "* 0-4 1-7,15-21 * 1"
+  ],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Dependency Update Dashboard",
+  "dependencyDashboardApproval": true,
+  "automerge": false,
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 1,
+  "packageRules": [
+    {
+      "description": [
+        "Keep non-major Android build-system updates together for compatibility review."
+      ],
+      "groupName": "Android build system",
+      "matchPackageNames": [
+        "gradle",
+        "com.android.application",
+        "com.android.kotlin.multiplatform.library",
+        "com.android.library",
+        "com.android.tools.build:gradle"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "minor",
+        "patch",
+        "pin"
+      ]
+    },
+    {
+      "description": [
+        "Keep non-major Kotlin, KSP, Compose, and Skiko updates in one compatibility change."
+      ],
+      "groupName": "Kotlin, KSP, Compose, and Skiko",
+      "matchPackageNames": [
+        "com.google.devtools.ksp",
+        "org.jetbrains.compose*",
+        "org.jetbrains.kotlin*",
+        "org.jetbrains.skiko*"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "minor",
+        "patch",
+        "pin"
+      ]
+    },
+    {
+      "description": [
+        "Keep non-major AndroidX updates reviewable as one compatibility family."
+      ],
+      "groupName": "AndroidX",
+      "matchPackageNames": [
+        "androidx.*"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "minor",
+        "patch",
+        "pin"
+      ]
+    },
+    {
+      "description": [
+        "Keep non-major Firebase and Google build/runtime updates together."
+      ],
+      "groupName": "Firebase and Google tooling",
+      "matchPackageNames": [
+        "com.google.firebase*",
+        "com.google.gms*"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "minor",
+        "patch",
+        "pin"
+      ]
+    },
+    {
+      "description": [
+        "Review GitHub Actions digest updates together while preserving immutable pins."
+      ],
+      "groupName": "GitHub Actions",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "minor",
+        "patch",
+        "pin"
+      ]
+    }
+  ]
+}

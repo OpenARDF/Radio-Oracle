@@ -21,8 +21,11 @@ Android while giving future desktop work a cleaner shared-code base.
 - Keep coupled versions grouped together, especially Kotlin/KSP, Room
   runtime/compiler, Navigation plugin/runtime artifacts, OkHttp artifacts, and
   AndroidX test artifacts.
-- Add dependency update automation, preferably Renovate, with conservative
-  grouping rules for Gradle, Kotlin, AndroidX, Firebase, and JitPack libraries.
+- Configured: added conservative Renovate monitoring for Gradle, Kotlin/KSP,
+  Compose/Skiko, AndroidX, Firebase/Google, npm, and GitHub Actions. It targets
+  `Development1`, runs twice monthly, requires Dependency Dashboard approval,
+  limits concurrent pull requests, and never automerges. The hosted Renovate
+  GitHub App still requires explicit installation before this becomes active.
 - Consider Gradle dependency locking and dependency verification metadata,
   especially because several important dependencies are resolved through
   JitPack.

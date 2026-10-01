@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 const expectedPackageName = "@openardf/radio-oracle";
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
+const renovateConfig = JSON.parse(readFileSync("renovate.json", "utf8"));
 const appBuildGradle = readFileSync("app/build.gradle", "utf8");
 const rootBuildGradle = readFileSync("build.gradle", "utf8");
 const settingsGradle = readFileSync("settings.gradle", "utf8");
@@ -17,6 +18,7 @@ const readme = readFileSync("README.md", "utf8");
 const desktopPrep = readFileSync("docs/desktop-prep.md", "utf8");
 const npmPublishWorkflow = readFileSync(".github/workflows/publish-jdeploy.yml", "utf8");
 const githubReleaseWorkflow = readFileSync(".github/workflows/jdeploy-github-release.yml", "utf8");
+const windowsDesktopSmokeWorkflow = readFileSync(".github/workflows/windows-desktop-smoke.yml", "utf8");
 const githubReleasePrepareScript = readFileSync("scripts/prepare-jdeploy-github-release.mjs", "utf8");
 const githubReleasePublishScript = readFileSync("scripts/publish-jdeploy-github-release.sh", "utf8");
 const requiredJdeploySkikoRuntimeArtifacts = [
@@ -249,6 +251,27 @@ requireIncludes("GitHub release preparation script", githubReleasePrepareScript,
 requireIncludes("GitHub release publication script", githubReleasePublishScript, "RADIO_ORACLE_ALLOW_GITHUB_RELEASE_PUBLISH");
 requireIncludes("GitHub release publication script", githubReleasePublishScript, "package-info-2.json");
 requireIncludes("GitHub release publication script", githubReleasePublishScript, "current_digest");
+
+// Installed-app acceptance must exercise a stable, genuine Windows x64 environment through the shared smoke.
+requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "runs-on: windows-2025");
+requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "npm run jdeploy:local-smoke");
+requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "branches: [Development1]");
+
+// Dependency proposals may change release tooling, but they must stay review-gated and target the development branch.
+requireEqual("Renovate automerge", renovateConfig.automerge, false);
+requireEqual("Renovate Dependency Dashboard", renovateConfig.dependencyDashboard, true);
+requireEqual("Renovate Dependency Dashboard approval", renovateConfig.dependencyDashboardApproval, true);
+for (const baseBranch of ["Development1"]) {
+  if (!renovateConfig.baseBranchPatterns?.includes(baseBranch)) {
+    fail(`Renovate base branches must include ${baseBranch}`);
+  }
+}
+for (const manager of ["github-actions", "gradle", "gradle-wrapper", "npm"]) {
+  if (!renovateConfig.enabledManagers?.includes(manager)) {
+    fail(`Renovate enabled managers must include ${manager}`);
+  }
+}
+requireEqual("Renovate concurrent pull-request limit", renovateConfig.prConcurrentLimit, 3);
 
 execFileSync(process.execPath, ["--test", "scripts/prepare-jdeploy-github-release.test.mjs"], {
   stdio: "inherit"

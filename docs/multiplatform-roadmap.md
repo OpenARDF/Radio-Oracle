@@ -296,10 +296,12 @@ These are deliberate limits in the current app, not necessarily defects.
   dry-run lanes pass on both images; make adoption of Ubuntu 26 as the default
   an explicit maintenance decision rather than inheriting a moving runner
   label. macOS release builds remain pinned to macOS 26.
-- Add conservative Renovate dependency-update automation for Gradle, npm, and
-  GitHub Actions. Group coupled Android/Kotlin/KSP, AndroidX, Firebase, and
-  jDeploy updates, and require the applicable platform and packaging gates
-  before merging them.
+- Configured: added conservative Renovate monitoring for Gradle, npm, and
+  GitHub Actions, grouping coupled Android build-system, Kotlin/KSP/Compose,
+  AndroidX, and Firebase/Google updates. It targets `Development1`, requires
+  Dependency Dashboard approval, limits pull-request volume, and never
+  automerges. Install the hosted Renovate GitHub App explicitly before treating
+  this automation as active.
 - Implemented: updated the exactly pinned jDeploy tool from 6.1.3 to 6.1.7 in
   its own maintenance change. Keep local installation explicitly native because
   jDeploy 6.1.5 changed plain `install` to npm-link mode. The update retains
@@ -308,11 +310,12 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Native Desktop Platform Acceptance
 
-- Add a Windows x64 installed-package smoke workflow that launches Radio-Oracle,
-  opens the sample Race File, performs representative CSV/JSON/XML exports, and
-  exits cleanly. Keep Windows packaged-app acceptance a desktop beta release
-  blocker and retain ARM64 acceptance when suitable hardware or runners are
-  available.
+- Added: a pinned Windows 2025 x64 workflow builds the jDeploy
+  bundle, performs a native installation, verifies the installed application,
+  opens the sample Race File, confirms the process starts, and closes the smoke
+  instance. Keep representative installed-app CSV/JSON/XML export checks and a
+  passing cloud run as the remaining Windows beta acceptance work; retain ARM64
+  acceptance when suitable hardware or runners are available.
 - Add a Linux x64 installed-package launch and sample-file smoke on the pinned
   Ubuntu runner. Keep Linux support explicitly best-effort until native x64 and
   ARM64 acceptance is repeatable.
