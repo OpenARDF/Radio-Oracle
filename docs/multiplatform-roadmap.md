@@ -312,13 +312,15 @@ These are deliberate limits in the current app, not necessarily defects.
 
 - Added: a pinned Windows 2025 x64 workflow builds the jDeploy
   bundle, performs a native installation, verifies the installed application,
-  opens the sample Race File, confirms the process starts, and closes the smoke
-  instance. Keep representative installed-app CSV/JSON/XML export checks and a
-  passing cloud run as the remaining Windows beta acceptance work; retain ARM64
-  acceptance when suitable hardware or runners are available.
-- Add a Linux x64 installed-package launch and sample-file smoke on the pinned
-  Ubuntu runner. Keep Linux support explicitly best-effort until native x64 and
-  ARM64 acceptance is repeatable.
+  generates and checks representative CSV/JSON/XML exports, opens the sample
+  Race File, confirms the process starts, and closes the smoke instance. Keep a
+  passing cloud run as the remaining acceptance proof for these expanded checks;
+  retain ARM64 acceptance when suitable hardware or runners are available.
+- Added: a pinned Ubuntu 24.04 x64 workflow performs the same native jDeploy
+  installation, representative CSV/JSON/XML exports, sample-file launch, and
+  process cleanup under a virtual display. Keep Linux support explicitly
+  best-effort until the cloud lane is green and native x64 and ARM64 acceptance
+  is repeatable.
 - Continue macOS ARM64 package and isolated-launch validation, and add x64
   acceptance when suitable hardware or runners are available. A bundle that
   merely contains all six Skiko runtime jars is packaging evidence, not proof
