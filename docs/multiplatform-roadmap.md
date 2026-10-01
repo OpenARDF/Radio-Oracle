@@ -239,6 +239,12 @@ These are deliberate limits in the current app, not necessarily defects.
   hosted-tool messages when the image installs, boots, launches Radio-Oracle,
   and the smoke exits successfully. Recheck the waiver whenever the emulator
   runner, command-line tools, or system image changes.
+- Do not treat a hosted-emulator `LOW_MEMORY` process exit as a passing smoke.
+  When the crash buffer is empty and the build and static compatibility checks
+  passed, retry the unchanged workflow once to distinguish temporary runner
+  pressure from an application failure. Classify it as transient only when the
+  retry passes every gate; a repeated exit remains blocking and requires
+  resource and application diagnostics.
 
 ### Android Build-System Modernization
 
@@ -302,12 +308,22 @@ These are deliberate limits in the current app, not necessarily defects.
   dry-run lanes pass on both images; make adoption of Ubuntu 26 as the default
   an explicit maintenance decision rather than inheriting a moving runner
   label. macOS release builds remain pinned to macOS 26.
-- Configured: added conservative Renovate monitoring for Gradle, npm, and
-  GitHub Actions, grouping coupled Android build-system, Kotlin/KSP/Compose,
-  AndroidX, and Firebase/Google updates. It targets `Development1`, requires
-  Dependency Dashboard approval, limits pull-request volume, and never
-  automerges. Install the hosted Renovate GitHub App explicitly before treating
-  this automation as active.
+- Active: added conservative Renovate monitoring for Gradle, npm, and GitHub
+  Actions, grouping coupled Android build-system,
+  Kotlin/KSP/Compose, AndroidX, and Firebase/Google updates. It targets
+  `Development1`, requires Dependency Dashboard approval, limits pull-request
+  volume, and never automerges. The hosted Renovate GitHub App was installed on
+  2026-10-01 with access limited to `OpenARDF/Radio-Oracle`; Mend silent mode is
+  disabled, and automated pull requests, required repository configuration, and
+  onboarding are enabled. Mend's repository base branch is explicitly
+  `Development1` because GitHub's default branch remains `main`. Onboarding PR
+  #10 was reviewed with the repository's conservative configuration and merged
+  to `main`, where Renovate requires its effective repository configuration.
+  Mend subsequently reports Renovate as Interactive, and the GitHub App has the
+  required read/write access to repository issues and pull requests. Confirm the
+  first Dependency Dashboard during the next configured first- or third-Monday
+  maintenance window before approving any update group; no dependency update is
+  approved merely because Renovate reports it.
 - Implemented: updated the exactly pinned jDeploy tool from 6.1.3 to 6.1.7 in
   its own maintenance change. Keep local installation explicitly native because
   jDeploy 6.1.5 changed plain `install` to npm-link mode. The update retains

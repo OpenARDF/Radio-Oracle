@@ -21,11 +21,24 @@ Android while giving future desktop work a cleaner shared-code base.
 - Keep coupled versions grouped together, especially Kotlin/KSP, Room
   runtime/compiler, Navigation plugin/runtime artifacts, OkHttp artifacts, and
   AndroidX test artifacts.
-- Configured: added conservative Renovate monitoring for Gradle, Kotlin/KSP,
-  Compose/Skiko, AndroidX, Firebase/Google, npm, and GitHub Actions. It targets
-  `Development1`, runs twice monthly, requires Dependency Dashboard approval,
-  limits concurrent pull requests, and never automerges. The hosted Renovate
-  GitHub App still requires explicit installation before this becomes active.
+- Active: added conservative Renovate monitoring for Gradle, Kotlin/KSP,
+  Compose/Skiko, AndroidX, Firebase/Google, npm, and GitHub
+  Actions. It targets `Development1`, runs twice monthly, requires Dependency
+  Dashboard approval, limits concurrent pull requests, and never automerges.
+  The hosted Renovate GitHub App was installed on 2026-10-01 with access limited
+  to `OpenARDF/Radio-Oracle`; Mend silent mode is disabled, and automated pull
+  requests, required repository configuration, and onboarding are enabled.
+  Mend's repository base branch is explicitly `Development1` because GitHub's
+  default branch remains `main`. Onboarding PR #10 was reviewed with the
+  repository's conservative configuration and merged to `main`, where Renovate
+  requires its effective repository configuration. Mend subsequently reports
+  Renovate as Interactive, and the GitHub App has read/write access to issues,
+  code, checks, commit statuses, pull requests, and workflows. The first
+  Dependency Dashboard is expected during the next configured first- or
+  third-Monday maintenance window; confirm it appears before approving any
+  update group. The onboarding scan's sole dependency-lookup warning was a
+  transient Maven Central rate limit; direct metadata confirmed Expandable FAB
+  1.2.1 is already current.
 - Consider Gradle dependency locking and dependency verification metadata,
   especially because several important dependencies are resolved through
   JitPack.
