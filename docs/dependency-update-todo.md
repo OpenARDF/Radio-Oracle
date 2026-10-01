@@ -69,8 +69,13 @@ Android while giving future desktop work a cleaner shared-code base.
 - For dependency version updates, also run Android hardware checks when
   practical, including install, launch, foreground/logcat smoke, and SI reader
   connect/read/disconnect once hardware is available.
-- Fix or quarantine the stale CSV instrumentation assertions before treating
-  `:app:connectedDebugAndroidTest` as a strict update gate.
+- Done: made `just android-connected-test` a strict device gate. The active CSV
+  assertions already matched the shared export contract, so their pure Android
+  entity adapters now run in the JVM suite and the obsolete no-op CSV device
+  test was removed. The baseline run instead exposed two stale control-parser
+  fixtures; those now follow the shared semicolon-delimiter and sprint-duplicate
+  rules. The complete eight-test instrumentation suite then passed on a Moto g
+  5G (2024) running Android 15.
 - JVM unit-test workers can report that class-data sharing is unavailable when
   Mockito modifies the bootstrap classpath. This waiver applies only to that
   VM runtime notice when the affected test task completes successfully.

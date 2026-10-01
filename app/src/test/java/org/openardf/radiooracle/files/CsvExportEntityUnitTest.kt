@@ -24,13 +24,14 @@
 
 package org.openardf.radiooracle.files
 
+import org.junit.Assert.assertEquals
+import org.junit.Test
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
 import org.openardf.radiooracle.backend.room.entity.ControlPoint
 import org.openardf.radiooracle.backend.room.enums.ControlPointType
-import org.junit.Assert.assertEquals
-import org.junit.Test
 
+/** Verifies the pure Android entity adapters that delegate to the shared CSV rows. */
 class CsvExportEntityUnitTest {
 
     @Test

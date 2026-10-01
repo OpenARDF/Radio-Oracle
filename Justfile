@@ -39,6 +39,10 @@ android-test filter="":
         JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:testDebugUnitTest; \
     fi
 
+# Install and run the complete Android instrumentation suite on every connected device.
+android-connected-test:
+    JAVA_HOME="{{java_home}}" ./scripts/gradle-sequential.sh :app:connectedDebugAndroidTest
+
 android-check: android-compile android-test
 
 # Block new Android lint findings and verify the signed, shrunk release bundle.
