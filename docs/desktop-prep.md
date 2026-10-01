@@ -372,6 +372,32 @@ The normal deployment sequence is:
 8. Verify that the README's jDeploy install page remains the public desktop
    install link.
 
+### Google Play publication
+
+Use the OpenARDF Google Play developer account for Radio-Oracle releases:
+
+- Developer account: `OpenARDF`
+- Sign-in identity: `openardf@gmail.com`
+- Developer account ID: `7559128284059430620`
+- Radio-Oracle package: `org.openardf.radiooracle`
+
+The sign-in identity is an account locator, not a credential. Never store its
+password, recovery information, session data, or verification codes in the
+repository. Before uploading, confirm that Play Console shows the OpenARDF
+developer account and the existing Radio-Oracle package; another Google Play
+account is not an alternative publication target.
+
+Upload the signed release AAB to the existing Internal testing track first,
+using the text under `## Android release notes` in the release-notes document
+for that exact version; populate the Play release-notes field even for Internal
+testing. Verify that Play Console recognizes the intended version name,
+monotonically increasing version code, package, and upload certificate before
+saving the release. Treat the final rollout or submission action as an external
+publication that requires explicit owner approval. Production availability has
+additional Play Console setup and testing requirements; inspect and record the
+current requirements rather than assuming that a prior release's requirements
+remain current.
+
 ### Trusted Publishing
 
 The npm package should be published through npm Trusted Publishing rather than a

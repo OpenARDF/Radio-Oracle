@@ -65,14 +65,32 @@ npm accepted the trusted publish at 18:43 UTC and made the 118.5 MB package publ
 
 ## Google Play
 
-Google Play submission is blocked by the developer-account state, not by the
-release bundle. Play Console reports that the only developer account available
-to the signed-in `charles.scharlau@gmail.com` identity, NZ0I, was closed on
-July 16, 2024 because it was not being used. The account switcher lists no
-alternative developer account. Consequently, the signed version-code 60 bundle
-was not uploaded and no release track was changed. Google directs the account
-owner to create a new developer account before publishing can resume; that
-account-creation and registration-fee decision requires separate owner approval.
+The Radio-Oracle publisher identity is the active `OpenARDF` developer account,
+signed in as `openardf@gmail.com`, account ID `7559128284059430620`. Its
+existing `org.openardf.radiooracle` app has an active Internal testing track;
+version 1.0.51, version code 59, was available to internal testers before this
+release. The closed NZ0I account associated with a different Google identity is
+unrelated to Radio-Oracle publication and does not block this release.
+
+Play Console accepted and published the signed version-code 60 bundle to the
+Internal testing track as release 10, version 1.0.52, API 26+, target SDK 37.
+The release name is `60 (1.0.52)`, and the `en-US` notes reproduce the Android
+release-notes section from `docs/release-notes-1.0.52.md`. No devices supported
+by 1.0.51 are removed: the preview reports unchanged phone, tablet, TV, car,
+Chromebook, and Android XR coverage.
+
+The preview has no errors and one specifically waived warning: the bundle
+contains native code without an uploaded native debug-symbol archive. The only
+packaged native library is AndroidX DataStore's third-party
+`libdatastore_shared_counter.so`; its incoming release binaries are already
+stripped, and the Gradle merged and stripped outputs are byte-identical.
+Radio-Oracle contains no native code of its own and therefore has no meaningful
+native symbol archive to upload. Google Play reports release `60 (1.0.52)` as
+available to internal testers, released October 1, 2026 at 3:19 PM EDT.
+
+The dashboard also reports that production access currently requires completion
+of the remaining app setup work followed by a qualifying closed test. Those
+production prerequisites are separate from the 1.0.52 Internal testing update.
 
 ## Explicitly unverified scope
 
