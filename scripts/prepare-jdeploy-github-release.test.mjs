@@ -22,7 +22,7 @@ const environment = {
 const packageJson = {
   name: "radio-oracle",
   version: "1.2.3",
-  devDependencies: { jdeploy: "6.1.3" },
+  devDependencies: { jdeploy: "6.1.7" },
   jdeploy: { javaVersion: "17" }
 };
 
@@ -44,7 +44,7 @@ test("validates a matching tag release context", () => {
 
 test("adds only jDeploy release metadata", () => {
   const prepared = withGithubReleaseMetadata(packageJson, environment);
-  assert.equal(prepared.jdeploy.jdeployVersion, "6.1.3");
+  assert.equal(prepared.jdeploy.jdeployVersion, "6.1.7");
   assert.equal(prepared.jdeploy.commitHash, environment.GITHUB_SHA);
   assert.equal(prepared.jdeploy.gitTag, environment.GITHUB_REF_NAME);
   assert.equal(prepared.jdeploy.javaVersion, "17");

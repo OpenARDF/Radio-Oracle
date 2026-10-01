@@ -9,6 +9,11 @@ Android while giving future desktop work a cleaner shared-code base.
 
 ## Dependency Management
 
+- Every two weeks, or weekly during an active release cycle, review authoritative
+  release notes and version sources for jDeploy and the libraries, build tools,
+  runtimes, SDKs, and GitHub Actions used by Radio-Oracle. Record useful,
+  security-relevant, or compatibility-relevant candidates here before changing
+  versions; an available update is not by itself approval to adopt it.
 - Done: introduced a Gradle version catalog at `gradle/libs.versions.toml`
   without changing dependency versions.
 - Done: moved root plugin versions and app library coordinates into the version
@@ -59,6 +64,11 @@ Android while giving future desktop work a cleaner shared-code base.
   desktop gates passed after each applicable group.
 - Done: kept the jDeploy Skiko native runtimes coupled to Compose Multiplatform;
   Compose 1.12.1 requires Skiko 0.150.1.
+- Done: updated the exact jDeploy development-tool pin from 6.1.3 to 6.1.7 in
+  a separate maintenance change. The local smoke now requests `install
+  --native` explicitly to preserve native-app installation after jDeploy 6.1.5
+  changed plain `install` to npm-link mode. The update does not remove
+  jDeploy's deprecated `shelljs` 0.8, `glob` 7, or `inflight` transitives.
 - Keep Gradle 9.6 with AGP 9.4 for now. Gradle 9.6 is AGP 9.4's documented
   default and compiles without Gradle deprecations. Gradle 9.8 exposes
   `Configuration.setVisible` deprecations inside AGP 9.4.1, KSP 2.3.12, and

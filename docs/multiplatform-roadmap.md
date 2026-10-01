@@ -276,6 +276,12 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ### Release Automation And Dependency Hygiene
 
+- Review jDeploy and the project's libraries, build tools, runtimes, SDKs, and
+  GitHub Actions every two weeks, increasing to weekly during active release
+  cycles. Use authoritative release notes and version sources, record candidates
+  in [`dependency-update-todo.md`](dependency-update-todo.md), and assess
+  compatibility and security impact before opening a narrowly scoped
+  maintenance change.
 - Keep third-party actions on reviewed immutable commits. The GitHub release
   lane uses the repository's pinned jDeploy dependency plus local preparation
   and publication adapters, avoiding a moving action branch and its hidden
@@ -294,10 +300,11 @@ These are deliberate limits in the current app, not necessarily defects.
   GitHub Actions. Group coupled Android/Kotlin/KSP, AndroidX, Firebase, and
   jDeploy updates, and require the applicable platform and packaging gates
   before merging them.
-- Evaluate the current jDeploy patch release in its own maintenance change.
-  Do not combine that update with an AGP/KMP migration, and do not treat a patch
-  update as resolving deprecated transitive packages unless the resulting npm
-  tree proves that they are gone.
+- Implemented: updated the exactly pinned jDeploy tool from 6.1.3 to 6.1.7 in
+  its own maintenance change. Keep local installation explicitly native because
+  jDeploy 6.1.5 changed plain `install` to npm-link mode. The update retains
+  jDeploy's deprecated `shelljs` 0.8, `glob` 7, and `inflight` tool-only
+  transitives, so their narrow zero-vulnerability waiver remains in force.
 
 ### Native Desktop Platform Acceptance
 
