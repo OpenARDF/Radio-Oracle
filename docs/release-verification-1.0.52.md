@@ -52,11 +52,27 @@ The complete instrumentation suite passed on the wirelessly connected Moto g 5G 
 
 ## Publication verification
 
-The exact candidate commit, immutable tag, GitHub installer workflow, npm trusted-publish workflow and provenance, immutable-tag course workflow, public release assets and hashes, npm integrity, direct tarball availability, and fresh registry-install smoke will be added after publication.
+- Candidate commit and tag target: `1c017b9931da009d38e4eef0c2a308a648f9eaea`, immutable tag `v1.0.52`.
+- [GitHub installer release workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36907433990): passed in 17m35s.
+- [npm trusted-publish workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36907466479): passed in 12m29s and published signed provenance to [Sigstore](https://search.sigstore.dev/?logIndex=3039430909).
+- [Immutable-tag course workflow](https://github.com/OpenARDF/Radio-Oracle/actions/runs/36907864897): passed in 9m47s against the candidate commit.
+- [GitHub release v1.0.52](https://github.com/OpenARDF/Radio-Oracle/releases/tag/v1.0.52): public, non-draft, and non-prerelease. All 14 assets were downloaded into a fresh temporary directory and matched GitHub's SHA-256 digests. The GitHub-safe package archive contains version 1.0.52, candidate commit and tag metadata, and all six Linux, macOS, and Windows x64/ARM64 runtime jars; its SHA-256 is `52fe58e45a0a8205d8363851f755de5167a62f347e711071ab2e64954b9969dc`.
+- The README installer link remains `https://www.jdeploy.com/gh/OpenARDF/Radio-Oracle`.
+- [npm package 1.0.52](https://www.npmjs.com/package/@openardf/radio-oracle/v/1.0.52): public with `latest` set to 1.0.52, SLSA provenance attached, and source commit `1c017b9931da009d38e4eef0c2a308a648f9eaea`. Registry shasum: `a21fe99bd0040b1bedd02808c98db2c3f5f60ae3`; integrity: `sha512-ifY1gFL7khab0merDGiINUq0zk4Ila9Ql2C2Q/18a8t4uWugBcR5Ig6tHPwLjVLuUreIXfaxAK+Cv8LaOxIIvw==`.
+- The exact public tarball returned HTTP 200. A fresh temporary-directory registry install launched Radio-Oracle successfully, and its targeted cleanup removed only the smoke instance.
+
+npm accepted the trusted publish at 18:43 UTC and made the 118.5 MB package publicly downloadable at 18:51 UTC. The release process waited through asynchronous processing and did not attempt a duplicate publish.
 
 ## Google Play
 
-Google Play submission remains pending. It is not reported as complete until Play Console accepts the signed version-code 60 bundle into the intended release track.
+Google Play submission is blocked by the developer-account state, not by the
+release bundle. Play Console reports that the only developer account available
+to the signed-in `charles.scharlau@gmail.com` identity, NZ0I, was closed on
+July 16, 2024 because it was not being used. The account switcher lists no
+alternative developer account. Consequently, the signed version-code 60 bundle
+was not uploaded and no release track was changed. Google directs the account
+owner to create a new developer account before publishing can resume; that
+account-creation and registration-fee decision requires separate owner approval.
 
 ## Explicitly unverified scope
 
