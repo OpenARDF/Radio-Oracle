@@ -233,6 +233,12 @@ These are deliberate limits in the current app, not necessarily defects.
 - Treat the static bundle/ELF check as a release gate, not as a substitute for
   launching the app on a 16 KB device or emulator. Record any skipped device or
   preview validation explicitly in the release verification document.
+- The pinned Google 16 KB emulator image can currently report an SDK XML
+  reader-version mismatch plus headless-runner display, quick-boot, temporary
+  `.ini`, client-configuration, and Netsim shutdown warnings. Waive only those
+  hosted-tool messages when the image installs, boots, launches Radio-Oracle,
+  and the smoke exits successfully. Recheck the waiver whenever the emulator
+  runner, command-line tools, or system image changes.
 
 ### Android Build-System Modernization
 
