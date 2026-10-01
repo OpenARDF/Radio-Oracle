@@ -67,7 +67,7 @@
     "documentTypes": [
       {
         "extension": "roseries",
-        "mimetype": "application/vnd.openardf.radio-oracle-series+zip",
+        "mimetype": "application/vnd.openardf.radio-oracle-series",
         "editor": true,
         "custom": true
       }

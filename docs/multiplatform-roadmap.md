@@ -233,6 +233,12 @@ These are deliberate limits in the current app, not necessarily defects.
 - Treat the static bundle/ELF check as a release gate, not as a substitute for
   launching the app on a 16 KB device or emulator. Record any skipped device or
   preview validation explicitly in the release verification document.
+- The pinned Google 16 KB emulator image can currently report an SDK XML
+  reader-version mismatch plus headless-runner display, quick-boot, temporary
+  `.ini`, client-configuration, and Netsim shutdown warnings. Waive only those
+  hosted-tool messages when the image installs, boots, launches Radio-Oracle,
+  and the smoke exits successfully. Recheck the waiver whenever the emulator
+  runner, command-line tools, or system image changes.
 
 ### Android Build-System Modernization
 
@@ -312,13 +318,20 @@ These are deliberate limits in the current app, not necessarily defects.
 
 - Added: a pinned Windows 2025 x64 workflow builds the jDeploy
   bundle, performs a native installation, verifies the installed application,
-  opens the sample Race File, confirms the process starts, and closes the smoke
-  instance. Keep representative installed-app CSV/JSON/XML export checks and a
-  passing cloud run as the remaining Windows beta acceptance work; retain ARM64
+  generates and checks representative CSV/JSON/XML exports, opens the sample
+  Race File, confirms the process starts, and closes the smoke instance. The
+  expanded workflow has passed its first Windows cloud run; retain ARM64
   acceptance when suitable hardware or runners are available.
-- Add a Linux x64 installed-package launch and sample-file smoke on the pinned
-  Ubuntu runner. Keep Linux support explicitly best-effort until native x64 and
-  ARM64 acceptance is repeatable.
+- Added: a pinned Ubuntu 24.04 x64 workflow performs the same native jDeploy
+  installation, representative CSV/JSON/XML exports, sample-file launch, and
+  process cleanup under a virtual display. The workflow has passed its first
+  Linux x64 cloud run. Keep Linux support explicitly best-effort until x64
+  acceptance has repeated across maintenance cycles and ARM64 acceptance is
+  available. Its jDeploy desktop association uses
+  `application/vnd.openardf.radio-oracle-series` because jDeploy 6.1.7 rejects
+  `+` in Linux MIME subtypes; Radio-Oracle retains its existing standards-valid
+  `application/vnd.openardf.radio-oracle-series+zip` archive and transfer MIME
+  for compatibility.
 - Continue macOS ARM64 package and isolated-launch validation, and add x64
   acceptance when suitable hardware or runners are available. A bundle that
   merely contains all six Skiko runtime jars is packaging evidence, not proof

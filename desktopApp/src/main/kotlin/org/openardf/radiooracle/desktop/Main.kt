@@ -148,6 +148,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.awt.Dimension
 import java.awt.datatransfer.StringSelection
 import java.awt.image.BufferedImage
+import kotlin.system.exitProcess
 import org.openardf.radiooracle.desktop.printing.DesktopPrinterDiagnostics
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinter
 import org.openardf.radiooracle.desktop.printing.DesktopTicketPrinterSelector
@@ -988,8 +989,13 @@ private fun ManageDesktopServerCleanup(
     }
 }
 
-/** Starts the first Compose Desktop shell for Radio-Oracle. */
-fun main(args: Array<String>) = application {
+/** Starts the installed-package acceptance command or the first Compose Desktop shell. */
+fun main(args: Array<String>) {
+    DesktopInstalledPackageSmoke.runIfRequested(args)?.let(::exitProcess)
+    launchDesktopApplication(args)
+}
+
+private fun launchDesktopApplication(args: Array<String>) = application {
     val restoredWindowBounds = remember { DesktopAppSettingsPreferences.windowBounds() }
     val windowState = rememberWindowState(
         position = restoredWindowBounds?.let { bounds ->

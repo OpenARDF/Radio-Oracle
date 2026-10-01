@@ -19,6 +19,8 @@ const desktopPrep = readFileSync("docs/desktop-prep.md", "utf8");
 const npmPublishWorkflow = readFileSync(".github/workflows/publish-jdeploy.yml", "utf8");
 const githubReleaseWorkflow = readFileSync(".github/workflows/jdeploy-github-release.yml", "utf8");
 const windowsDesktopSmokeWorkflow = readFileSync(".github/workflows/windows-desktop-smoke.yml", "utf8");
+const linuxDesktopSmokeWorkflow = readFileSync(".github/workflows/linux-desktop-smoke.yml", "utf8");
+const localJdeploySmokeScript = readFileSync("scripts/jdeploy-local-smoke.mjs", "utf8");
 const githubReleasePrepareScript = readFileSync("scripts/prepare-jdeploy-github-release.mjs", "utf8");
 const githubReleasePublishScript = readFileSync("scripts/publish-jdeploy-github-release.sh", "utf8");
 const requiredJdeploySkikoRuntimeArtifacts = [
@@ -135,7 +137,8 @@ if (!seriesDocumentType) {
 requireEqual(
   "jDeploy .roseries MIME type",
   seriesDocumentType.mimetype,
-  "application/vnd.openardf.radio-oracle-series+zip"
+  // jDeploy 6.1.7's Linux installer rejects '+' even though it is valid in an archive MIME subtype.
+  "application/vnd.openardf.radio-oracle-series"
 );
 requireEqual("jDeploy .roseries editor role", seriesDocumentType.editor, true);
 requireEqual("jDeploy .roseries custom MIME registration", seriesDocumentType.custom, true);
@@ -257,6 +260,19 @@ requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, 
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "npm run jdeploy:local-smoke");
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "branches: [Development1]");
 
+// Linux acceptance uses the same installed-app smoke under a virtual display on a pinned x64 image.
+requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "runs-on: ubuntu-24.04");
+requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "init.defaultBranch main");
+requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "xvfb-run");
+requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "npm run jdeploy:local-smoke");
+requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "branches: [Development1]");
+
+// The installed launchers must exercise representative portable exporters, not only open a window.
+requireIncludes("installed desktop smoke", localJdeploySmokeScript, "--installed-package-smoke");
+for (const artifact of ["results.csv", "final-results.json", "start-list.xml"]) {
+  requireIncludes("installed desktop smoke", localJdeploySmokeScript, artifact);
+}
+
 // Dependency proposals may change release tooling, but they must stay review-gated and target the development branch.
 requireEqual("Renovate automerge", renovateConfig.automerge, false);
 requireEqual("Renovate Dependency Dashboard", renovateConfig.dependencyDashboard, true);
@@ -274,6 +290,9 @@ for (const manager of ["github-actions", "gradle", "gradle-wrapper", "npm"]) {
 requireEqual("Renovate concurrent pull-request limit", renovateConfig.prConcurrentLimit, 3);
 
 execFileSync(process.execPath, ["--test", "scripts/prepare-jdeploy-github-release.test.mjs"], {
+  stdio: "inherit"
+});
+execFileSync(process.execPath, ["--test", "scripts/jdeploy-local-smoke.test.mjs"], {
   stdio: "inherit"
 });
 execFileSync(process.execPath, ["--test", "scripts/publish-jdeploy-github-release.test.mjs"], {
