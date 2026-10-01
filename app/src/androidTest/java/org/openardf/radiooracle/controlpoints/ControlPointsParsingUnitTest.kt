@@ -33,9 +33,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.util.UUID
 
-/**
- * Checks wherever the control point parsing system works
- */
+/** Checks the Android adapter around the shared control-point parser on a device. */
 class ControlPointsParsingUnitTest {
 
     private val categoryId = UUID.randomUUID()
@@ -92,7 +90,7 @@ class ControlPointsParsingUnitTest {
             )
         }.message)
 
-        cpString = "22;33;44" //Invalid characters
+        cpString = "22X 33 44" // Unknown control suffix.
         System.err.println(assertThrows(IllegalArgumentException::class.java) {
             ControlPointsHelper.getControlPointsFromString(
                 cpString,
@@ -254,7 +252,7 @@ class ControlPointsParsingUnitTest {
 
     @Test
     fun testSprintValidParsing() {
-        var cpString = "31 32 33 34 36! 31 35 99B"
+        var cpString = "31 32 33 34 36! 41 35 99B"
         var result = ControlPointsHelper.getControlPointsFromString(
             cpString,
             categoryId,
@@ -262,7 +260,7 @@ class ControlPointsParsingUnitTest {
             appContext
         )
         assertEquals(
-            listOf(31, 32, 33, 34, 36, 31, 35, 99),
+            listOf(31, 32, 33, 34, 36, 41, 35, 99),
             result.map { cp -> cp.siCode }.toList()
         )
         assertEquals((1..8).toList(), result.map { cp -> cp.order }.toList())
@@ -279,7 +277,7 @@ class ControlPointsParsingUnitTest {
             ), result.map { cp -> cp.type }.toList()
         )
 
-        cpString = "31 32 33 34 36! 31 35 99"   //Beacon doesn't need to be present
+        cpString = "31 32 33 34 36! 41 35 99"   //Beacon doesn't need to be present
         result = ControlPointsHelper.getControlPointsFromString(
             cpString,
             categoryId,
@@ -287,7 +285,7 @@ class ControlPointsParsingUnitTest {
             appContext
         )
         assertEquals(
-            listOf(31, 32, 33, 34, 36, 31, 35, 99),
+            listOf(31, 32, 33, 34, 36, 41, 35, 99),
             result.map { cp -> cp.siCode }.toList()
         )
         assertEquals((1..8).toList(), result.map { cp -> cp.order }.toList())
