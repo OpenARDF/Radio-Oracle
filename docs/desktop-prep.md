@@ -365,20 +365,24 @@ The normal deployment sequence follows the protected-branch details in
    details, and no desktop-only changes. Give the notes to the release operator
    even though jDeploy does not publish the Android package.
 4. Run `npm run jdeploy:release-preflight` and the other applicable release
-   gates.
+   gates. If `Development1` advances afterward, update the candidate and rerun
+   every applicable release gate against the final base.
 5. Merge the candidate into `Development1` through the required pull-request
    and hosted-check gate.
-6. Fast-forward the validated release state to `main` without weakening
+6. Freeze ordinary `Development1` merges and disarm any pending auto-merge that
+   could land before the final branch synchronization.
+7. Fast-forward the validated release state to `main` without weakening
    `main` protection.
-7. Push the matching `v<version>` tag and let
+8. Push the matching `v<version>` tag and let
    `.github/workflows/jdeploy-github-release.yml` publish GitHub release
    installer assets.
-8. Run `.github/workflows/publish-jdeploy.yml` in `publish` mode for the same
+9. Run `.github/workflows/publish-jdeploy.yml` in `publish` mode for the same
    version.
-9. Run `npm run jdeploy:registry-smoke -- <version>`.
-10. Record release evidence on `main`, then use the controlled synchronization
+10. Run `npm run jdeploy:registry-smoke -- <version>`.
+11. Record release evidence on `main`, then use the controlled synchronization
    procedure to fast-forward `Development1` to the exact same evidence commit.
-11. Verify that the README's jDeploy install page remains the public desktop
+12. Restore and read back `Development1` protection, then resume queued merges.
+13. Verify that the README's jDeploy install page remains the public desktop
    install link.
 
 ### Google Play publication

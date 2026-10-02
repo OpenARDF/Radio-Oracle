@@ -31,6 +31,12 @@ from clean, synchronized `Development1`. Merge the candidate into
 `Development1` through the same protected pull-request workflow after all
 applicable release gates and the required hosted check pass.
 
+The loose branch-wide status policy does not relax release validation.
+Immediately before merging a release candidate, verify that it is current with
+`Development1`. If `Development1` advanced after any release gate ran, update
+the candidate to the final base and rerun every applicable local and hosted
+release gate before merging.
+
 The normal release transition remains a fast-forward push of the validated
 release commit from `Development1` to `main`; `main` does not require a pull
 request or status check. Verify that `main` is an ancestor of the release
@@ -42,16 +48,20 @@ Radio-Oracle release completion requires `main` and `Development1` to contain
 the exact same tag and release-evidence commits. This is the only controlled
 exception that permits a direct push to `Development1`:
 
-1. Finish the normal fast-forward release and evidence commits on `main`.
-2. Keep linear-history, force-push, and deletion protections enabled on
+1. Freeze ordinary merges to `Development1` before fast-forwarding `main`, and
+   ensure that no pending pull request has an armed auto-merge request that can
+   land during the release. Keep later development queued until synchronization
+   finishes.
+2. Finish the normal fast-forward release and evidence commits on `main`.
+3. Keep linear-history, force-push, and deletion protections enabled on
    `Development1` throughout the synchronization.
-3. Temporarily suspend only `Development1`'s required-pull-request and
+4. Temporarily suspend only `Development1`'s required-pull-request and
    required-status-check settings.
-4. Fast-forward `Development1` to the exact `main` commit and push it without a
+5. Fast-forward `Development1` to the exact `main` commit and push it without a
    merge commit.
-5. Immediately restore the required-pull-request rule and the app-pinned
+6. Immediately restore the required-pull-request rule and the app-pinned
    `course-workflow` status check, then read back the protection to verify both
-   settings and the unchanged safety rules.
+   settings and the unchanged safety rules before resuming queued merges.
 
 If the branches are not in a fast-forward relationship, stop and reconcile the
 unexpected divergence explicitly before release. Do not treat this exception
