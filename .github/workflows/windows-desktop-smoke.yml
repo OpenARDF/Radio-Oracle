@@ -186,5 +186,6 @@ jobs:
           path: |
             smoke-diagnostics\**
             ~\.jdeploy\log\**
+            ~\.jdeploy\manifests\**\uninstall-manifest.xml
             ~\AppData\Roaming\Radio-Oracle\logs\**
             desktopApp\build\reports\**

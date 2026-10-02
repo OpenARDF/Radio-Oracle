@@ -9,9 +9,9 @@ import test from "node:test";
 import {
   localInstallPath,
   parseSmokeArguments,
-  sourcePackageMetadataPath,
+  sourcePackageManifestPath,
   validateExportFiles,
-  validateSourcePackageMetadata,
+  validateSourcePackageManifest,
   validateVersionEvidence
 } from "./jdeploy-local-smoke.mjs";
 
@@ -49,22 +49,21 @@ test("resolves native jDeploy launcher paths on every supported desktop platform
   );
 });
 
-test("resolves source-qualified package metadata on native ARM64", () => {
+test("resolves the source-qualified jDeploy manifest on native ARM64", () => {
   const home = join("", "test-home");
   assert.equal(
-    sourcePackageMetadataPath(
+    sourcePackageManifestPath(
       home,
       "https://github.com/OpenARDF/Radio-Oracle",
-      "1.0.52",
       "arm64"
     ),
     join(
       home,
       ".jdeploy",
-      "gh-packages-arm64",
+      "manifests",
+      "arm64",
       "1190fb0d3f779f0fba709b0dec2020e8.radio-oracle",
-      "1.0.52",
-      "package.json"
+      "uninstall-manifest.xml"
     )
   );
 });
@@ -141,11 +140,29 @@ test("requires complete exact version evidence from the installed application", 
 
 test("validates exact source package identity for legacy published probes", () => {
   const directory = mkdtempSync(join(tmpdir(), "radio-oracle-source-package-test-"));
-  const metadata = join(directory, "package.json");
+  const manifest = join(directory, "uninstall-manifest.xml");
+  const source = "https://github.com/OpenARDF/Radio-Oracle";
   try {
-    writeFileSync(metadata, "{\"name\":\"radio-oracle\",\"version\":\"1.0.52\"}\n");
-    assert.doesNotThrow(() => validateSourcePackageMetadata(metadata, "1.0.52"));
-    assert.throws(() => validateSourcePackageMetadata(metadata, "1.0.51"), /expected radio-oracle/);
+    writeFileSync(manifest, `<?xml version="1.0" encoding="UTF-8"?>
+<uninstallManifest xmlns="http://jdeploy.ca/uninstall-manifest/1.0" version="1.0">
+  <packageInfo>
+    <name>radio-oracle</name>
+    <source>${source}</source>
+    <version>1.0.52</version>
+    <fullyQualifiedName>1190fb0d3f779f0fba709b0dec2020e8.radio-oracle</fullyQualifiedName>
+    <architecture>arm64</architecture>
+  </packageInfo>
+</uninstallManifest>
+`);
+    assert.doesNotThrow(() => validateSourcePackageManifest(manifest, source, "1.0.52", "arm64"));
+    assert.throws(
+      () => validateSourcePackageManifest(manifest, source, "1.0.51", "arm64"),
+      /version=1\.0\.52, expected 1\.0\.51/
+    );
+    assert.throws(
+      () => validateSourcePackageManifest(manifest, source, "1.0.52", "x64"),
+      /architecture=arm64, expected x64/
+    );
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

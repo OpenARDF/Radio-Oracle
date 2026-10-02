@@ -64,31 +64,55 @@ export function validateVersionEvidence(evidenceText, expectedVersion) {
   }
 }
 
-export function sourcePackageMetadataPath(
+export function sourcePackageManifestPath(
   userHome,
   packageSource,
-  expectedVersion,
   runtimeArchitecture = process.arch
 ) {
   const packageDirectory = `${createHash("md5").update(packageSource).digest("hex")}.radio-oracle`;
   return join(
     userHome,
     ".jdeploy",
-    `gh-packages-${runtimeArchitecture}`,
+    "manifests",
+    runtimeArchitecture,
     packageDirectory,
-    expectedVersion,
-    "package.json"
+    "uninstall-manifest.xml"
   );
 }
 
-export function validateSourcePackageMetadata(metadataPath, expectedVersion) {
-  if (!existsSync(metadataPath)) {
-    throw new Error(`Installed source package metadata was not created: ${metadataPath}`);
+function manifestValue(manifest, field) {
+  return manifest.match(new RegExp(`<${field}>([^<]+)</${field}>`))?.[1] ?? null;
+}
+
+export function validateSourcePackageManifest(
+  manifestPath,
+  packageSource,
+  expectedVersion,
+  runtimeArchitecture = process.arch
+) {
+  if (!existsSync(manifestPath)) {
+    throw new Error(`Installed source package manifest was not created: ${manifestPath}`);
   }
-  const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
-  if (metadata.name !== "radio-oracle" || metadata.version !== expectedVersion) {
+  const manifest = readFileSync(manifestPath, "utf8");
+  const qualifiedName = `${createHash("md5").update(packageSource).digest("hex")}.radio-oracle`;
+  const expected = new Map([
+    ["name", "radio-oracle"],
+    ["source", packageSource],
+    ["version", expectedVersion],
+    ["fullyQualifiedName", qualifiedName],
+    ["architecture", runtimeArchitecture]
+  ]);
+  for (const [field, expectedValue] of expected) {
+    const actualValue = manifestValue(manifest, field);
+    if (actualValue !== expectedValue) {
+      throw new Error(
+        `Installed source package manifest reported ${field}=${actualValue}, expected ${expectedValue}.`
+      );
+    }
+  }
+  if (!manifest.includes('<uninstallManifest xmlns="http://jdeploy.ca/uninstall-manifest/1.0"')) {
     throw new Error(
-      `Installed source package metadata reported ${metadata.name}@${metadata.version}, expected radio-oracle@${expectedVersion}.`
+      "Installed source package manifest has an unexpected format."
     );
   }
 }
@@ -244,10 +268,11 @@ function main() {
       if (existsSync(versionEvidencePath)) {
         validateVersionEvidence(readFileSync(versionEvidencePath, "utf8"), expectedVersion);
       } else if (options.packageSource != null) {
-        // v1.0.52 predates versioned smoke output, so verify the exact source-qualified
-        // jDeploy package metadata that supplied the launcher just exercised above.
-        validateSourcePackageMetadata(
-          sourcePackageMetadataPath(homedir(), options.packageSource, expectedVersion),
+        // v1.0.52 predates versioned smoke output. Its jDeploy uninstall manifest records
+        // the exact source-qualified package identity, version, and native architecture.
+        validateSourcePackageManifest(
+          sourcePackageManifestPath(homedir(), options.packageSource),
+          options.packageSource,
           expectedVersion
         );
       } else {
