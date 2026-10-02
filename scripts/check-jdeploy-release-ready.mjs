@@ -259,6 +259,12 @@ requireIncludes("GitHub release publication script", githubReleasePublishScript,
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "runs-on: windows-2025");
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "runs-on: windows-11-arm");
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "distribution: microsoft");
+requireIncludes(
+  "Windows installed desktop smoke",
+  windowsDesktopSmokeWorkflow,
+  "Remove-Item gradle\\gradle-daemon-jvm.properties"
+);
+requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "os\\.arch = aarch64");
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "Radio-Oracle.Installer-win-arm64-*.exe");
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "npm run jdeploy:local-smoke");
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "branches: [Development1]");

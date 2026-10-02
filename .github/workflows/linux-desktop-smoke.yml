@@ -102,8 +102,13 @@ jobs:
           cache: npm
       - name: Require a native ARM64 Node process
         run: |
+          mkdir -p smoke-diagnostics
+          node_architecture="$(node -p process.arch)"
+          printf 'machine=%s\nnodeArchitecture=%s\nreleaseTag=%s\n' \
+            "$(uname -m)" "$node_architecture" "${{ github.event.inputs.release_tag }}" \
+            > smoke-diagnostics/runtime.txt
           test "$(uname -m)" = "aarch64"
-          test "$(node -p process.arch)" = "arm64"
+          test "$node_architecture" = "arm64"
       - name: Install npm dependencies
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.release_tag == ''
         run: npm ci
@@ -162,6 +167,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
           path: |
+            smoke-diagnostics/**
             ~/.jdeploy/log/**
             ~/.local/state/Radio-Oracle/logs/**
             desktopApp/build/reports/**

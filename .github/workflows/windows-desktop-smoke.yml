@@ -100,10 +100,29 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+      - name: Use Microsoft Java 17 for Gradle on Windows ARM64
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.release_tag == ''
+        shell: pwsh
+        run: |
+          # The checked-in daemon criteria select Adoptium, which has no Windows ARM64 Java 17.
+          # Removing the criteria in this disposable checkout lets Gradle use setup-java's Microsoft JDK.
+          Remove-Item gradle\gradle-daemon-jvm.properties
+          $javaSettings = (& java -XshowSettings:properties -version 2>&1) -join "`n"
+          $javaSettings | Write-Host
+          if ($javaSettings -notmatch 'java\.vendor = Microsoft') {
+            throw "Expected the Microsoft Java distribution on Windows ARM64."
+          }
+          if ($javaSettings -notmatch 'os\.arch = aarch64') {
+            throw "Expected an ARM64 Java process on the native ARM64 runner."
+          }
       - name: Require a native ARM64 Node process
         shell: pwsh
         run: |
-          if ((node -p process.arch) -ne "arm64") {
+          New-Item -ItemType Directory -Force -Path smoke-diagnostics | Out-Null
+          $nodeArchitecture = node -p process.arch
+          "nodeArchitecture=$nodeArchitecture`nreleaseTag=${{ github.event.inputs.release_tag }}" |
+            Set-Content smoke-diagnostics\runtime.txt
+          if ($nodeArchitecture -ne "arm64") {
             throw "Expected an ARM64 Node process on the native ARM64 runner."
           }
       - name: Install npm dependencies
@@ -165,6 +184,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
           path: |
+            smoke-diagnostics\**
             ~\.jdeploy\log\**
             ~\AppData\Roaming\Radio-Oracle\logs\**
             desktopApp\build\reports\**
