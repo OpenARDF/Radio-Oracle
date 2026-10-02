@@ -353,23 +353,32 @@ passes. First classify the patch's regression risk:
   or postpone the deployment. Do not spot-fix a release blocker and publish on
   the strength of one narrow passing command.
 
-The normal deployment sequence is:
+The normal deployment sequence follows the protected-branch details in
+[`development-workflow.md`](development-workflow.md):
 
-1. Bump Android, desktop, and npm/jDeploy versions together.
-2. Generate terse Android release notes from the user-facing Android and shared
+1. Create `codex/release-X.Y.Z` from clean, synchronized `Development1`.
+2. Bump Android, desktop, and npm/jDeploy versions together on that release
+   candidate.
+3. Generate terse Android release notes from the user-facing Android and shared
    changes since the previous deployed version. Keep the notes suitable for an
    app-store "What's new" field: one short paragraph, no internal implementation
    details, and no desktop-only changes. Give the notes to the release operator
    even though jDeploy does not publish the Android package.
-3. Run `npm run jdeploy:release-preflight`.
-4. Merge the release state to `main`.
-5. Push the matching `v<version>` tag and let
+4. Run `npm run jdeploy:release-preflight` and the other applicable release
+   gates.
+5. Merge the candidate into `Development1` through the required pull-request
+   and hosted-check gate.
+6. Fast-forward the validated release state to `main` without weakening
+   `main` protection.
+7. Push the matching `v<version>` tag and let
    `.github/workflows/jdeploy-github-release.yml` publish GitHub release
    installer assets.
-6. Run `.github/workflows/publish-jdeploy.yml` in `publish` mode for the same
+8. Run `.github/workflows/publish-jdeploy.yml` in `publish` mode for the same
    version.
-7. Run `npm run jdeploy:registry-smoke -- <version>`.
-8. Verify that the README's jDeploy install page remains the public desktop
+9. Run `npm run jdeploy:registry-smoke -- <version>`.
+10. Record release evidence on `main`, then use the controlled synchronization
+   procedure to fast-forward `Development1` to the exact same evidence commit.
+11. Verify that the README's jDeploy install page remains the public desktop
    install link.
 
 ### Google Play publication
