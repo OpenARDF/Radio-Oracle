@@ -62,6 +62,9 @@ class DesktopInstalledPackageSmokeTest {
 
         assertEquals(stderr.toString(), 0, exitCode)
         assertTrue(stdout.toString().contains("installed-package exports OK"))
+        val versionEvidence = Files.readString(output.resolve("installed-package-evidence.txt"))
+        assertTrue(versionEvidence.contains("packageVersion=${DesktopBuildInfo.baseVersion}"))
+        assertTrue(versionEvidence.contains("displayVersion=${DesktopBuildInfo.displayVersion}"))
         assertEquals("Place,Competitor,Status,Points,Run time", Files.readAllLines(output.resolve("results.csv")).first())
         Json.parseToJsonElement(Files.readString(output.resolve("final-results.json")))
         val document: Document = DocumentBuilderFactory.newInstance().newDocumentBuilder()

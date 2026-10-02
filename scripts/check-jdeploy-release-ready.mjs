@@ -255,23 +255,39 @@ requireIncludes("GitHub release publication script", githubReleasePublishScript,
 requireIncludes("GitHub release publication script", githubReleasePublishScript, "package-info-2.json");
 requireIncludes("GitHub release publication script", githubReleasePublishScript, "current_digest");
 
-// Installed-app acceptance must exercise a stable, genuine Windows x64 environment through the shared smoke.
+// Installed-app acceptance preserves x64 while adding native ARM64 candidate and immutable-release probes.
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "runs-on: windows-2025");
+requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "runs-on: windows-11-arm");
+requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "distribution: microsoft");
+requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "Radio-Oracle.Installer-win-arm64-*.exe");
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "npm run jdeploy:local-smoke");
 requireIncludes("Windows installed desktop smoke", windowsDesktopSmokeWorkflow, "branches: [Development1]");
 
-// Linux acceptance uses the same installed-app smoke under a virtual display on a pinned x64 image.
+// Linux acceptance uses the same installed-app smoke under a virtual display on pinned x64 and ARM64 images.
 requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "runs-on: ubuntu-24.04");
+requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "runs-on: ubuntu-24.04-arm");
+requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "Radio-Oracle.Installer-linux-arm64-*.tar.gz");
 requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "init.defaultBranch main");
 requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "xvfb-run");
 requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "npm run jdeploy:local-smoke");
 requireIncludes("Linux installed desktop smoke", linuxDesktopSmokeWorkflow, "branches: [Development1]");
+
+for (const [label, workflow] of [
+  ["Windows installed desktop smoke", windowsDesktopSmokeWorkflow],
+  ["Linux installed desktop smoke", linuxDesktopSmokeWorkflow]
+]) {
+  requireIncludes(label, workflow, "release_tag:");
+  requireIncludes(label, workflow, "--jdeploy:update");
+  requireIncludes(label, workflow, "--jdeploy:command=install");
+  requireIncludes(label, workflow, "--source https://github.com/OpenARDF/Radio-Oracle");
+}
 
 // The installed launchers must exercise representative portable exporters, not only open a window.
 requireIncludes("installed desktop smoke", localJdeploySmokeScript, "--installed-package-smoke");
 for (const artifact of ["results.csv", "final-results.json", "start-list.xml"]) {
   requireIncludes("installed desktop smoke", localJdeploySmokeScript, artifact);
 }
+requireIncludes("installed desktop smoke", localJdeploySmokeScript, "installed-package-evidence.txt");
 
 // Dependency proposals may change release tooling, but they must stay review-gated and target the development branch.
 requireEqual("Renovate automerge", renovateConfig.automerge, false);

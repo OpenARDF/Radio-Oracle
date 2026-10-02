@@ -57,11 +57,23 @@ object DesktopInstalledPackageSmoke {
             val resultsCsv = output.resolve("results.csv")
             val finalResultsJson = output.resolve("final-results.json")
             val startListXml = output.resolve("start-list.xml")
+            val versionEvidence = output.resolve("installed-package-evidence.txt")
             DesktopProjectFiles.exportResultsCsv(resultsCsv, projectFile)
             DesktopProjectFiles.exportFinalResultsJson(finalResultsJson, projectFile)
             DesktopProjectFiles.exportIofStartListXml(startListXml, projectFile)
+            // Keep the version proof coupled to the installed application that performed the exports.
+            Files.writeString(
+                versionEvidence,
+                buildString {
+                    appendLine("Radio-Oracle installed package smoke")
+                    appendLine("packageVersion=${DesktopBuildInfo.baseVersion}")
+                    appendLine("displayVersion=${DesktopBuildInfo.displayVersion}")
+                    appendLine("javaVersion=${System.getProperty("java.version")}")
+                    appendLine("osName=${System.getProperty("os.name")}")
+                }
+            )
 
-            val artifacts = listOf(resultsCsv, finalResultsJson, startListXml)
+            val artifacts = listOf(resultsCsv, finalResultsJson, startListXml, versionEvidence)
             require(artifacts.all { Files.isRegularFile(it) && Files.size(it) > 0L }) {
                 "One or more installed-package export artifacts are missing or empty."
             }

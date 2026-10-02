@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { homedir, platform, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -28,20 +29,71 @@ function npmCommand() {
   return platform() === "win32" ? "npm.cmd" : "npm";
 }
 
-export function localInstallPath(runtimePlatform = platform(), userHome = homedir()) {
+export function localInstallPath(
+  runtimePlatform = platform(),
+  userHome = homedir(),
+  packageSource = null
+) {
   if (runtimePlatform === "darwin") {
     return join(userHome, "Applications", "Radio-Oracle.app");
   }
+  // GitHub-backed jDeploy installs use a source-qualified directory instead of the npm scope.
+  const packageDirectory = packageSource == null
+    ? join("@openardf", "radio-oracle")
+    : `${createHash("md5").update(packageSource).digest("hex")}.radio-oracle`;
   if (runtimePlatform === "win32") {
-    return join(userHome, ".jdeploy", "apps", "@openardf", "radio-oracle", "Radio-Oracle.exe");
+    return join(userHome, ".jdeploy", "apps", packageDirectory, "Radio-Oracle.exe");
   }
   if (runtimePlatform === "linux") {
-    return join(userHome, ".jdeploy", "apps", "@openardf", "radio-oracle", "radio-oracle");
+    return join(userHome, ".jdeploy", "apps", packageDirectory, "radio-oracle");
   }
   return null;
 }
 
-function isRadioOracleRunning() {
+export function validateVersionEvidence(evidenceText, expectedVersion) {
+  if (!evidenceText.includes("Radio-Oracle installed package smoke")) {
+    throw new Error("Installed application version evidence has an unexpected header.");
+  }
+  if (!evidenceText.split(/\r?\n/).includes(`packageVersion=${expectedVersion}`)) {
+    throw new Error(`Installed application did not report expected version ${expectedVersion}.`);
+  }
+  for (const field of ["displayVersion=", "javaVersion=", "osName="]) {
+    if (!evidenceText.includes(field)) {
+      throw new Error(`Installed application version evidence is missing ${field}`);
+    }
+  }
+}
+
+export function sourcePackageMetadataPath(
+  userHome,
+  packageSource,
+  expectedVersion,
+  runtimeArchitecture = process.arch
+) {
+  const packageDirectory = `${createHash("md5").update(packageSource).digest("hex")}.radio-oracle`;
+  return join(
+    userHome,
+    ".jdeploy",
+    `gh-packages-${runtimeArchitecture}`,
+    packageDirectory,
+    expectedVersion,
+    "package.json"
+  );
+}
+
+export function validateSourcePackageMetadata(metadataPath, expectedVersion) {
+  if (!existsSync(metadataPath)) {
+    throw new Error(`Installed source package metadata was not created: ${metadataPath}`);
+  }
+  const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
+  if (metadata.name !== "radio-oracle" || metadata.version !== expectedVersion) {
+    throw new Error(
+      `Installed source package metadata reported ${metadata.name}@${metadata.version}, expected radio-oracle@${expectedVersion}.`
+    );
+  }
+}
+
+function isRadioOracleRunning(installPath) {
   if (platform() === "win32") {
     const result = spawnSync(
       "powershell.exe",
@@ -52,7 +104,7 @@ function isRadioOracleRunning() {
   }
 
   if (platform() === "linux") {
-    const executablePattern = `${localInstallPath()} ${sampleProject}`;
+    const executablePattern = `${installPath} ${sampleProject}`;
     if (spawnSync("pgrep", ["-f", executablePattern]).status === 0) return true;
   }
   const appPattern = `Radio-Oracle.app/Contents/MacOS/Client4JLauncher ${sampleProject}`;
@@ -61,12 +113,12 @@ function isRadioOracleRunning() {
     spawnSync("pgrep", ["-f", jarPattern]).status === 0;
 }
 
-function cleanup() {
+function cleanup(installPath) {
   if (platform() === "darwin" || platform() === "linux") {
     // Target only this smoke's unique project argument; another Radio-Oracle instance may contain
     // unsaved user work and must not be closed by release verification.
-    if (platform() === "linux") {
-      spawnSync("pkill", ["-f", `${localInstallPath()} ${sampleProject}`], { stdio: "ignore" });
+    if (platform() === "linux" && installPath != null) {
+      spawnSync("pkill", ["-f", `${installPath} ${sampleProject}`], { stdio: "ignore" });
     }
     spawnSync("pkill", ["-f", `Radio-Oracle.app/Contents/MacOS/Client4JLauncher ${sampleProject}`], { stdio: "ignore" });
     spawnSync("pkill", ["-f", `Radio-Oracle-jdeploy.jar ${sampleProject}`], { stdio: "ignore" });
@@ -134,15 +186,47 @@ function runInstalledExportSmoke(installPath) {
   }
 }
 
-function main() {
-  process.on("exit", cleanup);
+export function parseSmokeArguments(args) {
+  if (args.length === 0) {
+    return { probeOnlyVersion: null, packageSource: null };
+  }
+  if (args.length === 2 && args[0] === "--probe-only" && /^\d+\.\d+\.\d+$/.test(args[1])) {
+    return { probeOnlyVersion: args[1], packageSource: null };
+  }
+  if (
+    args.length === 4
+    && args[0] === "--probe-only"
+    && /^\d+\.\d+\.\d+$/.test(args[1])
+    && args[2] === "--source"
+  ) {
+    const packageSource = new URL(args[3]);
+    if (packageSource.protocol !== "https:") {
+      throw new Error("The installed package source must use HTTPS.");
+    }
+    return { probeOnlyVersion: args[1], packageSource: packageSource.href.replace(/\/$/, "") };
+  }
+  throw new Error(
+    "Usage: jdeploy-local-smoke.mjs [--probe-only <major.minor.patch> [--source <https-url>]]"
+  );
+}
 
-  run(npmCommand(), ["run", "jdeploy:install-local"]);
-  run(npmCommand(), ["run", "jdeploy:verify-install"]);
+function main() {
+  let options;
+  try {
+    options = parseSmokeArguments(process.argv.slice(2));
+  } catch (error) {
+    fail(error.message);
+  }
+
+  if (options.probeOnlyVersion == null) {
+    run(npmCommand(), ["run", "jdeploy:install-local"]);
+    run(npmCommand(), ["run", "jdeploy:verify-install"]);
+  }
 
   copyFileSync(resolve("samples", "desktop-smoke.rom.json"), sampleProject);
 
-  const installPath = localInstallPath();
+  const installPath = localInstallPath(platform(), homedir(), options.packageSource);
+  process.on("exit", () => cleanup(installPath));
   if (installPath == null) {
     console.log("Radio-Oracle local jDeploy install verified; launch smoke is skipped on this platform.");
     process.exit(0);
@@ -151,7 +235,28 @@ function main() {
     fail(`Expected local jDeploy install at ${installPath}.`);
   }
 
+  const expectedVersion = options.probeOnlyVersion
+    ?? JSON.parse(readFileSync("package.json", "utf8")).version;
   runInstalledExportSmoke(installPath);
+  if (platform() === "win32" || platform() === "linux") {
+    const versionEvidencePath = join(exportDirectory, "installed-package-evidence.txt");
+    try {
+      if (existsSync(versionEvidencePath)) {
+        validateVersionEvidence(readFileSync(versionEvidencePath, "utf8"), expectedVersion);
+      } else if (options.packageSource != null) {
+        // v1.0.52 predates versioned smoke output, so verify the exact source-qualified
+        // jDeploy package metadata that supplied the launcher just exercised above.
+        validateSourcePackageMetadata(
+          sourcePackageMetadataPath(homedir(), options.packageSource, expectedVersion),
+          expectedVersion
+        );
+      } else {
+        throw new Error("Installed application did not produce version evidence.");
+      }
+    } catch (error) {
+      fail(error.message);
+    }
+  }
 
   if (platform() === "darwin") {
     run("open", ["-n", installPath, "--args", sampleProject]);
@@ -163,12 +268,12 @@ function main() {
     launchedProcess.unref();
   }
 
-  if (waitFor(isRadioOracleRunning, 30_000)) {
-    console.log(`Radio-Oracle local jDeploy smoke OK for ${packageName}`);
+  if (waitFor(() => isRadioOracleRunning(installPath), 30_000)) {
+    console.log(`Radio-Oracle installed jDeploy smoke OK for ${packageName} ${expectedVersion}`);
     process.exit(0);
   }
 
-  fail("Radio-Oracle did not start from local jDeploy install.");
+  fail("Radio-Oracle did not start from the installed jDeploy launcher.");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
