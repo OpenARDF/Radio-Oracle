@@ -230,6 +230,31 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ## Near-Term Roadmap
 
+### Post-1.0.53 Development Readiness
+
+- Harden the hosted Android 16 KB emulator lane against transient runner
+  readiness failures without weakening the gate. Wait for package and activity
+  services before installation, add bounded retries for the observed
+  package-service `Broken pipe (32)` and empty-crash-buffer `LOW_MEMORY`
+  signatures, and continue to fail repeated or application-attributable exits.
+- Track the jDeploy Windows ARM64 bootstrap defect separately from Radio-Oracle
+  runtime compatibility. Native Windows ARM64 candidate installation and launch
+  pass, while the exact published 1.0.52 bootstrap failed during
+  `--jdeploy:update` before app installation. Require an exact newly generated
+  published-installer check after a relevant jDeploy change; do not rewrite or
+  relabel immutable historical release evidence.
+- Preserve the narrow documented warning waivers for missing debug symbols in
+  third-party AndroidX DataStore native libraries, Mockito's test-VM
+  class-data-sharing notice, and jDeploy's tool-only `shelljs` 0.8, `glob` 7,
+  and `inflight` deprecations. Re-evaluate each waiver when its dependency or
+  toolchain changes, and never let it hide a new source, build, test, or runtime
+  warning.
+- Start each new development effort from a clean, synchronized `Development1`
+  on a focused `codex/<feature>` branch and merge it through a reviewed PR after
+  applicable gates pass. Branch creation alone does not change versions; use
+  `1.0.53a` for the first installable post-1.0.53 test build and then follow the
+  established iterative-suffix sequence.
+
 ### Android Native Dependency Maintenance
 
 - Implemented: replaced `firebase-crashlytics-ndk` with ordinary
