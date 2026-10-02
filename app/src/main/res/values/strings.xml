@@ -353,16 +353,31 @@
     <!-- SPORTident tools -->
     <string name="sportident_menu_title" translatable="false">SPORTident</string>
     <string name="sportident_tools_title" translatable="false">SPORTident Tools</string>
+    <string name="sportident_tools_intro">Choose one tool. Each workflow has its own screen and keeps unrelated controls out of the way.</string>
+    <string name="sportident_tools_connected">Connected to station %1$d (%2$s).</string>
+    <string name="sportident_tools_recovery_attention">SI Card Tools requires attention before another owner-name write.</string>
+    <string name="sportident_operation_in_progress">Wait for the current SPORTident operation to finish before leaving this screen.</string>
+    <string name="sportident_station_tools_title">Station Maintenance</string>
+    <string name="sportident_station_tools_description">Inspect the station, review diagnostics, synchronize its clock, or put it to sleep.</string>
+    <string name="sportident_card_tools_title">SI Card Tools</string>
+    <string name="sportident_card_tools_description">Read owner information and perform guarded SI-Card8 owner-name writes and recovery.</string>
+    <string name="sportident_punch_history_tools_title">Punch History</string>
+    <string name="sportident_punch_history_tools_description">Download and search the connected field station’s read-only backup records.</string>
     <string name="sportident_time_sync_computer_time">Computer time: %1$s</string>
     <string name="sportident_time_sync_connecting">Connecting to the SPORTident reader service…</string>
     <string name="sportident_time_sync_disconnected">Connect a ready SPORTident download station.</string>
     <string name="sportident_time_sync_inspecting">Inspecting the connected station…</string>
     <string name="sportident_time_sync_inspect">Inspect Station</string>
     <string name="sportident_time_sync_sync">Sync Time</string>
+    <string name="sportident_station_sleep">Sleep</string>
+    <string name="sportident_station_sleep_confirm_title">Put SPORTident station to sleep?</string>
+    <string name="sportident_station_sleep_confirm_message">Put inspected station %1$d to sleep? The station identity will be checked again before the command is sent.</string>
+    <string name="sportident_station_sleep_failed">Station sleep failed: %1$s</string>
     <string name="sportident_time_sync_syncing">Syncing device time to the station…</string>
     <string name="sportident_time_sync_sleep_after">Put station to sleep after sync</string>
     <string name="sportident_time_sync_guidance">Keep the target station awake and coupled to the download station. The station is inspected before time sync is enabled.</string>
     <string name="sportident_time_sync_station_summary">Station %1$d%2$s; time %3$s; %4$s.</string>
+    <string name="sportident_station_diagnostics">Station details: %1$s</string>
     <string name="sportident_time_sync_station_code"> (SI code %1$d)</string>
     <string name="sportident_time_sync_confirm_title">Sync SPORTident station time?</string>
     <string name="sportident_time_sync_confirm_message">Set station %1$d to this Android device’s current time? The station will be read back and verified after the write.</string>
@@ -370,9 +385,55 @@
     <string name="sportident_time_sync_attempts"> Succeeded on attempt %1$d.</string>
     <string name="sportident_time_sync_failed">Time sync failed: %1$s</string>
     <string name="sportident_time_sync_readback_unavailable">post-sync readback unavailable</string>
+    <string name="sportident_time_sync_aligned">aligned with the Android device</string>
+    <string name="sportident_time_sync_ahead">%1$s ahead of the Android device</string>
+    <string name="sportident_time_sync_behind">%1$s behind the Android device</string>
     <string name="sportident_time_sync_inspection_failed">Station inspection failed: %1$s</string>
-    <string name="sportident_time_sync_section">Station Time Sync</string>
-    <string name="sportident_backup_section">Field Station Punch History</string>
+    <string name="sportident_card_ready">Card reading starts automatically.</string>
+    <string name="sportident_card_not_detected">Card not detected</string>
+    <string name="sportident_card_removed">Card removed</string>
+    <string name="sportident_card_detected">Card inserted</string>
+    <string name="sportident_card_reading_status">Reading card</string>
+    <string name="sportident_card_station_disconnected">Station disconnected</string>
+    <string name="sportident_card_reader_preparing">Preparing card reader</string>
+    <string name="sportident_card_connect_station">CONNECT STATION</string>
+    <string name="sportident_card_please_wait">PLEASE WAIT</string>
+    <string name="sportident_card_insert_now">INSERT CARD NOW</string>
+    <string name="sportident_card_remove_now">REMOVE CARD NOW</string>
+    <string name="sportident_card_keep_inserted">KEEP CARD INSERTED</string>
+    <string name="sportident_card_ready_for_name">CARD READY</string>
+    <string name="sportident_card_edit_then_write">EDIT NAME, THEN WRITE</string>
+    <string name="sportident_card_name_to_write">Name to write:</string>
+    <string name="sportident_card_first_name">First name</string>
+    <string name="sportident_card_last_name">Last name</string>
+    <string name="sportident_card_write">Write Names</string>
+    <string name="sportident_card_accept_recovery">Accept Fresh Read</string>
+    <string name="sportident_card_guidance">Owner-name writing supports SI-Card8 only. Keep the card inserted until the app tells you to remove it. Station beeps do not signal that reading is complete. Writes never retry automatically and succeed only after a fresh complete-card comparison.</string>
+    <string name="sportident_card_read_failed">Card read failed: %1$s</string>
+    <string name="sportident_card_write_failed">Name write was not verified: %1$s Remove and reinsert this card for a fresh automatic read before attempting another write.</string>
+    <string name="sportident_card_write_confirm_title">Write names to SI-Card %1$d?</string>
+    <string name="sportident_card_write_confirm_message">Station %1$d\nCard %2$d\nStored: %3$s\nNew: %4$s\n\nAfter confirming, follow the large red remove/insert instructions on this screen. Keep the card inserted until the next instruction appears. No write is retried automatically.</string>
+    <string name="sportident_card_names_invalid">Enter valid changed names.</string>
+    <string name="sportident_card_name_not_stored">Not stored</string>
+    <plurals name="sportident_card_write_verified">
+        <item quantity="one">Write verified for SI-Card %1$d: %2$d control punch preserved and no other card bytes changed.</item>
+        <item quantity="other">Write verified for SI-Card %1$d: %2$d control punches preserved and no other card bytes changed.</item>
+    </plurals>
+    <string name="sportident_card_recovery_accepted">Fresh complete-card read accepted. Name writing is available again.</string>
+    <string name="sportident_card_recovery_blocked">Recovery remains blocked: %1$s</string>
+    <string name="sportident_card_recovery_pending">An earlier name write was not verified for SI-Card %1$d. Read that card and accept only a matching fresh image; another write is blocked.</string>
+    <string name="sportident_card_recovery_unavailable">The name-write recovery record cannot be read. Name writing is blocked.</string>
+    <string name="sportident_card_names_display">Names: %1$s</string>
+    <string name="sportident_card_club_display">; club: %1$s</string>
+    <string name="sportident_card_owner_not_supported">Owner information is not supported</string>
+    <string name="sportident_card_owner_incomplete">Owner information was incomplete</string>
+    <string name="sportident_card_owner_unsupported_encoding">Unsupported owner character set %1$d</string>
+    <plurals name="sportident_card_read_summary">
+        <item quantity="one">%1$s · SI-Card %2$d · %3$d control punch. %4$s.</item>
+        <item quantity="other">%1$s · SI-Card %2$d · %3$d control punches. %4$s.</item>
+    </plurals>
+    <string name="sportident_card_write_in_progress">Writing names to SI-Card %1$d. Follow the instruction above.</string>
+    <string name="sportident_card_verifying">Verifying SI-Card %1$d. Follow the instruction above.</string>
     <string name="sportident_backup_filter_hint">SI-Card number (optional)</string>
     <string name="sportident_backup_read">Read History</string>
     <string name="sportident_backup_reading_button">Reading…</string>
@@ -384,6 +445,24 @@
         <item quantity="other">Read %1$d punch-history records.</item>
     </plurals>
     <string name="sportident_backup_failed">Punch-history read failed: %1$s</string>
+    <string name="sportident_backup_progress">Punch-history read progress: %1$d / %2$d…</string>
+    <string name="sportident_backup_station_code">, SI code %1$d</string>
+    <string name="sportident_backup_overflowed">; ring buffer has wrapped</string>
+    <plurals name="sportident_backup_unreadable">
+        <item quantity="one">; %1$d unreadable record</item>
+        <item quantity="other">; %1$d unreadable records</item>
+    </plurals>
+    <string name="sportident_backup_invalid_card">Enter a valid numeric SI-Card number.</string>
+    <string name="sportident_backup_no_card_records">No records for SI-Card %1$s.</string>
+    <string name="sportident_backup_no_records">No punch records were found.</string>
+    <string name="sportident_backup_showing_newest">; showing newest %1$d</string>
+    <plurals name="sportident_backup_summary">
+        <item quantity="one">Station %1$d%2$s: %3$d record%4$s%5$s%6$s.</item>
+        <item quantity="other">Station %1$d%2$s: %3$d records%4$s%5$s%6$s.</item>
+    </plurals>
+    <string name="sportident_backup_unknown_date">Unknown date</string>
+    <string name="sportident_backup_punch_failed">punch failed</string>
+    <string name="sportident_backup_error_record">%1$s %2$s: %3$s</string>
 
     <string name="preferences_general">General</string>
     <string name="preferences_prints">Prints</string>

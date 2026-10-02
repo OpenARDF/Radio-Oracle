@@ -27,6 +27,9 @@
         <action
             android:id="@+id/openEventSeries"
             app:destination="@id/eventSeriesFragment" />
+        <action
+            android:id="@+id/openSportIdentTools"
+            app:destination="@id/sportIdentTools" />
     </fragment>
 
     <fragment
@@ -38,6 +41,42 @@
             android:id="@+id/openRaceFromSeries"
             app:destination="@id/bottomNav" />
     </fragment>
+
+    <!-- Keep the three long-running hardware workflows in a focused back stack. -->
+    <navigation
+        android:id="@+id/sportIdentTools"
+        app:startDestination="@id/sportIdentToolsHomeFragment">
+        <fragment
+            android:id="@+id/sportIdentToolsHomeFragment"
+            android:name="org.openardf.radiooracle.ui.sportident.SportIdentToolsHomeFragment"
+            android:label="@string/sportident_tools_title"
+            tools:layout="@layout/fragment_sportident_tools">
+            <action
+                android:id="@+id/openSportIdentStation"
+                app:destination="@id/sportIdentStationFragment" />
+            <action
+                android:id="@+id/openSportIdentCard"
+                app:destination="@id/sportIdentCardFragment" />
+            <action
+                android:id="@+id/openSportIdentPunchHistory"
+                app:destination="@id/sportIdentPunchHistoryFragment" />
+        </fragment>
+        <fragment
+            android:id="@+id/sportIdentStationFragment"
+            android:name="org.openardf.radiooracle.ui.sportident.SportIdentStationFragment"
+            android:label="@string/sportident_station_tools_title"
+            tools:layout="@layout/fragment_sportident_station" />
+        <fragment
+            android:id="@+id/sportIdentCardFragment"
+            android:name="org.openardf.radiooracle.ui.sportident.SportIdentCardFragment"
+            android:label="@string/sportident_card_tools_title"
+            tools:layout="@layout/fragment_sportident_card" />
+        <fragment
+            android:id="@+id/sportIdentPunchHistoryFragment"
+            android:name="org.openardf.radiooracle.ui.sportident.SportIdentPunchHistoryFragment"
+            android:label="@string/sportident_punch_history_tools_title"
+            tools:layout="@layout/fragment_sportident_punch_history" />
+    </navigation>
 
     <navigation
         android:id="@+id/bottomNav"

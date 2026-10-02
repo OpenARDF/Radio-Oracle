@@ -50,6 +50,8 @@ import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_PCARD_SER
 import org.openardf.radiooracle.backend.sportident.SIConstants.SI_CARD_REMOVED
 import org.openardf.radiooracle.backend.sportident.SIConstants.ZERO
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadoutParser
+import org.openardf.radiooracle.shared.sportident.SportIdentCardBlock
+import org.openardf.radiooracle.shared.sportident.SportIdentCardBlockParser
 import org.openardf.radiooracle.shared.sportident.SportIdentCommandResult
 import org.openardf.radiooracle.shared.sportident.SportIdentFrame
 import org.openardf.radiooracle.shared.sportident.SportIdentFrameParser
@@ -57,10 +59,19 @@ import org.openardf.radiooracle.shared.sportident.SportIdentStationInfo
 import org.openardf.radiooracle.shared.sportident.SportIdentStationBackupSnapshot
 import org.openardf.radiooracle.shared.sportident.SportIdentStationMode
 import org.openardf.radiooracle.shared.sportident.SportIdentTimeSyncCommandStep
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerWriteTransaction
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerWriteWordCountPolicy
+import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteRehearsal
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -73,7 +84,8 @@ import kotlin.experimental.and
 
 class SIPort(
     private val port: UsbSerialDevice,
-    private val dataProcessor: DataProcessor = DataProcessor.get()
+    private val dataProcessor: DataProcessor = DataProcessor.get(),
+    private val ownerRecoveryStore: AndroidSportIdentOwnerRecoveryStore
 ) {
 
     private val msgCache: ArrayList<ByteArray> = ArrayList()
@@ -92,6 +104,16 @@ class SIPort(
         },
         readChunk = ::readPortChunk,
         cacheUnexpectedFrame = ::enqueueCache
+    )
+    // Presence probes treat an absent card as normal. A separate one-attempt
+    // reader avoids normal card-read retries and warning logs for that state.
+    private val ownerPresenceProbeReader = AndroidSportIdentCardCommandReader(
+        writeCommand = { command, payload ->
+            writeMsg(command, payload, extendedMode) == 0
+        },
+        readChunk = ::readPortChunk,
+        cacheUnexpectedFrame = ::enqueueCache,
+        maxAttempts = 1
     )
     private val commandTransport = object : AndroidSportIdentCommandTransport {
         override fun sendWakePulse(): Boolean {
@@ -254,6 +276,15 @@ class SIPort(
             }
         }
 
+    suspend fun sleepStation(
+        writeEnabled: Boolean,
+        expectedStationSerialNumber: Int
+    ): AndroidSportIdentStationPowerStateWriteResult =
+        stationAccessMutex.withLock {
+            ensureConnectedForStationMaintenance()
+            timeSyncController.sleepStation(writeEnabled, expectedStationSerialNumber)
+        }
+
     suspend fun readStationBackup(
         onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> }
     ): SportIdentStationBackupSnapshot =
@@ -279,6 +310,259 @@ class SIPort(
             }
         }
 
+    /**
+     * Owns the station mutex for the lifetime of the Card Tools screen.
+     * Continuous ownership prevents maintenance insertions from leaking into
+     * normal race readout and incorrectly producing duplicate-card dialogs.
+     */
+    suspend fun monitorCardInspections(
+        initiallySeatedCardNumber: Int? = null,
+        onPresenceChanged: (AndroidSportIdentCardPresenceState) -> Unit,
+        onInspection: (AndroidSportIdentCardInspection) -> Unit,
+        onReadError: (Throwable) -> Unit
+    ) = stationAccessMutex.withLock {
+        ensureConnectedForStationMaintenance()
+        var seatedCardNumber = initiallySeatedCardNumber
+        onPresenceChanged(
+            if (seatedCardNumber == null) {
+                AndroidSportIdentCardPresenceState.NOT_PRESENT
+            } else {
+                AndroidSportIdentCardPresenceState.PRESENT
+            }
+        )
+        DebugLog.info("SI", "Android card-tool monitoring session started")
+        try {
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                seatedCardNumber?.let { cardNumber ->
+                    awaitTargetCardRemovalUntilCancelled(cardNumber)
+                    seatedCardNumber = null
+                    onPresenceChanged(AndroidSportIdentCardPresenceState.NOT_PRESENT)
+                }
+
+                val cardData = waitForMaintenanceCardInsertUntilCancelled()
+                seatedCardNumber = cardData.siNumber
+                onPresenceChanged(AndroidSportIdentCardPresenceState.READING)
+                setStatusReading(cardData.siNumber)
+                try {
+                    val inspection = readMaintenanceCardInspection(cardData)
+                    require(inspection.owner.siNumber == cardData.siNumber) {
+                        "The inserted and downloaded SI-card numbers differ."
+                    }
+                    writeAck()
+                    DebugLog.info(
+                        "SI",
+                        "Owner inspection complete id=${inspection.owner.siNumber} " +
+                            "family=${inspection.owner.family.label} " +
+                            "punches=${inspection.controlPunchCount}"
+                    )
+                    onInspection(inspection)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    DebugLog.error(
+                        "SI",
+                        "Owner inspection failed: ${error.message ?: error::class.simpleName}"
+                    )
+                    onReadError(error)
+                } finally {
+                    setStatusConnected()
+                    onPresenceChanged(AndroidSportIdentCardPresenceState.PRESENT)
+                }
+            }
+        } finally {
+            setStatusConnected()
+            DebugLog.info("SI", "Android card-tool monitoring session stopped")
+        }
+    }
+
+    suspend fun writeOwnerNames(
+        request: SportIdentOwnerNameWriteRequest,
+        expectedBefore: SportIdentOwnerReadFixture,
+        onInstruction: (AndroidSportIdentOwnerWriteInstruction) -> Unit = {}
+    ): AndroidSportIdentOwnerWriteResult = stationAccessMutex.withLock {
+        ensureConnectedForStationMaintenance()
+        require(request.stationNumber == serialNo && expectedBefore.stationNumber == serialNo) {
+            "The owner-name request does not match the connected station."
+        }
+        val transaction = SportIdentOwnerWriteTransaction<Unit, AndroidSportIdentCardPresenceResult>(
+            withFreshRead = { activeRequest, onReady ->
+                val expectedBlock0 = SportIdentOwnerReadVerification.blockBytes(expectedBefore, 0)
+                val requiresRemoval =
+                    AndroidSportIdentOwnerWritePreflight.prepareFreshInsertionBoundary(
+                        probeCurrentCard = {
+                            probeOwnerCardPresence(expectedBlock0)
+                        },
+                        discardQueuedCardEvents = ::discardQueuedCardEvents
+                    )
+                DebugLog.debug(
+                    "SI",
+                    "Owner-write preflight card=${activeRequest.cardNumber} " +
+                        "requiresRemoval=$requiresRemoval"
+                )
+                if (requiresRemoval) {
+                    onInstruction(AndroidSportIdentOwnerWriteInstruction.REMOVE_FOR_WRITE)
+                    check(awaitTargetCardRemoval(activeRequest.cardNumber)) {
+                        "The inspected SI-Card8 was not removed before the write preflight timed out."
+                    }
+                }
+                onInstruction(AndroidSportIdentOwnerWriteInstruction.INSERT_FOR_WRITE)
+                val cardData = waitForMaintenanceCardInsert()
+                onInstruction(AndroidSportIdentOwnerWriteInstruction.KEEP_INSERTED_FOR_WRITE)
+                val fresh = readMaintenanceCardInspection(cardData)
+                writeAck()
+                val raw = requireNotNull(fresh.si8RawRead) {
+                    "The freshly inserted card is not a complete SI-Card8 read."
+                }
+                require(
+                    cardData.siNumber == activeRequest.cardNumber &&
+                        fresh.owner.siNumber == activeRequest.cardNumber
+                ) { "The freshly inserted SI-Card8 is not the inspected card." }
+                AndroidSportIdentOwnerWritePreflight.requireUnchangedTarget(
+                    activeRequest,
+                    expectedBefore,
+                    raw
+                )
+                val rehearsal = SportIdentSi8OwnerWriteRehearsal(
+                    activeRequest,
+                    requireNotNull(stationCodeNumber),
+                    raw
+                )
+                onReady(Unit, rehearsal, raw)
+            },
+            recoveryStore = ownerRecoveryStore,
+            checkPresence = { _, expectedBlock0 ->
+                probeOwnerCardPresence(expectedBlock0)
+            },
+            isMatchingPresence = {
+                it == AndroidSportIdentCardPresenceResult.MATCHING_BLOCK
+            },
+            exchangeWords = { _, rehearsal ->
+                onInstruction(AndroidSportIdentOwnerWriteInstruction.KEEP_INSERTED_FOR_WRITE)
+                AndroidSportIdentOwnerWordTransport(
+                    writeFrame = { frame ->
+                        port.syncWrite(frame, READ_WRITE_TIMEOUT) == frame.size
+                    },
+                    readReply = ::readMsg
+                ).exchange(rehearsal)
+            },
+            verifyReadback = { _, rehearsal ->
+                verifyOwnerWriteReadback(rehearsal, onInstruction)
+            },
+            wordCountPolicy = SportIdentOwnerWriteWordCountPolicy.AnySupportedShape
+        )
+        val outcome = transaction.execute(request)
+        check(outcome.verified) {
+            "The SI-Card8 owner write stopped without verification: ${outcome.stopReason}."
+        }
+        AndroidSportIdentOwnerWriteResult(requireNotNull(outcome.comparison))
+    }
+
+    private fun probeOwnerCardPresence(
+        expectedBlock0: ByteArray
+    ): AndroidSportIdentCardPresenceResult {
+        val reply = ownerPresenceProbeReader.read(
+            command = GET_SI_CARD8_9_SIAC,
+            payload = byteArrayOf(0),
+            expectedReplyBytes = CARD_BLOCK_REPLY_BYTES
+        ).reply ?: return AndroidSportIdentCardPresenceResult.NO_REPLY
+        val frame = SportIdentFrameParser.firstFrame(
+            reply,
+            commandFilter = GET_SI_CARD8_9_SIAC,
+            requireValidCrc = true
+        ) ?: return AndroidSportIdentCardPresenceResult.INVALID_REPLY
+        val block = SportIdentCardBlockParser.si8Or9OrSiacBlock(0, frame)
+            ?: return AndroidSportIdentCardPresenceResult.INVALID_REPLY
+        return if (block.data.contentEquals(expectedBlock0)) {
+            AndroidSportIdentCardPresenceResult.MATCHING_BLOCK
+        } else {
+            AndroidSportIdentCardPresenceResult.DIFFERENT_BLOCK
+        }
+    }
+
+    private fun discardQueuedCardEvents() {
+        val discarded = msgCache.count(::isCardLifecycleMessage)
+        msgCache.removeAll(::isCardLifecycleMessage)
+        if (discarded > 0) {
+            DebugLog.info(
+                "SI",
+                "Discarded $discarded card lifecycle event(s) before the owner-write removal prompt"
+            )
+        }
+    }
+
+    private fun isCardLifecycleMessage(message: ByteArray): Boolean =
+        message.size > 1 && when (message[1]) {
+            SI_CARD5, SI_CARD6, SI_CARD8_9_SIAC, SI_CARD_REMOVED -> true
+            else -> false
+        }
+
+    suspend fun acknowledgeOwnerWriteRecovery(
+        fresh: SportIdentOwnerReadFixture,
+        observedFirstName: String,
+        observedLastName: String
+    ) = stationAccessMutex.withLock {
+        ensureConnectedForStationMaintenance()
+        ownerRecoveryStore.acknowledge(fresh, observedFirstName, observedLastName)
+    }
+
+    fun ownerWriteRecoveryState(): AndroidSportIdentOwnerRecoveryState =
+        ownerRecoveryStore.load()
+
+    private fun verifyOwnerWriteReadback(
+        rehearsal: SportIdentSi8OwnerWriteRehearsal,
+        onInstruction: (AndroidSportIdentOwnerWriteInstruction) -> Unit
+    ): org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWritePlanComparison? {
+        onInstruction(AndroidSportIdentOwnerWriteInstruction.REMOVE_FOR_READ_BACK)
+        if (!awaitTargetCardRemoval(rehearsal.targetCardNumber)) {
+            rehearsal.stopForMissingReadback()
+            return null
+        }
+        onInstruction(AndroidSportIdentOwnerWriteInstruction.INSERT_FOR_READ_BACK)
+        val cardData = waitForMaintenanceCardInsert()
+        onInstruction(AndroidSportIdentOwnerWriteInstruction.KEEP_INSERTED_FOR_READ_BACK)
+        val fresh = runCatching { readMaintenanceCardInspection(cardData) }.getOrElse {
+            rehearsal.rejectReadback()
+            return null
+        }
+        writeAck()
+        val raw = fresh.si8RawRead
+        if (
+            cardData.siNumber != rehearsal.targetCardNumber ||
+                fresh.owner.siNumber != rehearsal.targetCardNumber ||
+                raw == null
+        ) {
+            rehearsal.rejectReadback()
+            return null
+        }
+        return rehearsal.compareIndependentRead(raw)
+    }
+
+    private fun awaitTargetCardRemoval(expectedCardNumber: Int): Boolean {
+        val deadline = android.os.SystemClock.elapsedRealtime() + MAINTENANCE_CARD_WAIT_MS
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            val reply = readMsg(READ_WRITE_TIMEOUT) ?: continue
+            if (reply.size >= 9 && reply[1] == SI_CARD_REMOVED) {
+                val cardNumber =
+                    (byteToUnsignedInt(reply[5]) shl 24) or
+                        (byteToUnsignedInt(reply[6]) shl 16) or
+                        (byteToUnsignedInt(reply[7]) shl 8) or
+                        byteToUnsignedInt(reply[8])
+                if (cardNumber == expectedCardNumber) return true
+            }
+        }
+        return false
+    }
+
+    private suspend fun awaitTargetCardRemovalUntilCancelled(expectedCardNumber: Int) {
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val reply = readMsg(READ_WRITE_TIMEOUT)
+            currentCoroutineContext().ensureActive()
+            if (reply != null && removedCardNumber(reply) == expectedCardNumber) return
+        }
+    }
+
     private fun ensureConnectedForTimeSync() {
         ensureConnectedForStationMaintenance()
     }
@@ -290,6 +574,93 @@ class SIPort(
         ) {
             "Connect a ready SPORTident download station before using station tools."
         }
+    }
+
+    private fun waitForMaintenanceCardInsert(): CardData {
+        val deadline = android.os.SystemClock.elapsedRealtime() + MAINTENANCE_CARD_WAIT_MS
+        val cardData = CardData(ZERO, 0, punchData = ArrayList())
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            if (waitForCardInsert(cardData)) return cardData
+        }
+        error("No fresh SI-card insertion was detected. Remove and reinsert the card.")
+    }
+
+    private suspend fun waitForMaintenanceCardInsertUntilCancelled(): CardData {
+        val cardData = CardData(ZERO, 0, punchData = ArrayList())
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            if (waitForCardInsert(cardData)) return cardData
+            currentCoroutineContext().ensureActive()
+        }
+    }
+
+    private fun removedCardNumber(reply: ByteArray): Int? {
+        if (reply.size < 9 || reply[1] != SI_CARD_REMOVED) return null
+        return (byteToUnsignedInt(reply[5]) shl 24) or
+            (byteToUnsignedInt(reply[6]) shl 16) or
+            (byteToUnsignedInt(reply[7]) shl 8) or
+            byteToUnsignedInt(reply[8])
+    }
+
+    private fun readMaintenanceCardInspection(cardData: CardData): AndroidSportIdentCardInspection {
+        val station = connectedStationInfo()
+        return when (cardData.cardType) {
+            SI_CARD5 -> {
+                val reply = requireNotNull(readCardCommandReply(
+                    cardData,
+                    cardFamilyLabel(cardData.cardType),
+                    "owner-inspection",
+                    SIConstants.GET_SI_CARD5,
+                    null,
+                    SI5_REPLY_BYTES
+                )) { "The SI-Card5 read did not complete." }
+                AndroidSportIdentCardInspectionAssembler.fromSi5(station, reply)
+            }
+
+            SI_CARD6 -> {
+                val blocks = listOf(0, 1, 6, 7, 2, 3, 4, 5).map { blockNumber ->
+                    readCardBlock(cardData, SIConstants.GET_SI_CARD6, blockNumber)
+                }
+                AndroidSportIdentCardInspectionAssembler.fromSi6(station, blocks)
+            }
+
+            SI_CARD8_9_SIAC -> {
+                val block0 = readCardBlock(cardData, GET_SI_CARD8_9_SIAC, 0)
+                val series = block0.data[24].toInt() and 0x0f
+                val additional = if (series == 15) (1..7).toList() else listOf(1)
+                val blocks = listOf(block0) + additional.map { blockNumber ->
+                    readCardBlock(cardData, GET_SI_CARD8_9_SIAC, blockNumber)
+                }
+                AndroidSportIdentCardInspectionAssembler.fromSi8OrNewer(station, blocks)
+            }
+
+            else -> error("This SI-card family is not supported by the connected station.")
+        }
+    }
+
+    private fun readCardBlock(
+        cardData: CardData,
+        command: Byte,
+        blockNumber: Int
+    ): SportIdentCardBlock {
+        val reply = requireNotNull(readCardCommandReply(
+            cardData = cardData,
+            family = cardFamilyLabel(cardData.cardType),
+            stage = "block=$blockNumber",
+            command = command,
+            payload = byteArrayOf(blockNumber.toByte()),
+            expectedReplyBytes = CARD_BLOCK_REPLY_BYTES
+        )) { "SI-card block $blockNumber could not be read." }
+        val frame = requireNotNull(SportIdentFrameParser.firstFrame(
+            reply,
+            commandFilter = command,
+            requireValidCrc = true
+        )) { "SI-card block $blockNumber returned an invalid frame." }
+        return requireNotNull(when (command) {
+            SIConstants.GET_SI_CARD6 -> SportIdentCardBlockParser.si6Block(blockNumber, frame)
+            GET_SI_CARD8_9_SIAC -> SportIdentCardBlockParser.si8Or9OrSiacBlock(blockNumber, frame)
+            else -> null
+        }) { "SI-card block $blockNumber returned an invalid payload." }
     }
 
     private fun connectedStationInfo(): SportIdentStationInfo {
@@ -1184,5 +1555,8 @@ class SIPort(
         private const val SI5_REPLY_BYTES = 136
         private const val CARD_BLOCK_REPLY_BYTES = 137
         private const val TIME_SYNC_TIMEOUT_MS = 1_200
+        // Match the desktop hardware window so normal remove/reinsert handling
+        // does not turn a successful one-shot write into avoidable recovery.
+        private const val MAINTENANCE_CARD_WAIT_MS = 60_000L
     }
 }

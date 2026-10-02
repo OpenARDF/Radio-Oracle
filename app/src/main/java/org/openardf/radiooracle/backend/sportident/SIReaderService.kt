@@ -47,6 +47,8 @@ import org.openardf.radiooracle.backend.sportident.SIConstants.SI_VENDOR_ID
 import org.openardf.radiooracle.shared.device.SIReaderState
 import org.openardf.radiooracle.shared.device.SIReaderStatus
 import org.openardf.radiooracle.shared.sportident.SportIdentStationBackupSnapshot
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
 import kotlinx.coroutines.Job
 
 
@@ -78,10 +80,48 @@ class SIReaderService :
                 expectedStationSerialNumber
             )
 
+        suspend fun sleepStation(
+            writeEnabled: Boolean,
+            expectedStationSerialNumber: Int
+        ): AndroidSportIdentStationPowerStateWriteResult =
+            requirePort().sleepStation(writeEnabled, expectedStationSerialNumber)
+
         suspend fun readStationBackup(
             onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> }
         ): SportIdentStationBackupSnapshot =
             requirePort().readStationBackup(onProgress)
+
+        suspend fun monitorCardInspections(
+            initiallySeatedCardNumber: Int? = null,
+            onPresenceChanged: (AndroidSportIdentCardPresenceState) -> Unit,
+            onInspection: (AndroidSportIdentCardInspection) -> Unit,
+            onReadError: (Throwable) -> Unit
+        ) = requirePort().monitorCardInspections(
+            initiallySeatedCardNumber,
+            onPresenceChanged,
+            onInspection,
+            onReadError
+        )
+
+        suspend fun writeOwnerNames(
+            request: SportIdentOwnerNameWriteRequest,
+            expectedBefore: SportIdentOwnerReadFixture,
+            onInstruction: (AndroidSportIdentOwnerWriteInstruction) -> Unit = {}
+        ): AndroidSportIdentOwnerWriteResult =
+            requirePort().writeOwnerNames(request, expectedBefore, onInstruction)
+
+        suspend fun acknowledgeOwnerWriteRecovery(
+            fresh: SportIdentOwnerReadFixture,
+            observedFirstName: String,
+            observedLastName: String
+        ) = requirePort().acknowledgeOwnerWriteRecovery(
+            fresh,
+            observedFirstName,
+            observedLastName
+        )
+
+        fun ownerWriteRecoveryState(): AndroidSportIdentOwnerRecoveryState =
+            requirePort().ownerWriteRecoveryState()
 
         private fun requirePort(): SIPort =
             siPort ?: error("Connect a SPORTident download station before using station tools.")
@@ -198,7 +238,12 @@ class SIReaderService :
         connection = usbManager.openDevice(device)
         serialDevice = UsbSerialDevice.createUsbSerialDevice(device, connection)
         DebugLog.info("SI", "USB serial device created")
-        siPort = SIPort(serialDevice!!)
+        siPort = SIPort(
+            serialDevice!!,
+            ownerRecoveryStore = AndroidSportIdentOwnerRecoveryStore(
+                filesDir.resolve(AndroidSportIdentOwnerRecoveryStore.FILE_NAME)
+            )
+        )
 
         //Start the work on the SI reader
         siJob = siPort!!.workJob()

@@ -218,7 +218,12 @@ class MainActivity : AppCompatActivity() {
                     siStatusTextView.visibility = View.VISIBLE
                 }
 
-                R.id.raceSelectionFragment, R.id.readoutDetailFragment -> {
+                R.id.raceSelectionFragment,
+                R.id.readoutDetailFragment,
+                R.id.sportIdentToolsHomeFragment,
+                R.id.sportIdentStationFragment,
+                R.id.sportIdentCardFragment,
+                R.id.sportIdentPunchHistoryFragment -> {
                     navView.visibility = View.GONE
                     siStatusTextView.visibility = View.VISIBLE
                 }

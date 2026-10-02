@@ -1,6 +1,6 @@
 # Radio-Oracle Multiplatform Roadmap
 
-Status reviewed: 2026-09-29 against the current source, regression coverage, and
+Status reviewed: 2026-10-01 against the current source, regression coverage, and
 release history through 1.0.50. This review does not replace hardware acceptance.
 
 Radio-Oracle is no longer an Android-only app with a hypothetical desktop beta.
@@ -198,9 +198,21 @@ These are deliberate limits in the current app, not necessarily defects.
 - Android remains the primary race-day platform for mature USB readout and
   Bluetooth ESC/POS printing.
 - Desktop and Android SPORTident tools now cover readout, time synchronization,
-  and read-only field-station Punch History. Live punch streaming, deeper
-  diagnostics, multi-station coordination, and additional configuration writes
-  still require more hardware validation.
+  read-only field-station Punch History, owner inspection, and guarded SI-Card8
+  owner-name writing. The Android implementation shares the desktop transaction
+  ordering, name codec/planner, exact-card preflight, durable interruption
+  recovery, and complete two-block readback rules; unit, release, 16 KB, and Moto
+  UI gates pass. Moto/Android 15 hardware runs used station 554900 to write
+  explicitly approved names to SI-Card8 2450662 and 2450663; fresh recovery
+  reads preserved 11 and 1 control punches respectively and showed no unrelated
+  byte changes. Both normal in-transaction verification windows expired during
+  human-mediated steps, so one further hardware run should prove the automatic
+  60-second readback path before calling Android programming fully accepted.
+  Card Tools now owns reader insert/remove events continuously while visible,
+  preventing maintenance reads from leaking into race processing as Duplicate
+  Card dialogs, and uses automatic reading plus prominent on-device prompts.
+  Live punch streaming, deeper diagnostics, multi-station coordination, and
+  additional configuration writes still require more hardware validation.
 - Local results web server exposure should stay loopback/local unless LAN
   exposure is explicitly hardened and selected.
 - OCheckList/new-card import remains future work until sample files or schema
@@ -684,10 +696,16 @@ mid-term goal on Android and desktop.
   guarded maintenance phase. A "set attached download box to READOUT" action may
   be added only after the configuration transaction is verified against real
   hardware and has immediate read-back validation.
-- Extend the desktop SPORTident SI Card owner-information inspector into a
-  programming tool for writing the owner's name to supported cards. Keep card
-  family rules, owner parsing, and name preparation in shared code for later Android reuse;
-  add Android UI and transport integration separately. Identify supported
+- Maintain the desktop SPORTident SI Card owner-information inspector and
+  programming tool for writing the owner's name to supported cards. Card family
+  rules, owner parsing, name preparation, transaction ordering, and verification
+  remain shared with Android; Android now has read-only owner inspection, its
+  guarded SI-Card8 transport, persistent recovery, and a full-screen Tools hub
+  with dedicated Station Maintenance, SI Card Tools, and Punch History screens.
+  The first physical Android write and recovery comparison passed without punch
+  loss or unrelated byte changes. Complete one automatic in-transaction
+  remove/reinsert readback under the new 60-second window before merging this
+  work as fully hardware-accepted. Identify supported
   card/station combinations and name encoding/length limits,
   verify the actual write protocol and capacity, then verify the written name
   by reading it back. The desktop SI-Card8 editor previews names using the
