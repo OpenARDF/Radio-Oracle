@@ -162,6 +162,14 @@ internal class AndroidSportIdentTimeSyncController(
         throw lastFailure ?: IllegalStateException("SPORTident time sync failed.")
     }
 
+    fun sleepStation(
+        writeEnabled: Boolean,
+        expectedStationSerialNumber: Int
+    ): AndroidSportIdentStationPowerStateWriteResult {
+        require(writeEnabled) { "Putting a SPORTident station to sleep requires explicit user confirmation." }
+        return sleepStationInSeparateTransaction(expectedStationSerialNumber)
+    }
+
     private fun inspectOnce(
         readerInfo: SportIdentStationInfo,
         accessMode: AndroidSportIdentTimeSyncAccessMode

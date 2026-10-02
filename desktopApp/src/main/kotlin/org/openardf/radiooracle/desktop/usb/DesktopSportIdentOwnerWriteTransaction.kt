@@ -3,21 +3,16 @@ package org.openardf.radiooracle.desktop.usb
 import org.openardf.radiooracle.desktop.DesktopSportIdentOwnerRecoveryState
 import org.openardf.radiooracle.desktop.DesktopSportIdentOwnerRecoveryStore
 import org.openardf.radiooracle.shared.sportident.SportIdentOwnerNameWriteRequest
-import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadVerification
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerReadFixture
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerWriteRecoveryStore
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerWriteTransaction
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerWriteTransactionOutcome
+import org.openardf.radiooracle.shared.sportident.SportIdentOwnerWriteWordCountPolicy
 import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWritePlanComparison
-import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStage
-import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWriteStopReason
-import org.openardf.radiooracle.shared.sportident.SportIdentSi8OwnerWordWritePlanner
 
-/** Terminal outcome of one native word exchange; a stopped attempt must never be retried blindly. */
-internal data class DesktopSportIdentOwnerWriteOutcome(
-    val stage: SportIdentSi8OwnerWriteStage,
-    val stopReason: SportIdentSi8OwnerWriteStopReason?,
-    val comparison: SportIdentSi8OwnerWritePlanComparison?,
-    val prewritePresence: DesktopSportIdentCardPresenceResult
-) {
-    val verified: Boolean get() = stage == SportIdentSi8OwnerWriteStage.VERIFIED && comparison?.matches == true
-}
+/** Keep the existing desktop API while sharing the safety-critical ordering. */
+internal typealias DesktopSportIdentOwnerWriteOutcome =
+    SportIdentOwnerWriteTransactionOutcome<DesktopSportIdentCardPresenceResult>
 
 /**
  * Same-port preflight, one-shot word transport, and independent read-back.
@@ -40,46 +35,43 @@ internal class DesktopSportIdentOwnerWriteTransaction(
         require(!allowVariableLength || experimentalWordCount == null)
     }
 
-    fun execute(request: SportIdentOwnerNameWriteRequest): DesktopSportIdentOwnerWriteOutcome {
-        check(recoveryStore.load() == DesktopSportIdentOwnerRecoveryState.Empty) {
-            "Resolve the pending SI-card owner-write attempt before starting another."
-        }
-        return preflight.withFreshRead(request) { port, rehearsal, before ->
-            require(when {
-                experimentalWordCount != null -> rehearsal.wordCount == experimentalWordCount
-                allowVariableLength -> rehearsal.wordCount in 1..7
-                else -> SportIdentSi8OwnerWordWritePlanner.hasPreviouslyVerifiedDirectShape(request, before)
-            }) {
-                if (experimentalWordCount != null)
-                    "The opt-in trial requires exactly $experimentalWordCount owner words."
-                else if (allowVariableLength)
-                    "The SI-Card8 owner write must contain between one and seven owner words."
-                else "Direct SI-Card8 writes are limited to the previously verified 11/12-byte transitions."
-            }
-            val presence = presenceProbe.check(port, SportIdentOwnerReadVerification.blockBytes(before, 0))
-            if (presence != DesktopSportIdentCardPresenceResult.MATCHING_BLOCK) {
-                rehearsal.stopForUnconfirmedCard()
-            } else {
-                // Persistence must succeed before any owner-word frame can be sent.
-                recoveryStore.beginNative(request, before)
-                onBeforeWordExchange(request)
-                // One durable upper bound avoids a disk sync between replies
-                // and the next word. Fresh readback still identifies the actual prefix.
-                recoveryStore.reserveNativeWordSequence(request)
-                makeWordTransport(port).exchange(rehearsal,
-                    stopAfterAcknowledgedWord = stopAfterAcknowledgedWord)
-            }
-            val comparison = if (rehearsal.stage == SportIdentSi8OwnerWriteStage.REQUIRES_READBACK) {
-                readbackVerifier.verify(port, rehearsal)
-            } else null
-            check(rehearsal.stage == SportIdentSi8OwnerWriteStage.VERIFIED ||
-                rehearsal.stage == SportIdentSi8OwnerWriteStage.STOPPED) {
-                "The SI-Card8 owner-write transaction did not reach a terminal state."
-            }
-            if (rehearsal.stage == SportIdentSi8OwnerWriteStage.VERIFIED) {
-                recoveryStore.completeVerifiedNative(request, requireNotNull(comparison))
-            }
-            DesktopSportIdentOwnerWriteOutcome(rehearsal.stage, rehearsal.stopReason, comparison, presence)
-        }
-    }
+    fun execute(request: SportIdentOwnerNameWriteRequest): DesktopSportIdentOwnerWriteOutcome =
+        SportIdentOwnerWriteTransaction(
+            withFreshRead = preflight::withFreshRead,
+            recoveryStore = object : SportIdentOwnerWriteRecoveryStore {
+                override fun isClear(): Boolean =
+                    recoveryStore.load() == DesktopSportIdentOwnerRecoveryState.Empty
+
+                override fun begin(
+                    request: SportIdentOwnerNameWriteRequest,
+                    before: SportIdentOwnerReadFixture
+                ) = recoveryStore.beginNative(request, before)
+
+                override fun reserveWordSequence(request: SportIdentOwnerNameWriteRequest) =
+                    recoveryStore.reserveNativeWordSequence(request)
+
+                override fun completeVerified(
+                    request: SportIdentOwnerNameWriteRequest,
+                    comparison: SportIdentSi8OwnerWritePlanComparison
+                ) = recoveryStore.completeVerifiedNative(request, comparison)
+            },
+            checkPresence = presenceProbe::check,
+            isMatchingPresence = {
+                it == DesktopSportIdentCardPresenceResult.MATCHING_BLOCK
+            },
+            exchangeWords = { port, rehearsal ->
+                makeWordTransport(port).exchange(
+                    rehearsal,
+                    stopAfterAcknowledgedWord = stopAfterAcknowledgedWord
+                )
+            },
+            verifyReadback = readbackVerifier::verify,
+            wordCountPolicy = when {
+                experimentalWordCount != null ->
+                    SportIdentOwnerWriteWordCountPolicy.Exact(experimentalWordCount)
+                allowVariableLength -> SportIdentOwnerWriteWordCountPolicy.AnySupportedShape
+                else -> SportIdentOwnerWriteWordCountPolicy.PreviouslyVerifiedDirectShape
+            },
+            onBeforeWordExchange = onBeforeWordExchange
+        ).execute(request)
 }

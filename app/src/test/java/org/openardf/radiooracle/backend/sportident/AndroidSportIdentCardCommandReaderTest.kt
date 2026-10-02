@@ -93,6 +93,27 @@ class AndroidSportIdentCardCommandReaderTest {
     }
 
     @Test
+    fun oneAttemptPresenceProbeDoesNotRetryExpectedNegativeAcknowledgement() {
+        val fixture = Fixture(
+            listOf(
+                listOf(byteArrayOf(SportIdentProtocol.NAK)),
+                listOf(cardBlockReply())
+            )
+        )
+
+        val result = fixture.reader(maxAttempts = 1)
+            .read(COMMAND, byteArrayOf(0), CARD_BLOCK_REPLY_BYTES)
+
+        assertNull(result.reply)
+        assertEquals(1, fixture.writeCount)
+        assertEquals(0, fixture.sleepCount)
+        assertEquals(
+            SportIdentCardReadFailure.NEGATIVE_ACKNOWLEDGEMENT,
+            result.attempts.single().failure
+        )
+    }
+
+    @Test
     fun retriesIncompleteFrameAndRecovers() {
         val reply = cardBlockReply()
         val fixture = Fixture(
@@ -164,7 +185,7 @@ class AndroidSportIdentCardCommandReaderTest {
         var sleepCount = 0
             private set
 
-        fun reader() = AndroidSportIdentCardCommandReader(
+        fun reader(maxAttempts: Int = 3) = AndroidSportIdentCardCommandReader(
             writeCommand = { _, _ ->
                 writeCount++
                 activeChunks = pendingAttempts.removeFirstOrNull() ?: ArrayDeque()
@@ -182,7 +203,7 @@ class AndroidSportIdentCardCommandReaderTest {
             nowMillis = { now },
             attemptTimeoutMillis = 2_000,
             retryDelayMillis = 100,
-            maxAttempts = 3
+            maxAttempts = maxAttempts
         )
     }
 

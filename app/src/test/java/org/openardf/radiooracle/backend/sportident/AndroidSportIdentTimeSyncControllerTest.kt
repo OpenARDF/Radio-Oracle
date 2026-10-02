@@ -118,6 +118,41 @@ class AndroidSportIdentTimeSyncControllerTest {
     }
 
     @Test
+    fun standaloneSleepRequiresConfirmationAndRechecksStationIdentity() {
+        val unconfirmedTransport = FakeTransport()
+        val unconfirmed = controller(unconfirmedTransport, emptyList())
+        assertThrows(IllegalArgumentException::class.java) {
+            unconfirmed.sleepStation(
+                writeEnabled = false,
+                expectedStationSerialNumber = 781234
+            )
+        }
+        assertTrue(unconfirmedTransport.commands.isEmpty())
+
+        val transport = FakeTransport(
+            frame(SportIdentProtocol.PROBE_COMMAND),
+            systemInfoFrame(serial = 781234, stationCode = 45),
+            frame(SportIdentTimeSyncProtocol.POWER_OFF_COMMAND),
+            frame(SportIdentProtocol.PROBE_COMMAND)
+        )
+        val result = controller(transport, emptyList()).sleepStation(
+            writeEnabled = true,
+            expectedStationSerialNumber = 781234
+        )
+
+        assertTrue(result.confirmed)
+        assertEquals(
+            listOf(
+                SportIdentProtocol.PROBE_COMMAND,
+                SportIdentProtocol.GET_SYSTEM_INFO,
+                SportIdentTimeSyncProtocol.POWER_OFF_COMMAND,
+                SportIdentProtocol.PROBE_COMMAND
+            ),
+            transport.commands
+        )
+    }
+
+    @Test
     fun syncWritesAppliesVerifiesAndSleepsBeforeLeavingRemoteMode() {
         val targetTime = LocalDateTime.parse("2026-09-01T10:00:00.500")
         val computerAfter = LocalDateTime.parse("2026-09-01T10:00:00.550")

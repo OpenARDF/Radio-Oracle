@@ -462,25 +462,82 @@ through a fresh independent read.
 `SportIdentSi8OwnerWordWritePlanner` now uses the existing shared card-read
 fixture and name/consent rules to produce an offline plan. It requires a complete
 SI-Card8 read, the requested station and card, exact existing first/last names,
-and raw owner bytes that agree with those parsed names. For now it accepts only
-11- or 12-byte ASCII `first;last;` strings when the existing text is no longer
-than 12 bytes. The 11-byte form is limited to an existing 12-byte name and adds
-the observed `0xEE` twelfth byte. Both produce three-word plans through the
-shared CRC encoder. One test checks all
-three 12-byte frames against the independent Config+ capture. Another replays
-the 11-byte plan into a synthetic pre-write block containing the observed
-residual owner bytes and checks the resulting owner bytes against the paired
-Mac capture's byte pattern; the synthetic punch block remains unchanged.
+and raw owner bytes that agree with those parsed names. It accepts encoded
+`first;last;` text from 2 through 25 bytes, writes only the one through seven
+four-byte words covering the new text, and pads a partial final word with the
+observed `0xEE` value. Independent SDK, Config+, and direct Kotlin captures
+exercise short, three-word, six-word, and seven-word shapes. Tests also replay
+the planned words into complete synthetic card images and require the punch
+block and every unrelated byte to remain unchanged.
 
-The planner has no serial transport call. The experimental desktop CLI now
-uses it; Android programming is not wired. The fixture itself carries no
-freshness or card-presence guarantee; the sender obtains a fresh read and
+The planner has no serial transport call. The desktop CLI and guarded desktop
+and Android product transports now use it. The Android transport is implemented
+behind the existing reader-service mutex with durable recovery, exact-card
+preflight, one-shot word replies, 200 ms pacing, and fresh two-block readback;
+its software, release, and Moto UI gates pass. The fixture itself carries
+no freshness or card-presence guarantee; each sender obtains a fresh read and
 checks card identity.
-The Mac capture supports only one-byte `0xEE` padding in the third word; the
-planner still refuses 10-byte and other unobserved lengths, or a longer existing
-string that could leave trailing bytes. Response/error characterization,
-interruption safety, and further lengths are needed before attempting a direct
-Kotlin hardware write.
+
+### First Android owner-write and recovery validation
+
+On 2026-10-01, a Moto g 5G (2024) running Android 15 connected to SI MASTER
+station 554900 and read spare SI-Card8 2450662 as `Penny` /
+`Popandrolopoulos-J`, with 11 control punches. After exact card, station, names,
+and risk approval, the Android product path received every owner-word reply for
+the requested `Mortimer` / `Mouse` change. The 30-second automatic verification
+window expired during the human-mediated removal and reinsertion, so the durable
+recovery record correctly blocked another write.
+
+A separate fresh removal/insertion read then returned `Mortimer` / `Mouse` and
+the same 11 punches. Recovery accepted the complete card image only after its
+byte-level interruption assessment found it consistent with the recorded write
+prefix and found no unrelated changes, then cleared the durable record. This
+validates the physical Android read, write, and interrupted-write recovery paths;
+it does not yet count as a pass of the automatic in-transaction readback.
+
+The hardware run also showed that removal/insertion events generated just before
+confirmation could remain queued. Android now performs a live matching block-0
+probe, discards older lifecycle events only after that probe, and exposes the
+removal prompt afterward. Its maintenance wait now matches desktop at 60 seconds.
+Software and Moto UI gates pass after the correction. Further reader/card
+combinations and response-error behavior still need characterization before
+treating the direct writer as generally compatible.
+
+A second explicitly approved Android attempt on the same station changed
+SI-Card8 2450663 to `Elmer` / `Fudd`. The card's one control punch was preserved,
+and a later fresh read plus byte-level recovery assessment accepted the intended
+write with no unrelated changes. The in-transaction verification again expired,
+this time because the operator was watching the test conversation rather than
+the Moto and therefore did not see the removal instruction. This remains useful
+recovery evidence, but it is not an automatic-readback pass.
+
+The Card Tools screen now follows a Config+-style automatic read workflow. It
+holds the Android reader-service mutex continuously while visible, consumes card
+insert/remove events itself, and releases the mutex only when the screen closes
+or a guarded write/recovery operation takes over. That prevents maintenance-card
+events from reaching normal race readout and producing a misleading Duplicate
+Card dialog. After a complete read, removing the card retains that session's
+snapshot and enables name editing and Write Names; confirmation then treats the
+next exact-card insertion as the fresh unchanged-card preflight. A colored
+presence indicator and large on-device insert/remove instructions make physical
+timing visible without relying on chat or station beeps. Beep suppression was
+not attempted because no documented transient feedback control for the tested
+USB station has been established; the screen instead states that station beeps
+do not signal read completion.
+
+A third Android run on station 554900 changed SI-Card8 2450663 from `Elmer` /
+`Fudd` to `Elmo` / `Fudder`. This time the operator completed both prompted
+removal/insertion cycles within the transaction. Automatic readback verified
+the new names, preserved the card's one control punch, found no unrelated byte
+changes, and cleared the durable recovery record. After a subsequent automatic
+read and removal, the screen retained the fresh card snapshot with both name
+fields and Write Names enabled. This is the first complete Android product-path
+pass of the write plus automatic in-transaction readback.
+
+The Android entry point is a full-screen SPORTident Tools hub rather than a
+single multi-purpose modal. Station Maintenance, SI Card Tools, and Punch
+History each have their own navigation destination while continuing to share
+the reader service mutex and the same guarded hardware transactions.
 
 The shared planner can now replay its proposed word frames into a copy of a
 complete before-read snapshot and compare all 256 predicted card bytes with an
