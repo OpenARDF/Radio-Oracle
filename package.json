@@ -58,7 +58,7 @@
     "yauzl"
   ],
   "devDependencies": {
-    "jdeploy": "6.1.7"
+    "jdeploy": "6.1.10"
   },
   "jdeploy": {
     "jar": "desktopApp/build/jdeploy/Radio-Oracle-jdeploy.jar",
