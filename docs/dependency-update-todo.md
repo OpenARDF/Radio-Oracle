@@ -95,6 +95,12 @@ Android while giving future desktop work a cleaner shared-code base.
   --native` explicitly to preserve native-app installation after jDeploy 6.1.5
   changed plain `install` to npm-link mode. The update does not remove
   jDeploy's deprecated `shelljs` 0.8, `glob` 7, or `inflight` transitives.
+- Keep the bundled launcher on exact `shelljs` 0.8.5 while the current 0.10
+  line resolves through vulnerable `braces` 3.0.3 and no patched `braces`
+  release exists. jDeploy already requires the compatible 0.8 line, and the
+  existing `brace-expansion` override keeps that line's glob dependency
+  patched. Re-evaluate the pin when ShellJS or `braces` publishes a safe
+  replacement; `npm audit` must remain at zero vulnerabilities.
 - Keep Gradle 9.6 with AGP 9.4 for now. Gradle 9.6 is AGP 9.4's documented
   default and compiles without Gradle deprecations. Gradle 9.8 exposes
   `Configuration.setVisible` deprecations inside AGP 9.4.1, KSP 2.3.12, and
