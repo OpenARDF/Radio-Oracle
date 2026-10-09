@@ -101,11 +101,21 @@ Android while giving future desktop work a cleaner shared-code base.
   existing `brace-expansion` override keeps that line's glob dependency
   patched. Re-evaluate the pin when ShellJS or `braces` publishes a safe
   replacement; `npm audit` must remain at zero vulnerabilities.
-- Keep Gradle 9.6 with AGP 9.4 for now. Gradle 9.6 is AGP 9.4's documented
-  default and compiles without Gradle deprecations. Gradle 9.8 exposes
-  `Configuration.setVisible` deprecations inside AGP 9.4.1, KSP 2.3.12, and
-  Compose tooling, so the exact Gradle 9.8 availability notice remains as the
-  sole lint-baseline entry until those upstream plugins are compatible.
+- Security exception: update Gradle 9.6.0 to 9.8.1 even though AGP 9.4 documents
+  9.6 as its default. Gradle 9.6.0 is affected by
+  [GHSA-mvvg-497x-hmj8](https://github.com/gradle/gradle/security/advisories/GHSA-mvvg-497x-hmj8),
+  [GHSA-xwqc-3h47-hg64](https://github.com/gradle/gradle/security/advisories/GHSA-xwqc-3h47-hg64),
+  and [GHSA-j5m7-59rp-24f5](https://github.com/gradle/gradle/security/advisories/GHSA-j5m7-59rp-24f5).
+  Gradle 9.8.1 is the publicly available patched 9.x release; the 9.6.2
+  backport requires a Gradle Security Subscription.
+- Temporarily waive only the two upstream configuration warnings reproduced by
+  `just gradle --no-daemon --no-configuration-cache --warning-mode all help`:
+  `Configuration.setVisible(boolean)` while configuring `:app`, and Compose
+  Hot Reload's unsupported `HotReloadUsageType` attribute while configuring
+  `:desktopApp`. No
+  Radio-Oracle source uses either API. Remove this waiver as soon as compatible
+  AGP, KSP, and Compose tooling is available; the Hot Reload warning becomes an
+  error in Gradle 10. Any additional Gradle warning remains blocking.
 - Record dependency-update evidence in commit messages or release notes so the
   source development team can see what was changed, what was verified, and what
   remains deferred.
