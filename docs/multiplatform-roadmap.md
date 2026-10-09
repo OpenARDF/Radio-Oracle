@@ -313,12 +313,15 @@ These are deliberate limits in the current app, not necessarily defects.
   checked-in exact baseline so new lint errors and warnings fail immediately;
   do not regenerate the baseline merely to make a new finding pass.
 - Implemented: retired all 27 dependency/tool availability entries after
-  updating them in reviewable compatibility groups. The sole remaining
-  baseline entry is the Gradle 9.8 availability notice: AGP 9.4's documented
-  Gradle 9.6 default is warning-free, while Gradle 9.8 currently exposes
-  upstream `Configuration.setVisible` deprecations in AGP, KSP, and Compose
-  tooling. Remove that final entry once the coupled plugins support 9.8 without
-  introducing replacement warnings.
+  updating them in reviewable compatibility groups. The final Gradle
+  availability entry was removed when the wrapper moved to security-patched
+  Gradle 9.8.1; the checked-in source-lint baseline is now empty.
+- Temporary security waiver: Gradle 9.8.1 still exposes the upstream
+  `Configuration.setVisible(boolean)` and Compose Hot Reload
+  `HotReloadUsageType` warnings. The upgrade is required because Gradle 9.6.0
+  is affected by three high-severity advisories and its patched 9.6.2 backport
+  is subscription-only. Remove this exact two-warning waiver when compatible
+  AGP, KSP, and Compose tooling is available, and before adopting Gradle 10.
 - Review dependency-version availability separately from source lint. Upgrade
   coupled AndroidX, Firebase, Kotlin, and plugin families through the dependency
   maintenance lane instead of mixing them into unrelated lint cleanup.
