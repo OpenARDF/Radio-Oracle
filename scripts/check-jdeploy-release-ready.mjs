@@ -5,6 +5,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { platform, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { describesDirectPushException } from "./release-workflow-policy.mjs";
+
 const expectedPackageName = "@openardf/radio-oracle";
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
@@ -128,7 +130,7 @@ const suspendedProtection =
 if (suspendedProtection.test(releaseWorkflowDocs)) {
   fail("release workflow must not suspend protected-branch requirements");
 }
-if (/direct-push exception.*Development1/isu.test(releaseWorkflowDocs)) {
+if (describesDirectPushException(releaseWorkflowDocs)) {
   fail("release workflow must not create a direct-push exception for Development1");
 }
 requireIncludes(
@@ -350,6 +352,9 @@ execFileSync(process.execPath, ["--test", "scripts/jdeploy-local-smoke.test.mjs"
   stdio: "inherit"
 });
 execFileSync(process.execPath, ["--test", "scripts/publish-jdeploy-github-release.test.mjs"], {
+  stdio: "inherit"
+});
+execFileSync(process.execPath, ["--test", "scripts/release-workflow-policy.test.mjs"], {
   stdio: "inherit"
 });
 
