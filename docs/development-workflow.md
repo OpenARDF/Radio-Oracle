@@ -44,26 +44,29 @@ commit before attempting that push. Do not add a merge commit, force-push, or
 weaken `main` protection to manufacture a release transition. Tag and publish
 the exact commit required by the release checklist.
 
-Radio-Oracle release completion requires `main` and `Development1` to contain
-the exact same tag and release-evidence commits. This is the only controlled
-exception that permits a direct push to `Development1`:
+`Development1` remains the authoritative source for release history. Keep its
+pull-request, status-check, linear-history, force-push, and deletion protections
+enabled throughout the release. Release code and post-publication evidence must
+reach `Development1` through protected pull requests; do not commit release
+evidence directly on `main`.
 
 1. Freeze ordinary merges to `Development1` before fast-forwarding `main`, and
    ensure that no pending pull request has an armed auto-merge request that can
    land during the release. Keep later development queued until synchronization
    finishes.
-2. Finish the normal fast-forward release and evidence commits on `main`.
-3. Keep linear-history, force-push, and deletion protections enabled on
-   `Development1` throughout the synchronization.
-4. Temporarily suspend only `Development1`'s required-pull-request and
-   required-status-check settings.
-5. Fast-forward `Development1` to the exact `main` commit and push it without a
-   merge commit.
-6. Immediately restore the required-pull-request rule and the app-pinned
-   `course-workflow` status check, then read back the protection to verify both
-   settings and the unchanged safety rules before resuming queued merges.
+2. Fast-forward `main` from the protected release candidate on `Development1`,
+   tag that exact candidate, and complete publication and immutable-artifact
+   verification.
+3. Create a post-release evidence topic branch from the tagged `Development1`
+   commit. Add only release-verification records and related documentation, then
+   return it through the normal pull-request and `course-workflow` gate.
+4. After the evidence pull request is merged, fast-forward `main` from
+   `Development1` and push it without moving the release tag.
+5. Fetch both remote refs and verify that `origin/main` and
+   `origin/Development1` resolve to the same final evidence commit before
+   resuming queued merges.
 
 If the branches are not in a fast-forward relationship, stop and reconcile the
-unexpected divergence explicitly before release. Do not treat this exception
-as permission to force-push, merge divergent protected branches, bypass a
-failing gate, or use direct `Development1` pushes for ordinary work.
+unexpected divergence explicitly before release. Do not force-push, merge
+unvalidated development into the release branch, bypass a failing gate, or use
+direct `Development1` pushes for release evidence or ordinary work.
