@@ -371,17 +371,20 @@ The normal deployment sequence follows the protected-branch details in
    and hosted-check gate.
 6. Freeze ordinary `Development1` merges and disarm any pending auto-merge that
    could land before the final branch synchronization.
-7. Fast-forward the validated release state to `main` without weakening
-   `main` protection.
+7. Fast-forward the validated release state from `Development1` to `main`
+   without weakening either branch's protection.
 8. Push the matching `v<version>` tag and let
    `.github/workflows/jdeploy-github-release.yml` publish GitHub release
    installer assets.
 9. Run `.github/workflows/publish-jdeploy.yml` in `publish` mode for the same
    version.
 10. Run `npm run jdeploy:registry-smoke -- <version>`.
-11. Record release evidence on `main`, then use the controlled synchronization
-   procedure to fast-forward `Development1` to the exact same evidence commit.
-12. Restore and read back `Development1` protection, then resume queued merges.
+11. Record release evidence on a topic branch created from the tagged
+   `Development1` commit, then merge its pull request through the required
+   hosted-check gate.
+12. Fast-forward `main` from the final `Development1` evidence commit, verify
+   that both remote branch tips are identical, and resume queued merges without
+   moving the tag or changing branch protection.
 13. Verify that the README's jDeploy install page remains the public desktop
    install link.
 

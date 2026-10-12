@@ -255,6 +255,26 @@ These are deliberate limits in the current app, not necessarily defects.
   `1.0.53a` for the first installable post-1.0.53 test build and then follow the
   established iterative-suffix sequence.
 
+### Release Process Simplification
+
+- After the protected `Development1` release flow has completed at least one
+  full deployment successfully, evaluate consolidating development and releases
+  onto one protected `main` branch with short-lived topic branches. Retain two
+  long-lived branches only if the stable-versus-integration distinction still
+  provides a concrete operational benefit.
+- In the simplified flow, tag the fully tested `main` commit and let GitHub
+  Actions publish it. Keep release notes, workflow links, artifact hashes,
+  registry verification, and platform acceptance summaries in the GitHub
+  Release or immutable release assets instead of adding post-publication
+  evidence commits.
+- Evaluate GitHub artifact attestations for downloadable packages and immutable
+  releases using a draft-first asset upload. Adopt them only after the workflow
+  verifies every required GitHub and npm artifact before publication.
+- Preserve the current Android, desktop, hardware, architecture, warning, and
+  standards-compatibility gates during any branch simplification. Historical
+  tags and release-verification records remain immutable evidence and must not
+  be rewritten to match the new process.
+
 ### Android Native Dependency Maintenance
 
 - Implemented: replaced `firebase-crashlytics-ndk` with ordinary

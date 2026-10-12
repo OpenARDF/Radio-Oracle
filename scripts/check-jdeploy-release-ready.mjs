@@ -5,6 +5,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { platform, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { describesDirectPushException } from "./release-workflow-policy.mjs";
+
 const expectedPackageName = "@openardf/radio-oracle";
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
@@ -16,6 +18,7 @@ const desktopBuildGradle = readFileSync("desktopApp/build.gradle", "utf8");
 const versionCatalog = readFileSync("gradle/libs.versions.toml", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const desktopPrep = readFileSync("docs/desktop-prep.md", "utf8");
+const developmentWorkflow = readFileSync("docs/development-workflow.md", "utf8");
 const npmPublishWorkflow = readFileSync(".github/workflows/publish-jdeploy.yml", "utf8");
 const githubReleaseWorkflow = readFileSync(".github/workflows/jdeploy-github-release.yml", "utf8");
 const windowsDesktopSmokeWorkflow = readFileSync(".github/workflows/windows-desktop-smoke.yml", "utf8");
@@ -119,6 +122,37 @@ function runGradle(args, extraEnv = {}) {
 requireEqual("package name", packageJson.name, expectedPackageName);
 requireEqual("package-lock name", packageLock.name, expectedPackageName);
 requireEqual("package-lock version", packageLock.version, packageJson.version);
+
+// Release evidence must follow the same protected direction as application changes.
+const releaseWorkflowDocs = `${developmentWorkflow}\n${desktopPrep}`;
+const suspendedProtection =
+  /temporar(?:ily|y)\s+(?:suspend|relax|disable).*?(?:protect|required-pull-request|required-status-check)/isu;
+if (suspendedProtection.test(releaseWorkflowDocs)) {
+  fail("release workflow must not suspend protected-branch requirements");
+}
+if (describesDirectPushException(releaseWorkflowDocs)) {
+  fail("release workflow must not create a direct-push exception for Development1");
+}
+requireIncludes(
+  "development release workflow",
+  developmentWorkflow,
+  "`Development1` remains the authoritative source for release history."
+);
+requireIncludes(
+  "development release workflow",
+  developmentWorkflow,
+  "evidence directly on `main`."
+);
+requireIncludes(
+  "desktop release workflow",
+  desktopPrep,
+  "Record release evidence on a topic branch created from the tagged"
+);
+requireIncludes(
+  "desktop release workflow",
+  desktopPrep,
+  "Fast-forward `main` from the final `Development1` evidence commit"
+);
 
 if (!existsSync("icon.png")) {
   fail("icon.png is missing. Restore the baseline jDeploy icon before releasing.");
@@ -318,6 +352,9 @@ execFileSync(process.execPath, ["--test", "scripts/jdeploy-local-smoke.test.mjs"
   stdio: "inherit"
 });
 execFileSync(process.execPath, ["--test", "scripts/publish-jdeploy-github-release.test.mjs"], {
+  stdio: "inherit"
+});
+execFileSync(process.execPath, ["--test", "scripts/release-workflow-policy.test.mjs"], {
   stdio: "inherit"
 });
 
