@@ -71,13 +71,7 @@ object DesktopCoursePointLabelClassifier {
     }
 
     fun sprintFastFoxNumber(name: String): Int? {
-        val compactName = compactCourseName(name).uppercase()
-        val exactMatch = Regex("""^(?:F([1-5])|([1-5])F)$""").matchEntire(compactName)
-        if (exactMatch != null) {
-            return exactMatch.groupValues.drop(1).firstOrNull { it.isNotBlank() }?.toIntOrNull()
-        }
-        val normalized = name.trim().uppercase()
-        return normalized.takeIf { it.contains("FAST") }?.sprintLabelNumber()?.takeIf { it in 1..5 }
+        return ControlRoleLabelRules.sprintFastFoxNumber(name)
     }
 
     private fun normalizedCourseName(name: String): String =
