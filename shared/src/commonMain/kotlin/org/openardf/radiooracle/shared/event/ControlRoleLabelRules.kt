@@ -57,7 +57,8 @@ object ControlRoleLabelRules {
         if (tokenNumber != null) return tokenNumber
         return SPRINT_FAST_WORD_REGEX.find(label)
             ?.groupValues
-            ?.getOrNull(1)
+            ?.drop(1)
+            ?.firstOrNull { it.isNotBlank() }
             ?.toIntOrNull()
     }
 
@@ -107,7 +108,8 @@ object ControlRoleLabelRules {
     private val FOX_NUMBER_LABEL_REGEX = Regex("(?:FOX ?)?(\\d+)")
     private val SPRINT_FAST_FOX_LABEL_REGEX = Regex("(?:(\\d+)F|F(\\d+))")
     private val SPRINT_FAST_FOX_TOKEN_REGEX = Regex("(?:^| )(?:(?:([1-5]) ?F)|(?:F ?([1-5])))(?: |$)")
-    private val SPRINT_FAST_WORD_REGEX = Regex("(?:^| )FAST(?: ?FOX)? ?([1-5])(?: |$)")
+    private val SPRINT_FAST_WORD_REGEX =
+        Regex("(?:^| )(?:(?:FAST(?: ?FOX)? ?([1-5]))|(?:([1-5]) ?FAST(?: ?FOX)?))(?: |$)")
     private val SPECTATOR_LABELS = setOf("S", "SP", "SPEC", "SPECTATOR", "SEP", "SEPARATOR")
     private val BEACON_LABELS = setOf("B", "BB", "M", "MO", "BEACON", "FINISH BEACON")
     private val morseFoxAliases = mapOf(

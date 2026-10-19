@@ -62,6 +62,8 @@ class ControlRoleLabelRulesTest {
         assertEquals(2, ControlRoleLabelRules.sprintFastFoxNumber("Sprint F 2"))
         assertEquals(3, ControlRoleLabelRules.sprintFastFoxNumber("Sprint Fast 3"))
         assertEquals(4, ControlRoleLabelRules.sprintFastFoxNumber("FastFox4"))
+        assertEquals(3, ControlRoleLabelRules.sprintFastFoxNumber("Sprint 3 Fast"))
+        assertEquals(4, ControlRoleLabelRules.sprintFastFoxNumber("4FastFox"))
         assertEquals(ControlPointType.CONTROL, ControlRoleLabelRules.inferredRole("Sprint 1F"))
         assertNull(ControlRoleLabelRules.sprintFastFoxNumber("Sprint 6F"))
         assertNull(ControlRoleLabelRules.sprintFastFoxNumber("Course 15F"))
