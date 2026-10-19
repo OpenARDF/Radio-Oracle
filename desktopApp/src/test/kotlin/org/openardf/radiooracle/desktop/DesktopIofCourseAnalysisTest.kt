@@ -3,10 +3,47 @@ package org.openardf.radiooracle.desktop
 import org.junit.Assert.*
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.*
 import org.openardf.radiooracle.shared.files.*
 
 class DesktopIofCourseAnalysisTest {
+    @Test fun descriptiveFastFoxLabelsKeepTheSpectatorBetweenSprintLoops() {
+        val original = project().let { project ->
+            project.copy(raceData = project.raceData.copy(race = project.raceData.race.copy(raceType = RaceType.SPRINT)))
+        }
+        val mappings = IofCourseControlMappings.prefill(
+            IofXmlImports.courseControlSources(sprintXml()),
+            original
+        ).map { mapping ->
+            when (mapping.sourceId) {
+                "161" -> mapping.copy(publicName = "Sprint 1")
+                "171" -> mapping.copy(publicName = "Sprint 1F")
+                "137" -> mapping.copy(publicName = "Spectator", pointType = ProtectedCourseObjectType.SPECTATOR)
+                "99" -> mapping.copy(publicName = "Beacon", pointType = ProtectedCourseObjectType.BEACON)
+                else -> mapping
+            }
+        }
+        val parsed = IofXmlImports.courseDataWithControlMappings(
+            sprintXml(),
+            original.raceData.race,
+            mappings
+        ).parsedData
+        val imported = EventProjectEditor.importIofCourseData(original, parsed).projectFile
+
+        val result = DesktopIofCourseAnalysis.prepare(
+            imported,
+            imported.raceData.categories.map { it.category.id }.toSet(),
+            null,
+            elevationLookup = { 100.0 }
+        )
+        val controlsById = result.project.raceData.controls.associateBy { it.id }
+        val orderedSiCodes = result.project.raceData.categories.single().category.courseInfo!!.courseObjects
+            .mapNotNull { controlsById[it.id]?.siCode }
+
+        assertEquals(listOf(161, 137, 171, 99), orderedSiCodes)
+    }
+
     @Test fun optionalCondesRouteBendsStayOffByDefaultAndNeverBecomeScoredStationsWhenSelected() {
         val original = project()
         val input = xml().replace("<Control><Id>32</Id>", "<Control><Id>900</Id><Position lat=\"35.0001\" lng=\"-78.9985\"/></Control><Control><Id>32</Id>")
@@ -277,5 +314,23 @@ class DesktopIofCourseAnalysisTest {
         </Course>
         <ClassCourseAssignment><ClassName>W21</ClassName><CourseName>Shared course</CourseName></ClassCourseAssignment>
         <ClassCourseAssignment><ClassName>M21</ClassName><CourseName>Shared course</CourseName></ClassCourseAssignment>
+        </RaceCourseData></CourseData>"""
+
+    private fun sprintXml() = """<CourseData xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0"><Event><Name>Sprint import test</Name></Event><RaceCourseData>
+        <Control type="Start"><Id>S</Id><Position lat="35.0" lng="-79.0"/></Control>
+        <Control><Id>161</Id><Position lat="35.001" lng="-79.001"/></Control>
+        <Control><Id>137</Id><Position lat="35.002" lng="-79.002"/></Control>
+        <Control><Id>171</Id><Position lat="35.003" lng="-79.003"/></Control>
+        <Control><Id>99</Id><Position lat="35.004" lng="-79.004"/></Control>
+        <Control type="Finish"><Id>F</Id><Position lat="35.005" lng="-79.005"/></Control>
+        <Course><Name>Sprint &amp; Controls</Name>
+            <CourseControl type="Start"><Control>S</Control></CourseControl>
+            <CourseControl><Control>161</Control></CourseControl>
+            <CourseControl><Control>137</Control></CourseControl>
+            <CourseControl><Control>171</Control></CourseControl>
+            <CourseControl><Control>99</Control></CourseControl>
+            <CourseControl type="Finish"><Control>F</Control></CourseControl>
+        </Course>
+        <ClassCourseAssignment><ClassName>Sprint &amp; Controls</ClassName><CourseName>Sprint &amp; Controls</CourseName></ClassCourseAssignment>
         </RaceCourseData></CourseData>"""
 }

@@ -221,8 +221,8 @@ class CourseEvaluatorTest {
                 EvaluationControlPoint(161, ControlPointType.CONTROL, label = "1"),
                 EvaluationControlPoint(162, ControlPointType.CONTROL, label = "2"),
                 EvaluationControlPoint(137, ControlPointType.SEPARATOR, scored = false, label = "S"),
-                EvaluationControlPoint(171, ControlPointType.CONTROL, label = "1F"),
-                EvaluationControlPoint(172, ControlPointType.CONTROL, label = "2F"),
+                EvaluationControlPoint(171, ControlPointType.CONTROL, label = "Sprint 1F"),
+                EvaluationControlPoint(172, ControlPointType.CONTROL, label = "Sprint 2F"),
                 EvaluationControlPoint(136, ControlPointType.BEACON, scored = false, label = "B")
             )
         )
@@ -254,11 +254,11 @@ class CourseEvaluatorTest {
                 EvaluationControlPoint(162, ControlPointType.CONTROL, label = "2"),
                 EvaluationControlPoint(172, ControlPointType.CONTROL, label = "2F"),
                 EvaluationControlPoint(163, ControlPointType.CONTROL, label = "3"),
-                EvaluationControlPoint(173, ControlPointType.CONTROL, label = "3F"),
+                EvaluationControlPoint(173, ControlPointType.CONTROL, label = "Sprint 3F"),
                 EvaluationControlPoint(164, ControlPointType.CONTROL, label = "4"),
-                EvaluationControlPoint(174, ControlPointType.CONTROL, label = "4F"),
+                EvaluationControlPoint(174, ControlPointType.CONTROL, label = "Sprint 4F"),
                 EvaluationControlPoint(165, ControlPointType.CONTROL, label = "5"),
-                EvaluationControlPoint(175, ControlPointType.CONTROL, label = "5F"),
+                EvaluationControlPoint(175, ControlPointType.CONTROL, label = "Sprint 5F"),
                 EvaluationControlPoint(136, ControlPointType.BEACON, scored = false, label = "B")
             )
         )

@@ -29,6 +29,7 @@ import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventControlCatalog
 import org.openardf.radiooracle.shared.event.EventRaceData
@@ -355,12 +356,7 @@ object CourseEvaluator {
             normalizedLabel in setOf("B", "BB", "M", "MO", "BEACON", "FINISH BEACON")
 
     private val EvaluationControlPoint.hasSprintFastLabel: Boolean
-        get() {
-            val label = normalizedLabel
-            return label.endsWith("F") && label.dropLast(1).all { it.isDigit() } ||
-                label.startsWith("F") && label.drop(1).all { it.isDigit() } ||
-                label.contains("FAST")
-        }
+        get() = ControlRoleLabelRules.sprintFastFoxNumber(label) != null
 
     private fun EvaluationControlPoint.isSprintFastFoxByCode(): Boolean =
         type == ControlPointType.CONTROL && siCode >= 40

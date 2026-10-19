@@ -56,6 +56,22 @@ class ControlRoleLabelRulesTest {
     }
 
     @Test
+    fun recognizesDescriptiveSprintFastFoxLabelsWithoutOvermatching() {
+        assertEquals(1, ControlRoleLabelRules.sprintFastFoxNumber("Sprint 1F"))
+        assertEquals(5, ControlRoleLabelRules.sprintFastFoxNumber("Sprint F5"))
+        assertEquals(2, ControlRoleLabelRules.sprintFastFoxNumber("Sprint F 2"))
+        assertEquals(3, ControlRoleLabelRules.sprintFastFoxNumber("Sprint Fast 3"))
+        assertEquals(4, ControlRoleLabelRules.sprintFastFoxNumber("FastFox4"))
+        assertEquals(3, ControlRoleLabelRules.sprintFastFoxNumber("Sprint 3 Fast"))
+        assertEquals(4, ControlRoleLabelRules.sprintFastFoxNumber("4FastFox"))
+        assertEquals(ControlPointType.CONTROL, ControlRoleLabelRules.inferredRole("Sprint 1F"))
+        assertNull(ControlRoleLabelRules.sprintFastFoxNumber("Sprint 6F"))
+        assertNull(ControlRoleLabelRules.sprintFastFoxNumber("Course 15F"))
+        assertNull(ControlRoleLabelRules.sprintFastFoxNumber("First floor"))
+        assertNull(ControlRoleLabelRules.sprintFastFoxNumber("Breakfast 3"))
+    }
+
+    @Test
     fun buildsSpecialLabelWithFoxRoleWarning() {
         val warning = ControlRoleLabelRules.mismatchWarning("S", ControlPointType.CONTROL, ControlPointType.SEPARATOR)
 
