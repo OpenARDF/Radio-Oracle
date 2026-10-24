@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.desktop
 
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.prefs.Preferences
 
@@ -56,6 +57,31 @@ fun startupProjectPath(
     lastEventFileStore: DesktopLastEventFileStore = DesktopLastEventFilePreferences
 ): Path? =
     commandLinePath ?: lastEventFileStore.lastEventFile()
+
+/** Startup routing keeps explicit automation paths direct and defers ordinary choices until after splash. */
+data class DesktopStartupPlan(
+    val directOpenPath: Path?,
+    val rememberedChoicePath: Path?,
+    val openWizardAfterSplash: Boolean
+)
+
+fun desktopStartupPlan(
+    commandLinePath: Path?,
+    lastEventFileStore: DesktopLastEventFileStore = DesktopLastEventFilePreferences,
+    isAvailable: (Path) -> Boolean = Files::isRegularFile
+): DesktopStartupPlan {
+    if (commandLinePath != null) {
+        return DesktopStartupPlan(commandLinePath, null, openWizardAfterSplash = false)
+    }
+    val remembered = lastEventFileStore.lastEventFile()
+        ?.takeIf(isAvailable)
+        ?.takeIf { DesktopProjectFilePaths.isOpenableEventFileName(it.fileName.toString()) }
+    return DesktopStartupPlan(
+        directOpenPath = null,
+        rememberedChoicePath = remembered,
+        openWizardAfterSplash = remembered == null
+    )
+}
 
 /** Opens an optional startup Race File path for repeatable desktop smoke runs. */
 fun openStartupProject(

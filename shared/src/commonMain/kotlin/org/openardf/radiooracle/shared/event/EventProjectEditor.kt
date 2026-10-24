@@ -335,6 +335,50 @@ object EventProjectEditor {
         )
     }
 
+    private data class IofCourseSetReplacementState(
+        val categories: MutableList<EventCategoryData>,
+        val activeIds: MutableSet<String>
+    )
+
+    private fun prepareIofCourseSetReplacement(
+        projectFile: EventProjectFile,
+        preview: IofCourseDataPreview,
+        replacedIofCourseIds: Set<String>
+    ): IofCourseSetReplacementState {
+        val existingCourses = projectFile.raceData.categories + projectFile.raceData.courseMappings
+        require(replacedIofCourseIds.all { replacementId -> existingCourses.any { it.category.id == replacementId } }) {
+            "An IOF course selected for replacement no longer exists. Import the file again."
+        }
+        val importedNames = preview.categories.mapTo(mutableSetOf()) {
+            StandardCategoryRules.normalizedCategoryName(it.category.name)
+        }
+        val obsoleteIofCourseIds = existingCourses.filter { existing ->
+            existing.category.id in replacedIofCourseIds &&
+                StandardCategoryRules.normalizedCategoryName(existing.category.name) !in importedNames
+        }.mapTo(mutableSetOf()) { it.category.id }
+        val activeIds = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.id }
+        val categories = existingCourses.mapNotNull { existing ->
+            when {
+                existing.category.id !in obsoleteIofCourseIds -> existing
+                existing.category.id !in activeIds -> null
+                else -> existing.copy(
+                    category = existing.category.copy(
+                        lengthMeters = 0,
+                        climbMeters = 0,
+                        controlPointsString = "",
+                        encryptedIdealOrder = null,
+                        encryptedCourseInfo = null,
+                        idealOrder = null,
+                        courseInfo = null
+                    ),
+                    controlPoints = emptyList(),
+                    publicControlIds = emptyList()
+                )
+            }
+        }.toMutableList()
+        return IofCourseSetReplacementState(categories, activeIds)
+    }
+
     /**
      * Adds an active category and consumes a same-named inactive course mapping when one exists.
      *
@@ -1799,9 +1843,17 @@ object EventProjectEditor {
         )
     }
 
+    /**
+     * Imports one complete IOF CourseData set.
+     *
+     * Desktop supplies [replacedIofCourseIds] from the previously accepted IOF import. Courses
+     * missing from the replacement file are no longer valid: inactive mappings are removed, while
+     * active categories keep their competitors and identity but lose the obsolete course details.
+     */
     fun importIofCourseData(
         projectFile: EventProjectFile,
-        preview: IofCourseDataPreview
+        preview: IofCourseDataPreview,
+        replacedIofCourseIds: Set<String> = emptySet()
     ): IofCourseDataImportOutcome {
         val duplicateImportNames = preview.categories
             .groupBy { StandardCategoryRules.normalizedCategoryName(it.category.name) }
@@ -1815,9 +1867,10 @@ object EventProjectEditor {
             "IOF CourseData preview contains duplicate control IDs."
         }
 
+        val replacementState = prepareIofCourseSetReplacement(projectFile, preview, replacedIofCourseIds)
         var nextCategoryOrder = (projectFile.raceData.categories.maxOfOrNull { it.category.order } ?: -1) + 1
-        val activeIds = projectFile.raceData.categories.map { it.category.id }.toMutableSet()
-        val categories = (projectFile.raceData.categories + projectFile.raceData.courseMappings).toMutableList()
+        val activeIds = replacementState.activeIds
+        val categories = replacementState.categories
         val importedControls = mutableListOf<EventControl>()
         var importedCount = 0
         var updatedCount = 0

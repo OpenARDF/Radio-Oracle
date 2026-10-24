@@ -142,6 +142,26 @@ class DesktopImportPreviewsTest {
     }
 
     @Test
+    fun previewsExistingUnassignedIofCourseAsAnUpdateInsteadOfANewCourse() {
+        val base = projectFile()
+        val inactive = base.raceData.categories.single().copy(
+            category = base.raceData.categories.single().category.copy(id = "course-w21", name = "W21"),
+            controlPoints = emptyList(),
+            publicControlIds = emptyList()
+        )
+        val project = base.copy(raceData = base.raceData.copy(courseMappings = listOf(inactive)))
+        val imported = inactive.copy(
+            category = inactive.category.copy(id = "import-w21", name = "W-21")
+        )
+
+        val preview = DesktopImportPreviews.categoryDataPreview(project, "CourseData.xml", listOf(imported))
+
+        assertEquals(0, preview.addedCount)
+        assertEquals(1, preview.updatedCount)
+        assertTrue(newIofCourseMappingNames(project, listOf(imported)).isEmpty())
+    }
+
+    @Test
     fun previewsControlsCsvChangesAndAffectedCourses() {
         val preview = DesktopImportPreviews.controlsCsvPreview(
             projectFile = projectFile(),

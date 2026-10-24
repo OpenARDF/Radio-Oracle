@@ -1023,8 +1023,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
     onRequestWindowCloseReady: (() -> Unit) -> Unit
 ) {
         ConfigureDesktopWindowMinimumSize()
-        val startupPath = remember(args.toList()) {
-            startupProjectPath(args.firstOrNull()?.let(Path::of))
+        val startupPlan = remember(args.toList()) {
+            desktopStartupPlan(args.firstOrNull()?.let(Path::of))
         }
         val projectSession = remember { DesktopProjectSession(DesktopProjectFiles) }
         val publicResultSitePublisher = remember { DesktopCloudflarePagesPublisher() }
@@ -1033,13 +1033,21 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         val classicRouteAnalysis = remember { ClassicRouteAnalysisUi(appCoroutineScope) }
         val courseDesignUi = remember { DesktopCourseDesignUi() }
         var publishResultsOnly by remember { mutableStateOf(false) }
-        val startupStatus = remember(startupPath) {
-            openStartupProject(projectSession, startupPath, DesktopLastEventFilePreferences::rememberEventFile)
+        val startupStatus = remember(startupPlan.directOpenPath) {
+            openStartupProject(
+                projectSession,
+                startupPlan.directOpenPath,
+                DesktopLastEventFilePreferences::rememberEventFile
+            )
         }
         var projectFile by remember { mutableStateOf(projectSession.currentProject) }
         var projectStatusText by remember { mutableStateOf(startupStatus) }
         var hasUnsavedChanges by remember { mutableStateOf(projectSession.hasUnsavedChanges) }
         var newEventDraftProject by remember { mutableStateOf<EventProjectFile?>(null) }
+        var isStartupDecisionVisible by remember { mutableStateOf(false) }
+        var isNewCompetitionWizardVisible by remember { mutableStateOf(false) }
+        var newCompetitionWizardError by remember { mutableStateOf<String?>(null) }
+        var hasHandledSplashDismiss by remember { mutableStateOf(false) }
         var pendingDirtyProjectAction by remember { mutableStateOf<PendingDirtyProjectAction?>(null) }
         var hasUnsavedEventDefinitionChanges by remember { mutableStateOf(false) }
         var isEventDefinitionSaveDialogVisible by remember { mutableStateOf(false) }
@@ -1628,20 +1636,52 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         }
 
         fun createNewProject() {
-            clearAssignedControlsWarning()
-            lockProtectedCourseOrder()
-            val project = EventProjectFactory.createEmptyProject(
-                raceId = UUID.randomUUID().toString(),
-                raceName = "New Race",
-                startDateTimeIso = DesktopDateTimeText.isoText(DesktopDateTimeText.defaultStartDateTime())
-            )
-            projectSession.newProject(project)
-            newEventDraftProject = project
-            hasUnsavedEventDefinitionChanges = false
-            isEventDefinitionSaveDialogVisible = false
-            syncProjectState()
-            projectStatusText = "New unsaved Race File."
-            DesktopDebugLog.info("EventFile", "Created new unsaved Race File")
+            newCompetitionWizardError = null
+            isNewCompetitionWizardVisible = true
+        }
+
+        fun createNewCompetition(plan: DesktopNewCompetitionPlan) {
+            val acceptedPlan = runCatching { plan.validated() }.getOrElse { error ->
+                newCompetitionWizardError = error.message ?: "Review the competition information."
+                return
+            }
+            val destination = if (acceptedPlan.races.size == 1) {
+                DesktopFileDialogs.chooseSaveProject(raceName = acceptedPlan.races.single().name)
+            } else {
+                val seriesName = requireNotNull(acceptedPlan.seriesName)
+                val defaultFileName = DesktopProjectFilePaths.withSeriesArchiveExtension(
+                    Path.of(DesktopProjectFilePaths.projectFileDisplayStem(DesktopProjectFilePaths.defaultProjectFileName(seriesName)))
+                ).fileName.toString()
+                DesktopFileDialogs.chooseSaveEventSeries(defaultFileName)
+            } ?: return
+
+            runCatching {
+                clearAssignedControlsWarning()
+                lockProtectedCourseOrder()
+                val result = DesktopNewCompetitionCreator.create(
+                    plan = acceptedPlan,
+                    destination = destination,
+                    replaceExisting = Files.exists(destination)
+                )
+                require(openProject(result.openPath)) { "The new competition was created but could not be opened." }
+                DesktopLastEventFilePreferences.rememberEventFile(result.rememberedPath)
+                isNewCompetitionWizardVisible = false
+                newCompetitionWizardError = null
+                projectStatusText = buildString {
+                    append("Created ")
+                    append(result.createdRaceCount)
+                    append(if (result.createdRaceCount == 1) " Race File" else " Race Files and a Series File")
+                    append(" at ${result.rememberedPath.fileName}.")
+                    if (result.warnings.isNotEmpty()) {
+                        append(" ${result.warnings.size} CourseData warning")
+                        append(if (result.warnings.size == 1) "." else "s.")
+                    }
+                }
+                DesktopDebugLog.info("EventFile", projectStatusText)
+            }.onFailure { error ->
+                newCompetitionWizardError = "Creation failed: ${error.message ?: error::class.simpleName}"
+                DesktopDebugLog.error("EventFile", newCompetitionWizardError.orEmpty())
+            }
         }
 
         fun localResultsWebPageUrl(rootUrl: String, eventPath: String?): String =
@@ -5096,20 +5136,20 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         fun applyIofCourseDataImport(
             review: PendingIofCourseDataImportReview,
-            selectedNewCourseMappingNames: Set<String>,
             useRouteBends: Boolean
         ) {
             runCatching {
                 val currentProject = review.transaction.baseProject
-                val selectedData = if (useRouteBends) review.courseData.withCondesRouteBends() else review.courseData
-                val courseDataToImport = selectedData.copy(
-                    categories = selectedIofCourseDataCategories(
-                        projectFile = currentProject,
-                        categories = selectedData.categories,
-                        selectedNewCourseMappingNames = selectedNewCourseMappingNames
-                    )
+                val courseDataToImport = if (useRouteBends) {
+                    review.courseData.withCondesRouteBends()
+                } else {
+                    review.courseData
+                }
+                val outcome = EventProjectEditor.importIofCourseData(
+                    projectFile = currentProject,
+                    preview = courseDataToImport,
+                    replacedIofCourseIds = review.replacement.categoryIds
                 )
-                val outcome = EventProjectEditor.importIofCourseData(currentProject, courseDataToImport)
                 val importedProject = DesktopIofControlMappingReview.refreshSharedNames(currentProject, outcome.projectFile,
                     courseDataToImport.reviewedControlNames, currentProject.courseDataPassword(protectedCoursePassword))
                 val importedSiCodes = courseDataToImport.controlSiCodes()
@@ -6724,7 +6764,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
 
         MenuBar {
             Menu("File") {
-                Item("New Race File", onClick = ::requestNewEventFile)
+                Item("New Race or Series...", onClick = ::requestNewEventFile)
                 Item("Load Race File...", onClick = ::chooseOpenEventFile)
                 Item("Import EventReg Website...", onClick = ::showEventRegImportDialog)
                 Item(
@@ -7398,8 +7438,8 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
         pendingIofCourseDataImportReview?.let { review ->
             IofCourseDataImportReviewDialog(
                 review = review,
-                onImport = { selectedNewCourseMappingNames, useRouteBends ->
-                    applyIofCourseDataImport(review, selectedNewCourseMappingNames, useRouteBends)
+                onImport = { useRouteBends ->
+                    applyIofCourseDataImport(review, useRouteBends)
                 },
                 onCancel = {
                     pendingIofCourseDataImportReview = null
@@ -8178,8 +8218,51 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 closeProject(discardUnsavedChanges = true)
                 newEventDraftProject = null
                 projectStatusText = "New Race File discarded."
+            },
+            onSplashDismissed = {
+                if (!hasHandledSplashDismiss) {
+                    hasHandledSplashDismiss = true
+                    when {
+                        startupPlan.directOpenPath != null -> Unit
+                        startupPlan.rememberedChoicePath != null -> isStartupDecisionVisible = true
+                        startupPlan.openWizardAfterSplash -> isNewCompetitionWizardVisible = true
+                    }
+                }
             }
         )
+
+        if (isStartupDecisionVisible && startupPlan.rememberedChoicePath != null) {
+            DesktopStartupDecisionDialog(
+                previousPath = startupPlan.rememberedChoicePath,
+                errorText = projectStatusText.takeIf { it.startsWith("Open failed:") },
+                onOpenPrevious = {
+                    if (openProject(startupPlan.rememberedChoicePath)) {
+                        isStartupDecisionVisible = false
+                    }
+                },
+                onStartNew = {
+                    isStartupDecisionVisible = false
+                    createNewProject()
+                },
+                onOpenOther = {
+                    DesktopFileDialogs.chooseOpenProject()?.let { path ->
+                        isStartupDecisionVisible = false
+                        openOrImportSelectedEventFile(path)
+                    }
+                }
+            )
+        }
+        if (isNewCompetitionWizardVisible) {
+            DesktopNewCompetitionWizardDialog(
+                creationError = newCompetitionWizardError,
+                onClearCreationError = { newCompetitionWizardError = null },
+                onCreate = ::createNewCompetition,
+                onDismiss = {
+                    isNewCompetitionWizardVisible = false
+                    newCompetitionWizardError = null
+                }
+            )
+        }
         }
         }
 }
@@ -9467,7 +9550,7 @@ private fun IofResultListImportReviewDialog(
 @Composable
 internal fun IofCourseDataImportReviewDialog(
     review: PendingIofCourseDataImportReview,
-    onImport: (selectedNewCourseMappingNames: Set<String>, useRouteBends: Boolean) -> Unit,
+    onImport: (useRouteBends: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
     var useRouteBends by remember(review) { mutableStateOf(review.useRouteBends) }
@@ -9477,9 +9560,6 @@ internal fun IofCourseDataImportReviewDialog(
     } }
     val preview = selectedData.getOrNull()?.let { DesktopImportPreviews.categoryDataPreview(
         review.transaction.baseProject, review.path.fileName.toString(), it.categories) } ?: review.preview
-    var selectedNewCourseMappingNames by remember(review.path, review.newCourseMappingNames) {
-        mutableStateOf(review.newCourseMappingNames.toSet())
-    }
     DesktopAlertDialog(
         onDismissRequest = onCancel,
         title = { Text("Review IOF CourseData Import") },
@@ -9488,6 +9568,7 @@ internal fun IofCourseDataImportReviewDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("File: ${review.path.fileName}")
+                Text(IOF_COURSE_DATA_RACE_WORKFLOW_TEXT)
                 if (hasRouteBendCodes) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(useRouteBends, { useRouteBends = it }, modifier = Modifier.testTag("iof-route-bends"))
@@ -9504,32 +9585,32 @@ internal fun IofCourseDataImportReviewDialog(
                     )
                 }
                 if (review.newCourseMappingNames.isNotEmpty()) {
-                    Text("New categories and courses:")
-                    Text("XML category assignments create categories automatically. Courses without assignments will be listed in Setup → Courses.")
+                    Text("New categories and courses in this complete file:")
+                    Text("All courses are imported together. XML category assignments create categories automatically; courses without assignments are listed in Setup → Courses.")
                     review.newCourseMappingNames.forEach { categoryName ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Checkbox(
-                                checked = categoryName in selectedNewCourseMappingNames,
-                                onCheckedChange = { checked ->
-                                    selectedNewCourseMappingNames = if (checked) {
-                                        selectedNewCourseMappingNames + categoryName
-                                    } else {
-                                        selectedNewCourseMappingNames - categoryName
-                                    }
-                                }
-                            )
-                            val isCategory = review.courseData.categories.any {
-                                it.category.name == categoryName && it.category.id in review.courseData.assignedCategoryIds
-                            }
-                            Text("$categoryName — ${if (isCategory) "category" else "unassigned course"}")
+                        val isCategory = review.courseData.categories.any {
+                            StandardCategoryRules.categoryNamesEquivalent(it.category.name, categoryName) &&
+                                it.category.id in review.courseData.assignedCategoryIds
                         }
+                        Text("$categoryName — ${if (isCategory) "category" else "unassigned course"}")
                     }
                 }
-                Text("Selected new categories/courses: ${selectedNewCourseMappingNames.size}")
+                Text("New categories/courses to add: ${review.newCourseMappingNames.size}")
                 Text("Existing categories/courses to update: ${preview.updatedCount}")
+                if (review.replacement.activeCategoryNamesToClear.isNotEmpty()) {
+                    Text(
+                        text = "Existing categories whose prior IOF course is absent from this complete file will keep their competitors but lose the obsolete course assignment: ${review.replacement.activeCategoryNamesToClear.joinToString()}.",
+                        color = DesktopPalette.Warning,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                if (review.replacement.inactiveCourseNamesToRemove.isNotEmpty()) {
+                    Text(
+                        text = "Prior unassigned IOF courses absent from this complete file will be removed: ${review.replacement.inactiveCourseNamesToRemove.joinToString()}.",
+                        color = DesktopPalette.Warning,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 if (preview.affectedCompetitorCount > 0) {
                     Text("Updated categories currently include ${preview.affectedCompetitorCount} competitor${if (preview.affectedCompetitorCount == 1) "" else "s"}.")
                 }
@@ -9562,14 +9643,14 @@ internal fun IofCourseDataImportReviewDialog(
                     )
                 }
                 Text(
-                    "Existing categories are updated when names match. XML category assignments create active categories; other courses remain available in Setup → Courses. Use Setup → Categories to assign an existing course. Categories missing from the XML are kept. Review the prepared import before accepting it.",
+                    "This file replaces the previously imported IOF course set. Matching categories are updated, unrelated manually created courses are kept, and prior IOF courses missing from this file are removed or cleared as shown above. Review the prepared import before accepting it.",
                     fontSize = 12.sp,
                     color = Color.DarkGray
                 )
             }
         },
         confirmButton = {
-            Button(enabled = selectedData.isSuccess, onClick = { onImport(selectedNewCourseMappingNames, useRouteBends) }) {
+            Button(enabled = selectedData.isSuccess, onClick = { onImport(useRouteBends) }) {
                 ButtonLabel("Review Course Report")
             }
         },
@@ -11323,10 +11404,14 @@ private fun newCategoryCsvCourseMappingNames(
 internal fun newIofCourseMappingNames(
     projectFile: EventProjectFile,
     categories: List<EventCategoryData>
-): List<String> =
-    categories.map { StandardCategoryRules.normalizedCategoryName(it.category.name) }
-        .filterNot(projectFile::hasCategoryImportName)
+): List<String> {
+    val existingNames = (projectFile.raceData.categories + projectFile.raceData.courseMappings).mapTo(mutableSetOf()) {
+        StandardCategoryRules.normalizedCategoryName(it.category.name).courseMappingSelectionKey()
+    }
+    return categories.map { StandardCategoryRules.normalizedCategoryName(it.category.name) }
+        .filterNot { it.courseMappingSelectionKey() in existingNames }
         .distinctBy { it.courseMappingSelectionKey() }
+}
 
 private fun selectedCategoryCsvRows(
     projectFile: EventProjectFile,
@@ -11336,18 +11421,6 @@ private fun selectedCategoryCsvRows(
     val selectedKeys = selectedNewCourseMappingNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
     return rows.filter { row ->
         projectFile.hasCategoryImportName(row.name) || row.name.courseMappingSelectionKey() in selectedKeys
-    }
-}
-
-private fun selectedIofCourseDataCategories(
-    projectFile: EventProjectFile,
-    categories: List<EventCategoryData>,
-    selectedNewCourseMappingNames: Set<String>
-): List<EventCategoryData> {
-    val selectedKeys = selectedNewCourseMappingNames.mapTo(mutableSetOf()) { it.courseMappingSelectionKey() }
-    return categories.filter { categoryData ->
-        projectFile.hasCategoryImportName(categoryData.category.name) ||
-            categoryData.category.name.courseMappingSelectionKey() in selectedKeys
     }
 }
 
@@ -11590,7 +11663,8 @@ internal data class PendingIofCourseDataImportReview(
     val preview: DesktopCategoryCsvImportPreview,
     val deletedControlNames: List<String>,
     val warningLines: List<String>,
-    val useRouteBends: Boolean = false
+    val useRouteBends: Boolean = false,
+    val replacement: DesktopIofCourseSetReplacement = DesktopIofCourseSetReplacement.Empty
 )
 
 private data class PendingStartsCsvImportReview(
@@ -12208,7 +12282,8 @@ private fun RadioOManagerDesktopApp(
     hasEditedUnsavedNewEventFileDraft: Boolean = false,
     onSaveEventFileForNavigation: () -> Boolean = { false },
     onDiscardEventFileChangesForNavigation: () -> Boolean = { false },
-    onDiscardUnsavedNewEventFile: () -> Unit = {}
+    onDiscardUnsavedNewEventFile: () -> Unit = {},
+    onSplashDismissed: () -> Unit = {}
 ) {
     var awardDisplayMode by remember {
         mutableStateOf(DesktopAppSettingsPreferences.awardDisplayMode())
@@ -12362,7 +12437,10 @@ private fun RadioOManagerDesktopApp(
         }
 
         if (isSplashVisible) {
-            RadioOracleSplashScreen(onDismiss = { isSplashVisible = false })
+            RadioOracleSplashScreen(onDismiss = {
+                isSplashVisible = false
+                onSplashDismissed()
+            })
         } else {
             fun applyCourseAnalysisAction(action: CourseAnalysisApplyAction) {
                 val summary = courseAnalysisResult ?: return
@@ -14282,7 +14360,7 @@ private fun SetupSectionWorkspaceContent(
     onUpdateStartDrawSeriesOptimizationLock: (Boolean) -> Unit,
     onDrawStartList: (String, StartDrawOptions) -> Unit
 ) {
-    if (section == DesktopSection.Races && projectFile != null) {
+    if (section in setOf(DesktopSection.Races, DesktopSection.RaceDetails) && projectFile != null) {
         RaceDetailsPanel(
             details = EventRaceDetails.from(projectFile.raceData.race),
             eventFilePath = eventFilePath,
@@ -24435,7 +24513,7 @@ private fun RaceSettingsFields(
             value = timeLimitMinutesDraft,
             onValueChange = onTimeLimitMinutesChange,
             modifier = Modifier.weight(1f),
-            label = { Text("Limit (min.)") }
+            label = { Text("Time limit (minutes)") }
         )
     }
 }
@@ -24467,7 +24545,7 @@ private fun RaceEventFileFolderRow(
 }
 
 @Composable
-private fun DateTimePickerField(
+internal fun DateTimePickerField(
     label: String,
     value: LocalDateTime,
     onValueChange: (LocalDateTime) -> Unit,

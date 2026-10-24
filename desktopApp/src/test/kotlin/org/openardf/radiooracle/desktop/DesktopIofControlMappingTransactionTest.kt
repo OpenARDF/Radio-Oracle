@@ -41,24 +41,45 @@ class DesktopIofControlMappingTransactionTest {
         assertTrue(original.raceData.controls.isEmpty())
     }
 
-    @Test fun partialReimportRefreshesNamesInOtherCoursesWithoutChangingTheirGeometry() {
+    @Test fun completeReimportClearsPriorIofCategoryMissingFromTheNewFile() {
         val initial = imported(DesktopCourseImportAvailabilityTest.project(), xml())
         val original = DesktopIofCourseAnalysis.prepare(initial, initial.raceData.categories.map { it.category.id }.toSet(),
             null, elevationLookup = { 100.0 }).project
         val input = xml().replace("<ClassCourseAssignment><ClassName>W21</ClassName><CourseName>Shared course</CourseName></ClassCourseAssignment>", "")
-        val candidate = imported(original, input, "Fox1")
-        val before = original.raceData.categories.single { it.category.name == "W21" }.category.courseInfo!!
-        val refreshed = DesktopIofControlMappingReview.refreshSharedNames(original, candidate, mapOf(31 to "Fox1"), null)
-        val after = refreshed.raceData.categories.single { it.category.name == "W21" }.category.courseInfo!!
-        assertEquals(before.route, after.route)
-        assertEquals(before.suppliedLegLengths, after.suppliedLegLengths)
-        assertEquals(before.lengthMeters, after.lengthMeters)
-        assertTrue(after.appliedBindings!!.controls.any { it.siCode == 31 && it.label == "Fox1" })
+        val sources = IofXmlImports.validatedCourseControlSources(input, IofXmlSchemaResource.loadBundledSchema())
+        val rows = IofCourseControlMappings.prefill(sources, original).map {
+            if (it.sourceId == "31") it.copy(publicName = "Fox1") else it
+        }
+        val review = DesktopIofControlMappingReview.prepareCourseReview(
+            PendingIofControlMappingReview(Path.of("complete.xml"), DesktopCourseImportTransaction.prepare(original), input, sources, rows),
+            rows,
+            false,
+            null
+        )
+        assertEquals(listOf("W21"), review.replacement.activeCategoryNamesToClear)
+        val candidate = EventProjectEditor.importIofCourseData(
+            original,
+            review.courseData,
+            review.replacement.categoryIds
+        ).projectFile
+        val refreshed = DesktopIofControlMappingReview.refreshSharedNames(
+            original,
+            candidate,
+            review.courseData.reviewedControlNames,
+            null
+        )
+        val missing = refreshed.raceData.categories.single { it.category.name == "W21" }
+        assertTrue(missing.controlPoints.isEmpty())
+        assertNull(missing.category.courseInfo)
+        val retained = refreshed.raceData.categories.single { it.category.name == "M21" }.category.courseInfo!!
+        assertTrue(retained.controlPoints.any { it.label == "Fox1" })
         val prepared = DesktopIofCourseAnalysis.prepare(refreshed,
             refreshed.raceData.categories.filter { it.category.name == "M21" }.map { it.category.id }.toSet(), null,
             elevationLookup = { 100.0 }).project
         ResolvedCourseProjection.courseInfos(prepared.raceData,
-            prepared.raceData.categories.associate { it.category.id to it.category.courseInfo!! })
+            prepared.raceData.categories.mapNotNull { data ->
+                data.category.courseInfo?.let { data.category.id to it }
+            }.toMap())
     }
 
     @Test fun protectedSharedCourseRenameRequiresUnlockAndRetainsProtection() {
@@ -77,5 +98,25 @@ class DesktopIofControlMappingTransactionTest {
         assertNotNull(stored.encryptedCourseInfo)
         assertTrue(stored.storedCourseInfo("fixture-password")!!.appliedBindings!!.controls.any { it.siCode == 31 && it.label == "Fox1" })
         assertEquals(before, EventProjectFileJson.encode(original))
+    }
+
+    @Test fun replacementPlanUsesUnlockedIofProvenanceForEncryptedCourses() {
+        val candidate = imported(DesktopCourseImportAvailabilityTest.project(), xml())
+        val protected = DesktopIofCourseAnalysis.prepare(candidate, candidate.raceData.categories.map { it.category.id }.toSet(),
+            "fixture-password", elevationLookup = { 100.0 }).project
+        val input = xml().replace("<ClassCourseAssignment><ClassName>W21</ClassName><CourseName>Shared course</CourseName></ClassCourseAssignment>", "")
+        val parsed = IofXmlImports.courseData(input, protected.raceData.race).parsedData
+
+        val replacement = DesktopIofControlMappingReview.courseSetReplacement(
+            protected,
+            parsed,
+            "fixture-password"
+        )
+
+        assertEquals(protected.raceData.categories.map { it.category.id }.toSet(), replacement.categoryIds)
+        assertEquals(listOf("W21"), replacement.activeCategoryNamesToClear)
+        assertThrows(IllegalArgumentException::class.java) {
+            DesktopIofControlMappingReview.courseSetReplacement(protected, parsed, null)
+        }
     }
 }

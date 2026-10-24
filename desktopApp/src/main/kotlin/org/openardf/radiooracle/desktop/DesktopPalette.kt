@@ -84,6 +84,7 @@ enum class DesktopSection(val label: String) {
     WorkflowHome("Radio-Oracle"),
     EventFile("Race File"),
     Races("Races"),
+    RaceDetails("Race Details"),
     Categories("Categories"),
     ProtectedCourseOrder("Course Order"),
     Competitors("Competitors"),

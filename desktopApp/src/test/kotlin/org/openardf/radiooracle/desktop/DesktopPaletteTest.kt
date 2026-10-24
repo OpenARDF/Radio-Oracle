@@ -35,6 +35,7 @@ class DesktopPaletteTest {
                 "Radio-Oracle",
                 "Race File",
                 "Races",
+                "Race Details",
                 "Categories",
                 "Course Order",
                 "Competitors",

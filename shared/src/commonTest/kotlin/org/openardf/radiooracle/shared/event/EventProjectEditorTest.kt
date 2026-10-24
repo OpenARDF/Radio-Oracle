@@ -36,6 +36,7 @@ import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 import org.openardf.radiooracle.shared.files.IofXmlImports
+import org.openardf.radiooracle.shared.files.IOF_COURSE_DATA_SOURCE_PREFIX
 import org.openardf.radiooracle.shared.sportident.SportIdentCardHolder
 import org.openardf.radiooracle.shared.sportident.SportIdentCardPunch
 import org.openardf.radiooracle.shared.sportident.SportIdentCardReadout
@@ -46,6 +47,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EventProjectEditorTest {
@@ -1443,6 +1445,64 @@ class EventProjectEditorTest {
         assertEquals(added.controlPoints.map { it.controlId }, added.publicControlIds)
         assertTrue(added.controlPoints.all { it.controlId.isNotBlank() })
         assertEquals(listOf(31, 32, 33, 34), outcome.projectFile.raceData.controls.map { it.siCode })
+    }
+
+    @Test
+    fun completeIofReimportClearsMissingActiveCoursesAndRemovesMissingInactiveCourses() {
+        val original = projectFile()
+        val initial = IofXmlImports.courseData(
+            """
+            <CourseData iofVersion="3.0">
+              <RaceCourseData>
+                <Course><Name>M21 Course</Name><CourseControl type="Control"><Control>31</Control></CourseControl></Course>
+                <Course><Name>W21</Name><CourseControl type="Control"><Control>32</Control></CourseControl></Course>
+                <Course><Name>Orange</Name><CourseControl type="Control"><Control>33</Control></CourseControl></Course>
+                <ClassCourseAssignment><ClassName>M21</ClassName><CourseName>M21 Course</CourseName></ClassCourseAssignment>
+              </RaceCourseData>
+            </CourseData>
+            """.trimIndent(),
+            original.raceData.race
+        ).parsedData
+        val firstImport = EventProjectEditor.importIofCourseData(original, initial).projectFile
+        val competitor = competitorData("comp-1", "Alice", "Runner", category = firstImport.raceData.categories.single().category)
+            .competitorCategory.competitor
+        val withCompetitor = firstImport.copy(raceData = firstImport.raceData.copy(
+            categories = firstImport.raceData.categories.map { it.copy(competitors = listOf(competitor)) },
+            courseMappings = firstImport.raceData.courseMappings + categoryData("manual-course", "Manual").copy(
+                category = category("manual-course", "Manual").copy(
+                    courseInfo = ProtectedCourseInfo(sourceName = "Manual course")
+                )
+            )
+        ))
+        val replacement = IofXmlImports.courseData(
+            """
+            <CourseData iofVersion="3.0">
+              <RaceCourseData>
+                <Course><Name>W21</Name><CourseControl type="Control"><Control>34</Control></CourseControl></Course>
+              </RaceCourseData>
+            </CourseData>
+            """.trimIndent(),
+            original.raceData.race
+        ).parsedData
+        val priorIofIds = (withCompetitor.raceData.categories + withCompetitor.raceData.courseMappings)
+            .filter { it.category.courseInfo?.sourceName?.startsWith(IOF_COURSE_DATA_SOURCE_PREFIX) == true }
+            .mapTo(mutableSetOf()) { it.category.id }
+
+        val outcome = EventProjectEditor.importIofCourseData(withCompetitor, replacement, priorIofIds)
+
+        val retainedCategory = outcome.projectFile.raceData.categories.single()
+        assertEquals("M21", retainedCategory.category.name)
+        assertEquals(listOf(competitor), retainedCategory.competitors)
+        assertTrue(retainedCategory.controlPoints.isEmpty())
+        assertTrue(retainedCategory.publicControlIds.isEmpty())
+        assertEquals(0, retainedCategory.category.lengthMeters)
+        assertNull(retainedCategory.category.courseInfo)
+        assertEquals(setOf("W21", "Manual"), outcome.projectFile.raceData.courseMappings.map { it.category.name }.toSet())
+        assertEquals(listOf(34), outcome.projectFile.raceData.assignedSiCodes(
+            outcome.projectFile.raceData.courseMappings.single { it.category.name == "W21" }
+        ))
+        assertEquals("Manual course", outcome.projectFile.raceData.courseMappings
+            .single { it.category.name == "Manual" }.category.courseInfo?.sourceName)
     }
 
     @Test

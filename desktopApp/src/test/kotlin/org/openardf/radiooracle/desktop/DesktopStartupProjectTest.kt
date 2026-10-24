@@ -91,6 +91,49 @@ class DesktopStartupProjectTest {
     }
 
     @Test
+    fun startupPlanOffersAvailableRememberedFileInsteadOfOpeningIt() {
+        val rememberedPath = Path.of("remembered.roseries")
+
+        val plan = desktopStartupPlan(
+            commandLinePath = null,
+            lastEventFileStore = StartupLastEventFileStore(rememberedPath),
+            isAvailable = { true }
+        )
+
+        assertNull(plan.directOpenPath)
+        assertEquals(rememberedPath, plan.rememberedChoicePath)
+        assertEquals(false, plan.openWizardAfterSplash)
+    }
+
+    @Test
+    fun startupPlanOpensWizardWhenRememberedFileIsUnavailable() {
+        val plan = desktopStartupPlan(
+            commandLinePath = null,
+            lastEventFileStore = StartupLastEventFileStore(Path.of("missing.json")),
+            isAvailable = { false }
+        )
+
+        assertNull(plan.directOpenPath)
+        assertNull(plan.rememberedChoicePath)
+        assertEquals(true, plan.openWizardAfterSplash)
+    }
+
+    @Test
+    fun startupPlanKeepsExplicitCommandLineOpenForAutomation() {
+        val path = Path.of("smoke.json")
+
+        val plan = desktopStartupPlan(
+            commandLinePath = path,
+            lastEventFileStore = StartupLastEventFileStore(Path.of("remembered.json")),
+            isAvailable = { true }
+        )
+
+        assertEquals(path, plan.directOpenPath)
+        assertNull(plan.rememberedChoicePath)
+        assertEquals(false, plan.openWizardAfterSplash)
+    }
+
+    @Test
     fun topBarTextShowsLoadedEventName() {
         val projectFile = projectFile("USA and IARU Region 2 Radio Orienteering 80m Classic")
 

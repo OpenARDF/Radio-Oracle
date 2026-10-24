@@ -1363,7 +1363,7 @@ object DesktopNavigation {
 
     private val workflowDescriptions: Map<DesktopWorkflow, String> = mapOf(
         DesktopWorkflow.Setup to
-            "Use Setup to create or open a Race File, define controls and courses, maintain categories and competitors, and draw or import the start list before competition operations begin.",
+            "Use Setup to create or open a Race File for one continuous competition activity using one format, define its controls and courses, maintain categories and competitors, and draw or import the start list. Use separate Race Files and a Series for multiple races or formats.",
         DesktopWorkflow.RaceOps to
             "Use Race Ops during competition to download SI cards, monitor active competitors, review unmatched readouts, and print finish tickets after setup data is complete.",
         DesktopWorkflow.Series to
@@ -1376,7 +1376,7 @@ object DesktopNavigation {
 
     private val itemDescriptions: Map<String, String> = mapOf(
         "setup.event-file" to
-            "Use Race File to create, open, import, save, close, and inspect race files, including Race Password protection and series protection when a series is open.",
+            "A Race File represents one continuous competition activity using the single format selected here. It may contain multiple courses and categories, but it is not a multi-race event. Use Race File to create, open, import, save, close, and inspect races; use a Series to combine multiple Race Files or formats.",
         "setup.courses" to
             "Review assigned and unassigned course reports, including 2D routes and elevation profiles with control markers. Assign unassigned courses to categories or create categories from them. Manage control definitions in Controls, retrieve elevation data, and import or export course and control files here.",
         "setup.controls" to
@@ -1404,7 +1404,7 @@ object DesktopNavigation {
         "setup.controls.export-gpx" to
             "Use Export GPX to export control and route geometry as standard GPX. A password-locked ZIP is used only when the Race File is encrypted.",
         "setup.controls.import-iof-course-data" to
-            "Use Import IOF CourseData XML to import schema-valid IOF CourseData controls, courses, and course assignments.",
+            "Use Import IOF CourseData XML to import one complete, schema-valid file containing all controls, courses, and category assignments for this race. A corrected re-import replaces the prior IOF course set after review.",
         "setup.controls.export-iof-course-data" to
             "Use Export IOF CourseData XML to write schema-valid IOF CourseData from Radio-Oracle controls, courses, and course assignments.",
         "setup.controls.export-course-overlays" to
@@ -1592,9 +1592,11 @@ object DesktopNavigation {
         "settings.about" to
             "Use About Radio-Oracle to view the app version, project identity, and maintainer information.",
         "setup.event-file.new" to
-            "Create a race, import courses, then add or assign categories in Setup → Categories. Course Analyzer is optional.",
+            "Use the guided setup to create one Race File or a named Series of Race Files, optionally starting from IOF 3.0 CourseData.",
         "setup.event-file.open" to
             "Use Load Race File to open a desktop Race File or import an Android Race File by file extension.",
+        "setup.event-file.race-details" to
+            "Use Edit Race Details to change the open race's name, Race File name, start date/time, competition format, competition type, band, and time limit.",
         "setup.event-file.import-eventreg" to
             "Use Import EventReg Website to create race files from EventReg website exports.",
         "setup.event-file.import-google-sheet" to
@@ -1665,7 +1667,7 @@ object DesktopNavigation {
         listOf(
             action(
                 "setup.event-file.new",
-                "New Race File",
+                "New Race or Series...",
                 workflow,
                 DesktopNavAction.NewEventFile,
                 requiresEventFile = false,
@@ -1677,6 +1679,12 @@ object DesktopNavigation {
                 workflow,
                 DesktopNavAction.OpenEventFile,
                 requiresEventFile = false
+            ),
+            item(
+                "setup.event-file.race-details",
+                "Edit Race Details",
+                workflow,
+                DesktopSection.RaceDetails
             ),
             action(
                 "setup.event-file.import-eventreg",
@@ -1694,37 +1702,7 @@ object DesktopNavigation {
                 requiresEventFile = false,
                 section = DesktopSection.Races
             ),
-            group(
-                "setup.event-file.android",
-                "Android...",
-                workflow,
-                listOf(
-                    action(
-                        "setup.event-file.send-android",
-                        "Send Race To Android",
-                        workflow,
-                        DesktopNavAction.SendEventFileToAndroid,
-                        section = DesktopSection.EventFile
-                    ),
-                    action(
-                        "setup.event-file.receive-android",
-                        "Receive File From Android",
-                        workflow,
-                        DesktopNavAction.ReceiveFileFromAndroid,
-                        requiresEventFile = false,
-                        section = DesktopSection.Races
-                    ),
-                    action(
-                        "setup.event-file.export-android",
-                        "Save Android Race File...",
-                        workflow,
-                        DesktopNavAction.ExportAndroidRaceBackupJson,
-                        section = DesktopSection.EventFile
-                    )
-                ),
-                DesktopSection.EventFile,
-                requiresEventFile = false
-            ),
+            eventFileAndroidActions(workflow),
             group(
                 "setup.event-file.settings",
                 "Settings",
@@ -1810,6 +1788,38 @@ object DesktopNavigation {
             action("setup.event-file.save", "Save Race", workflow, DesktopNavAction.SaveEventFile),
             action("setup.event-file.close", "Close Race File", workflow, DesktopNavAction.CloseEventFile)
         )
+
+    private fun eventFileAndroidActions(workflow: DesktopWorkflow): DesktopNavItem = group(
+        "setup.event-file.android",
+        "Android...",
+        workflow,
+        listOf(
+            action(
+                "setup.event-file.send-android",
+                "Send Race To Android",
+                workflow,
+                DesktopNavAction.SendEventFileToAndroid,
+                section = DesktopSection.EventFile
+            ),
+            action(
+                "setup.event-file.receive-android",
+                "Receive File From Android",
+                workflow,
+                DesktopNavAction.ReceiveFileFromAndroid,
+                requiresEventFile = false,
+                section = DesktopSection.Races
+            ),
+            action(
+                "setup.event-file.export-android",
+                "Save Android Race File...",
+                workflow,
+                DesktopNavAction.ExportAndroidRaceBackupJson,
+                section = DesktopSection.EventFile
+            )
+        ),
+        DesktopSection.EventFile,
+        requiresEventFile = false
+    )
 
     private fun sportIdentTools(workflow: DesktopWorkflow): DesktopNavItem = group(
         "setup.tools.sportident", "SPORTident", workflow,
