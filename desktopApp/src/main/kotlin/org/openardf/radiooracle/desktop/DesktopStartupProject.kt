@@ -83,6 +83,28 @@ fun desktopStartupPlan(
     )
 }
 
+/** Resolves a Race Series container or manifest to the Race File that should open. */
+fun desktopEventProjectPathToOpen(path: Path): Path =
+    when {
+        DesktopProjectFilePaths.isEventSeriesArchiveName(path.fileName.toString()) -> {
+            val workspace = DesktopEventSeriesArchiveWorkspaces.open(path)
+            DesktopEventSeriesActions.eventPathToOpenFromManifest(
+                store = DesktopEventSeriesFiles,
+                manifestPath = workspace.manifestPath,
+                lastSeriesEventStore = DesktopLastSeriesEventPreferences
+            )
+        }
+
+        DesktopProjectFilePaths.isEventSeriesManifestName(path.fileName.toString()) ->
+            DesktopEventSeriesActions.eventPathToOpenFromManifest(
+                store = DesktopEventSeriesFiles,
+                manifestPath = path,
+                lastSeriesEventStore = DesktopLastSeriesEventPreferences
+            )
+
+        else -> path
+    }
+
 /** Opens an optional startup Race File path for repeatable desktop smoke runs. */
 fun openStartupProject(
     session: DesktopProjectSession,
@@ -94,25 +116,7 @@ fun openStartupProject(
     }
 
     return runCatching {
-        val openPath = when {
-            DesktopProjectFilePaths.isEventSeriesArchiveName(path.fileName.toString()) -> {
-                val workspace = DesktopEventSeriesArchiveWorkspaces.open(path)
-                DesktopEventSeriesActions.eventPathToOpenFromManifest(
-                    store = DesktopEventSeriesFiles,
-                    manifestPath = workspace.manifestPath,
-                    lastSeriesEventStore = DesktopLastSeriesEventPreferences
-                )
-            }
-
-            DesktopProjectFilePaths.isEventSeriesManifestName(path.fileName.toString()) ->
-                DesktopEventSeriesActions.eventPathToOpenFromManifest(
-                    store = DesktopEventSeriesFiles,
-                    manifestPath = path,
-                    lastSeriesEventStore = DesktopLastSeriesEventPreferences
-                )
-
-            else -> path
-        }
+        val openPath = desktopEventProjectPathToOpen(path)
         session.open(openPath)
         onOpened(path)
         if (openPath == path) {

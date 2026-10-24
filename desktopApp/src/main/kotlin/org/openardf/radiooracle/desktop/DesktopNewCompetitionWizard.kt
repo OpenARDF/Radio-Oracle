@@ -64,6 +64,7 @@ import org.openardf.radiooracle.shared.files.IofXmlImports
 import org.openardf.radiooracle.shared.files.IofXmlSchemaResource
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.util.UUID
@@ -703,13 +704,17 @@ private fun defaultWizardRace(
         startDateTime = startDateTime
     )
 
-private fun org.openardf.radiooracle.shared.files.IofCourseDataRaceMetadata.startDateTimeOrDefault(): LocalDateTime {
-    val iso = startDate?.let { date -> startTime?.let { time -> "${date}T$time" } }
+internal fun org.openardf.radiooracle.shared.files.IofCourseDataRaceMetadata.startDateTimeOrDefault(
+    defaultValue: LocalDateTime = DesktopDateTimeText.defaultStartDateTime()
+): LocalDateTime {
+    val parsedDate = startDate?.let { text -> runCatching { LocalDate.parse(text) }.getOrNull() }
+        ?: return defaultValue
+    val iso = startTime?.let { time -> "${startDate}T$time" }
     return iso?.let { text ->
         runCatching { LocalDateTime.parse(text) }.getOrNull()
             ?: runCatching { OffsetDateTime.parse(text).toLocalDateTime() }.getOrNull()
     }
-        ?: DesktopDateTimeText.defaultStartDateTime()
+        ?: LocalDateTime.of(parsedDate, defaultValue.toLocalTime())
 }
 
 private fun DesktopWizardRace.runCatchingValid(validation: (String?) -> Unit = {}): Boolean =

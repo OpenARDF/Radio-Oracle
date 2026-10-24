@@ -32,6 +32,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.openardf.radiooracle.shared.domain.RaceLevel
+import org.openardf.radiooracle.shared.files.IofCourseDataRaceMetadata
 
 class DesktopNewCompetitionWizardTest {
     @After
@@ -94,6 +95,23 @@ class DesktopNewCompetitionWizardTest {
         assertEquals(listOf("race-1", "race-2"), workspace.archive.membersBySeriesEventId.keys.toList())
         assertTrue(workspace.archive.membersBySeriesEventId.values.all { it.seriesLink?.seriesId == "series-1" })
         assertEquals(workspace.memberPaths.first(), result.openPath)
+    }
+
+    @Test
+    fun preservesImportedRaceDateWhenStartTimeIsOmitted() {
+        val fallback = LocalDateTime.of(2026, 10, 24, 15, 30)
+        val metadata = IofCourseDataRaceMetadata(
+            raceNumber = 1,
+            name = "Classic",
+            startDate = "2027-06-12",
+            startTime = null,
+            classification = null
+        )
+
+        assertEquals(
+            LocalDateTime.of(2027, 6, 12, 15, 30),
+            metadata.startDateTimeOrDefault(fallback)
+        )
     }
 
     private fun race(

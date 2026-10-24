@@ -1618,6 +1618,21 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
             }.isSuccess
         }
 
+        fun openRememberedCompetition(path: Path): Boolean =
+            runCatching { desktopEventProjectPathToOpen(path) }.fold(
+                onSuccess = { openPath ->
+                    openProject(openPath).also { opened ->
+                        // Preserve the user-selected series container, rather than replacing it with one member.
+                        if (opened) DesktopLastEventFilePreferences.rememberEventFile(path)
+                    }
+                },
+                onFailure = { error ->
+                    projectStatusText = "Open failed: ${error.message ?: error::class.simpleName}"
+                    DesktopDebugLog.error("EventFile", projectStatusText)
+                    false
+                }
+            )
+
         fun closeProject(discardUnsavedChanges: Boolean = false) {
             runCatching {
                 clearAssignedControlsWarning()
@@ -8236,7 +8251,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 previousPath = startupPlan.rememberedChoicePath,
                 errorText = projectStatusText.takeIf { it.startsWith("Open failed:") },
                 onOpenPrevious = {
-                    if (openProject(startupPlan.rememberedChoicePath)) {
+                    if (openRememberedCompetition(startupPlan.rememberedChoicePath)) {
                         isStartupDecisionVisible = false
                     }
                 },
