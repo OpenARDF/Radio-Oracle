@@ -37,6 +37,8 @@ import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 
 private const val IOF_VERSION = "3.0"
+/** Stable provenance marker used to distinguish replaceable IOF courses from manually authored courses. */
+const val IOF_COURSE_DATA_SOURCE_PREFIX = "IOF CourseData:"
 
 /** Severity for schema-valid IOF data that Radio-Oracle cannot fully represent yet. */
 enum class IofXmlImportSeverity {
@@ -85,6 +87,21 @@ data class IofCourseDataPreview(
 }
 
 typealias IofCourseDataImportResult = IofXmlImportResult<IofCourseDataPreview>
+
+/** Standard IOF event/race metadata that can seed the new-competition wizard. */
+data class IofCourseDataRaceMetadata(
+    val raceNumber: Int?,
+    val name: String,
+    val startDate: String?,
+    val startTime: String?,
+    val classification: String?
+)
+
+/** Event metadata plus the explicit race-to-RaceCourseData mapping in one CourseData message. */
+data class IofCourseDataCompetitionMetadata(
+    val eventName: String,
+    val races: List<IofCourseDataRaceMetadata>
+)
 
 private data class ParsedIofCourse(
     val categoryData: EventCategoryData,
@@ -202,6 +219,65 @@ object IofXmlImports {
         return parsedCourseData(xml, race, idFactory)
     }
 
+    /**
+     * Reads the standard Event/Race and RaceCourseData relationship without guessing from names.
+     * Multi-race CourseData must use the IOF raceNumber attributes to identify every course block.
+     */
+    fun validatedCourseDataCompetitionMetadata(
+        xml: String,
+        iofSchema: String
+    ): IofCourseDataCompetitionMetadata {
+        requireValidImportXml(xml, iofSchema, expectedRoot = "CourseData")
+        val root = parseXml(xml)
+        val event = requireNotNull(root.child("Event")) {
+            "CourseData does not contain Event metadata."
+        }
+        val eventName = event.childText("Name").orEmpty().trim()
+        require(eventName.isNotBlank()) { "CourseData Event name is missing." }
+        val eventStart = event.child("StartTime")
+        val eventClassification = event.childText("Classification")
+        val eventRaces = event.children("Race").associateBy { raceNode ->
+            raceNode.childText("RaceNumber")?.toIntOrNull()
+                ?: throw IofXmlImportException("CourseData Event/Race is missing a numeric RaceNumber.")
+        }
+        require(eventRaces.size == event.children("Race").size) {
+            "CourseData Event contains duplicate RaceNumber values."
+        }
+        val blocks = root.children("RaceCourseData")
+        require(blocks.isNotEmpty()) { "CourseData does not contain RaceCourseData." }
+        val isMultiRace = blocks.size > 1
+        val descriptors = blocks.mapIndexed { index, block ->
+            val raceNumber = block.attribute("raceNumber")?.toIntOrNull()
+            if (isMultiRace) {
+                require(raceNumber != null) {
+                    "CourseData RaceCourseData[${index + 1}] needs raceNumber for a multi-race event."
+                }
+            }
+            val raceNode = raceNumber?.let { number ->
+                requireNotNull(eventRaces[number]) {
+                    "CourseData raceNumber $number does not match an Event/Race RaceNumber."
+                }
+            } ?: eventRaces.values.singleOrNull()
+            val raceStart = raceNode?.child("StartTime") ?: eventStart
+            IofCourseDataRaceMetadata(
+                raceNumber = raceNumber,
+                name = raceNode?.childText("Name")?.trim().takeUnless { it.isNullOrBlank() } ?: eventName,
+                startDate = raceStart?.childText("Date"),
+                startTime = raceStart?.childText("Time"),
+                classification = raceNode?.childText("Classification") ?: eventClassification
+            )
+        }
+        require(descriptors.mapNotNull { it.raceNumber }.distinct().size == descriptors.mapNotNull { it.raceNumber }.size) {
+            "CourseData contains duplicate RaceCourseData raceNumber values."
+        }
+        if (eventRaces.size > 1) {
+            require(descriptors.mapNotNull { it.raceNumber }.toSet() == eventRaces.keys) {
+                "CourseData Event/Race entries must each have one matching RaceCourseData raceNumber."
+            }
+        }
+        return IofCourseDataCompetitionMetadata(eventName = eventName, races = descriptors)
+    }
+
     /** Uses the existing XML parser and course conversion after a complete mapping review. */
     fun courseDataWithControlMappings(
         xml: String,
@@ -253,7 +329,8 @@ object IofXmlImports {
         xml: String,
         race: EventRace,
         idFactory: (String) -> String,
-        mappings: Map<String, IofCourseControlMapping>? = null
+        mappings: Map<String, IofCourseControlMapping>? = null,
+        raceNumber: Int? = null
     ): IofCourseDataImportResult {
         val root = parseXml(xml)
         requireRoot(root, "CourseData")
@@ -261,10 +338,14 @@ object IofXmlImports {
         val event = root.child("Event")
         val startTime = event?.child("StartTime")
         val raceCourseDataElements = root.children("RaceCourseData")
-        val raceCourseData = raceCourseDataElements.firstOrNull()
+        val raceCourseData = if (raceNumber == null) {
+            raceCourseDataElements.firstOrNull()
+        } else {
+            raceCourseDataElements.singleOrNull { it.attribute("raceNumber")?.toIntOrNull() == raceNumber }
+        }
             ?: throw IofXmlImportException("CourseData does not contain RaceCourseData.")
 
-        if (raceCourseDataElements.size > 1) {
+        if (raceNumber == null && raceCourseDataElements.size > 1) {
             warnings += IofXmlUnsupportedItem(
                 messageType = "CourseData",
                 location = "/CourseData/RaceCourseData[2]",
@@ -337,6 +418,18 @@ object IofXmlImports {
     ): IofCourseDataImportResult {
         requireValidImportXml(xml, iofSchema, expectedRoot = "CourseData")
         return courseData(xml, race, idFactory)
+    }
+
+    /** Validates and parses the RaceCourseData block explicitly identified by IOF raceNumber. */
+    fun validatedCourseDataRace(
+        xml: String,
+        iofSchema: String,
+        race: EventRace,
+        raceNumber: Int,
+        idFactory: (String) -> String = { seed -> seed.stableIofId() }
+    ): IofCourseDataImportResult {
+        requireValidImportXml(xml, iofSchema, expectedRoot = "CourseData")
+        return parsedCourseData(xml, race, idFactory, raceNumber = raceNumber)
     }
 
     private fun XmlNode.warnUnsupportedChildren(
@@ -622,7 +715,7 @@ object IofXmlImports {
             } else warnings += IofXmlUnsupportedItem("CourseData", "/Course/$courseName/$code",
                 "Geographic coordinates are missing or invalid for $code; route analysis needs latitude and longitude.")
         }
-        val info = ProtectedCourseInfo(sourceName = "IOF CourseData: $courseName",
+        val info = ProtectedCourseInfo(sourceName = "$IOF_COURSE_DATA_SOURCE_PREFIX $courseName",
             lengthMeters = childText("Length")?.toDoubleOrNull()?.roundToInt(),
             climbMeters = childText("Climb")?.toDoubleOrNull()?.roundToInt(),
             route = objects.map { ProtectedCourseRoutePoint(it.latitude, it.longitude, it.elevationMeters) },

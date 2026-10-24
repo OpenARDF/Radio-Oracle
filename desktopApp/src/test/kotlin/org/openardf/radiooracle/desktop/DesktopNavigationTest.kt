@@ -34,8 +34,9 @@ import org.openardf.radiooracle.shared.domain.RaceType
 
 class DesktopNavigationTest {
     private val eventFileMenuLabels = listOf(
-        "New Race File",
+        "New Race or Series...",
         "Load Race File...",
+        "Edit Race Details",
         "Import EventReg Website...",
         "Import Google Sheet...",
         "Android...",
@@ -619,7 +620,7 @@ class DesktopNavigationTest {
 
         assertEquals("setup.event-file.new", completedState.selectedItemId)
         assertEquals(DesktopSection.Races, completedState.selectedSection)
-        assertEquals("Setup > Race File > New Race File", DesktopNavigation.breadcrumb(completedState))
+        assertEquals("Setup > Race File > New Race or Series...", DesktopNavigation.breadcrumb(completedState))
         assertEquals(emptyList<String>(), DesktopNavigation.currentItems(completedState).map { it.label })
     }
 
@@ -730,6 +731,7 @@ class DesktopNavigationTest {
 
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.NewEventFile }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.OpenEventFile }.requiresEventFile)
+        assertTrue(eventFileActions.first { it.label == "Edit Race Details" }.requiresEventFile)
         assertFalse(eventFileActions.first { it.action == DesktopNavAction.ImportEventRegWebsite }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.SaveEventFile }.requiresEventFile)
         assertTrue(eventFileActions.first { it.action == DesktopNavAction.CloseEventFile }.requiresEventFile)
@@ -1302,6 +1304,22 @@ class DesktopNavigationTest {
     }
 
     @Test
+    fun editRaceDetailsSelectsExistingRaceEditor() {
+        val eventFileState = DesktopNavState().enter(
+            DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
+        )
+        val editRaceDetails = DesktopNavigation.currentItems(eventFileState)
+            .first { it.label == "Edit Race Details" }
+
+        val state = eventFileState.enter(editRaceDetails)
+
+        assertEquals(DesktopSection.RaceDetails, state.selectedSection)
+        assertEquals("setup.event-file.race-details", state.selectedItemId)
+        assertEquals("Setup > Race File > Edit Race Details", DesktopNavigation.breadcrumb(state))
+        assertTrue(DesktopNavigation.selectedDescription(state).contains("start date/time"))
+    }
+
+    @Test
     fun newEventFileActionSelectsEventDetailsWorkspaceForImmediateEditing() {
         val eventFileState = DesktopNavState().enter(
             DesktopNavigation.rootItems(DesktopWorkflow.Setup).first { it.label == "Race File" }
@@ -1313,7 +1331,7 @@ class DesktopNavigationTest {
 
         assertEquals(DesktopSection.Races, state.selectedSection)
         assertEquals("setup.event-file.new", state.selectedItemId)
-        assertEquals("Setup > Race File > New Race File", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Race File > New Race or Series...", DesktopNavigation.breadcrumb(state))
         assertEquals(emptyList<String>(), DesktopNavigation.currentItems(state).map { it.label })
     }
 
@@ -1341,10 +1359,10 @@ class DesktopNavigationTest {
         ).state
         val state = DesktopNavigation.selectItem(
             eventFileState,
-            DesktopNavigation.currentItems(eventFileState).first { it.label == "New Race File" }
+            DesktopNavigation.currentItems(eventFileState).first { it.label == "New Race or Series..." }
         ).state
 
-        assertEquals("Setup > Race File > New Race File", DesktopNavigation.breadcrumb(state))
+        assertEquals("Setup > Race File > New Race or Series...", DesktopNavigation.breadcrumb(state))
         assertEquals(emptyList<String>(), DesktopNavigation.currentItems(state).map { it.label })
 
         val backState = state.back()

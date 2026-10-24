@@ -10,6 +10,9 @@ import androidx.compose.ui.unit.dp
 import org.openardf.radiooracle.shared.files.*
 import org.openardf.radiooracle.shared.event.*
 
+internal const val IOF_COURSE_DATA_RACE_WORKFLOW_TEXT =
+    "A Race File represents one race: one continuous competition activity using the single competition format selected under Setup → Race File. A race may contain multiple courses and support multiple categories. Import one complete IOF CourseData XML file containing all courses for this race. Use separate Race Files and a Series for a multi-race or multi-format event."
+
 /** The selected XML bytes are frozen for review; nothing is written to the race at this stage. */
 internal data class PendingIofControlMappingReview(
     val path: Path,
@@ -19,7 +22,18 @@ internal data class PendingIofControlMappingReview(
     val mappings: List<IofCourseControlMapping>
 )
 
-/** Reuse the accepted-course catalog refresher when a shared control is renamed by import. */
+/** Prior IOF-owned course state that a reviewed complete-file import will replace. */
+internal data class DesktopIofCourseSetReplacement(
+    val categoryIds: Set<String>,
+    val activeCategoryNamesToClear: List<String>,
+    val inactiveCourseNamesToRemove: List<String>
+) {
+    companion object {
+        val Empty = DesktopIofCourseSetReplacement(emptySet(), emptyList(), emptyList())
+    }
+}
+
+/** Coordinates the reviewed, complete-file IOF import before the transactional report stage. */
 internal object DesktopIofControlMappingReview {
     fun prepareCourseReview(review: PendingIofControlMappingReview, mappings: List<IofCourseControlMapping>,
                             useRouteBends: Boolean, password: String?): PendingIofCourseDataImportReview {
@@ -30,8 +44,9 @@ internal object DesktopIofControlMappingReview {
             mappings, useRouteBends)
         val warningLines = iofWarningLines(parsed.unsupportedItems)
         val importedSiCodes = parsed.parsedData.controlSiCodes()
+        val replacement = courseSetReplacement(currentProject, parsed.parsedData, password)
         val previewImportProject = DesktopIofControlMappingReview.refreshSharedNames(currentProject,
-            EventProjectEditor.importIofCourseData(currentProject, parsed.parsedData).projectFile,
+            EventProjectEditor.importIofCourseData(currentProject, parsed.parsedData, replacement.categoryIds).projectFile,
             parsed.parsedData.reviewedControlNames, password)
         val previewImportedControlIds = previewImportProject.raceData.controls
             .filter { it.siCode in importedSiCodes }
@@ -51,7 +66,32 @@ internal object DesktopIofControlMappingReview {
             ),
             deletedControlNames = deletedControlNames,
             warningLines = warningLines,
-            useRouteBends = useRouteBends
+            useRouteBends = useRouteBends,
+            replacement = replacement
+        )
+    }
+
+    fun courseSetReplacement(
+        projectFile: EventProjectFile,
+        courseData: IofCourseDataPreview,
+        password: String?
+    ): DesktopIofCourseSetReplacement {
+        val importedNames = courseData.categories.mapTo(mutableSetOf()) {
+            StandardCategoryRules.normalizedCategoryName(it.category.name)
+        }
+        val activeIds = projectFile.raceData.categories.mapTo(mutableSetOf()) { it.category.id }
+        // Source provenance prevents a complete IOF replacement from deleting manually authored courses.
+        val priorIofCourses = (projectFile.raceData.categories + projectFile.raceData.courseMappings).filter { data ->
+            data.category.storedCourseInfo(password)?.sourceName
+                ?.startsWith(IOF_COURSE_DATA_SOURCE_PREFIX, ignoreCase = true) == true
+        }
+        val missing = priorIofCourses.filter { data ->
+            StandardCategoryRules.normalizedCategoryName(data.category.name) !in importedNames
+        }
+        return DesktopIofCourseSetReplacement(
+            categoryIds = priorIofCourses.mapTo(mutableSetOf()) { it.category.id },
+            activeCategoryNamesToClear = missing.filter { it.category.id in activeIds }.map { it.category.name }.sorted(),
+            inactiveCourseNamesToRemove = missing.filterNot { it.category.id in activeIds }.map { it.category.name }.sorted()
         )
     }
 
@@ -111,6 +151,7 @@ internal fun IofControlMappingReviewDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("File: ${review.path.fileName}")
+                Text(IOF_COURSE_DATA_RACE_WORKFLOW_TEXT)
                 Text("Review every point before continuing. Names, roles and SI codes are prefilled from the XML and existing race controls; correct any mistakes. One mapping is used by every course that references the same XML Id.")
                 if (review.sources.any { it.id.toIntOrNull() in 900..999 }) {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {

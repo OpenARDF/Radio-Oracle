@@ -1004,11 +1004,11 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectReportsNewEventFileAction() {
-        val result = runAutomation("nav-select", "Race File > New Race File")
+        val result = runAutomation("nav-select", "Race File > New Race or Series...")
 
         assertEquals(0, result.exitCode)
         assertTrue(result.stdout.contains("\"command\":\"nav-select\""))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File > New Race File\""))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File > New Race or Series...\""))
         assertTrue(result.stdout.contains("\"selectedSection\":\"Races\""))
         assertTrue(result.stdout.contains("\"action\":\"NewEventFile\""))
     }
@@ -1065,11 +1065,11 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectDraftModeReportsGuardBeforeLeavingNewEventFile() {
-        val result = runAutomation("nav-select", "--draft", "Race File > New Race File > < Back")
+        val result = runAutomation("nav-select", "--draft", "Race File > New Race or Series... > < Back")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race File\", \"< Back\"]"))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File > New Race File\""))
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race or Series...\", \"< Back\"]"))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File > New Race or Series...\""))
         assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.event-file.new\""))
         assertTrue(result.stdout.contains("\"action\":\"NewEventFile\""))
         assertTrue(result.stdout.contains("\"guarded\":true"))
@@ -1077,31 +1077,31 @@ class DesktopAutomationCliTest {
 
     @Test
     fun navSelectDraftModeReportsGuardBeforeWorkflowSwitch() {
-        val result = runAutomation("nav-select", "--draft", "Race File > New Race File > Race Ops")
+        val result = runAutomation("nav-select", "--draft", "Race File > New Race or Series... > Race Ops")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race File\", \"Race Ops\"]"))
-        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File > New Race File\""))
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race or Series...\", \"Race Ops\"]"))
+        assertTrue(result.stdout.contains("\"breadcrumb\":\"Setup > Race File > New Race or Series...\""))
         assertTrue(result.stdout.contains("\"selectedItemId\":\"setup.event-file.new\""))
         assertTrue(result.stdout.contains("\"guarded\":true"))
     }
 
     @Test
     fun navSelectDefaultDraftModeDoesNotGuardBeforeWorkflowSwitch() {
-        val result = runAutomation("nav-select", "--default-draft", "Race File > New Race File > Race Ops")
+        val result = runAutomation("nav-select", "--default-draft", "Race File > New Race or Series... > Race Ops")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race File\", \"Race Ops\"]"))
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race or Series...\", \"Race Ops\"]"))
         assertTrue(result.stdout.contains("\"workflow\":\"Race Operations\""))
         assertTrue(result.stdout.contains("\"guarded\":false"))
     }
 
     @Test
     fun navSelectDraftModeDoesNotGuardSaveFromNewEventFile() {
-        val result = runAutomation("nav-select", "--draft", "Race File > New Race File > Save Race")
+        val result = runAutomation("nav-select", "--draft", "Race File > New Race or Series... > Save Race")
 
         assertEquals(0, result.exitCode)
-        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race File\", \"Save Race\"]"))
+        assertTrue(result.stdout.contains("\"selectedLabels\":[\"Race File\", \"New Race or Series...\", \"Save Race\"]"))
         assertTrue(result.stdout.contains("\"action\":\"SaveEventFile\""))
         assertTrue(result.stdout.contains("\"guarded\":false"))
     }

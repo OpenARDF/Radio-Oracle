@@ -26,8 +26,9 @@ class DesktopIofCourseImportUiTest {
             emptyList(), emptyList())
         val choices = mutableListOf<Boolean>()
         rule.setContent { MaterialTheme {
-            IofCourseDataImportReviewDialog(review, { _, useBends -> choices += useBends }, {})
+            IofCourseDataImportReviewDialog(review, { useBends -> choices += useBends }, {})
         } }
+        rule.onNodeWithText(IOF_COURSE_DATA_RACE_WORKFLOW_TEXT).assertExists()
         rule.onNodeWithTag("iof-route-bends").assertIsOff()
         rule.onNodeWithText("Review Course Report").performClick()
         rule.onNodeWithTag("iof-route-bends").performClick().assertIsOn()

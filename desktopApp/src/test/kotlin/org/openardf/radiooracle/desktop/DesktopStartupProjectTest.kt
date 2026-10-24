@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.desktop
 
+import java.nio.file.Files
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -33,9 +35,17 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.EventRace
 import org.openardf.radiooracle.shared.event.EventRaceData
+import org.openardf.radiooracle.shared.event.EventSeriesArchive
+import org.openardf.radiooracle.shared.event.EventSeriesEvent
+import org.openardf.radiooracle.shared.event.EventSeriesFile
 import java.nio.file.Path
 
 class DesktopStartupProjectTest {
+    @After
+    fun closeSeriesWorkspaces() {
+        DesktopEventSeriesArchiveWorkspaces.closeAll()
+    }
+
     @Test
     fun leavesSessionEmptyWhenNoStartupPathIsProvided() {
         val session = DesktopProjectSession(StartupProjectFileStore())
@@ -59,6 +69,26 @@ class DesktopStartupProjectTest {
         assertEquals(projectFile, session.currentProject)
         assertEquals(path, session.currentPath)
         assertEquals(path, rememberedPath)
+    }
+
+    @Test
+    fun resolvesRememberedSeriesArchiveToItsRaceFile() {
+        val archivePath = Files.createTempDirectory("radio-oracle-startup-series-")
+            .resolve("Championship.roseries")
+        val event = EventSeriesEvent("race", "Classic.json", 0, "Classic")
+        val workspace = DesktopEventSeriesArchiveWorkspaces.create(
+            archivePath,
+            EventSeriesArchive(
+                seriesFile = EventSeriesFile(
+                    seriesId = "series",
+                    name = "Championship",
+                    events = listOf(event)
+                ),
+                membersBySeriesEventId = mapOf("race" to projectFile("Classic"))
+            )
+        )
+
+        assertEquals(workspace.memberPaths.single(), desktopEventProjectPathToOpen(archivePath))
     }
 
     @Test
@@ -88,6 +118,49 @@ class DesktopStartupProjectTest {
         val store = StartupLastEventFileStore(rememberedPath)
 
         assertEquals(rememberedPath, startupProjectPath(null, store))
+    }
+
+    @Test
+    fun startupPlanOffersAvailableRememberedFileInsteadOfOpeningIt() {
+        val rememberedPath = Path.of("remembered.roseries")
+
+        val plan = desktopStartupPlan(
+            commandLinePath = null,
+            lastEventFileStore = StartupLastEventFileStore(rememberedPath),
+            isAvailable = { true }
+        )
+
+        assertNull(plan.directOpenPath)
+        assertEquals(rememberedPath, plan.rememberedChoicePath)
+        assertEquals(false, plan.openWizardAfterSplash)
+    }
+
+    @Test
+    fun startupPlanOpensWizardWhenRememberedFileIsUnavailable() {
+        val plan = desktopStartupPlan(
+            commandLinePath = null,
+            lastEventFileStore = StartupLastEventFileStore(Path.of("missing.json")),
+            isAvailable = { false }
+        )
+
+        assertNull(plan.directOpenPath)
+        assertNull(plan.rememberedChoicePath)
+        assertEquals(true, plan.openWizardAfterSplash)
+    }
+
+    @Test
+    fun startupPlanKeepsExplicitCommandLineOpenForAutomation() {
+        val path = Path.of("smoke.json")
+
+        val plan = desktopStartupPlan(
+            commandLinePath = path,
+            lastEventFileStore = StartupLastEventFileStore(Path.of("remembered.json")),
+            isAvailable = { true }
+        )
+
+        assertEquals(path, plan.directOpenPath)
+        assertNull(plan.rememberedChoicePath)
+        assertEquals(false, plan.openWizardAfterSplash)
     }
 
     @Test

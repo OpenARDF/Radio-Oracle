@@ -59,6 +59,40 @@ class IofXmlImportsTest {
     }
 
     @Test
+    fun readsExplicitMultiRaceCourseDataMetadataForWizard() {
+        val metadata = IofXmlImports.validatedCourseDataCompetitionMetadata(
+            multiRaceCourseDataXml(),
+            localIofXsd()
+        )
+
+        assertEquals("Autumn Championship", metadata.eventName)
+        assertEquals(listOf(1, 2), metadata.races.map { it.raceNumber })
+        assertEquals(listOf("Classic 80m", "Sprint"), metadata.races.map { it.name })
+        assertEquals(listOf("2026-10-10", "2026-10-11"), metadata.races.map { it.startDate })
+        assertEquals(listOf("National", "Regional"), metadata.races.map { it.classification })
+        val secondRace = IofXmlImports.validatedCourseDataRace(
+            multiRaceCourseDataXml(),
+            localIofXsd(),
+            race(),
+            raceNumber = 2
+        )
+        assertEquals(listOf("Day 2 Course"), secondRace.parsedData.categories.map { it.category.name })
+        assertTrue(secondRace.unsupportedItems.none { it.reason.contains("only the first race") })
+    }
+
+    @Test
+    fun rejectsMultiRaceCourseDataWithoutStandardRaceNumberMapping() {
+        val exception = assertFailsWith<IllegalArgumentException> {
+            IofXmlImports.validatedCourseDataCompetitionMetadata(
+                multiRaceCourseDataXml().replace("<RaceCourseData raceNumber=\"2\">", "<RaceCourseData>"),
+                localIofXsd()
+            )
+        }
+
+        assertTrue(exception.message!!.contains("needs raceNumber"))
+    }
+
+    @Test
     fun parsesStartListPreviewAndReportsUnsupportedTeamStarts() {
         val result = IofXmlImports.startList(startListXml())
         val entry = result.parsedData.entries.single()
@@ -401,6 +435,44 @@ class IofXmlImportsTest {
             <Class><Name>M21</Name></Class>
           </PersonEntry>
         </EntryList>
+    """.trimIndent()
+
+    private fun multiRaceCourseDataXml(): String = """
+        <CourseData xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0">
+          <Event>
+            <Name>Autumn Championship</Name>
+            <Race>
+              <RaceNumber>1</RaceNumber>
+              <Name>Classic 80m</Name>
+              <StartTime><Date>2026-10-10</Date><Time>09:00:00</Time></StartTime>
+              <Classification>National</Classification>
+            </Race>
+            <Race>
+              <RaceNumber>2</RaceNumber>
+              <Name>Sprint</Name>
+              <StartTime><Date>2026-10-11</Date><Time>10:00:00</Time></StartTime>
+              <Classification>Regional</Classification>
+            </Race>
+          </Event>
+          <RaceCourseData raceNumber="1">
+            <Control type="Start"><Id>S1</Id></Control>
+            <Control type="Finish"><Id>F1</Id></Control>
+            <Course>
+              <Name>Day 1 Course</Name>
+              <CourseControl type="Start"><Control>S1</Control></CourseControl>
+              <CourseControl type="Finish"><Control>F1</Control></CourseControl>
+            </Course>
+          </RaceCourseData>
+          <RaceCourseData raceNumber="2">
+            <Control type="Start"><Id>S2</Id></Control>
+            <Control type="Finish"><Id>F2</Id></Control>
+            <Course>
+              <Name>Day 2 Course</Name>
+              <CourseControl type="Start"><Control>S2</Control></CourseControl>
+              <CourseControl type="Finish"><Control>F2</Control></CourseControl>
+            </Course>
+          </RaceCourseData>
+        </CourseData>
     """.trimIndent()
 
     private fun iofExample(fileName: String): String? {

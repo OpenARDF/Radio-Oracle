@@ -30,6 +30,7 @@ import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventProjectEditor
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.ControlCsvImportRow
 
@@ -108,14 +109,17 @@ object DesktopImportPreviews {
         )
     }
 
-    // Android category previews may arrive before the portable race catalog is restored.
+    // IOF previews use the same active-and-inactive normalized-name matching as the shared importer.
     @Suppress("DEPRECATION")
     fun categoryDataPreview(
         projectFile: EventProjectFile,
         sourceName: String,
         categories: List<EventCategoryData>
     ): DesktopCategoryCsvImportPreview {
-        val existingByName = projectFile.raceData.categories.associateBy { it.category.name }
+        // Mirror the IOF importer: normalized names update active categories or inactive courses.
+        val existingByName = (projectFile.raceData.categories + projectFile.raceData.courseMappings).associateBy {
+            StandardCategoryRules.normalizedCategoryName(it.category.name)
+        }
         val competitorCountsByCategoryId = projectFile.raceData.competitorData
             .mapNotNull { data -> data.competitorCategory.competitor.categoryId ?: data.competitorCategory.category?.id }
             .groupingBy { it }
@@ -127,7 +131,7 @@ object DesktopImportPreviews {
         var categoriesWithAssignedControlsReplacedCount = 0
 
         categories.forEach { imported ->
-            val existing = existingByName[imported.category.name]
+            val existing = existingByName[StandardCategoryRules.normalizedCategoryName(imported.category.name)]
             if (existing == null) {
                 addedCount++
             } else {
