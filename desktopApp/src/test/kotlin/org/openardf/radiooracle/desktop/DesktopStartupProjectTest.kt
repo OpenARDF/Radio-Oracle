@@ -164,18 +164,18 @@ class DesktopStartupProjectTest {
     }
 
     @Test
-    fun topBarTextShowsLoadedEventName() {
+    fun topBarSelectionTextShowsLoadedEventName() {
         val projectFile = projectFile("USA and IARU Region 2 Radio Orienteering 80m Classic")
 
         assertEquals(
-            "Race: USA and IARU Region 2 Radio Orienteering 80m Classic",
-            desktopTopBarEventText(projectFile)
+            "USA and IARU Region 2 Radio Orienteering 80m Classic",
+            desktopTopBarEventSelectionText(projectFile)
         )
     }
 
     @Test
-    fun topBarTextShowsEmptyEventFileState() {
-        assertEquals("No race file loaded", desktopTopBarEventText(null))
+    fun topBarSelectionTextShowsEmptyEventFileState() {
+        assertEquals("No race file loaded", desktopTopBarEventSelectionText(null))
     }
 
     @Test

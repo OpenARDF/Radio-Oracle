@@ -45,15 +45,8 @@ enum class DesktopWorkflow(
     SettingsHelp("Help/About/App Settings", "Settings", requiresEventFileInBottomBar = false);
 
     companion object {
+        /** Event-scoped workflow buttons; Series is selected from the top race/series selector. */
         val bottomBarEntries: List<DesktopWorkflow> = listOf(Setup, RaceOps, ResultsExport)
-
-        fun bottomBarEntries(readiness: DesktopNavigationReadiness): List<DesktopWorkflow> =
-            if (readiness.hasSeriesContext) {
-                // When a series is active, put cross-race planning before event-scoped workflows.
-                listOf(Series, Setup, RaceOps, ResultsExport)
-            } else {
-                bottomBarEntries
-            }
 
         fun bottomBarLabel(workflow: DesktopWorkflow, readiness: DesktopNavigationReadiness): String {
             if (!readiness.hasSeriesContext || workflow == Series || workflow == SettingsHelp) {

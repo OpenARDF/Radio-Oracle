@@ -66,15 +66,12 @@ class DesktopNavigationTest {
     }
 
     @Test
-    fun bottomBarAddsSeriesOnlyWhenEventHasSeriesContext() {
+    fun bottomBarKeepsSeriesInTheTopSelectorInsteadOfAddingAnotherWorkflowButton() {
         assertEquals(
             listOf(DesktopWorkflow.Setup, DesktopWorkflow.RaceOps, DesktopWorkflow.ResultsExport),
-            DesktopWorkflow.bottomBarEntries(DesktopNavigationReadiness(hasEventFile = true))
+            DesktopWorkflow.bottomBarEntries
         )
-        assertEquals(
-            listOf(DesktopWorkflow.Series, DesktopWorkflow.Setup, DesktopWorkflow.RaceOps, DesktopWorkflow.ResultsExport),
-            DesktopWorkflow.bottomBarEntries(DesktopNavigationReadiness(hasEventFile = true, hasSeriesContext = true))
-        )
+        assertFalse(DesktopWorkflow.bottomBarEntries.contains(DesktopWorkflow.Series))
     }
 
     @Test
@@ -90,7 +87,6 @@ class DesktopNavigationTest {
         assertEquals("80m Classic\nSetup", DesktopWorkflow.bottomBarLabel(DesktopWorkflow.Setup, seriesClassic))
         assertEquals("80m Classic\nRace Ops", DesktopWorkflow.bottomBarLabel(DesktopWorkflow.RaceOps, seriesClassic))
         assertEquals("80m Classic\nResults", DesktopWorkflow.bottomBarLabel(DesktopWorkflow.ResultsExport, seriesClassic))
-        assertEquals("Series", DesktopWorkflow.bottomBarLabel(DesktopWorkflow.Series, seriesClassic))
     }
 
     @Test

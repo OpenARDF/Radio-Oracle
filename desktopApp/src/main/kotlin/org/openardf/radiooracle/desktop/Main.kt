@@ -12469,6 +12469,10 @@ private fun RadioOManagerDesktopApp(
                         projectFile = projectFile,
                         eventSeriesUiContext = eventSeriesUiContext.takeIf { hasValidSeriesContext },
                         seriesEventSummaries = seriesEventSummaries,
+                        isSeriesWorkflowSelected = navState.workflow == DesktopWorkflow.Series,
+                        onOpenSeries = {
+                            requestNavigation(DesktopPendingNavigation.Workflow(DesktopWorkflow.Series))
+                        },
                         onOpenSeriesEvent = onOpenSeriesEvent
                     )
                     Row(modifier = Modifier.weight(1f)) {
@@ -12796,6 +12800,8 @@ private fun AppTopBar(
     projectFile: EventProjectFile?,
     eventSeriesUiContext: EventSeriesUiContext?,
     seriesEventSummaries: List<DesktopEventSeriesEventSummary>,
+    isSeriesWorkflowSelected: Boolean,
+    onOpenSeries: () -> Unit,
     onOpenSeriesEvent: (DesktopEventSeriesEventSummary) -> Unit
 ) {
     Row(
@@ -12823,8 +12829,12 @@ private fun AppTopBar(
                 )
             }
             TopBarSeriesEventSelector(
-                eventText = desktopTopBarEventText(projectFile),
+                labelText = if (eventSeriesUiContext == null) "Race:" else "Race/Series:",
+                selectionText = desktopTopBarEventSelectionText(projectFile),
+                hasSeriesContext = eventSeriesUiContext != null,
+                isSeriesSelected = isSeriesWorkflowSelected,
                 summaries = if (eventSeriesUiContext == null) emptyList() else seriesEventSummaries,
+                onOpenSeries = onOpenSeries,
                 onOpenEvent = onOpenSeriesEvent
             )
         }
@@ -12865,40 +12875,48 @@ private fun RadioOracleBrandName() {
 }
 
 @Composable
-private fun TopBarSeriesEventSelector(
-    eventText: String,
+internal fun TopBarSeriesEventSelector(
+    labelText: String,
+    selectionText: String,
+    hasSeriesContext: Boolean,
+    isSeriesSelected: Boolean,
     summaries: List<DesktopEventSeriesEventSummary>,
+    onOpenSeries: () -> Unit,
     onOpenEvent: (DesktopEventSeriesEventSummary) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val hasSelectableEvent = summaries.any { it.exists && !it.isCurrentEvent }
+    val hasSelectableDestination = hasSeriesContext || summaries.any { it.exists && !it.isCurrentEvent }
     Box(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = if (hasSelectableEvent) {
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = true }
-            } else {
-                Modifier.fillMaxWidth()
-            },
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = eventText,
+                text = labelText,
                 color = DesktopPalette.White,
                 fontSize = 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                textDecoration = if (hasSelectableEvent) TextDecoration.Underline else null,
-                modifier = Modifier.weight(1f, fill = false)
+                modifier = Modifier.testTag("top-bar-race-series-label")
             )
-            if (hasSelectableEvent) {
-                Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+                modifier = (if (hasSelectableDestination) {
+                    Modifier.clickable { expanded = true }
+                } else {
+                    Modifier
+                })
+                    .background(DesktopPalette.White)
+                    .weight(1f, fill = false)
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                    .testTag("top-bar-race-series-selection")
+            ) {
                 Text(
-                    text = "v",
-                    color = DesktopPalette.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
+                    text = selectionText,
+                    color = DesktopPalette.Black,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -12907,6 +12925,41 @@ private fun TopBarSeriesEventSelector(
             onDismissRequest = { expanded = false },
             modifier = Modifier.widthIn(min = 360.dp, max = 560.dp)
         ) {
+            if (hasSeriesContext) {
+                // Series is a cross-race destination in this selector, so retain the established
+                // orange series-navigation treatment instead of styling it like a Race File.
+                DropdownMenuItem(
+                    enabled = !isSeriesSelected,
+                    onClick = {
+                        expanded = false
+                        onOpenSeries()
+                    },
+                    modifier = Modifier
+                        .background(DesktopPalette.SeriesNavigation)
+                        .testTag("top-bar-series-option")
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Series",
+                            color = DesktopPalette.Black,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = if (isSeriesSelected) "Current" else "Ready",
+                            color = DesktopPalette.Black,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Divider(color = DesktopPalette.LightGrey)
+            }
             summaries.forEach { summary ->
                 val enabled = summary.exists && !summary.isCurrentEvent
                 DropdownMenuItem(
@@ -13042,11 +13095,8 @@ private fun rememberRadioOracleLogoBitmap() = remember {
     SkiaImage.makeFromEncoded(logoBytes).toComposeImageBitmap()
 }
 
-internal fun desktopTopBarEventText(projectFile: EventProjectFile?): String =
-    projectFile?.raceData?.race?.name
-        ?.takeIf { it.isNotBlank() }
-        ?.let { "Race: $it" }
-        ?: "No race file loaded"
+internal fun desktopTopBarEventSelectionText(projectFile: EventProjectFile?): String =
+    projectFile?.raceData?.race?.name?.takeIf { it.isNotBlank() } ?: "No race file loaded"
 
 internal fun desktopTopBarSeriesText(seriesContext: EventSeriesUiContext): String =
     "Series: ${seriesContext.seriesName.ifBlank { "Untitled Series" }}"
@@ -13638,7 +13688,7 @@ private fun WorkflowBar(
             .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        DesktopWorkflow.bottomBarEntries(navigationReadiness).forEach { workflow ->
+        DesktopWorkflow.bottomBarEntries.forEach { workflow ->
             val isSelected = workflow == selectedWorkflow
             val isEnabled = DesktopNavigation.isWorkflowEnabled(workflow, navigationReadiness)
             val canLongClickOverride = DesktopNavigation.canLongClickOverrideDisabledWorkflow(workflow, navigationReadiness)
