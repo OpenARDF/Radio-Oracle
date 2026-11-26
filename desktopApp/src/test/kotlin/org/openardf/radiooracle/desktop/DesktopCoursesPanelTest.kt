@@ -31,7 +31,7 @@ class DesktopCoursesPanelTest {
                 syncClicked = true
             }
         }
-        val button = rule.onNodeWithText("Sync to Competitors")
+        val button = rule.onNodeWithText("Review Category Mismatches…")
         val warning = rule.onNodeWithText("Category/competitor mismatch", substring = true)
         button.assertIsDisplayed().assertIsNotEnabled()
         warning.assertDoesNotExist()

@@ -23375,7 +23375,7 @@ internal fun CategoryCompetitorSyncNotice(
                 onClick = onSync,
                 enabled = plan.hasMismatch
             ) {
-                ButtonLabel("Sync to Competitors")
+                ButtonLabel("Review Category Mismatches…")
             }
         }
     }
