@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import org.openardf.radiooracle.backend.room.database.EventDatabase
 import org.openardf.radiooracle.backend.room.entity.Alias
+import org.openardf.radiooracle.backend.room.entity.Race
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import org.openardf.radiooracle.backend.room.entity.embeddeds.RaceData
 import org.openardf.radiooracle.backend.shared.encodePortableCourseData
@@ -98,8 +99,10 @@ class AndroidRaceSetup(private val db: EventDatabase) {
         } }
         .distinctUntilChanged()
 
-    suspend fun applyCategoryReview(raceId: UUID, reviewed: EventCategoryCompetitorSyncPlan,
-                                    missingIds: Set<String>, emptyIds: Set<String>) = db.withTransaction {
+    internal suspend fun applyCategoryReview(
+        raceId: UUID, reviewed: EventCategoryCompetitorSyncPlan, missingIds: Set<String>, emptyIds: Set<String>,
+        recalculateResults: suspend (UUID, Race) -> Unit
+    ) = db.withTransaction {
         val native = snapshot(raceId)
         val before = EventProjectFile(raceData = native.toReviewRaceData())
         // Counts, names and the course-removal warning must still match the choices shown in the dialog.
@@ -132,6 +135,8 @@ class AndroidRaceSetup(private val db: EventDatabase) {
             val target = assignments[row.id.toString()]
             if (target != null && target != row.categoryId) {
                 db.competitorDao().createCompetitor(row.copy(categoryId = target, pendingCategory = null))
+                // Commit the assignment and its corrected, ready-to-publish results together.
+                recalculateResults(row.id, native.race)
             }
         }
         existing.filterKeys { it !in localTargetIds }.values.forEach {

@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.room.ARDFRepository
 import org.openardf.radiooracle.shared.event.EventCategoryCompetitorSyncPlan
 import org.openardf.radiooracle.shared.event.ControlRoleLabelRules
@@ -184,7 +185,7 @@ internal class CategorySetupDialogs(private val fragment: Fragment, private val 
                 (source as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = checked.any { it }
             }.setNegativeButton(R.string.general_cancel, null).setPositiveButton(R.string.general_save) { _, _ ->
                 runAction(raceId) {
-                    val outcome = setup.applyCategoryReview(raceId, review,
+                    val outcome = DataProcessor.get().applyCategoryReview(raceId, review,
                         missing.filterIndexed { i, _ -> checked[i] }.mapTo(mutableSetOf()) { it.categoryId },
                         empty.filterIndexed { i, _ -> checked[missing.size + i] }.mapTo(mutableSetOf()) { it.categoryId })
                     Toast.makeText(context, context.getString(R.string.category_sync_saved, outcome.addedCategoryCount,

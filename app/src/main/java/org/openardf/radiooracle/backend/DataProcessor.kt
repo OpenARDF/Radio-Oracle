@@ -84,6 +84,7 @@ import org.openardf.radiooracle.shared.domain.ProviderType
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.event.CategoryGender
+import org.openardf.radiooracle.shared.event.EventCategoryCompetitorSyncPlan
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultServiceStatus
@@ -273,6 +274,13 @@ class DataProcessor private constructor(context: Context) {
         }
     }
 
+    suspend fun applyCategoryReview(
+        raceId: UUID, reviewed: EventCategoryCompetitorSyncPlan, missingIds: Set<String>, emptyIds: Set<String>
+    ) = ardfRepository.raceSetup.applyCategoryReview(raceId, reviewed, missingIds, emptyIds) { competitorId, race ->
+        // Reviewing category assignments must not also assign an unmatched card to a runner.
+        updateResultsForCompetitor(competitorId, race, this, claimUnmatched = false)
+    }
+
     suspend fun deleteCategory(categoryId: UUID, raceId: UUID, deleteCompetitors: Boolean) {
         val retainedCompetitors = if (deleteCompetitors) {
             emptyList()
@@ -379,6 +387,9 @@ class DataProcessor private constructor(context: Context) {
 
     suspend fun getResultByCompetitor(competitorId: UUID) =
         ardfRepository.getResultByCompetitor(competitorId)
+
+    suspend fun getResultsForCompetitor(raceId: UUID, competitorId: UUID) =
+        ardfRepository.getResultsForCompetitor(raceId, competitorId)
 
     suspend fun getResultBySINumber(siNumber: Int, raceId: UUID) =
         ardfRepository.getResultBySINumber(siNumber, raceId)

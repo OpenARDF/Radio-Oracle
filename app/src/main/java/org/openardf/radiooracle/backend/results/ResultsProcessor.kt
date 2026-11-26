@@ -172,11 +172,11 @@ object ResultsProcessor {
     }
 
     private fun removeStartAndFinishPunch(result: Result, punches: ArrayList<Punch>) {
-        if (punches.first().punchType == SIRecordType.START) {
+        if (punches.firstOrNull()?.punchType == SIRecordType.START) {
             result.startTime = punches.first().siTime
             punches.removeAt(0)
         }
-        if (punches.last().punchType == SIRecordType.FINISH) {
+        if (punches.lastOrNull()?.punchType == SIRecordType.FINISH) {
             result.finishTime = punches.last().siTime
             punches.removeAt(punches.lastIndex)
         }
@@ -787,14 +787,14 @@ object ResultsProcessor {
     suspend fun updateResultsForCompetitor(
         competitorId: UUID,
         race: Race,
-        dataProcessor: DataProcessor
+        dataProcessor: DataProcessor,
+        claimUnmatched: Boolean = true
     ) {
-        val results = dataProcessor.getResultDataFlowByRace(race.id).first()
-            .map { it.result }.filter { it.competitorId == competitorId }.toMutableList()
+        val results = dataProcessor.getResultsForCompetitor(race.id, competitorId).toMutableList()
         val competitor = dataProcessor.getCompetitor(competitorId)
 
         // Only claim an unmatched SI result; another Practice attempt keeps its own result.
-        if (results.isEmpty() && competitor?.siNumber != null) {
+        if (claimUnmatched && results.isEmpty() && competitor?.siNumber != null) {
             val siResult = dataProcessor.getResultBySINumber(
                 competitor.siNumber!!, competitor.raceId
             )
@@ -804,15 +804,10 @@ object ResultsProcessor {
             }
         }
 
-        //If result is found, recalculate it
+        if (results.isEmpty()) return
+        val category = competitor?.categoryId?.let { dataProcessor.getCategory(it) }
         results.forEach { result ->
             val punches = ArrayList(dataProcessor.getPunchesByResult(result.id))
-            val category = competitor?.categoryId?.let { dataProcessor.getCategory(it) }
-
-            if (category == null) {
-                clearEvaluation(punches, result)
-            }
-
             removeStartAndFinishPunch(
                 result,
                 punches

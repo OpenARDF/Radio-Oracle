@@ -58,6 +58,10 @@ interface ResultDao {
     @Query("SELECT * FROM result WHERE competitor_id=(:competitorId) LIMIT 1")
     suspend fun getResultByCompetitor(competitorId: UUID): Result?
 
+    /** Includes every saved Practice attempt owned by this registration in this race. */
+    @Query("SELECT * FROM result WHERE race_id = :raceId AND competitor_id = :competitorId ORDER BY readout_time")
+    suspend fun getResultsForCompetitor(raceId: UUID, competitorId: UUID): List<Result>
+
     /** Finds a result by SI card number within one race. */
     @Query("SELECT * FROM result WHERE si_number=(:siNumber) AND race_id=(:raceId) LIMIT 1")
     suspend fun getResultForSINumber(siNumber: Int, raceId: UUID): Result?
