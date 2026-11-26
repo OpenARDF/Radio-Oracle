@@ -6,6 +6,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import org.openardf.radiooracle.shared.course.ControlPointRules
 import org.openardf.radiooracle.shared.event.*
 
@@ -61,12 +66,13 @@ internal fun DesktopCategoryCourseAssignment(project: EventProjectFile, isUnlock
 internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
     onUnlock: (String) -> Boolean, onEdit: (DesktopCourseLibraryEdit) -> String?,
     courseInfos: Map<String, ProtectedCourseInfo> = emptyMap(),
-    idealOrders: Map<String, String> = emptyMap()) {
+    idealOrders: Map<String, String> = emptyMap(),
+    elevationRefreshToken: Int = 0, onOpenElevationData: () -> Unit = {}) {
     var password by remember(project.raceData.race.id) { mutableStateOf("") }
     var selectedId by remember(project.raceData.race.id) { mutableStateOf<String?>(null) }
     var deletingId by remember(project.raceData.race.id) { mutableStateOf<String?>(null) }
     var message by remember(project.raceData.race.id) { mutableStateOf<String?>(null) }
-    val reports = courseReports(project, courseInfos, idealOrders, includeUnassigned = true)
+    val reports = key(elevationRefreshToken) { courseReports(project, courseInfos, idealOrders, includeUnassigned = true) }
     val reportsById = reports?.associateBy { it.categoryId }.orEmpty()
     val unassigned = project.raceData.courseMappings.sortedWith(EventCategorySort.byDisplayName)
     val locked = project.hasEncryptedCategoryData() && !isUnlocked
@@ -80,6 +86,18 @@ internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
         Text("Courses", style = MaterialTheme.typography.h6)
+        if (locked) Text("Unlock course data to check elevation coverage.")
+        else if (project.raceData.courseDraft == null) {
+            CourseElevationNotice(project, courseInfos, reports.orEmpty(), elevationRefreshToken, onOpenElevationData)
+        } else {
+            // Control location edits live in the pending design until applied. Match the Controls screen.
+            val design = LocalCourseDesign.current
+            val candidate = remember(project) { runCatching { EventCourseDrafts.candidate(project) }.getOrNull() }
+            if (candidate != null && design?.project == candidate) {
+                CourseElevationNotice(candidate, design.courseState?.protectedCourseInfoByCategoryId.orEmpty(),
+                    emptyList(), elevationRefreshToken, onOpenElevationData, draft = true)
+            } else if (design?.error != null) Text("Unable to check draft elevation coverage. ${design.error}")
+        }
         Text("Every imported course is listed here. Assign an unassigned course to one or more categories, create a category for it, or delete it. Use Controls to manage the shared control list.")
         message?.let { Text(it) }
         if (locked) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -160,6 +178,75 @@ internal fun DesktopCoursesPanel(project: EventProjectFile, isUnlocked: Boolean,
                 }) { Text("Delete course") }
             } },
             dismissButton = { TextButton(onClick = { deletingId = null }) { Text("Cancel") } })
+    }
+}
+
+@Composable
+private fun CourseElevationNotice(project: EventProjectFile, infos: Map<String, ProtectedCourseInfo>,
+    reports: List<DesktopCourseBriefReport>, refreshToken: Int, onOpen: () -> Unit, draft: Boolean = false) {
+    // Re-entering Courses or changing race, protection, or cache clears the old location details immediately.
+    key(project, infos, refreshToken) {
+        val result by produceState<Result<CourseElevationFinding>?>(null) {
+            value = withContext(Dispatchers.IO) {
+                val context = currentCoroutineContext()
+                try {
+                    Result.success(eventElevationCoverage(project, infos, { context.ensureActive() }))
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Result.failure(error)
+                }
+            }
+        }
+        if (result == null) Text("Checking local elevation coverage…")
+        result?.fold(onSuccess = {
+            if (draft && (it.areaHasGap || it.unchecked.isNotEmpty())) Text("Pending course draft", style = MaterialTheme.typography.subtitle2)
+            CourseElevationFindingPanel(it, reports, onOpen)
+        }, onFailure = {
+            Text("Unable to check local elevation coverage. ${it.message.orEmpty()}", color = DesktopPalette.Warning)
+            TextButton(onClick = onOpen) { Text("Open Elevation Data") }
+        })
+    }
+}
+
+@Composable
+internal fun CourseElevationFindingPanel(finding: CourseElevationFinding, reports: List<DesktopCourseBriefReport> = emptyList(), onOpen: () -> Unit) {
+    if (finding.areaHasGap) {
+        // Report calculation finishes separately. Promote an ideal leg without reading the elevation files again.
+        val byId = reports.associateBy { it.categoryId }
+        val (ideal, possible) = finding.otherLegs.partition { it.onReportedRoute(byId[it.courseId]?.idealRouteLegs.orEmpty()) }
+        val primary = finding.legs + ideal.map { it.description }
+        val other = possible.map { it.description }.toSet() - primary
+        val affected = finding.controls.isNotEmpty() || finding.legs.isNotEmpty() || finding.otherLegs.isNotEmpty()
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(if (affected) "Local elevation coverage is incomplete" else "Elevation coverage advisory",
+                style = MaterialTheme.typography.subtitle1, color = if (affected) DesktopPalette.Warning else MaterialTheme.colors.onSurface)
+            if (affected) {
+                CoverageDetails("Affected controls", finding.controls)
+                CoverageDetails("Affected course legs", primary)
+                if (other.isNotEmpty()) {
+                    var expanded by remember(finding) { mutableStateOf(false) }
+                    TextButton(onClick = { expanded = !expanded }) { Text("Other possible legs (${other.size})") }
+                    if (expanded) {
+                        Text(other.joinToString("; "))
+                        Text("These legs use known mandatory waypoints and assume straight travel between them.")
+                    }
+                }
+            } else Text("Local elevation data covers the checked controls and legs. Some of the surrounding event area lacks coverage.")
+            TextButton(onClick = onOpen) { Text("Open Elevation Data") }
+        }
+    }
+    CoverageDetails("Location unavailable for these controls", finding.unchecked)
+}
+
+@Composable
+private fun CoverageDetails(heading: String, items: Set<String>) {
+    if (items.isEmpty()) return
+    var expanded by remember(items) { mutableStateOf(false) }
+    Text(heading, style = MaterialTheme.typography.subtitle2)
+    Text((if (expanded) items else items.take(3)).joinToString("\n"))
+    if (items.size > 3) TextButton(onClick = { expanded = !expanded }) {
+        Text(if (expanded) "Show fewer" else "Show all ${items.size}")
     }
 }
 

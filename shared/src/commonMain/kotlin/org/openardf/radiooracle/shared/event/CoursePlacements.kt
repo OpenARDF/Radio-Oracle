@@ -3,12 +3,15 @@ package org.openardf.radiooracle.shared.event
 import org.openardf.radiooracle.shared.domain.ControlPointType
 
 /** Geometry has one identity even when older payloads contain both marker representations. */
-internal fun ProtectedCourseInfo.placements(): List<ProtectedCourseObjectPoint> = courseObjects + controlPoints.map {
-    ProtectedCourseObjectPoint(it.controlId, it.label, when (it.type) {
-        ControlPointType.CONTROL -> ProtectedCourseObjectType.CONTROL
-        ControlPointType.BEACON -> ProtectedCourseObjectType.BEACON
-        ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
-    }, it.latitude, it.longitude, it.elevationMeters, it.speedFactor, it.description)
+fun ProtectedCourseInfo.placements(): List<ProtectedCourseObjectPoint> = courseObjects + controlPoints.map {
+    ProtectedCourseObjectPoint(it.controlId, it.label, it.type.placementType(),
+        it.latitude, it.longitude, it.elevationMeters, it.speedFactor, it.description)
+}
+
+fun ControlPointType.placementType(): ProtectedCourseObjectType = when (this) {
+    ControlPointType.CONTROL -> ProtectedCourseObjectType.CONTROL
+    ControlPointType.BEACON -> ProtectedCourseObjectType.BEACON
+    ControlPointType.SEPARATOR -> ProtectedCourseObjectType.SPECTATOR
 }
 
 fun ProtectedCourseObjectType.controlRole(): ControlPointType? = when (this) {

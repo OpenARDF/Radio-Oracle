@@ -473,10 +473,7 @@ object DesktopCourseAnalyzer {
         val canBuildImportedRouteSection = providedControls.isNotEmpty()
 
         val courseObjectPoints = courseInfo.effectiveCourseObjectPoints()
-        val route = normalizedImportedRoute(
-            courseInfo.route.map { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) },
-            courseObjectPoints
-        )
+        val route = normalizedImportedRoute(courseInfo, courseObjectPoints)
         val protectedControlPointsById = courseInfo.controlPoints.associateBy { it.controlId }
         val protectedCoordinateLookup = protectedCoordinateLookup(courseInfo)
         val controlsWithPoints = assignedControls.map { control ->
@@ -584,12 +581,7 @@ object DesktopCourseAnalyzer {
         }
         val courseObjectPoints = courseInfo?.effectiveCourseObjectPoints().orEmpty()
         val legSpeedFactors = courseInfo?.legSpeedFactors() ?: CourseLegSpeedFactors.Empty
-        val storedRoute = normalizedImportedRoute(
-            courseInfo?.route.orEmpty().map {
-                CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters)
-            },
-            courseObjectPoints
-        )
+        val storedRoute = normalizedImportedRoute(courseInfo, courseObjectPoints)
         val sampling = DesktopCourseAnalysisSampling(storedRoute, elevationLookup)
         val analysisElevationLookup: (CourseGeoPoint) -> Double? = sampling::elevation
         val route = sampling.appliedRoute(courseObjectPoints.map { it.toGeoPoint() })
@@ -2993,10 +2985,12 @@ object DesktopCourseAnalyzer {
         return CourseLegSpeedFactors(startSpeedFactor = startSpeedFactor, controlSpeedFactorsById = byControlId)
     }
 
-    private fun normalizedImportedRoute(
-        route: List<CourseGeoPoint>,
-        courseObjects: List<ProtectedCourseObjectPoint>
+    /** Analyzer and event coverage use the same oriented track and mandatory endpoints. */
+    internal fun normalizedImportedRoute(
+        info: ProtectedCourseInfo?,
+        courseObjects: List<ProtectedCourseObjectPoint> = info?.effectiveCourseObjectPoints().orEmpty()
     ): List<CourseGeoPoint> {
+        val route = info?.route.orEmpty().map { CourseGeoPoint(it.latitude, it.longitude, it.elevationMeters) }
         if (route.isEmpty()) {
             return route
         }

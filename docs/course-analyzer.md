@@ -53,6 +53,8 @@ Classic result route-length analysis uses the same endpoint-pair rules for both 
 
 ## Elevation Handling
 
+Setup > Courses checks the event bounding box against the elevation grids installed on this computer. The box includes located controls, Start, Finish, and stored route bends. Adjacent or overlapping grids can cover the area together. When a gap intersects a control or modeled leg, the warning names it. Expand **Other possible legs** to see affected alternatives on free-order courses. A gap elsewhere in the box produces an advisory. **Open Elevation Data** opens the local terrain data screen. Protected course locations are checked after unlock.
+
 When local Elevation Cache samples are complete for the relevant route or course points, the analyzer uses effective length as the primary comparison metric. If elevations are missing or incomplete, analysis still runs and falls back to horizontal distance. The report explains which metric was used in each section.
 
 For the calculated ideal route, Radio-Oracle first inserts mandatory points on matching imported legs, then samples each resulting segment at short intervals and applies cached elevation values to those samples. That sampled geometry is used for the calculated route's profile, climb, effective length, route comparison, and movement timing. If a cache value is unavailable for an intermediate sample, endpoint elevation interpolation is used when possible. When calculated-route samples are not covered by the local Elevation Cache, the incomplete-data warning states that the calculated route did not use downloaded elevations along the route and offers a `Download Calculated Route Elevations` action to create a 10 m USGS 3DEP cache around the calculated route bounds.

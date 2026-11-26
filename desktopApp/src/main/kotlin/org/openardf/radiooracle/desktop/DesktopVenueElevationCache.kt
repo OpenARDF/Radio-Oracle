@@ -45,6 +45,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.openardf.radiooracle.shared.event.EventProjectFile
+import org.openardf.radiooracle.shared.course.ElevationBounds
+import org.openardf.radiooracle.shared.course.ElevationCoverage
+import org.openardf.radiooracle.shared.course.ElevationCoverageGrid
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 import java.net.URI
 import java.net.URLEncoder
@@ -92,46 +95,30 @@ enum class DesktopVenueElevationCacheSource(
     LocalLidarRaster("Local LiDAR Raster")
 }
 
-data class DesktopVenueElevationBoundingBox(
-    val minLatitude: Double,
-    val maxLatitude: Double,
-    val minLongitude: Double,
-    val maxLongitude: Double
-) {
-    init {
-        require(minLatitude.isValidLatitude() && maxLatitude.isValidLatitude()) {
-            "Latitude values must be finite and between -90 and 90."
-        }
-        require(minLongitude.isValidLongitude() && maxLongitude.isValidLongitude()) {
-            "Longitude values must be finite and between -180 and 180."
-        }
-        require(minLatitude <= maxLatitude) { "Minimum latitude must not exceed maximum latitude." }
-        require(minLongitude <= maxLongitude) { "Minimum longitude must not exceed maximum longitude." }
-    }
+typealias DesktopVenueElevationBoundingBox = ElevationBounds
 
-    fun expanded(bufferMeters: Double): DesktopVenueElevationBoundingBox {
-        val clampedBuffer = max(0.0, bufferMeters)
-        val latitudeBuffer = clampedBuffer / METERS_PER_DEGREE_LATITUDE
-        val meanLatitude = (minLatitude + maxLatitude) / 2.0
-        val longitudeMeters = metersPerDegreeLongitude(meanLatitude).coerceAtLeast(1.0)
-        val longitudeBuffer = clampedBuffer / longitudeMeters
-        return DesktopVenueElevationBoundingBox(
-            minLatitude = minLatitude - latitudeBuffer,
-            maxLatitude = maxLatitude + latitudeBuffer,
-            minLongitude = minLongitude - longitudeBuffer,
-            maxLongitude = maxLongitude + longitudeBuffer
-        )
-    }
-
-    fun contains(point: CourseGeoPoint): Boolean =
-        point.latitude in minLatitude..maxLatitude && point.longitude in minLongitude..maxLongitude
-
-    fun widthMeters(): Double =
-        (maxLongitude - minLongitude) * metersPerDegreeLongitude((minLatitude + maxLatitude) / 2.0)
-
-    fun heightMeters(): Double =
-        (maxLatitude - minLatitude) * METERS_PER_DEGREE_LATITUDE
+internal fun DesktopVenueElevationBoundingBox.expanded(bufferMeters: Double): DesktopVenueElevationBoundingBox {
+    val clampedBuffer = max(0.0, bufferMeters)
+    val latitudeBuffer = clampedBuffer / METERS_PER_DEGREE_LATITUDE
+    val meanLatitude = (minLatitude + maxLatitude) / 2.0
+    val longitudeMeters = metersPerDegreeLongitude(meanLatitude).coerceAtLeast(1.0)
+    val longitudeBuffer = clampedBuffer / longitudeMeters
+    return DesktopVenueElevationBoundingBox(
+        minLatitude = minLatitude - latitudeBuffer,
+        maxLatitude = maxLatitude + latitudeBuffer,
+        minLongitude = minLongitude - longitudeBuffer,
+        maxLongitude = maxLongitude + longitudeBuffer
+    )
 }
+
+internal fun DesktopVenueElevationBoundingBox.contains(point: CourseGeoPoint): Boolean =
+    point.latitude in minLatitude..maxLatitude && point.longitude in minLongitude..maxLongitude
+
+internal fun DesktopVenueElevationBoundingBox.widthMeters(): Double =
+    (maxLongitude - minLongitude) * metersPerDegreeLongitude((minLatitude + maxLatitude) / 2.0)
+
+internal fun DesktopVenueElevationBoundingBox.heightMeters(): Double =
+    (maxLatitude - minLatitude) * METERS_PER_DEGREE_LATITUDE
 
 data class DesktopVenueElevationCacheEstimate(
     val boundingBox: DesktopVenueElevationBoundingBox,
@@ -286,11 +273,9 @@ object DesktopVenueElevationCache {
         }
     }
 
+    private data class CacheInventory(val signature: String, val bounds: ElevationBounds?, val files: List<DesktopVenueElevationCacheFile>)
     @Volatile
-    private var loadedSignature: String = ""
-
-    @Volatile
-    private var loadedCaches: List<DesktopVenueElevationCacheFile> = emptyList()
+    private var inventory: CacheInventory? = null
 
     fun cacheDirectory(): Path = DesktopAppDirectories.appDataDirectory().resolve("elevations")
 
@@ -329,7 +314,7 @@ object DesktopVenueElevationCache {
                 ?: return@flatMap emptyList()
             courseInfo.allGeoPoints()
         }
-        return points.boundingBoxOrNull()
+        return points.venueBoundingBoxOrNull()
     }
 
     fun listings(): List<DesktopVenueElevationCacheListing> {
@@ -458,8 +443,7 @@ object DesktopVenueElevationCache {
             }
             importedCount += 1
         }
-        loadedSignature = ""
-        loadedCaches = emptyList()
+        inventory = null
         return DesktopVenueElevationDemImportSummary(
             importedCount = importedCount,
             overwrittenCount = overwrittenCount,
@@ -526,6 +510,11 @@ object DesktopVenueElevationCache {
             caches.firstNotNullOfOrNull { it.elevationMeters(point) }
         }
     }
+
+    /** Read one consistent local cache inventory for the whole event check. */
+    internal fun coverage(bounds: ElevationBounds, checkCancelled: () -> Unit): ElevationCoverage =
+        ElevationCoverage(loadCaches(bounds).filter { it.metadata.boundingBox.toPublic().intersection(bounds) != null }
+            .map { checkCancelled(); it.coverageGrid }, checkCancelled)
 
     fun elevationMeters(point: CourseGeoPoint): Double? =
         loadCaches()
@@ -714,7 +703,7 @@ object DesktopVenueElevationCache {
             Files.createDirectories(directory)
             val path = uniqueCachePath(directory, cleanVenueName, resolutionMeters)
             Files.writeString(path, file.toJsonString())
-            loadedSignature = ""
+            inventory = null
             val hash = fileSha256(path)
             DesktopDebugLog.info(
                 "ElevationCache",
@@ -809,7 +798,7 @@ object DesktopVenueElevationCache {
                 )
                 val path = uniqueCachePath(directory, cleanVenueName, resolutionMeters)
                 Files.writeString(path, file.toJsonString())
-                loadedSignature = ""
+                inventory = null
                 val hash = fileSha256(path)
                 DesktopDebugLog.info(
                     "ElevationCache",
@@ -895,7 +884,7 @@ object DesktopVenueElevationCache {
             Files.createDirectories(directory)
             val path = uniqueCachePath(directory, cleanVenueName, resolutionMeters)
             Files.writeString(path, file.toJsonString())
-            loadedSignature = ""
+            inventory = null
             val hash = fileSha256(path)
             DesktopDebugLog.info(
                 "ElevationCache",
@@ -1063,7 +1052,7 @@ object DesktopVenueElevationCache {
             Files.createDirectories(directory)
             val path = uniqueCachePath(directory, cleanVenueName, resolutionMeters)
             Files.writeString(path, file.toJsonString())
-            loadedSignature = ""
+            inventory = null
             val hash = fileSha256(path)
             DesktopDebugLog.info(
                 "ElevationCache",
@@ -1086,11 +1075,11 @@ object DesktopVenueElevationCache {
             )
         }
 
-    private fun loadCaches(): List<DesktopVenueElevationCacheFile> {
+    @Synchronized
+    private fun loadCaches(bounds: ElevationBounds? = null): List<DesktopVenueElevationCacheFile> {
         val directory = cacheDirectory()
         if (!Files.isDirectory(directory)) {
-            loadedSignature = ""
-            loadedCaches = emptyList()
+            inventory = null
             return emptyList()
         }
         val files = Files.list(directory).use { stream ->
@@ -1103,19 +1092,20 @@ object DesktopVenueElevationCache {
             val attributes = Files.readAttributes(file, java.nio.file.attribute.BasicFileAttributes::class.java)
             "${file.toAbsolutePath()}:${attributes.size()}:${attributes.lastModifiedTime().toMillis()}"
         }
-        if (signature == loadedSignature) {
-            return loadedCaches
-        }
+        inventory?.takeIf { it.signature == signature && (it.bounds == null || it.bounds == bounds) }
+            ?.let { return it.files }
         val caches = files.mapNotNull { path ->
             runCatching {
-                parseCacheFile(Files.readString(path), path)
+                // A remote venue may have a large raster. Its metadata alone can exclude it.
+                val metadata = bounds?.let { runCatching { readCacheMetadata(path) }.getOrNull() }
+                if (metadata != null && metadata.boundingBox.toPublic().intersection(bounds) == null) null
+                else parseCacheFile(Files.readString(path), path)
             }.getOrElse { error ->
                 DesktopDebugLog.warn("ElevationCache", "Could not read ${path.fileName}: ${error.message ?: error::class.simpleName}")
                 null
             }
         }
-        loadedSignature = signature
-        loadedCaches = caches
+        inventory = CacheInventory(signature, bounds, caches)
         return caches
     }
 
@@ -1395,16 +1385,8 @@ object DesktopVenueElevationCache {
         if (!bbox.contains(point) || metadata.rowCount <= 0 || metadata.columnCount <= 0) {
             return null
         }
-        val rowPosition = if (metadata.rowCount <= 1) {
-            0.0
-        } else {
-            (point.latitude - bbox.minLatitude) / (bbox.maxLatitude - bbox.minLatitude) * (metadata.rowCount - 1)
-        }.coerceIn(0.0, (metadata.rowCount - 1).toDouble())
-        val columnPosition = if (metadata.columnCount <= 1) {
-            0.0
-        } else {
-            (point.longitude - bbox.minLongitude) / (bbox.maxLongitude - bbox.minLongitude) * (metadata.columnCount - 1)
-        }.coerceIn(0.0, (metadata.columnCount - 1).toDouble())
+        val rowPosition = coverageGrid.rowPosition(point.latitude)
+        val columnPosition = coverageGrid.columnPosition(point.longitude)
         val row0 = floor(rowPosition).toInt()
         val row1 = ceil(rowPosition).toInt().coerceAtMost(metadata.rowCount - 1)
         val column0 = floor(columnPosition).toInt()
@@ -1459,29 +1441,11 @@ object DesktopVenueElevationCache {
     private fun ProtectedCourseInfo.allGeoPoints(): List<CourseGeoPoint> =
         finiteCourseGeoPoints()
 
-    private fun List<CourseGeoPoint>.boundingBoxOrNull(): DesktopVenueElevationBoundingBox? =
-        takeIf { it.isNotEmpty() }?.let { points ->
-            DesktopVenueElevationBoundingBox(
-                minLatitude = points.minOf { it.latitude },
-                maxLatitude = points.maxOf { it.latitude },
-                minLongitude = points.minOf { it.longitude },
-                maxLongitude = points.maxOf { it.longitude }
-            )
-        }
-
     private fun gridCount(distanceMeters: Double, resolutionMeters: Double): Int =
         (ceil(max(0.0, distanceMeters) / resolutionMeters).toInt() + 1).coerceAtLeast(2)
 
     private fun DesktopVenueElevationBoundingBox.toSerializable(): DesktopVenueElevationBoundingBoxValue =
         DesktopVenueElevationBoundingBoxValue(
-            minLatitude = minLatitude,
-            maxLatitude = maxLatitude,
-            minLongitude = minLongitude,
-            maxLongitude = maxLongitude
-        )
-
-    private fun DesktopVenueElevationBoundingBoxValue.toPublic(): DesktopVenueElevationBoundingBox =
-        DesktopVenueElevationBoundingBox(
             minLatitude = minLatitude,
             maxLatitude = maxLatitude,
             minLongitude = minLongitude,
@@ -2264,7 +2228,15 @@ private data class DesktopVenueElevationCacheFile(
     val elevations: List<Double?>,
     @kotlinx.serialization.Transient
     val path: Path = Path.of("")
-)
+) {
+    // Parsing normalizes sentinel heights to null. Read the actual grid even for older files without quality metadata.
+    val coverageGrid by lazy {
+        ElevationCoverageGrid(metadata.boundingBox.toPublic(),
+            metadata.rowCount, metadata.columnCount,
+            elevations.size.toLong() == metadata.rowCount.toLong() * metadata.columnCount && elevations.none { it == null }
+        ) { row, column -> elevations.getOrNull(row * metadata.columnCount + column) != null }
+    }
+}
 
 private data class DesktopVenueElevationSpotCheckPoint(
     val row: Int,
@@ -2302,7 +2274,9 @@ private data class DesktopVenueElevationBoundingBoxValue(
     val maxLatitude: Double,
     val minLongitude: Double,
     val maxLongitude: Double
-)
+) {
+    fun toPublic() = DesktopVenueElevationBoundingBox(minLatitude, maxLatitude, minLongitude, maxLongitude)
+}
 
 private const val METERS_PER_DEGREE_LATITUDE = 111_320.0
 private const val USGS_GET_SAMPLES_URL =
