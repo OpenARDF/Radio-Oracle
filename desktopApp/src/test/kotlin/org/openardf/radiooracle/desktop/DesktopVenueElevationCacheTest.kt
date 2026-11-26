@@ -654,6 +654,17 @@ class DesktopVenueElevationCacheTest {
         assertTrue(diagnostics.warningMessages.any { it.contains("neighboring-cell jumps") })
     }
 
+    @Test fun eventCoverageRefreshesWhenAnOverlappingCacheFillsASentinelHole() = withTemporaryUserHome {
+        val dir = DesktopVenueElevationCache.cacheDirectory()
+        Files.createDirectories(dir)
+        val point = DesktopVenueElevationBoundingBox(45.0, 45.0, -122.0, -122.0)
+        writeCache(dir.resolve("missing.roelev.json"), "Local LiDAR Raster", 3.0, -9999.0)
+        assertTrue(DesktopVenueElevationCache.coverage(point) {}.hasGap(point))
+        writeCache(dir.resolve("overlap.roelev.json"), "USGS 3DEP", 10.0, 0.0)
+        assertTrue(!DesktopVenueElevationCache.coverage(point) {}.hasGap(point))
+        assertEquals(0.0, DesktopVenueElevationCache.elevationMeters(CourseGeoPoint(45.0, -122.0)))
+    }
+
     @Test
     fun importsValidatedDemJsonFilesIntoCacheDirectory() {
         withTemporaryUserHome { home ->
@@ -883,7 +894,7 @@ class DesktopVenueElevationCacheTest {
         }
     }
 
-    private fun withTemporaryUserHome(block: (Path) -> Unit) {
+    internal fun withTemporaryUserHome(block: (Path) -> Unit) {
         val originalHome = System.getProperty("user.home")
         val originalAppData = System.getProperty("radiooracle.appDataDirectory")
         val home = Files.createTempDirectory("radio-oracle-home")
@@ -898,7 +909,7 @@ class DesktopVenueElevationCacheTest {
         }
     }
 
-    private fun writeCache(
+    internal fun writeCache(
         path: Path,
         sourceName: String,
         resolutionMeters: Double,

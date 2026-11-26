@@ -12516,6 +12516,7 @@ private fun RadioOManagerDesktopApp(
                                     title = DesktopNavigation.selectedLabel(navState),
                                     breadcrumb = DesktopNavigation.breadcrumbStates(navState).map { it.first },
                                     onBreadcrumbClick = { requestNavigation(DesktopPendingNavigation.Ancestor(it)) },
+                                    onOpenElevationData = { requestNavigation(DesktopPendingNavigation.Item(DesktopNavigation.ElevationDataMenuId)) },
                                     menuDescription = DesktopNavigation.selectedDescription(navState),
                                     csvAction = DesktopCsvFormatGuides.selectedAction(navState),
                                     fileFormatGuides = remember(navState, projectFile, csvExportProjectFile, isProtectedCourseOrderUnlocked, awardDisplayMode) {
@@ -13841,6 +13842,7 @@ private fun SectionWorkspace(
     title: String,
     breadcrumb: List<String>,
     onBreadcrumbClick: (Int) -> Unit,
+    onOpenElevationData: () -> Unit,
     menuDescription: String,
     fileFormatGuides: List<DesktopFileFormatGuide>,
     csvAction: DesktopNavAction?,
@@ -14156,7 +14158,7 @@ private fun SectionWorkspace(
         if (section == DesktopSection.Courses && projectFile != null) {
             DesktopCoursesPanel(projectFile, isProtectedCourseOrderUnlocked,
                 onUnlockProtectedCourseOrder, onCourseLibraryEdit,
-                protectedCourseInfoByCategoryId, protectedIdealOrderByCategoryId)
+                protectedCourseInfoByCategoryId, protectedIdealOrderByCategoryId, elevationCacheRefreshToken, onOpenElevationData)
         }
         if (section == DesktopSection.ControlsRouteKmlImport && projectFile != null) {
             ControlsRouteKmlImportPanel(onSelectFile = onImportControlsRouteKmlKmz,
@@ -25875,16 +25877,6 @@ private fun LabeledTextField(
 
 private fun ProtectedCourseInfo.courseGeoPoints(): List<CourseGeoPoint> =
     finiteCourseGeoPoints()
-
-private fun List<CourseGeoPoint>.venueBoundingBoxOrNull(): DesktopVenueElevationBoundingBox? =
-    takeIf { it.isNotEmpty() }?.let { points ->
-        DesktopVenueElevationBoundingBox(
-            minLatitude = points.minOf { it.latitude },
-            maxLatitude = points.maxOf { it.latitude },
-            minLongitude = points.minOf { it.longitude },
-            maxLongitude = points.maxOf { it.longitude }
-        )
-    }
 
 internal fun Double.decimalText(): String =
     "%.${6}f".format(this)
