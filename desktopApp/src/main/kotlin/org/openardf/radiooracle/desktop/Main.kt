@@ -23227,7 +23227,7 @@ private fun CategoryDetailsPanel(
     val tableWidth = fixedTableWidth(tableColumns)
     val orderedCategories = rememberEditableRowOrder(categories) { it.id }
     var categoryNameDraft by remember { mutableStateOf("") }
-    var isSyncDialogVisible by remember { mutableStateOf(false) }
+    var isSyncDialogVisible by remember(syncPlan.hasMismatch) { mutableStateOf(false) }
     fun addCategory() {
         val didAdd = onEditCategories(DesktopCategoryListEdit.Add(categoryNameDraft))
         if (didAdd) {
@@ -23236,12 +23236,10 @@ private fun CategoryDetailsPanel(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (syncPlan.hasMismatch) {
-            CategoryCompetitorSyncNotice(
-                plan = syncPlan,
-                onSync = { isSyncDialogVisible = true }
-            )
-        }
+        CategoryCompetitorSyncNotice(
+            plan = syncPlan,
+            onSync = { isSyncDialogVisible = true }
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
@@ -23331,10 +23329,13 @@ private fun CategoryDetailsPanel(
 }
 
 @Composable
-private fun CategoryCompetitorSyncNotice(
+internal fun CategoryCompetitorSyncNotice(
     plan: EventCategoryCompetitorSyncPlan,
     onSync: () -> Unit
 ) {
+    // A populated, reconciled roster needs neither a warning nor a sync action.
+    if (plan.hasRegisteredCompetitors && !plan.hasMismatch) return
+
     val missingCompetitorCount = plan.missingCategories.sumOf { it.competitorCount }
     val warningParts = buildList {
         if (plan.missingCategories.isNotEmpty()) {
@@ -23354,20 +23355,22 @@ private fun CategoryCompetitorSyncNotice(
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = DesktopPalette.WarningBackground
+        color = if (plan.hasMismatch) DesktopPalette.WarningBackground else Color.Transparent
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Category/competitor mismatch: ${warningParts.joinToString("; ")}.",
-                modifier = Modifier.weight(1f),
-                color = DesktopPalette.Warning,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (plan.hasMismatch) {
+                Text(
+                    text = "Category/competitor mismatch: ${warningParts.joinToString("; ")}.",
+                    modifier = Modifier.weight(1f),
+                    color = DesktopPalette.Warning,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             Button(
                 onClick = onSync,
                 enabled = plan.hasMismatch

@@ -21,6 +21,41 @@ import org.openardf.radiooracle.shared.event.*
 class DesktopCoursesPanelTest {
     @get:Rule val rule = createComposeRule()
 
+    @Test
+    fun categorySyncTracksTheFirstAndLastRegistration() {
+        val race = EventProjectFactory.createEmptyProject("race", "Category sync", "2026-07-23T09:00")
+        var project by mutableStateOf(EventProjectEditor.addCategory(race, "m70", "M70"))
+        var syncClicked = false
+        rule.setContent {
+            CategoryCompetitorSyncNotice(EventCategoryCompetitorSync.plan(project.raceData)) {
+                syncClicked = true
+            }
+        }
+        val button = rule.onNodeWithText("Sync to Competitors")
+        val warning = rule.onNodeWithText("Category/competitor mismatch", substring = true)
+        button.assertIsDisplayed().assertIsNotEnabled()
+        warning.assertDoesNotExist()
+
+        // An uncategorized competitor still counts as the first registration.
+        rule.runOnIdle {
+            project = EventProjectEditor.addCompetitor(project, "runner", "Sam", "Hill", "", "")
+        }
+        warning.assertIsDisplayed()
+        button.assertIsEnabled().performClick()
+        rule.runOnIdle {
+            assertTrue(syncClicked)
+            project = EventProjectEditor.assignCompetitorCategory(project, "runner", "m70")
+        }
+        warning.assertDoesNotExist()
+        button.assertDoesNotExist()
+
+        rule.runOnIdle {
+            project = EventProjectEditor.removeCompetitor(project, "runner", deleteReadout = false)
+        }
+        button.assertIsDisplayed().assertIsNotEnabled()
+        warning.assertDoesNotExist()
+    }
+
     @Test fun categoriesCanAssignTheSameExistingCourseToM70AndW65WithoutAnalyzer() {
         val initial = DesktopCourseLibraryTest.unassigned()
         var base = DesktopCourseLibrary.apply(initial,
