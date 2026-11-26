@@ -34,6 +34,7 @@ import org.openardf.radiooracle.backend.room.database.DateTimeTypeConverter
 import org.openardf.radiooracle.backend.room.enums.RaceBand
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.backend.shared.toEventCategory
+import org.openardf.radiooracle.shared.event.CategoryGender
 import org.openardf.radiooracle.shared.files.EventCsvRows
 import java.io.Serializable
 import java.time.Duration
@@ -80,7 +81,8 @@ data class Category(
     @ColumnInfo(name = "encrypted_course_info") var encryptedCourseInfo: String? = null,
     @ColumnInfo(name = "ideal_order") var idealOrder: String? = null,
     @ColumnInfo(name = "course_info") var courseInfo: String? = null,
-    @ColumnInfo(name = "portable_category_id") var portableCategoryId: String? = null
+    @ColumnInfo(name = "portable_category_id") var portableCategoryId: String? = null,
+    @ColumnInfo(name = "is_open", defaultValue = "0") var isOpen: Boolean = false
 ) : Serializable {
 
     /** Formats this category in the legacy CSV export row shape. */
@@ -105,3 +107,11 @@ data class Category(
         ""
     )
 }
+
+/** Room persists the original flag for legacy categories and an additive flag for Open. */
+var Category.gender: CategoryGender
+    get() = CategoryGender.fromFlags(isMan, isOpen)
+    set(value) {
+        isOpen = value == CategoryGender.OPEN
+        isMan = value.isMan ?: isMan
+    }

@@ -39,7 +39,7 @@ class EventCategoryDetailsTest {
         assertEquals(2, rows.size)
         assertEquals("W21", rows[0].id)
         assertEquals("W21", rows[0].name)
-        assertEquals(false, rows[0].isMan)
+        assertEquals(CategoryGender.WOMEN, rows[0].gender)
         assertEquals("5000", rows[0].lengthMetersText)
         assertEquals("100", rows[0].climbMetersText)
         assertEquals("Classic", rows[0].raceTypeLabel)
@@ -50,7 +50,7 @@ class EventCategoryDetailsTest {
 
         assertEquals("M21", rows[1].id)
         assertEquals("M21", rows[1].name)
-        assertEquals(true, rows[1].isMan)
+        assertEquals(CategoryGender.MEN, rows[1].gender)
         assertEquals("Classic", rows[1].raceTypeLabel)
         assertEquals("80m", rows[1].raceBandLabel)
         assertEquals("120:00", rows[1].timeLimitText)

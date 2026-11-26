@@ -163,10 +163,11 @@ object EventProjectFileJson {
             categoryData.category.name,
             categoryData.category.isMan
         )
-        if (reconciledIsMan == categoryData.category.isMan) {
+        val isOpen = categoryData.category.isOpen && StandardCategoryRules.inferIsManFromName(categoryData.category.name) == null
+        if (reconciledIsMan == categoryData.category.isMan && isOpen == categoryData.category.isOpen) {
             return categoryData
         }
-        return categoryData.copy(category = categoryData.category.copy(isMan = reconciledIsMan))
+        return categoryData.copy(category = categoryData.category.copy(isMan = reconciledIsMan, isOpen = isOpen))
     }
 
     private fun EventCategory.hasLegacyRaceSettings(): Boolean =

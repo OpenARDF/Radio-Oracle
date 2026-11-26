@@ -35,7 +35,9 @@ data class DataImportWrapper(
     var categories: List<CategoryData>,
     var invalidLines: ArrayList<Pair<Int, String>>, // Row index plus validation failure reason.
     var readoutData: List<ReadoutData> = emptyList(),
-    var iofWarnings: List<String> = emptyList()
+    var iofWarnings: List<String> = emptyList(),
+    // CourseData supplies course geometry and controls, but no class eligibility.
+    val isIofCourseData: Boolean = false
 ) {
     /** Returns the number of accepted rows relevant to the requested import data type. */
     fun getCount(dataType: DataType): Int {

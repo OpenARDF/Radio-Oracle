@@ -54,6 +54,8 @@ import org.openardf.radiooracle.backend.shared.toEventReadoutData
 import org.openardf.radiooracle.backend.sportident.SITime
 import org.openardf.radiooracle.shared.files.EventCsvImports
 import org.openardf.radiooracle.shared.files.SplitResultExports
+import org.openardf.radiooracle.backend.room.entity.gender
+import org.openardf.radiooracle.shared.event.CategoryGender
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import java.io.IOException
 import java.io.InputStream
@@ -146,7 +148,7 @@ object CsvProcessor : FormatProcessor {
 
 
     /** Imports category/course rows and reports invalid rows without aborting the whole import. */
-    private fun importCategories(
+    private suspend fun importCategories(
         inStream: InputStream,
         race: Race,
         dataProcessor: DataProcessor,
@@ -159,11 +161,13 @@ object CsvProcessor : FormatProcessor {
 
         for ((index, row) in parsedRows.rows.withIndex()) {
             try {
+                val existing = if (row.isOpen == null) dataProcessor.getCategoryByName(row.name, race.id) else null
+                val gender = row.genderForImport(race.raceLevel, existing?.gender)
                 val category = Category(
                     UUID.randomUUID(),
                     race.id,
                     row.name,
-                    row.isMan,
+                    gender.isMan ?: existing?.isMan ?: row.isMan,
                     row.maxAge,
                     row.lengthMeters,
                     row.climbMeters,
@@ -172,7 +176,8 @@ object CsvProcessor : FormatProcessor {
                     null,
                     null,
                     null,
-                    ""
+                    "",
+                    isOpen = gender == CategoryGender.OPEN
                 )
 
                 val controlPoints = ControlPointsHelper.getControlPointsFromString(
@@ -330,7 +335,7 @@ object CsvProcessor : FormatProcessor {
                 UUID.randomUUID(),
                 race.id,
                 row.categoryName,
-                false,
+                StandardCategoryRules.inferIsManFromName(row.categoryName) ?: false,
                 null,
                 0,
                 0,
@@ -339,7 +344,8 @@ object CsvProcessor : FormatProcessor {
                 null,
                 null,
                 null,
-                ""
+                "",
+                isOpen = StandardCategoryRules.allowsOpen(row.categoryName, race.raceLevel)
             ), emptyList(), emptyList()
         )
     }

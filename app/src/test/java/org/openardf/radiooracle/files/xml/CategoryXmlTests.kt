@@ -114,6 +114,24 @@ class CategoryXmlTests {
         dataProcessor.saveDataImportWrapper(wrapper)
 
         val categoryData = dataProcessor.getCategoryDataForRace(race.id)
+        // A course refresh must use the saved class, even if eligibility changed after preview.
+        val first = categoryData.single { it.category.name == "A" }.category
+        assertEquals(true, first.isOpen)
+        dataProcessor.createOrUpdateCategory(first.copy(isOpen = false, isMan = true), null)
+        val refreshed = this::class.java.classLoader!!.getResourceAsStream("xml/xml_category_valid_example.xml")!!.use {
+            IofXmlProcessor.importCategories(it, race, context, existingCategories = dataProcessor.getCategoriesForRace(race.id))
+        }
+        val preview = refreshed.categories.single { it.category.name == "A" }.category
+        assertEquals(false, preview.isOpen)
+        assertEquals(true, preview.isMan)
+        dataProcessor.createOrUpdateCategory(first.copy(isOpen = false, isMan = false), null)
+        dataProcessor.saveDataImportWrapper(refreshed)
+        val saved = dataProcessor.getCategory(first.id)!!
+        assertEquals(false, saved.isOpen)
+        assertEquals(false, saved.isMan)
+        assertEquals(2, dataProcessor.getCategoriesForRace(race.id).size)
+        assertEquals(categoryData.first { it.category.id == first.id }.controlPoints.map { it.siCode },
+            dataProcessor.getCategoryData(first.id)!!.controlPoints.map { it.siCode })
         assertEquals(2, categoryData.size)
         assertEquals(listOf(31, 32, 33, 31, 34, 35, 31, 100), categoryData.first { it.category.name == "A" }.controlPoints.map { it.siCode })
     }

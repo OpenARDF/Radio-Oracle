@@ -24,7 +24,24 @@
 
 package org.openardf.radiooracle.shared.event
 
+import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.StandardCategoryType
+
+/** Eligibility belongs to the category; a competitor has a separate gender. */
+enum class CategoryGender(val isMan: Boolean?) {
+    MEN(true), WOMEN(false), OPEN(null);
+
+    companion object {
+        fun choicesFor(level: RaceLevel): List<CategoryGender> =
+            if (level == RaceLevel.PRACTICE) entries else listOf(MEN, WOMEN)
+
+        fun fromFlags(isMan: Boolean, isOpen: Boolean): CategoryGender = when {
+            isOpen -> OPEN
+            isMan -> MEN
+            else -> WOMEN
+        }
+    }
+}
 
 /** Parsed built-in category definition independent of Android resources. */
 data class StandardCategoryDefinition(
@@ -99,6 +116,13 @@ object StandardCategoryRules {
             else -> null
         }
     }
+
+    /** Use this only at creation or explicit edit, never to reinterpret a saved custom category. */
+    fun allowsOpen(name: String, level: RaceLevel): Boolean =
+        level == RaceLevel.PRACTICE && inferIsManFromName(name) == null
+
+    fun genderForName(name: String, customGender: CategoryGender): CategoryGender =
+        inferIsManFromName(name)?.let { CategoryGender.fromFlags(it, false) } ?: customGender
 
     /** Returns the gender flag corrected by standard category naming when the name implies one. */
     fun reconcileIsManWithName(name: String, isMan: Boolean): Boolean =

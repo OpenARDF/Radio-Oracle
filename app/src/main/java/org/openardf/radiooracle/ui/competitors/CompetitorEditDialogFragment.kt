@@ -271,7 +271,8 @@ class CompetitorEditDialogFragment : DialogFragment() {
                 if (catPos > 0 && catPos <= categories.size) {
                     val category = categories[catPos - 1]
                     competitor.categoryId = category.id
-                    competitor.isMan = category.isMan
+                    // An Open category supplies no personal gender when editing a registration.
+                    if (!category.isOpen) competitor.isMan = category.isMan
                 } else {
                     competitor.categoryId = null
                     competitor.isMan = manualGenderCheckBox.isChecked
@@ -379,7 +380,7 @@ class CompetitorEditDialogFragment : DialogFragment() {
 
     private fun updateManualGenderVisibility() {
         val catPos = categoryArr.indexOf(categoryPicker.text.toString()).or(0)
-        manualGenderCheckBox.visibility = if (catPos > 0 && catPos <= categories.size) {
+        manualGenderCheckBox.visibility = if (categories.getOrNull(catPos - 1)?.isOpen == false) {
             View.GONE
         } else {
             View.VISIBLE

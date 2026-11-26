@@ -277,3 +277,10 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
         )
     }
 }
+
+/** Existing categories keep their legacy gender. Only newly chosen Open eligibility sets this bit. */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE category ADD COLUMN is_open INTEGER NOT NULL DEFAULT 0")
+    }
+}

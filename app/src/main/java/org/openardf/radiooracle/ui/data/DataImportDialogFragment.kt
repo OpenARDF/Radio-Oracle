@@ -289,7 +289,11 @@ class DataImportDialogFragment : DialogFragment() {
         if (data != null) {
             val currType = getCurrentType()
             when (currType) {
-                DataType.CATEGORIES -> importCategories(data!!.categories)
+                DataType.CATEGORIES -> {
+                    val preview = requireNotNull(data)
+                    if (preview.isIofCourseData) selectedRaceViewModel.saveDataImportWrapper(preview)
+                    else importCategories(preview.categories)
+                }
 
                 DataType.COMPETITORS -> {
                     selectedRaceViewModel.saveDataImportWrapper(data!!)

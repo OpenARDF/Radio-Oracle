@@ -387,7 +387,7 @@ object IofXmlImports {
             )
         }
         val courses = parsedCourses.map { it.categoryData }
-        val (categories, assignedCategoryIds) = assignedCourses(raceCourseData, courseNodes, courses, idFactory, warnings)
+        val (categories, assignedCategoryIds) = assignedCourses(raceCourseData, courseNodes, courses, race.raceLevel, idFactory, warnings)
 
         return IofXmlImportResult(
             parsedData = IofCourseDataPreview(
@@ -620,7 +620,7 @@ object IofXmlImports {
         IofXmlValidator.requireValid(xml, iofSchema)
     }
 
-    private fun assignedCourses(root: XmlNode, nodes: List<XmlNode>, courses: List<EventCategoryData>,
+    private fun assignedCourses(root: XmlNode, nodes: List<XmlNode>, courses: List<EventCategoryData>, level: RaceLevel,
                                 idFactory: (String) -> String, warnings: MutableList<IofXmlUnsupportedItem>): Pair<List<EventCategoryData>, Set<String>> {
         val assignments = root.children("ClassCourseAssignment")
         if (assignments.isEmpty()) return courses to emptySet()
@@ -644,7 +644,11 @@ object IofXmlImports {
             used += index
             val data = courses[index]
             val id = idFactory("iof-class-$name")
-            data.copy(category = data.category.copy(id = id, name = name),
+            data.copy(category = data.category.copy(
+                id = id, name = name,
+                isMan = StandardCategoryRules.reconcileIsManWithName(name, data.category.isMan),
+                isOpen = StandardCategoryRules.allowsOpen(name, level)
+            ),
                 controlPoints = data.controlPoints.map { it.copy(id = "$id-${it.id}", categoryId = id) })
         }
         return (assigned + courses.filterIndexed { index, _ -> index !in used }) to assigned.map { it.category.id }.toSet()
@@ -727,6 +731,7 @@ object IofXmlImports {
         return ParsedIofCourse(
             categoryData = EventCategoryData(category = EventCategory(id = categoryId, raceId = race.id, name = courseName,
                 isMan = StandardCategoryRules.inferIsManFromName(courseName) ?: true, maxAge = null,
+                isOpen = StandardCategoryRules.allowsOpen(courseName, race.raceLevel),
                 lengthMeters = info.lengthMeters ?: 0, climbMeters = info.climbMeters ?: 0, order = index,
                 differentProperties = false, raceType = null, raceBand = null, timeLimitSeconds = null,
                 controlPointsString = "", courseInfo = info), controlPoints = controlPoints, competitors = emptyList()),

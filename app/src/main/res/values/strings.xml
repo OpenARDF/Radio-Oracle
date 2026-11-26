@@ -24,6 +24,7 @@
     <string name="general_finish_time">Finish Time</string>
     <string name="general_gender">Gender</string>
     <string name="general_gender_man">Men</string>
+    <string name="category_gender_open">Open</string>
     <string name="general_gender_woman">Women</string>
     <string name="general_index">Person ID</string>
     <string name="general_invalid">Invalid</string>

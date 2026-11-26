@@ -40,7 +40,7 @@ object EventCsvRows {
     fun categoryRow(category: EventCategory): String {
         return csvRow(
             category.name,
-            category.isMan.compareTo(false),
+            if (category.isOpen) "open" else category.isMan.compareTo(false).toString(),
             category.maxAge ?: EventCsvFormat.Category.OPEN_MAX_AGE,
             category.lengthMeters,
             category.climbMeters,

@@ -56,7 +56,8 @@ data class CategoryJson(
     val category_different_properties: Boolean,
     val category_race_type: RaceType?,
     val category_time_limit: String?,
-    val category_band: RaceBand?
+    val category_band: RaceBand?,
+    val category_open: Boolean? = null
 )
 
 /** JSON DTO for one control point in a category course. */

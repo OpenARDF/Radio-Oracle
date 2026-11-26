@@ -223,6 +223,7 @@ import org.openardf.radiooracle.shared.event.ProtectedIdealOrderRules
 import org.openardf.radiooracle.shared.event.PublicResultsPublication
 import org.openardf.radiooracle.shared.event.PublicResultsPublicationStatus
 import org.openardf.radiooracle.shared.event.ResultRecalculationOutcome
+import org.openardf.radiooracle.shared.event.CategoryGender
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.StartDrawClubHandling
 import org.openardf.radiooracle.shared.event.StartDrawOptions
@@ -7767,10 +7768,10 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                     projectStatusText = "Edit failed: ${genericEditErrorText(error)}"
                 }
             },
-            onUpdateCategoryGender = { categoryId, isMan ->
+            onUpdateCategoryGender = { categoryId, gender ->
                 runCatching {
                     projectFile = projectSession.updateCurrentProject { currentProject ->
-                        EventProjectEditor.updateCategoryGender(currentProject, categoryId, isMan)
+                        EventProjectEditor.updateCategoryGender(currentProject, categoryId, gender)
                     }
                     hasUnsavedChanges = projectSession.hasUnsavedChanges
                     recordActivity("Updated category gender.")
@@ -12200,7 +12201,7 @@ private fun RadioOManagerDesktopApp(
     onUpdateRaceSettings: (RaceType, RaceLevel, RaceBand, String, Boolean) -> Unit = { _, _, _, _, _ -> },
     onUpdateEventFileName: (String) -> Boolean = { false },
     onRenameCategory: (String, String) -> Unit = { _, _ -> },
-    onUpdateCategoryGender: (String, Boolean) -> Unit = { _, _ -> },
+    onUpdateCategoryGender: (String, CategoryGender) -> Unit = { _, _ -> },
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit = { _, _, _ -> },
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit = { _, _, _ -> },
     onEditCategories: (DesktopCategoryListEdit) -> Boolean = { false },
@@ -13867,7 +13868,7 @@ private fun SectionWorkspace(
     onUpdateEventFileName: (String) -> Boolean,
     onOpenEventFileWorkingFolder: () -> Unit,
     onRenameCategory: (String, String) -> Unit,
-    onUpdateCategoryGender: (String, Boolean) -> Unit,
+    onUpdateCategoryGender: (String, CategoryGender) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onEditCategories: (DesktopCategoryListEdit) -> Boolean,
@@ -14397,7 +14398,7 @@ private fun SetupSectionWorkspaceContent(
     onUpdateEventFileName: (String) -> Boolean,
     onOpenEventFileWorkingFolder: () -> Unit,
     onRenameCategory: (String, String) -> Unit,
-    onUpdateCategoryGender: (String, Boolean) -> Unit,
+    onUpdateCategoryGender: (String, CategoryGender) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onEditCategories: (DesktopCategoryListEdit) -> Boolean,
@@ -23213,7 +23214,7 @@ private fun CategoryDetailsPanel(
     raceLevel: RaceLevel,
     syncPlan: EventCategoryCompetitorSyncPlan,
     onRenameCategory: (String, String) -> Unit,
-    onUpdateCategoryGender: (String, Boolean) -> Unit,
+    onUpdateCategoryGender: (String, CategoryGender) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit,
     onEditCategories: (DesktopCategoryListEdit) -> Boolean,
@@ -23301,6 +23302,7 @@ private fun CategoryDetailsPanel(
                                 controls = controls,
                                 tableColumns = tableColumns,
                                 showGenderColumn = showGenderColumn,
+                                raceLevel = raceLevel,
                                 showPhysicalStats = showPhysicalStats,
                                 onRenameCategory = onRenameCategory,
                                 onUpdateCategoryGender = onUpdateCategoryGender,
@@ -23861,12 +23863,13 @@ private fun CategoryAddRow(
 @Composable
 private fun CategoryDetailRow(
     category: EventCategoryDetails,
+    raceLevel: RaceLevel,
     controls: List<EventControlDetails>,
     tableColumns: List<FixedTableColumn>,
     showGenderColumn: Boolean,
     showPhysicalStats: Boolean,
     onRenameCategory: (String, String) -> Unit,
-    onUpdateCategoryGender: (String, Boolean) -> Unit,
+    onUpdateCategoryGender: (String, CategoryGender) -> Unit,
     onUpdateCategoryControlPoints: (String, String, Boolean) -> Unit,
     onUpdateCategoryPhysicalStats: (String, String, String) -> Unit
 ) {
@@ -23899,7 +23902,6 @@ private fun CategoryDetailRow(
         onDispose { applyLatestCategoryNameDraft() }
     }
     val inferredIsMan = StandardCategoryRules.inferIsManFromName(category.name)
-    val displayIsMan = inferredIsMan ?: category.isMan
     val rowTextColor = if (category.assignedCompetitorCount == 0) {
         DesktopPalette.Error
     } else {
@@ -23910,7 +23912,7 @@ private fun CategoryDetailRow(
     Row(
         modifier = Modifier
             .width(fixedTableWidth(tableColumns))
-            .background(categoryGenderBackground(displayIsMan)),
+            .background(categoryGenderBackground(category.gender)),
         horizontalArrangement = Arrangement.spacedBy(TableColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -23933,8 +23935,9 @@ private fun CategoryDetailRow(
             val genderColumn = tableColumns[columnIndex++]
             if (inferredIsMan == null) {
                 CategoryGenderPicker(
-                    isMan = category.isMan,
-                    onGenderChange = { isMan -> onUpdateCategoryGender(category.id, isMan) },
+                    gender = category.gender,
+                    choices = CategoryGender.choicesFor(raceLevel),
+                    onGenderChange = { onUpdateCategoryGender(category.id, it) },
                     modifier = Modifier.width(genderColumn.width),
                     textColor = rowTextColor
                 )
@@ -24009,8 +24012,9 @@ private fun CategoryDetailRow(
 
 @Composable
 private fun CategoryGenderPicker(
-    isMan: Boolean,
-    onGenderChange: (Boolean) -> Unit,
+    gender: CategoryGender,
+    choices: List<CategoryGender>,
+    onGenderChange: (CategoryGender) -> Unit,
     modifier: Modifier = Modifier,
     textColor: Color = DesktopPalette.Black
 ) {
@@ -24020,42 +24024,32 @@ private fun CategoryGenderPicker(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
-                backgroundColor = if (isMan) Color(0xFFD5EAFE) else Color(0xFFFFD8D8),
+                backgroundColor = if (gender == CategoryGender.OPEN) MaterialTheme.colors.surface else categoryGenderBackground(gender),
                 contentColor = textColor
             )
-        ) {
-            ButtonLabel(if (isMan) "Men" else "Women")
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            DropdownMenuItem(
-                onClick = {
+        ) { ButtonLabel(gender.label()) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            choices.forEach { option ->
+                DropdownMenuItem(onClick = {
                     expanded = false
-                    if (!isMan) {
-                        onGenderChange(true)
-                    }
-                }
-            ) {
-                Text("Men")
-            }
-            DropdownMenuItem(
-                onClick = {
-                    expanded = false
-                    if (isMan) {
-                        onGenderChange(false)
-                    }
-                }
-            ) {
-                Text("Women")
+                    if (option != gender) onGenderChange(option)
+                }) { Text(option.label()) }
             }
         }
     }
 }
 
-private fun categoryGenderBackground(isMan: Boolean): Color =
-    if (isMan) CategoryMenBackground else CategoryWomenBackground
+private fun CategoryGender.label() = when (this) {
+    CategoryGender.MEN -> "Men"
+    CategoryGender.WOMEN -> "Women"
+    CategoryGender.OPEN -> "Open"
+}
+
+private fun categoryGenderBackground(gender: CategoryGender): Color = when (gender) {
+    CategoryGender.MEN -> CategoryMenBackground
+    CategoryGender.WOMEN -> CategoryWomenBackground
+    CategoryGender.OPEN -> Color.Transparent
+}
 
 @Composable
 private fun AssignedControlsEditor(
@@ -25473,6 +25467,7 @@ internal fun EventProjectFile.categoryImportRows(): List<CategoryCsvImportRow> =
             CategoryCsvImportRow(
                 name = category.name,
                 isMan = category.isMan,
+                isOpen = category.isOpen,
                 maxAge = category.maxAge ?: 99,
                 lengthMeters = category.lengthMeters,
                 climbMeters = category.climbMeters,

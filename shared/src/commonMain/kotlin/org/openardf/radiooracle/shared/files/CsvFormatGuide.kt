@@ -125,7 +125,7 @@ object CsvFormatGuides {
     }
 
     private val descriptions = mapOf(
-        "category" to "Category name, for example M21.", "is_man" to "Male category flag: 1 male, 0 female; standard category names determine this when recognized.",
+        "category" to "Category name, for example M21.", "is_man" to "Male category flag: 1 male, 0 female, or open for a custom Practice category; standard category names determine this when recognized.",
         "max_age" to "Maximum age; 99 represents an open age limit.", "length_m" to "Horizontal course length in meters, a nonnegative integer; blank means 0.",
         "climb_m" to "Course climb in meters, a nonnegative integer; blank means 0.", "follows_race_presets" to "1 uses race settings; otherwise the following three settings are required.",
         "race_type" to "Race type name or display label, such as CLASSIC, SPRINT or FOXORING.", "time_limit_min" to "Time limit in whole minutes when not using race presets.",

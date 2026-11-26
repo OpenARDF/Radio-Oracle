@@ -34,7 +34,7 @@ import org.openardf.radiooracle.shared.time.DurationFormatter
 data class EventCategoryDetails(
     val id: String,
     val name: String,
-    val isMan: Boolean,
+    val gender: CategoryGender,
     val lengthMetersText: String,
     val climbMetersText: String,
     val raceTypeLabel: String,
@@ -61,7 +61,7 @@ data class EventCategoryDetails(
                     EventCategoryDetails(
                         id = category.id,
                         name = category.name,
-                        isMan = category.isMan,
+                        gender = category.gender,
                         lengthMetersText = category.lengthMeters.toString(),
                         climbMetersText = category.climbMeters.toString(),
                         raceTypeLabel = raceType.toDisplayLabel(),

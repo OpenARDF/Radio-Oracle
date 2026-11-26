@@ -121,6 +121,7 @@ object FinalResultJsonExports {
         return FinalCategoryJson(
             categoryName = category.name,
             categoryGender = category.isMan,
+            categoryOpen = category.isOpen,
             categoryMaxAge = category.maxAge,
             categoryLength = if (protectedCourseInfoByCategoryId == null) {
                 category.lengthMeters
@@ -271,6 +272,7 @@ object FinalResultJsonExports {
     data class FinalCategoryJson(
         @SerialName("category_name") val categoryName: String,
         @SerialName("category_gender") val categoryGender: Boolean,
+        @SerialName("category_open") val categoryOpen: Boolean = false,
         @SerialName("category_max_age") val categoryMaxAge: Int? = null,
         @SerialName("category_length") val categoryLength: Int,
         @SerialName("category_climb") val categoryClimb: Int,

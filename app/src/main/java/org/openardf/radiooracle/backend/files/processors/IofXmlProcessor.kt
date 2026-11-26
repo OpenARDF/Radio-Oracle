@@ -113,7 +113,8 @@ object IofXmlProcessor : FormatProcessor {
                     inStream,
                     race,
                     context,
-                    schema
+                    schema,
+                    dataProcessor.getCategoriesForRace(race.id)
                 )
 
                 DataType.COMPETITOR_STARTS -> importStartList(
@@ -197,17 +198,27 @@ object IofXmlProcessor : FormatProcessor {
         inStream: InputStream,
         race: Race,
         context: Context,
-        iofSchema: String? = null
+        iofSchema: String? = null,
+        existingCategories: List<Category> = emptyList()
     ): DataImportWrapper {
         val xml = inStream.readBytes().toString(Charsets.UTF_8)
         val sharedRace = race.toEventRace()
         val result = iofSchema?.let { schema ->
             IofXmlImports.validatedCourseData(xml, schema, sharedRace)
         } ?: IofXmlImports.courseData(xml, sharedRace)
-        val cats = result.parsedData.categories.map { it.toRoomCategoryDataPreservingControlOrder() }
+        val existingByName = existingCategories.associateBy { it.name }
+        val cats = result.parsedData.categories.map { imported ->
+            val row = imported.toRoomCategoryDataPreservingControlOrder()
+            existingByName[row.category.name]?.let { existing ->
+                row.category.isMan = existing.isMan
+                row.category.isOpen = existing.isOpen
+            }
+            row
+        }
         return DataImportWrapper(
             competitorCategories = emptyList(),
             categories = cats,
+            isIofCourseData = true,
             invalidLines = arrayListOf(),
             iofWarnings = result.unsupportedItems.map { "${it.location}: ${it.reason}" }
         )
@@ -307,7 +318,8 @@ object IofXmlProcessor : FormatProcessor {
                 null,
                 null,
                 null,
-                ""
+                "",
+                isOpen = StandardCategoryRules.allowsOpen(row.categoryName, race.raceLevel)
             ),
             emptyList(),
             emptyList()

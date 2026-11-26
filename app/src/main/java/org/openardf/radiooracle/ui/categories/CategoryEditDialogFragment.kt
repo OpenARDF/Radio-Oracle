@@ -34,6 +34,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResult
@@ -47,6 +48,10 @@ import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
+import org.openardf.radiooracle.backend.room.entity.gender
+import org.openardf.radiooracle.shared.domain.RaceLevel
+import org.openardf.radiooracle.shared.event.CategoryGender
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.backend.room.enums.RaceType
 import org.openardf.radiooracle.ui.SelectedRaceViewModel
 import org.openardf.radiooracle.ui.setInvariantNumber
@@ -60,6 +65,7 @@ class CategoryEditDialogFragment : DialogFragment() {
     private lateinit var selectedRaceViewModel: SelectedRaceViewModel
     private val dataProcessor = DataProcessor.get()
     private lateinit var category: Category
+    private lateinit var customGender: CategoryGender
 
     private lateinit var nameEditText: TextInputEditText
     private lateinit var samePropertiesCheckBox: CheckBox
@@ -124,14 +130,14 @@ class CategoryEditDialogFragment : DialogFragment() {
         cancelButton = view.findViewById(R.id.category_dialog_cancel)
         okButton = view.findViewById(R.id.category_dialog_ok)
 
-        populateFields()
+        populateFields(savedInstanceState)
         setButtons()
     }
 
     /**
      * Populate the data fields - text views, pickers
      */
-    private fun populateFields() {
+    private fun populateFields(savedInstanceState: Bundle?) {
         val race = args.race
 
         if (args.create) {
@@ -150,7 +156,8 @@ class CategoryEditDialogFragment : DialogFragment() {
                 null,
                 null,
                 null,
-                args.controlPoints
+                args.controlPoints,
+                isOpen = race.raceLevel == RaceLevel.PRACTICE
             )
 
             //Preset the data from the race
@@ -206,8 +213,18 @@ class CategoryEditDialogFragment : DialogFragment() {
         bandLayout.visibility = View.GONE
         limitLayout.visibility = View.GONE
 
-        //Set gender
-        genderPicker.setText(dataProcessor.genderToString(category.isMan), false)
+        // Remember a custom choice while typing; a standard name always supplies its own gender.
+        customGender = savedInstanceState?.getString("customGender")?.let(CategoryGender::valueOf) ?: category.gender
+        val choices = CategoryGender.choicesFor(race.raceLevel)
+        genderPicker.setSimpleItems(choices.map(dataProcessor::categoryGenderToString).toTypedArray())
+        genderPicker.setOnItemClickListener { _, _, position, _ -> customGender = choices[position] }
+        fun showGender(name: String) {
+            val gender = StandardCategoryRules.genderForName(name, customGender)
+            genderPicker.setText(dataProcessor.categoryGenderToString(gender), false)
+            genderPicker.isEnabled = StandardCategoryRules.inferIsManFromName(name) == null
+        }
+        showGender(category.name)
+        nameEditText.doAfterTextChanged { showGender(it.toString()) }
         controlPointsEditText.setText(getEditableControlPointsString())
 
         //TODO: Process the saving - this is just to preserve the filtering after screen rotation
@@ -278,7 +295,7 @@ class CategoryEditDialogFragment : DialogFragment() {
                 }
 
                 //Set the data from pickers
-                category.isMan = getGenderFromPicker()
+                category.gender = StandardCategoryRules.genderForName(category.name, customGender)
 
                 category.differentProperties = false
                 category.raceType = null
@@ -310,8 +327,9 @@ class CategoryEditDialogFragment : DialogFragment() {
         }
     }
 
-    fun getGenderFromPicker(): Boolean {
-        return dataProcessor.genderFromString(genderPicker.text.toString())
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("customGender", customGender.name)
     }
 
     private fun getEditableControlPointsString(): String {

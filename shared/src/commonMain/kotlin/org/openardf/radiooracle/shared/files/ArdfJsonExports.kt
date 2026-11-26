@@ -119,6 +119,7 @@ object ArdfJsonExports {
         return ArdfCategory(
             categoryName = category.name,
             categoryGender = category.isMan,
+            categoryOpen = category.isOpen,
             categoryMaxAge = category.maxAge ?: EventCsvFormat.Category.OPEN_MAX_AGE,
             categoryLength = if (protectedCourseInfoByCategoryId == null) {
                 category.lengthMeters / METERS_PER_KILOMETER
@@ -303,6 +304,7 @@ object ArdfJsonExports {
     data class ArdfCategory(
         @SerialName("category_name") val categoryName: String,
         @SerialName("category_gender") val categoryGender: Boolean,
+        @SerialName("category_open") val categoryOpen: Boolean = false,
         @SerialName("category_max_age") val categoryMaxAge: Int,
         @SerialName("category_length") val categoryLength: Double,
         @SerialName("category_climb") val categoryClimb: Int,
