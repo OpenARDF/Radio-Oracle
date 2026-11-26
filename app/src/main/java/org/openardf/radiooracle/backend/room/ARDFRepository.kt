@@ -27,6 +27,7 @@ package org.openardf.radiooracle.backend.room
 import android.content.Context
 import androidx.room.Room
 import androidx.room.withTransaction
+import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.backend.files.AndroidEventSeriesImport
 import org.openardf.radiooracle.backend.room.database.EventDatabase
 import org.openardf.radiooracle.backend.room.database.MIGRATION_10_11
@@ -123,15 +124,29 @@ class ARDFRepository private constructor(context: Context) {
     suspend fun createCategory(category: Category) =
         eventDatabase.categoryDao().createOrUpdateCategory(category)
 
-    suspend fun createOrUpdateCategory(category: Category, controlPoints: List<ControlPoint>?) {
-        eventDatabase.withTransaction {
-            eventDatabase.categoryDao().createOrUpdateCategory(category)
-
-            if (controlPoints != null) {
-                deleteControlPointsByCategory(category.id)
-                createControlPoints(controlPoints)
-            }
+    suspend fun createOrUpdateCategory(
+        category: Category, controlPoints: List<ControlPoint>?, isIofCourseData: Boolean = false
+    ): Category = eventDatabase.withTransaction {
+        val target = if (isIofCourseData) courseImportTarget(category) else category
+        eventDatabase.categoryDao().createOrUpdateCategory(target)
+        if (controlPoints != null) {
+            deleteControlPointsByCategory(target.id)
+            createControlPoints(if (target.id == category.id) controlPoints else
+                controlPoints.map { it.copy(categoryId = target.id) })
         }
+        target
+    }
+
+    /** Re-read eligibility inside the write transaction in case it changed after preview. */
+    private suspend fun courseImportTarget(incoming: Category): Category {
+        val existing = getCategoryByName(incoming.name, incoming.raceId)
+        if (existing != null) return incoming.copy(
+            id = existing.id, portableCategoryId = existing.portableCategoryId, order = existing.order,
+            isMan = existing.isMan, isOpen = existing.isOpen
+        )
+        val race = requireNotNull(getRace(incoming.raceId))
+        return incoming.copy(order = getHighestCategoryOrder(race.id) + 1,
+            isOpen = StandardCategoryRules.allowsOpen(incoming.name, race.raceLevel))
     }
 
     private suspend fun createControlPoints(controlPoints: List<ControlPoint>) {
