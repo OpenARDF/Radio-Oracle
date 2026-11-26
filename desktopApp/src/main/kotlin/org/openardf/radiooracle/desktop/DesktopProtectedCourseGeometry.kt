@@ -72,6 +72,13 @@ internal fun ProtectedCourseInfo.finiteCourseGeoPoints(): List<CourseGeoPoint> =
 private fun ProtectedCourseRoutePoint.hasValidCoordinate(): Boolean =
     latitude.isValidLatitude() && longitude.isValidLongitude()
 
+/** Enclose the actual terrain geometry, including off-axis bends and zero-extent courses. */
+internal fun List<CourseGeoPoint>.venueBoundingBoxOrNull(): DesktopVenueElevationBoundingBox? =
+    if (isEmpty()) null else DesktopVenueElevationBoundingBox(
+        minLatitude = minOf { it.latitude }, maxLatitude = maxOf { it.latitude },
+        minLongitude = minOf { it.longitude }, maxLongitude = maxOf { it.longitude }
+    )
+
 private fun ProtectedCourseControlPoint.hasValidCoordinate(): Boolean =
     latitude.isValidLatitude() && longitude.isValidLongitude()
 

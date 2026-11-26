@@ -308,6 +308,7 @@ object DesktopNavigation {
     private const val EventSeriesSettingsMenuId = "setup.event-file.series-settings"
     private const val ToolsMenuId = "setup.tools"
     private const val CourseToolsMenuId = "setup.courses.course-tools"
+    const val ElevationDataMenuId = "setup.controls.elevation-cache"
     private const val ControlsMenuId = "setup.controls"
     private const val ControlsImportMenuId = "setup.controls.import"
 
@@ -345,7 +346,7 @@ object DesktopNavigation {
                             DesktopSection.Controls
                         ),
                         group(
-                            "setup.controls.elevation-cache",
+                            ElevationDataMenuId,
                             "Elevation Data",
                             workflow,
                             listOf(
