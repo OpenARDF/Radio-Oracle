@@ -26,6 +26,7 @@ package org.openardf.radiooracle.desktop
 
 import org.openardf.radiooracle.shared.event.EventCategory
 import org.openardf.radiooracle.shared.event.EventProjectEditor
+import org.openardf.radiooracle.shared.event.hasEncryptedCourseData
 import org.openardf.radiooracle.shared.event.EventProjectFile
 import org.openardf.radiooracle.shared.event.ProtectedCourseInfo
 
@@ -110,10 +111,7 @@ internal fun EventProjectFile.hasProtectedCategoryData(): Boolean =
     }
 
 internal fun EventProjectFile.hasEncryptedCategoryData(): Boolean =
-    protectedCourseDataContainers(raceData).any {
-        it.category.encryptedIdealOrder?.isNotBlank() == true ||
-            it.category.encryptedCourseInfo?.isNotBlank() == true
-    }
+    hasEncryptedCourseData()
 
 internal fun EventProjectFile.hasUnencryptedCategoryData(): Boolean =
     protectedCourseDataContainers(raceData).any {

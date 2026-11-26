@@ -62,6 +62,9 @@ import org.openardf.radiooracle.backend.shared.withPracticeReadoutNames
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.Locale
@@ -98,15 +101,12 @@ class SelectedRaceViewModel : ViewModel() {
 
     var resultService: LiveData<ResultServiceData> = MutableLiveData(null)
 
-    // Jobs for running collectors - stored so we can cancel them when switching races
-    private var categoryJob: Job? = null
-    private var competitorJob: Job? = null
-    private var readoutJob: Job? = null
-    private var resultWrapperJob: Job? = null
+    // One cancellable job owns both the pending Room lookup and every collector for that selection.
+    private var selectionJob: Job? = null
     private var selectedRaceId: UUID? = null
 
     init {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             dataProcessor.raceSelectionRequests.collect { raceId ->
                 if (raceId != selectedRaceId) {
                     setRace(raceId)
@@ -114,7 +114,7 @@ class SelectedRaceViewModel : ViewModel() {
             }
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             dataProcessor.getEventSeries().collect { series ->
                 _eventSeries.value = series
                 updateCurrentRaceSeries()
@@ -127,55 +127,49 @@ class SelectedRaceViewModel : ViewModel() {
         return race.value
     }
 
-    /**
-     * Updates the current selected race and corresponding data
-     * Return indicates if the race was correctly set and retrieved from DB
-     */
+    /** Manual and SI-routed selections share the same serialized transition. */
     fun setRace(id: UUID) {
-        selectedRaceId = id
+        viewModelScope.launch {
+            selectRace(id)
+        }
+    }
 
-        // Cancel any previous collectors to avoid collecting old race data
-        categoryJob?.cancel()
-        competitorJob?.cancel()
-        readoutJob?.cancel()
-        resultWrapperJob?.cancel()
+    private fun selectRace(id: UUID) {
+        selectedRaceId = id
+        selectionJob?.cancel()
 
         // Clear previously shown data immediately so UI doesn't show stale values
         _categories.value = emptyList()
         _competitorData.value = emptyList()
         _readoutData.value = emptyList()
         _resultWrappers.value = emptyList()
-        _race.postValue(null)
+        _race.value = null
         updateCurrentRaceSeries()
 
-        // Use viewModelScope so the collectors are lifecycle-aware and can be cancelled when VM is cleared
-        viewModelScope.launch(Dispatchers.IO) {
+        selectionJob = viewModelScope.launch {
             val race = dataProcessor.setCurrentRace(id)
 
             if (race != null) {
-                _race.postValue(race)
+                _race.value = race
 
-                // start collectors and keep job references so they can be cancelled on next setRace
-                categoryJob = launch {
-                    dataProcessor.getCategoryDataFlowForRace(id).collect {
-                        _categories.value = CategoryDisplaySort.categoryData(it)
-                    }
+                // Sort and score off the UI thread. Publishing on Main serializes emissions with a new selection.
+                launch {
+                    dataProcessor.getCategoryDataFlowForRace(id).map(CategoryDisplaySort::categoryData)
+                        .flowOn(Dispatchers.IO).collect { _categories.value = it }
                 }
-                competitorJob = launch {
-                    dataProcessor.getCompetitorDataFlowByRace(id).collect {
-                        _competitorData.value = it.groupBy { row -> row.competitorCategory.competitor.id }.values.map { rows -> rows.last() }
-                    }
+                launch {
+                    dataProcessor.getCompetitorDataFlowByRace(id).map { rows ->
+                        rows.groupBy { it.competitorCategory.competitor.id }.values.map { it.last() }
+                    }.flowOn(Dispatchers.IO).collect { _competitorData.value = it }
                 }
-                readoutJob = launch {
-                    dataProcessor.getResultDataFlowByRace(id).collect {
-                        _readoutData.value = if (race.raceLevel == org.openardf.radiooracle.shared.domain.RaceLevel.PRACTICE) it.withPracticeReadoutNames() else it
-                    }
+                launch {
+                    dataProcessor.getResultDataFlowByRace(id).map { rows ->
+                        if (race.raceLevel == org.openardf.radiooracle.shared.domain.RaceLevel.PRACTICE) rows.withPracticeReadoutNames() else rows
+                    }.flowOn(Dispatchers.IO).collect { _readoutData.value = it }
                 }
-
-                resultWrapperJob = launch {
-                    ResultsProcessor.getResultWrapperFlowByRace(id, dataProcessor).collect {
-                        _resultWrappers.value = CategoryDisplaySort.resultWrappers(it)
-                    }
+                launch {
+                    ResultsProcessor.getResultWrapperFlowByRace(id, dataProcessor).map(CategoryDisplaySort::resultWrappers)
+                        .flowOn(Dispatchers.IO).collect { _resultWrappers.value = it }
                 }
             }
         }
@@ -187,24 +181,21 @@ class SelectedRaceViewModel : ViewModel() {
     }
 
     fun updateRace(race: Race) {
-        viewModelScope.launch(Dispatchers.IO) {
-            dataProcessor.updateRace(race)
-            _race.postValue(race)
+        viewModelScope.launch {
+            val updated = withContext(Dispatchers.IO) { dataProcessor.updateRace(race) }
+            if (selectedRaceId == updated.id) _race.value = updated
         }
     }
 
     fun removeReaderRace() {
         // Cancel collectors and clear state to ensure no stale data remains
-        categoryJob?.cancel()
-        competitorJob?.cancel()
-        readoutJob?.cancel()
-        resultWrapperJob?.cancel()
+        selectionJob?.cancel()
 
         _categories.value = emptyList()
         _competitorData.value = emptyList()
         _readoutData.value = emptyList()
         _resultWrappers.value = emptyList()
-        _race.postValue(null)
+        _race.value = null
         selectedRaceId = null
         updateCurrentRaceSeries()
 

@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.ui
 
+import android.view.MenuItem
 import android.view.Menu
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.Toolbar
@@ -51,22 +52,32 @@ object EventToolbarSupport {
         toolbar.setBackgroundColor(
             ContextCompat.getColor(fragment.requireContext(), R.color.event_toolbar_background)
         )
-        applyOnPrimaryContentColor(fragment, toolbar)
-        toolbar.setOnClickListener {
-            showSeriesEventDropdown(fragment, toolbar, selectedRaceViewModel)
+        val switch = toolbar.menu.add(Menu.NONE, R.id.series_switch_race, 0, R.string.series_switch_race).apply {
+            setIcon(R.drawable.ic_expand)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+            isVisible = false
+            setOnMenuItemClickListener {
+                showSeriesEventDropdown(fragment, toolbar, selectedRaceViewModel)
+                true
+            }
         }
+        applyOnPrimaryContentColor(fragment, toolbar)
+        toolbar.setOnClickListener { showSeriesEventDropdown(fragment, toolbar, selectedRaceViewModel) }
 
-        selectedRaceViewModel.race.observe(fragment.viewLifecycleOwner) { race ->
+        fun refresh() {
+            val race = selectedRaceViewModel.getCurrentRace()
+            val members = selectableSeriesMembers(selectedRaceViewModel)
+            val canSwitch = members.size > 1
             toolbar.title = race?.name
             toolbar.subtitle = race?.let(subtitleForRace)
-            updateDropdownEnabledState(toolbar, selectedRaceViewModel)
+            toolbar.isClickable = canSwitch
+            toolbar.isFocusable = canSwitch
+            switch.isVisible = canSwitch
         }
-
+        selectedRaceViewModel.race.observe(fragment.viewLifecycleOwner) { refresh() }
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             fragment.viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                selectedRaceViewModel.currentRaceSeries.collect {
-                    updateDropdownEnabledState(toolbar, selectedRaceViewModel)
-                }
+                selectedRaceViewModel.currentRaceSeries.collect { refresh() }
             }
         }
     }
@@ -85,33 +96,31 @@ object EventToolbarSupport {
         tintMenuIcons(toolbar.menu, onToolbarColor)
     }
 
-    private fun updateDropdownEnabledState(
-        toolbar: Toolbar,
-        selectedRaceViewModel: SelectedRaceViewModel
-    ) {
-        val enabled = selectableSeriesMembers(selectedRaceViewModel).isNotEmpty()
-        toolbar.isClickable = enabled
-        toolbar.isFocusable = enabled
-    }
-
     private fun showSeriesEventDropdown(
         fragment: Fragment,
         toolbar: Toolbar,
         selectedRaceViewModel: SelectedRaceViewModel
     ) {
         val members = selectableSeriesMembers(selectedRaceViewModel)
-        if (members.isEmpty()) {
-            return
-        }
-        PopupMenu(fragment.requireContext(), toolbar).apply {
+        if (members.size < 2) return
+        val raceId = selectedRaceViewModel.getCurrentRace()?.id ?: return
+        val seriesId = selectedRaceViewModel.currentRaceSeries.value?.series?.seriesId
+        PopupMenu(fragment.requireContext(), toolbar.findViewById(R.id.series_switch_race) ?: toolbar).apply {
             members.forEachIndexed { index, member ->
-                menu.add(Menu.NONE, index, index, member.displayName)
+                val item = menu.add(1, index, index, member.displayName)
+                item.isCheckable = true
+                item.isChecked = member.localRaceId == raceId
             }
+            menu.setGroupCheckable(1, true, true)
             setOnMenuItemClickListener { item ->
-                members.getOrNull(item.itemId)?.let { member ->
+                val member = members[item.itemId]
+                // A routed card or a membership edit can change the race underneath an open popup.
+                if (selectedRaceViewModel.getCurrentRace()?.id == raceId && member.localRaceId != raceId &&
+                    selectedRaceViewModel.currentRaceSeries.value?.series?.seriesId == seriesId &&
+                    selectableSeriesMembers(selectedRaceViewModel).any { it.localRaceId == member.localRaceId }) {
                     selectedRaceViewModel.setRace(member.localRaceId)
-                    true
-                } ?: false
+                }
+                true
             }
             show()
         }
@@ -134,7 +143,6 @@ object EventToolbarSupport {
     private fun selectableSeriesMembers(selectedRaceViewModel: SelectedRaceViewModel): List<EventSeriesMember> {
         val currentRaceId = selectedRaceViewModel.getCurrentRace()?.id ?: return emptyList()
         val currentSeries = selectedRaceViewModel.currentRaceSeries.value ?: return emptyList()
-        return currentSeries.orderedMembers()
-            .filter { member -> member.localRaceId != currentRaceId }
+        return currentSeries.orderedMembers().takeIf { members -> members.any { it.localRaceId == currentRaceId } }.orEmpty()
     }
 }

@@ -75,6 +75,8 @@ class CategoryFragment : Fragment() {
     private lateinit var categoryAddFab: FloatingActionButton
     private lateinit var categoryRecyclerView: RecyclerView
 
+    private var setupDialogs: CategorySetupDialogs? = null
+
     private var mLastClickTime: Long = 0
 
     // This property is only valid between onCreateView and
@@ -104,6 +106,7 @@ class CategoryFragment : Fragment() {
         categoryToolbar.setOnMenuItemClickListener {
             return@setOnMenuItemClickListener setFragmentMenuActions(it)
         }
+        setupDialogs = CategorySetupDialogs(this, selectedRaceViewModel).also { it.bind(categoryToolbar, binding.categoryReviewMismatches) }
         setSeriesMenuTitle()
 
         categoryAddFab.setOnClickListener {
@@ -446,6 +449,8 @@ class CategoryFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        setupDialogs?.close()
+        setupDialogs = null
         super.onDestroyView()
         _binding = null
     }

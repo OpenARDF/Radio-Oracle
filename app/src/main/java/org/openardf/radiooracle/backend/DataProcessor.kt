@@ -186,13 +186,14 @@ class DataProcessor private constructor(context: Context) {
         DebugLog.info("Races", "Created race=${race.id} name=${race.name}")
     }
 
-    suspend fun updateRace(race: Race) {
-        ardfRepository.updateRace(race)
+    suspend fun updateRace(race: Race): Race {
+        val updated = ardfRepository.updateRace(race)
         updateResultsByRace(race.id)
         currentState.value
             ?.takeIf { it.currentRace?.id == race.id }
-            ?.let { state -> currentState.postValue(AppState(race, state.siReaderState, state.resultServiceJob)) }
+            ?.let { state -> currentState.postValue(AppState(updated, state.siReaderState, state.resultServiceJob)) }
         DebugLog.info("Races", "Updated race=${race.id} name=${race.name}")
+        return updated
     }
 
     suspend fun deleteRace(id: UUID) {

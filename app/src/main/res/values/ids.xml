@@ -1,0 +1,4 @@
+<resources>
+    <!-- The same switch is bound on every race workflow tab. -->
+    <item name="series_switch_race" type="id" />
+</resources>

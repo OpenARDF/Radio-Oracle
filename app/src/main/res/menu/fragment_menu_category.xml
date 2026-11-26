@@ -9,6 +9,8 @@
         android:title="@string/data_import_data"
         app:showAsAction="always" />
 
+    <item android:id="@+id/category_menu_station" android:title="@string/edit_station_code" />
+
     <item
         android:id="@+id/category_menu_manage_aliases"
         android:title="@string/category_alias_manage" />

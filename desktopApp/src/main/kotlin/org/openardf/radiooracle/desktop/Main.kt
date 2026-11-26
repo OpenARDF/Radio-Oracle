@@ -3379,7 +3379,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                 val acceptedControl = acceptedProject.raceData.controls.first { it.id == review.controlId }
                 val previousControls = review.baseProject.raceData.controls
                 pendingControlRoleWarning = combinedControlRoleWarning(
-                    controlRoleMismatchWarning(acceptedControl.type, acceptedControl.publicLabel.orEmpty()),
+                    ControlRoleLabelRules.mismatchWarning(acceptedControl.publicLabel, acceptedControl.type),
                     duplicateControlRoleWarning(acceptedProject.raceData.controls, acceptedControl.type)
                         .takeUnless { it == duplicateControlRoleWarning(previousControls, acceptedControl.type) },
                     controlCourseRuleWarning(
@@ -8182,7 +8182,7 @@ private fun FrameWindowScope.RadioOracleDesktopContent(
                             notes
                         )
                         roleWarning = combinedControlRoleWarning(
-                            controlRoleMismatchWarning(type, publicLabel),
+                            ControlRoleLabelRules.mismatchWarning(publicLabel, type),
                             duplicateControlRoleWarning(updatedProject.raceData.controls, type),
                             controlCourseRuleWarning(
                                 controls = updatedProject.raceData.controls,
@@ -23123,15 +23123,6 @@ private fun controlRoleLabel(type: ControlPointType, raceType: RaceType): String
         type == ControlPointType.CONTROL -> "Fox"
         else -> EventControlDetails.typeLabel(type)
     }
-
-private fun controlRoleMismatchWarning(type: ControlPointType, publicLabel: String): String? {
-    val inferredRole = ControlRoleLabelRules.inferredRole(publicLabel) ?: return null
-    return if (inferredRole == type) {
-        null
-    } else {
-        ControlRoleLabelRules.mismatchWarning(publicLabel, type, inferredRole)
-    }
-}
 
 private fun duplicateControlRoleWarning(controls: List<EventControl>, changedRole: ControlPointType): String? {
     val counts = ControlRoleCounts.from(controls.map { it.type })

@@ -138,3 +138,9 @@ object EventCourseDrafts {
                 ?: project.raceData.race.courseAnalyzerSpeedCompensationFactor)))
     }
 }
+
+/** A password applies to the race, including courses that are not assigned to an active category. */
+fun EventProjectFile.hasEncryptedCourseData(): Boolean =
+    EventCourseDrafts.protectedCategories(raceData).any {
+        !it.category.encryptedIdealOrder.isNullOrBlank() || !it.category.encryptedCourseInfo.isNullOrBlank()
+    }

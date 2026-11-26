@@ -24,7 +24,10 @@
 
 package org.openardf.radiooracle.backend
 
+import android.os.Looper
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
+import org.robolectric.Shadows.shadowOf
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -188,15 +191,21 @@ class DataProcessorEventSeriesMembershipTests {
         try {
             viewModel.setRace(dayOne.race.id)
 
-            val wrappers = withTimeout(5_000) {
-                viewModel.resultWrappers.first { it.isNotEmpty() }
+            suspend fun awaitSelected(id: UUID) = withTimeout(5_000) {
+                // Room returns to the Android main loop before attaching this race’s observers.
+                while (true) {
+                    shadowOf(Looper.getMainLooper()).idle()
+                    val rows = viewModel.resultWrappers.value.flatMap { it.competitorData }
+                    if (viewModel.getCurrentRace()?.id == id && rows.singleOrNull()?.readoutData?.result?.raceId == id) break
+                    delay(10)
+                }
             }
-
-            assertEquals(1, wrappers.size)
-            assertEquals(
-                dayOne.race.id,
-                wrappers.single().competitorData.single().readoutData!!.result.raceId
-            )
+            awaitSelected(dayOne.race.id)
+            viewModel.setRace(dayTwo.race.id)
+            viewModel.setRace(dayOne.race.id)
+            viewModel.setRace(dayTwo.race.id)
+            awaitSelected(dayTwo.race.id)
+            assertEquals(series.series.seriesId, viewModel.currentRaceSeries.value?.series?.seriesId)
         } finally {
             viewModel.viewModelScope.cancel()
         }

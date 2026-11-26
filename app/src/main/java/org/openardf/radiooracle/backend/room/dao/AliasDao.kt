@@ -49,6 +49,10 @@ interface AliasDao {
     @Query("DELETE FROM alias WHERE id =(:id) ")
     suspend fun deleteAlias(id: UUID)
 
+    /** Replace derived aliases for the two station numbers inside the course-edit transaction. */
+    @Query("DELETE FROM alias WHERE race_id = :raceId AND si_code IN (:codes)")
+    suspend fun deleteStationAliases(raceId: UUID, codes: List<Int>)
+
     /** Deletes all aliases belonging to a race. */
     @Query("DELETE FROM alias WHERE race_id=(:raceId)")
     suspend fun deleteAliasesByRace(raceId: UUID)

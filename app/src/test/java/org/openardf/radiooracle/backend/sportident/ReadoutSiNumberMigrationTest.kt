@@ -9,6 +9,7 @@ import org.junit.runner.RunWith
 import org.openardf.radiooracle.backend.room.database.EventDatabase
 import org.openardf.radiooracle.backend.room.database.MIGRATION_13_14
 import org.openardf.radiooracle.backend.room.database.MIGRATION_14_15
+import org.openardf.radiooracle.backend.room.database.MIGRATION_15_16
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Punch
 import org.openardf.radiooracle.backend.room.entity.Race
@@ -74,12 +75,13 @@ class ReadoutSiNumberMigrationTest {
             example(listOf(123456), punchRace = otherRace)
             // Recreate the pre-Open category schema before exercising the full Room upgrade.
             before.openHelper.writableDatabase.execSQL("ALTER TABLE category DROP COLUMN is_open")
+            before.openHelper.writableDatabase.execSQL("ALTER TABLE competitor DROP COLUMN pending_category")
             before.openHelper.writableDatabase.version = 13
         } finally {
             before.close()
         }
         val after = Room.databaseBuilder(context, EventDatabase::class.java, name)
-            .allowMainThreadQueries().addMigrations(MIGRATION_13_14, MIGRATION_14_15).build()
+            .allowMainThreadQueries().addMigrations(MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16).build()
         try {
             expectedResults.forEach { result ->
                 assertEquals(result.toString(), after.resultDao().getResult(result.id).toString())
@@ -87,7 +89,7 @@ class ReadoutSiNumberMigrationTest {
             expectedPunches.forEach { punch ->
                 assertEquals(punch.toString(), after.punchDao().getPunch(punch.id).toString())
             }
-            assertEquals(15, after.openHelper.writableDatabase.version)
+            assertEquals(16, after.openHelper.writableDatabase.version)
             oldCategories.forEach { assertEquals(it, after.categoryDao().getCategory(it.id)) }
             // Running the repair again cannot change a recovered or unresolved readout.
             MIGRATION_13_14.migrate(after.openHelper.writableDatabase)

@@ -36,6 +36,10 @@ import java.util.UUID
 /** Room access methods for SI readout results and result aggregates. */
 @Dao
 interface ResultDao {
+    // Every saved row locks station assignments, including unmatched downloads.
+    @Query("SELECT EXISTS(SELECT 1 FROM result WHERE race_id = :raceId)")
+    suspend fun hasRecordedActivity(raceId: UUID): Boolean
+
     /** Returns one result entity by primary key. */
     @Query("SELECT * FROM result WHERE id=(:id)")
     suspend fun getResult(id: UUID): Result

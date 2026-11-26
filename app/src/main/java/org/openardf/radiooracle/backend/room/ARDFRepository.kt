@@ -35,6 +35,10 @@ import org.openardf.radiooracle.backend.room.database.MIGRATION_11_12
 import org.openardf.radiooracle.backend.room.database.MIGRATION_12_13
 import org.openardf.radiooracle.backend.room.database.MIGRATION_13_14
 import org.openardf.radiooracle.backend.room.database.MIGRATION_14_15
+import org.openardf.radiooracle.backend.room.database.MIGRATION_15_16
+import org.openardf.radiooracle.backend.shared.toEventCategory
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.openardf.radiooracle.backend.room.database.MIGRATION_1_2
 import org.openardf.radiooracle.backend.room.database.MIGRATION_2_3
 import org.openardf.radiooracle.backend.room.database.MIGRATION_3_4
@@ -86,17 +90,25 @@ class ARDFRepository private constructor(context: Context) {
             MIGRATION_11_12,
             MIGRATION_12_13,
             MIGRATION_13_14,
-            MIGRATION_14_15
+            MIGRATION_14_15,
+            MIGRATION_15_16
         )
         .build()
 
+    val raceSetup by lazy { AndroidRaceSetup(eventDatabase) }
     val courseProtection by lazy { AndroidCourseProtection(eventDatabase) }
 
     //-------------------Races-------------------
     fun getRaces(): Flow<List<Race>> = eventDatabase.raceDao().getRaces()
     suspend fun getRace(id: UUID) = eventDatabase.raceDao().getRace(id)
     suspend fun createRace(race: Race) = eventDatabase.raceDao().createRace(race)
-    suspend fun updateRace(race: Race) = eventDatabase.raceDao().updateRace(race)
+    suspend fun updateRace(race: Race) = eventDatabase.withTransaction {
+        // Settings and publication screens may have opened before a reviewed course edit.
+        val stored = requireNotNull(getRace(race.id)) { "The selected race no longer exists." }
+        val updated = race.copy(portableCourseData = stored.portableCourseData)
+        eventDatabase.raceDao().updateRace(updated)
+        updated
+    }
     suspend fun deleteRace(id: UUID) = eventDatabase.raceDao().deleteRace(id)
 
     //-------------------Categories-------------------
@@ -215,7 +227,10 @@ class ARDFRepository private constructor(context: Context) {
         eventDatabase.competitorDao().getUnmatchedCompetitorsByRace(raceId)
 
     suspend fun createCompetitor(competitor: Competitor) =
-        eventDatabase.competitorDao().createCompetitor(competitor)
+        eventDatabase.competitorDao().createCompetitor(
+            if (competitor.categoryId != null && competitor.pendingCategory != null)
+                competitor.copy(pendingCategory = null) else competitor
+        )
 
     suspend fun deleteCompetitor(id: UUID) = eventDatabase.competitorDao().deleteCompetitor(id)
 
@@ -355,8 +370,22 @@ class ARDFRepository private constructor(context: Context) {
             )
         }
         raceData.aliases.forEach { alias -> createOrUpdateAlias(alias) }
+        val listedIds = raceData.categories.mapTo(mutableSetOf()) { it.category.id }
         raceData.competitorData.forEach { cd ->
-            createCompetitor(cd.competitorCategory.competitor)
+            val registration = cd.competitorCategory
+            val reference = registration.category
+            // Keep the embedded category available to review even when its ID has no Room row.
+            val competitor = when {
+                reference == null -> registration.competitor
+                reference.id in listedIds -> registration.competitor.copy(categoryId = reference.id)
+                else -> {
+                    // Only roster metadata belongs here: course payloads must stay inside the race protection boundary.
+                    val pending = reference.toEventCategory().copy(idealOrder = null, encryptedIdealOrder = null,
+                        courseInfo = null, encryptedCourseInfo = null, controlPointsString = "", lengthMeters = 0, climbMeters = 0)
+                    registration.competitor.copy(categoryId = null, pendingCategory = Json.encodeToString(pending))
+                }
+            }
+            createCompetitor(competitor)
             cd.readoutData?.let {
                 saveResultPunches(
                     it.result,
@@ -383,6 +412,7 @@ class ARDFRepository private constructor(context: Context) {
         }
 
         fun resetForTests() {
+            INSTANCE?.eventDatabase?.close()
             INSTANCE = null
         }
     }

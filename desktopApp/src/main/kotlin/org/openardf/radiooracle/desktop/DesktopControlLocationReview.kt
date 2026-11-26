@@ -30,11 +30,7 @@ internal object DesktopControlEditReviewer {
         elevationLookup: (CourseGeoPoint) -> Double? = { null },
         checkCancelled: () -> Unit = {}
     ): DesktopControlEditReview {
-        EventCourseDrafts.requireDesignEditable(projectFile)
-        EventCourseDrafts.requireCurrent(projectFile)
-        require(projectFile.raceData.courseDraft == null) {
-            "Apply or discard the current course draft before reviewing control changes."
-        }
+        CourseControlEdits.requireReviewable(projectFile)
         val baseCandidate = EventCourseDrafts.candidate(projectFile)
         val storagePassword = baseCandidate.courseDataPassword(password)
         val beforeState = decryptedProtectedCourseState(baseCandidate, password.orEmpty())

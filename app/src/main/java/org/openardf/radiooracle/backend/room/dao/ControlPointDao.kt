@@ -52,6 +52,10 @@ interface ControlPointDao {
     @Insert
     suspend fun createControlPoint(controlPoint: ControlPoint)
 
+    /** Backfill the stable catalog key as well when editing a pre-catalog Room assignment. */
+    @Query("UPDATE control_point SET si_code = :code, portable_control_id = :controlId WHERE id = :id AND category_id = :categoryId")
+    suspend fun updateStation(id: UUID, categoryId: UUID, controlId: String, code: Int)
+
     /** Deletes one control point by primary key. */
     @Query("DELETE FROM control_point WHERE id =(:id) ")
     suspend fun deleteControlPoint(id: UUID)

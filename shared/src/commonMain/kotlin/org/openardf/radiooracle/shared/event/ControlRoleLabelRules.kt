@@ -77,6 +77,12 @@ object ControlRoleLabelRules {
         return inferredRole(publicLabel).takeIf { it != ControlPointType.CONTROL }
     }
 
+    /** A station edit can retain a misleading public label even though its role did not change. */
+    fun mismatchWarning(publicLabel: String?, selectedRole: ControlPointType): String? {
+        val inferred = inferredRole(publicLabel) ?: return null
+        return if (inferred == selectedRole) null else mismatchWarning(publicLabel, selectedRole, inferred)
+    }
+
     fun mismatchWarning(publicLabel: String?, selectedRole: ControlPointType, inferredRole: ControlPointType): String {
         val label = publicLabel?.trim().orEmpty()
         val inferredLabel = roleLabel(inferredRole)
