@@ -39,6 +39,8 @@ class DesktopCourseElevationCoverageTest {
         val result = check(race, 1, 4)
         assertTrue(result.areaHasGap)
         assertEquals(setOf("Blue · Start → Fox 1"), result.legs)
+        assertEquals(result, check(project(stops, route.reversed()), 1, 4))
+        assertEquals(setOf("Blue · Fox 1 → Finish"), check(project(stops, route.reversed()), 3, 0).legs)
         assertTrue(result.controls.isEmpty())
         assertFalse(check(race).areaHasGap)
         assertEquals(CourseElevationFinding(areaHasGap = true), check(race, 4, 4))

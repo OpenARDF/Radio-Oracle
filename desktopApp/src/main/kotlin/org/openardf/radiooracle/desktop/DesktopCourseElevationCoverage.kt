@@ -66,14 +66,15 @@ internal fun eventElevationCoverage(
         checkCancelled()
         val course = data.category.name
         val info = infos[data.category.id]?.withFiniteCourseGeometry() ?: ProtectedCourseInfo()
-        val stops = courseStops(data, info, controls, catalog)
+        val route = DesktopCourseAnalyzer.normalizedImportedRoute(info)
+        val stops = courseStops(data, info, controls, catalog, route)
         stops.forEach { stop ->
             if (stop.type != WAYPOINT && stop.control?.id !in catalog && missing(stop.point, stop.point)) {
                 affected += "$course · ${stop.label}"
             }
         }
         val drawn = if (info.route.isEmpty() && info.courseObjects.isEmpty() && race.race.raceType != RaceType.ORIENTEERING)
-            emptyList() else storedLegs(info, stops)
+            emptyList() else storedLegs(info, stops, route)
         fun hasGap(path: List<CourseGeoPoint>): Boolean =
             (1 until path.size).any { missing(path[it - 1], path[it]) }
         for (leg in drawn) {
@@ -103,7 +104,7 @@ private fun CoverageStop.routeLabels() = listOfNotNull(label, control?.label, co
     when (type) { START -> "S"; FINISH -> "F"; BEACON -> "B"; else -> null })
 
 private fun courseStops(data: EventCategoryData, info: ProtectedCourseInfo, controls: Map<String, EventControl>,
-    catalog: Map<String, CourseGeoPoint?>): List<CoverageStop> {
+    catalog: Map<String, CourseGeoPoint?>, route: List<CourseGeoPoint>): List<CoverageStop> {
     val placements = info.placements().distinctBy { it.id }.associateBy { it.id }
     val bindings = info.appliedBindings
     val bound = bindings?.controls.orEmpty().associate { it.placementId to it.controlId }
@@ -122,16 +123,23 @@ private fun courseStops(data: EventCategoryData, info: ProtectedCourseInfo, cont
         if (index >= 0) stops[index] = stops[index].copy(label = control.publicLabel ?: control.label, control = control)
         else if (stops.none { it.control?.id == id }) stops += CoverageStop(control.publicLabel ?: control.label, point, type, control)
     }
-    if (stops.none { it.type == START }) info.route.firstOrNull()?.let { stops.add(0, CoverageStop("Start", CourseGeoPoint(it.latitude, it.longitude), START)) }
-    if (stops.none { it.type == FINISH }) info.route.lastOrNull()?.let { stops.add(CoverageStop("Finish", CourseGeoPoint(it.latitude, it.longitude), FINISH)) }
+    if (route.size >= 2) {
+        fun endpoint(type: ProtectedCourseObjectType, label: String, point: CourseGeoPoint) {
+            val index = stops.indexOfFirst { it.type == type }
+            val location = CourseGeoPoint(point.latitude, point.longitude)
+            if (index >= 0) stops[index] = stops[index].copy(point = location)
+            else stops.add(if (type == START) 0 else stops.size, CoverageStop(label, location, type))
+        }
+        endpoint(START, "Start", route.first())
+        endpoint(FINISH, "Finish", route.last())
+    }
     // Legacy files may list endpoint objects separately from their control-point records.
     if (bindings != null) return stops
     return stops.filter { it.type == START } + stops.filter { it.type != START && it.type != FINISH } +
         stops.filter { it.type == FINISH }
 }
 
-private fun storedLegs(info: ProtectedCourseInfo, stops: List<CoverageStop>): List<CoverageLeg> {
-    val route = info.route.map { CourseGeoPoint(it.latitude, it.longitude) }
+private fun storedLegs(info: ProtectedCourseInfo, stops: List<CoverageStop>, route: List<CourseGeoPoint>): List<CoverageLeg> {
     if (route.size < 2) {
         val bends = DesktopMandatoryCourseLegs.from(info)
         return stops.filter { it.type != WAYPOINT }.zipWithNext { a, b ->
