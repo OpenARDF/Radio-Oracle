@@ -307,7 +307,8 @@ object IofXmlProcessor : FormatProcessor {
                 null,
                 null,
                 null,
-                ""
+                "",
+                isOpen = StandardCategoryRules.allowsOpen(row.categoryName, race.raceLevel)
             ),
             emptyList(),
             emptyList()

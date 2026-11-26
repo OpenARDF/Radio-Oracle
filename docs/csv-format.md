@@ -19,7 +19,7 @@ M21,1,99,5155,174,1,,,,6,"71,72,73,74,75,79B"
 W65,0,99,0,0,1,,,,5,"71,72,73,74,79B"
 ```
 
-`is_man` is `1` for Men and `0` for Women (the existing category flag).
+The category field `is_man` accepts `1` for Men, `0` for Women, and `open` for a custom Practice category. A blank value keeps the saved category setting or defaults to Open for a new custom Practice category.
 The competitor CSV's existing `gender` column instead uses `0` for Men and `1` for
 Women. Length and climb are metres; zero length is allowed for categories whose
 course metrics have not yet been assigned. Control lists stay in one quoted cell.

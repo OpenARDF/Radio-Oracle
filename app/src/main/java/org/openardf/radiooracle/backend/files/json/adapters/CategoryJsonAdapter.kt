@@ -49,6 +49,7 @@ class CategoryJsonAdapter(val raceId: UUID) {
         return CategoryJson(
             category_name = category.name,
             category_gender = category.isMan,
+            category_open = true.takeIf { category.isOpen },
             category_max_age = category.maxAge,
             category_length = category.length,
             category_climb = category.climb,
@@ -82,6 +83,7 @@ class CategoryJsonAdapter(val raceId: UUID) {
             raceId = raceId,
             name = categoryJson.category_name,
             isMan = categoryJson.category_gender,
+            isOpen = categoryJson.category_open == true,
             maxAge = categoryJson.category_max_age,
             length = categoryJson.category_length ?: 0,
             climb = categoryJson.category_climb ?: 0,

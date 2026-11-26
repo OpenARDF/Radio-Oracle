@@ -27,9 +27,11 @@ package org.openardf.radiooracle.shared.files
 import org.openardf.radiooracle.shared.sportident.SportIdentCodes
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.event.CompetitorCorridorRules
 import org.openardf.radiooracle.shared.event.EventControlDetails
+import org.openardf.radiooracle.shared.event.CategoryGender
 import org.openardf.radiooracle.shared.event.StandardCategoryRules
 import org.openardf.radiooracle.shared.event.defaultScored
 import org.openardf.radiooracle.shared.event.toDisplayLabel
@@ -96,8 +98,22 @@ data class CategoryCsvImportRow(
     val timeLimitMinutes: Long?,
     val raceBand: RaceBand?,
     val controlPointsText: String,
-    val encryptedIdealOrder: String? = null
-)
+    val encryptedIdealOrder: String? = null,
+    // A blank CSV field leaves eligibility to the saved category or the race's creation default.
+    val isOpen: Boolean? = false
+) {
+    fun genderForImport(level: RaceLevel, existing: CategoryGender? = null): CategoryGender {
+        val requested = when (isOpen) {
+            null -> existing ?: CategoryGender.fromFlags(isMan, StandardCategoryRules.allowsOpen(name, level))
+            else -> CategoryGender.fromFlags(isMan, isOpen)
+        }
+        val gender = StandardCategoryRules.genderForName(name, requested)
+        require(gender != CategoryGender.OPEN || level == RaceLevel.PRACTICE) {
+            "Open is available only for Practice categories ($name)."
+        }
+        return gender
+    }
+}
 
 data class ControlCsvImportRow(
     val siCode: Int,
@@ -187,10 +203,11 @@ object EventCsvImports {
         val timeLimitMinutes = if (followsRacePresets) null else fields[EventCsvFormat.Category.TIME_LIMIT_MINUTES].trim().toLong()
         val raceBand = if (followsRacePresets) null else parseRaceBand(fields[EventCsvFormat.Category.RACE_BAND].trim())
 
+        val genderField = fields[EventCsvFormat.Category.IS_MAN].trim()
         return CategoryCsvImportRow(
             name = name,
-            isMan = StandardCategoryRules.inferIsManFromName(name)
-                ?: (fields[EventCsvFormat.Category.IS_MAN].trim() == "1"),
+            isMan = StandardCategoryRules.inferIsManFromName(name) ?: (genderField == "1"),
+            isOpen = genderField.takeIf { it.isNotEmpty() }?.equals("open", ignoreCase = true),
             maxAge = maxAge,
             lengthMeters = lengthMeters,
             climbMeters = climbMeters,

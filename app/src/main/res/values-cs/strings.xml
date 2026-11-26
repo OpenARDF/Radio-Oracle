@@ -96,6 +96,7 @@
     <string name="general_club">Klub</string>
     <string name="general_gender">Pohlaví</string>
     <string name="general_gender_man">Muž</string>
+    <string name="category_gender_open">Otevřená</string>
     <string name="general_gender_woman">Žena</string>
     <string name="competitor_create">Vytvořit závodníka</string>
     <string name="competitor_edit">Upravit závodníka</string>

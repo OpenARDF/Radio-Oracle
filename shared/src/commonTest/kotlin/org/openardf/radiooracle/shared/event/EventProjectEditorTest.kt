@@ -31,6 +31,10 @@ import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
+import org.openardf.radiooracle.shared.files.ArdfJsonExports
+import org.openardf.radiooracle.shared.files.EventCsvExports
+import org.openardf.radiooracle.shared.files.EventCsvImports
+import org.openardf.radiooracle.shared.files.IofXmlExports
 import org.openardf.radiooracle.shared.files.CategoryCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorCsvImportRow
 import org.openardf.radiooracle.shared.files.CompetitorStartCsvImportRow
@@ -1278,6 +1282,48 @@ class EventProjectEditorTest {
 
         assertEquals(false, withMen.raceData.categories.single { it.category.name == "W21" }.category.isMan)
         assertEquals(true, withMen.raceData.categories.single { it.category.name == "M50" }.category.isMan)
+    }
+
+    @Test
+    fun practiceDefaultsApplyOnlyToNewCustomCategories() {
+        val legacy = projectFile(categories = listOf(categoryData("old", "Short")))
+        val legacyFile = EventProjectFileJson.encode(legacy)
+        assertFalse(legacyFile.contains("\"isOpen\""))
+        val opened = EventProjectEditor.addCategory(EventProjectFileJson.decode(legacyFile), "new", "Long")
+        val restored = EventProjectFileJson.decode(EventProjectFileJson.encode(opened))
+        assertEquals(listOf(CategoryGender.WOMEN, CategoryGender.OPEN), restored.raceData.categories.map { it.category.gender })
+        val unspecified = categoryImportRow(name = "Long").copy(isOpen = null)
+        assertEquals(CategoryGender.OPEN, unspecified.genderForImport(RaceLevel.PRACTICE))
+        assertEquals(CategoryGender.WOMEN, unspecified.genderForImport(RaceLevel.PRACTICE, CategoryGender.WOMEN))
+        assertFailsWith<IllegalArgumentException> {
+            unspecified.copy(isOpen = true).genderForImport(RaceLevel.NATIONAL)
+        }
+        assertEquals(CategoryGender.WOMEN, EventProjectEditor.renameCategory(restored, "new", "W65").raceData.categories.last().category.gender)
+        assertEquals(CategoryGender.MEN, EventProjectEditor.updateCategoryGender(restored, "new", CategoryGender.MEN).raceData.categories.last().category.gender)
+        for (level in RaceLevel.entries.filter { it != RaceLevel.PRACTICE }) {
+            val race = EventProjectEditor.addCategory(projectFile(raceLevel = level), "new", "Long")
+            assertFalse(race.raceData.categories.single().category.isOpen)
+        }
+    }
+
+    @Test
+    fun practiceDownloadAssignsCourseWithoutChangingRegisteredGender() {
+        val si = 2005010
+        val registered = competitorData("runner", "Jamie", "Runner", siNumber = si)
+        val long = categoryData("course", "Long", controlSiCodes = listOf(31, 32))
+        val open = long.copy(category = long.category.copy(isMan = false, isOpen = true))
+        val project = projectFile(categories = listOf(open), competitors = listOf(registered))
+        val result = appendPracticeDownload(project, sportIdentReadout(siNumber = si, controlCodes = listOf(31, 32)), "download")
+        val runner = result.raceData.competitorData.single().competitorCategory
+        val csv = EventCsvExports.categories(result.raceData.categories, result.raceData.controls)
+        assertEquals(true, EventCsvImports.parseAndroidCategoryRows(csv).rows.single().isOpen)
+        val xml = IofXmlExports.resultList(result.raceData)
+        assertTrue(xml.contains("""<Class sex="B">"""))
+        assertTrue(IofXmlExports.entryList(result.raceData).contains("""<Person sex="M">"""))
+        val exported = ArdfJsonExports.eventDocument("Practice", result.raceData)
+        assertTrue(exported.races.single().categories.single().categoryOpen)
+        assertEquals("course", runner.competitor.categoryId)
+        assertEquals(registered.competitorCategory.competitor.isMan, runner.competitor.isMan)
     }
 
     @Test

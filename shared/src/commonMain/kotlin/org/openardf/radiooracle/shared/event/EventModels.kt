@@ -24,6 +24,8 @@
 
 package org.openardf.radiooracle.shared.event
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import org.openardf.radiooracle.shared.domain.ControlPointType
 import org.openardf.radiooracle.shared.domain.PunchStatus
@@ -76,8 +78,15 @@ data class EventCategory(
     /** Plaintext course order used whenever this Race File is not Race Password protected. */
     val idealOrder: String? = null,
     /** Plaintext route details used whenever this Race File is not Race Password protected. */
-    val courseInfo: ProtectedCourseInfo? = null
+    val courseInfo: ProtectedCourseInfo? = null,
+    // Older Race Files have only isMan. Omit the new flag unless explicitly Open.
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val isOpen: Boolean = false
 ) {
+    val gender: CategoryGender
+        get() = CategoryGender.fromFlags(isMan, isOpen)
+
     /** Returns the event race type; legacy category-specific race type is ignored. */
     fun effectiveRaceType(race: EventRace): RaceType =
         race.raceType
@@ -353,7 +362,11 @@ fun EventCategoryData.hasCourseData(): Boolean =
 data class EventCompetitorCategory(
     val competitor: EventCompetitor,
     val category: EventCategory?
-)
+) {
+    /** A course assignment from a card or operator must preserve the competitor's personal data. */
+    fun withCategory(selected: EventCategory?): EventCompetitorCategory =
+        copy(competitor = competitor.copy(categoryId = selected?.id), category = selected)
+}
 
 /** Portable competitor aggregate with optional readout data. */
 @Serializable

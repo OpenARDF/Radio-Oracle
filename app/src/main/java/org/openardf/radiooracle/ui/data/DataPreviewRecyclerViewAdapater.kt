@@ -30,6 +30,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.room.entity.gender
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.files.constants.DataType
 import org.openardf.radiooracle.backend.files.wrappers.DataImportWrapper
@@ -80,7 +81,7 @@ class DataPreviewRecyclerViewAdapater(
             DataType.CATEGORIES -> {
                 val item = value.categories[position]
                 holder.columnOne.text = item.category.name
-                holder.columnTwo.text = dataProcessor.genderToString(item.category.isMan)
+                holder.columnTwo.text = dataProcessor.categoryGenderToString(item.category.gender)
                 holder.columnThree.text = item.category.maxAge.toString()
                 holder.columnFour.text =
                     ControlPointsHelper.getStringFromControlPoints(item.controlPoints)

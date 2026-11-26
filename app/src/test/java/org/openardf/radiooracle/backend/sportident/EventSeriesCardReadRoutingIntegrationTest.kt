@@ -251,6 +251,24 @@ class EventSeriesCardReadRoutingIntegrationTest {
     }
 
     @Test
+    fun openPracticeReadoutPreservesRegisteredGender() = runBlocking {
+        val processor = DataProcessor.get()
+        val event = raceData("Open practice", listOf(31, 32), siNumber = 2002)
+        val course = event.categories.single()
+        val runner = event.competitorData.single()
+        val registration = runner.competitorCategory.competitor.copy(categoryId = null, isMan = false)
+        processor.saveRaceData(event.copy(
+            categories = listOf(course.copy(category = course.category.copy(name = "Long", isOpen = true))),
+            competitorData = listOf(runner.copy(competitorCategory = CompetitorCategory(registration, null)))
+        ))
+        assertEquals(true, processor.processCardDataForCurrentRaceOrSeries(card(2002, listOf(31, 32)), event.race))
+        val read = processor.getCompetitorBySINumber(2002, event.race.id)!!
+        assertEquals(course.category.id, read.categoryId)
+        assertEquals(false, read.isMan)
+        assertEquals(true, processor.getRaceData(event.race.id).toEventRaceData().categories.single().category.isOpen)
+    }
+
+    @Test
     fun unknownPracticeSeriesCardCreatesCategorizedCompetitorInEveryRace() = runBlocking {
         val processor = DataProcessor.get()
         val day1 = raceData("Practice Day 1", listOf(31, 32), siNumber = null)

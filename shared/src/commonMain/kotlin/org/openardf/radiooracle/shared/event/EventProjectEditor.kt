@@ -243,7 +243,8 @@ object EventProjectEditor {
                 categoryData.copy(
                     category = categoryData.category.copy(
                         name = trimmedName,
-                        isMan = StandardCategoryRules.reconcileIsManWithName(trimmedName, categoryData.category.isMan)
+                        isMan = StandardCategoryRules.reconcileIsManWithName(trimmedName, categoryData.category.isMan),
+                        isOpen = categoryData.category.isOpen && StandardCategoryRules.inferIsManFromName(trimmedName) == null
                     )
                 )
             } else {
@@ -259,21 +260,27 @@ object EventProjectEditor {
         )
     }
 
-    /** Returns a copy of the Race File with one category's gender flag changed. */
+    fun updateCategoryGender(projectFile: EventProjectFile, categoryId: String, isMan: Boolean): EventProjectFile =
+        updateCategoryGender(projectFile, categoryId, CategoryGender.fromFlags(isMan, false))
+
+    /** An explicit Open choice is available only for a custom Practice category. */
     fun updateCategoryGender(
         projectFile: EventProjectFile,
         categoryId: String,
-        isMan: Boolean
+        gender: CategoryGender
     ): EventProjectFile {
         var foundCategory = false
         val categories = projectFile.raceData.categories.map { categoryData ->
             if (categoryData.category.id == categoryId) {
                 foundCategory = true
-                categoryData.copy(
-                    category = categoryData.category.copy(
-                        isMan = StandardCategoryRules.reconcileIsManWithName(categoryData.category.name, isMan)
-                    )
-                )
+                val selected = StandardCategoryRules.genderForName(categoryData.category.name, gender)
+                require(selected != CategoryGender.OPEN || projectFile.raceData.race.raceLevel == RaceLevel.PRACTICE) {
+                    "Open is available only for Practice categories."
+                }
+                categoryData.copy(category = categoryData.category.copy(
+                    isMan = selected.isMan ?: categoryData.category.isMan,
+                    isOpen = selected == CategoryGender.OPEN
+                ))
             } else {
                 categoryData
             }
@@ -313,6 +320,7 @@ object EventProjectEditor {
             raceId = projectFile.raceData.race.id,
             name = trimmedName,
             isMan = StandardCategoryRules.inferIsManFromName(trimmedName) ?: true,
+            isOpen = StandardCategoryRules.allowsOpen(trimmedName, projectFile.raceData.race.raceLevel),
             maxAge = null,
             lengthMeters = 0,
             climbMeters = 0,
@@ -453,6 +461,7 @@ object EventProjectEditor {
             raceId = projectFile.raceData.race.id,
             name = trimmedName,
             isMan = StandardCategoryRules.reconcileIsManWithName(trimmedName, courseMapping.category.isMan),
+            isOpen = StandardCategoryRules.allowsOpen(trimmedName, projectFile.raceData.race.raceLevel),
             lengthMeters = courseInfo?.lengthMeters ?: courseMapping.category.lengthMeters,
             climbMeters = courseInfo?.climbMeters ?: courseMapping.category.climbMeters,
             order = addedCategoryOrder,
@@ -1155,10 +1164,7 @@ object EventProjectEditor {
             if (competitor.id == competitorId) {
                 foundCompetitor = true
                 data.copy(
-                    competitorCategory = competitorCategory.copy(
-                        competitor = competitor.copy(categoryId = category?.id),
-                        category = category
-                    )
+                    competitorCategory = competitorCategory.withCategory(category)
                 )
             } else {
                 data
@@ -1777,11 +1783,13 @@ object EventProjectEditor {
             val categoryId = existingCategoryData?.category?.id ?: categoryIdFactory()
             val categoryOrder = existingCategoryData?.category?.order ?: nextCategoryOrder++
 
+            val gender = row.genderForImport(projectFile.raceData.race.raceLevel, existingCategoryData?.category?.gender)
             val category = EventCategory(
                 id = categoryId,
                 raceId = projectFile.raceData.race.id,
                 name = existingCategoryData?.category?.name ?: categoryName,
-                isMan = StandardCategoryRules.reconcileIsManWithName(categoryName, row.isMan),
+                isMan = gender.isMan ?: existingCategoryData?.category?.isMan ?: row.isMan,
+                isOpen = gender == CategoryGender.OPEN,
                 maxAge = row.maxAge,
                 lengthMeters = row.lengthMeters,
                 climbMeters = row.climbMeters,
@@ -1940,8 +1948,11 @@ object EventProjectEditor {
                     order = categoryOrder,
                     isMan = StandardCategoryRules.reconcileIsManWithName(
                         importedCategoryName,
-                        imported.category.isMan
+                        existingCategoryData?.category?.isMan ?: imported.category.isMan
                     ),
+                    // CourseData describes the course, not an existing category's eligibility.
+                    isOpen = existingCategoryData?.category?.isOpen
+                        ?: StandardCategoryRules.allowsOpen(importedCategoryName, projectFile.raceData.race.raceLevel),
                     encryptedIdealOrder = imported.category.encryptedIdealOrder,
                     encryptedCourseInfo = imported.category.encryptedCourseInfo,
                     idealOrder = imported.category.idealOrder,
@@ -2079,6 +2090,7 @@ object EventProjectEditor {
                         raceId = projectFile.raceData.race.id,
                         name = normalizedCategoryName,
                         isMan = StandardCategoryRules.inferIsManFromName(normalizedCategoryName) ?: row.isMan,
+                        isOpen = StandardCategoryRules.allowsOpen(normalizedCategoryName, projectFile.raceData.race.raceLevel),
                         maxAge = StandardCategoryRules.normalizedCategoryName(normalizedCategoryName)
                             .filter(Char::isDigit)
                             .takeIf { it.isNotBlank() }
@@ -3782,13 +3794,7 @@ object EventProjectEditor {
                         data
                     } else {
                         data.copy(
-                            competitorCategory = data.competitorCategory.copy(
-                                competitor = data.competitorCategory.competitor.copy(
-                                    categoryId = categoryData.category.id,
-                                    isMan = categoryData.category.isMan
-                                ),
-                                category = categoryData.category
-                            )
+                            competitorCategory = data.competitorCategory.withCategory(categoryData.category)
                         )
                     }
                 }

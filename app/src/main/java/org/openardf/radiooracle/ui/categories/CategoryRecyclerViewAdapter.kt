@@ -37,6 +37,8 @@ import androidx.appcompat.widget.PopupMenu
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import org.openardf.radiooracle.R
+import org.openardf.radiooracle.backend.room.entity.gender
+import org.openardf.radiooracle.shared.event.CategoryGender
 import org.openardf.radiooracle.backend.DataProcessor
 import org.openardf.radiooracle.backend.helpers.ControlPointsHelper
 import org.openardf.radiooracle.backend.room.entity.embeddeds.ControlPointAlias
@@ -71,7 +73,7 @@ class CategoryRecyclerViewAdapter(
 
     override fun onBindViewHolder(holder: CategoryViewHolder, position: Int) {
         val item = values[position]
-        holder.itemView.setBackgroundColor(categoryBackgroundColor(item.category.isMan))
+        holder.itemView.setBackgroundColor(categoryBackgroundColor(item.category.gender))
         holder.title.text = item.category.name
         holder.numCompeititors.text = context.resources.getQuantityString(
             R.plurals.category_competitor_count,
@@ -187,7 +189,7 @@ class CategoryRecyclerViewAdapter(
         selectedRaceViewModel.getCurrentRace()?.raceBand ?: RaceBand.M80
 
     private fun categoryGenderAgeText(item: CategoryData): String {
-        val gender = dataProcessor.genderToString(item.category.isMan)
+        val gender = dataProcessor.categoryGenderToString(item.category.gender)
         val age = displayCategoryAge(item)
         return if (age == null) {
             gender
@@ -209,11 +211,11 @@ class CategoryRecyclerViewAdapter(
     private fun categoryNameAge(name: String): Int? =
         CATEGORY_NAME_AGE_PATTERN.find(name.trim())?.groupValues?.get(1)?.toIntOrNull()
 
-    private fun categoryBackgroundColor(isMan: Boolean): Int {
-        val colorRes = if (isMan) {
-            R.color.category_men_background
-        } else {
-            R.color.category_women_background
+    private fun categoryBackgroundColor(gender: CategoryGender): Int {
+        val colorRes = when (gender) {
+            CategoryGender.MEN -> R.color.category_men_background
+            CategoryGender.WOMEN -> R.color.category_women_background
+            CategoryGender.OPEN -> android.R.color.transparent
         }
         return ContextCompat.getColor(context, colorRes)
     }

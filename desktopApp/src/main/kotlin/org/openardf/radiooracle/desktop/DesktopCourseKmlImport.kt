@@ -304,6 +304,7 @@ object DesktopCourseKmlImporter {
                                 id = missingCategoryIdFactory(name),
                                 raceId = projectFile.raceData.race.id,
                                 name = name,
+                                isOpen = StandardCategoryRules.allowsOpen(name, projectFile.raceData.race.raceLevel),
                                 isMan = StandardCategoryRules.inferIsManFromName(name)
                                     ?: name.trim().uppercase().startsWith("M"),
                                 maxAge = name.filter(Char::isDigit).takeIf { it.isNotBlank() }?.toIntOrNull(),

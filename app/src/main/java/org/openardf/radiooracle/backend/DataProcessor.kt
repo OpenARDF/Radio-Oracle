@@ -83,6 +83,7 @@ import org.openardf.radiooracle.shared.device.SIReaderStatus
 import org.openardf.radiooracle.shared.domain.ProviderType
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
+import org.openardf.radiooracle.shared.event.CategoryGender
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultServiceStatus
@@ -680,7 +681,6 @@ class DataProcessor private constructor(context: Context) {
                     createOrUpdateCompetitor(
                         existing.copy(
                             categoryId = updatedCategoryId,
-                            isMan = if (existing.categoryId == null) categoryData?.category?.isMan ?: existing.isMan else existing.isMan,
                             drawnRelativeStartTime = updatedStart
                         )
                     )
@@ -697,7 +697,8 @@ class DataProcessor private constructor(context: Context) {
                     lastName = nameParts.firstOrNull().orEmpty().ifEmpty { "Practice" },
                     club = "",
                     index = "",
-                    isMan = categoryData?.category?.isMan ?: false,
+                    // Only a new registration uses the historical default. Open supplies no gender.
+                    isMan = categoryData?.category?.gender?.isMan ?: false,
                     birthYear = null,
                     siNumber = cardData.siNumber,
                     siRent = false,
@@ -1105,6 +1106,12 @@ class DataProcessor private constructor(context: Context) {
             appContext.resources.getStringArray(R.array.result_status_short_array)
         val idx = raceStatusStrings.indexOf(string)
         return if (idx >= 0) ResultStatus.getByValue(idx) else ResultStatus.entries.first()
+    }
+
+    fun categoryGenderToString(gender: CategoryGender): String = when (gender) {
+        CategoryGender.OPEN -> appContext.getString(R.string.category_gender_open)
+        CategoryGender.MEN -> genderToString(true)
+        CategoryGender.WOMEN -> genderToString(false)
     }
 
     fun genderToString(isMan: Boolean?): String {

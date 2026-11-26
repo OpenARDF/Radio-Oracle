@@ -32,6 +32,7 @@ import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultStatus
 import org.openardf.radiooracle.shared.domain.SIRecordType
 import org.openardf.radiooracle.shared.event.EventAssignedControlOrder
+import org.openardf.radiooracle.shared.event.CategoryGender
 import org.openardf.radiooracle.shared.event.EventCategoryData
 import org.openardf.radiooracle.shared.event.EventCompetitor
 import org.openardf.radiooracle.shared.event.EventCompetitorData
@@ -487,7 +488,12 @@ object IofXmlExports {
         raceData: EventRaceData
     ) {
         append("  <ClassResult>\n")
-        append("""    <Class sex="${if (categoryData.category.isMan) "M" else "F"}">""")
+        val classSex = when (categoryData.category.gender) {
+            CategoryGender.MEN -> "M"
+            CategoryGender.WOMEN -> "F"
+            CategoryGender.OPEN -> "B"
+        }
+        append("""    <Class sex="$classSex">""")
         append('\n')
         appendTextElement("Name", categoryData.category.name, indent = "      ")
         append("    </Class>\n")

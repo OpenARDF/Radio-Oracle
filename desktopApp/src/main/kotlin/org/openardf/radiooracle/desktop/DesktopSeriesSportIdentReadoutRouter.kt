@@ -213,13 +213,7 @@ object DesktopSeriesSportIdentReadoutRouter {
                 raceData = projectFile.raceData.copy(
                     competitorData = projectFile.raceData.competitorData.mapIndexed { index, data ->
                         if (index != existingIndex) data else data.copy(
-                            competitorCategory = data.competitorCategory.copy(
-                                competitor = data.competitorCategory.competitor.copy(
-                                    categoryId = categoryData.category.id,
-                                    isMan = categoryData.category.isMan
-                                ),
-                                category = categoryData.category
-                            )
+                            competitorCategory = data.competitorCategory.withCategory(categoryData.category)
                         )
                     }
                 )
