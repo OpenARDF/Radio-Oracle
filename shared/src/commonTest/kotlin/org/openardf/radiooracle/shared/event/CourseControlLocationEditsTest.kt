@@ -122,6 +122,18 @@ class CourseControlLocationEditsTest {
     }
 
     @Test
+    fun changingAStationCodeRejectsOneUsedByAnotherRoleInTheEvent() {
+        val empty = EventProjectFactory.createEmptyProject("race", "Station fixture", "2026-09-26T09:00")
+        val beacon = control.copy(id = "beacon", label = "M", siCode = 99, type = ControlPointType.BEACON)
+        val project = empty.copy(raceData = empty.raceData.copy(controls = listOf(control, beacon)))
+        // The other station is unassigned, so a category-only or role-only check would miss it.
+        val edit = CourseControlEditRequest(control.id, control.label, beacon.siCode, control.type, true, "", "")
+        val error = assertFailsWith<IllegalArgumentException> { CourseControlEdits.applyDetails(project, edit) }
+        assertTrue(error.message.orEmpty().contains("99"))
+        assertEquals(listOf(131, 99), project.raceData.controls.map { it.siCode })
+    }
+
+    @Test
     fun controlFieldReviewAndMutationUseOneSharedRequest() {
         val emptyProject = EventProjectFactory.createEmptyProject(
             "race",

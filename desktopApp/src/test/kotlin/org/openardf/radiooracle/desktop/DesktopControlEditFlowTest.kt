@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -102,8 +101,9 @@ class DesktopControlEditFlowTest {
     }
 
     @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
-    @Test fun roundedAcceptedCoordinatesDoNotEnableApplyAndDisabledApplyExplainsWhy() {
+    @Test fun roundedCoordinatesAreSubmittedOnlyWhenEdited() {
         val control = control()
+        var applied: CourseControlEditRequest? = null
         rule.setContent {
             MaterialTheme {
                 ControlDetailsPanel(
@@ -112,7 +112,7 @@ class DesktopControlEditFlowTest {
                     locationSummaries = listOf(CourseControlLocationSummary(
                         control.id, control.publicLabel, 40.12345649, -75.98765449, 1
                     )),
-                    onApplyControlEdit = { "Review prepared" },
+                    onApplyControlEdit = { request -> applied = request; "Review prepared" },
                     onAddControl = { _, _, _, _, _, _ -> false }, onRemoveControl = {}
                 )
             }
@@ -122,6 +122,24 @@ class DesktopControlEditFlowTest {
         apply.performScrollTo().assertIsNotEnabled().performMouseInput { enter(center) }
         rule.mainClock.advanceTimeBy(1_000)
         rule.onNodeWithText("Change at least one control field before applying.").assertExists()
+
+        rule.onNodeWithTag("control-si-${control.id}").performScrollTo().performTextReplacement("151")
+        apply.performScrollTo().assertIsEnabled().performClick()
+        rule.runOnIdle {
+            val edit = requireNotNull(applied)
+            assertEquals(151, edit.siCode)
+            assertEquals(control.label, edit.label)
+            assertNull(edit.location)
+        }
+
+        // A move along one axis must retain the full precision of the other axis.
+        rule.onNode(hasSetTextAction() and hasText("40.123456")).performScrollTo().performTextReplacement("40.25")
+        apply.performScrollTo().assertIsEnabled().performClick()
+        rule.runOnIdle {
+            val location = requireNotNull(applied?.location)
+            assertEquals(40.25, location.latitude, 0.0)
+            assertEquals(-75.98765449, location.longitude, 0.0)
+        }
     }
 
     @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
