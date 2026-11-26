@@ -37,7 +37,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = 'https://maven.pkg.jetbrains.space/public/p/compose/dev' }
+        // Stable Compose artifacts use Maven Central. The pinned Android USB and printer libraries use JitPack.
         maven { url = 'https://jitpack.io' }
     }
 }
