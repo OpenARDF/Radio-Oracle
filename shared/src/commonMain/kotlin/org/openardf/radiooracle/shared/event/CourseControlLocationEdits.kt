@@ -113,8 +113,12 @@ object CourseControlEdits {
         }
     }
 
-    fun applyDetails(projectFile: EventProjectFile, edit: CourseControlEditRequest): EventProjectFile =
-        EventProjectEditor.updateControl(
+    fun applyDetails(projectFile: EventProjectFile, edit: CourseControlEditRequest): EventProjectFile {
+        // Punches carry only the station code, even when two controls have different roles.
+        require(projectFile.raceData.controls.none { it.id != edit.controlId && it.siCode == edit.siCode }) {
+            "SI code ${edit.siCode} is already assigned to another control in this event."
+        }
+        return EventProjectEditor.updateControl(
             projectFile = projectFile,
             controlId = edit.controlId,
             label = edit.label,
@@ -124,6 +128,7 @@ object CourseControlEdits {
             publicLabel = edit.publicLabel,
             notes = edit.notes
         )
+    }
 
     private fun MutableList<CourseControlFieldChange>.addChange(
         field: String,

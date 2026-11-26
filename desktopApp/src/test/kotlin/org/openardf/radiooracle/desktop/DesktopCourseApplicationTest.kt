@@ -56,6 +56,42 @@ class DesktopCourseApplicationTest {
         assertNotEquals(before, EventProjectFileJson.encode(accepted))
     }
 
+    @Test fun stationCodeReviewUpdatesBindingsWithMissingRouteMetrics() {
+        val source = imported()
+        val selection = selection(source)
+        val applied = DesktopCourseAnalysisApplier.commit(
+            source, DesktopCourseAnalysisApplier.prepare(source, listOf(selection), null)
+        )
+        val category = applied.raceData.categories.single().category
+        val info = requireNotNull(category.courseInfo)
+        val bindings = requireNotNull(info.appliedBindings)
+        // An accepted station placement can exist before there is a measured route.
+        val incomplete = CourseDesignBindings.prepare(
+            info.copy(route = emptyList(), lengthMeters = null, climbMeters = null, sampledPointCount = 0),
+            applied.raceData.controls, bindings.controls.associate { it.placementId to it.controlId },
+            bindings.orderedPlacementIds, bindings.revision
+        )
+        val project = applied.withStoredCourseInfo(category.id, incomplete, null)
+        val control = project.raceData.controls.first { it.id == bindings.controls.first().controlId }
+        val edit = CourseControlEditRequest(control.id, control.label, 151, control.type, control.scored,
+            control.publicLabel.orEmpty(), control.notes.orEmpty())
+        val review = DesktopControlEditReviewer.prepare(project, edit, null,
+            elevationLookup = { error("A station-code change cannot require elevation data") })
+
+        assertEquals(listOf("SI code"), review.fieldChanges.map { it.field })
+        assertTrue(review.courseChanges.isEmpty())
+        val saved = EventProjectFileJson.decode(EventProjectFileJson.encode(review.candidateProject))
+        val updated = saved.raceData.categories.single().category.courseInfo!!
+        assertEquals(incomplete.controlPoints, updated.controlPoints)
+        assertEquals(incomplete.route, updated.route)
+        assertNull(updated.lengthMeters)
+        assertNull(updated.climbMeters)
+        val updatedBindings = requireNotNull(updated.appliedBindings)
+        assertEquals(bindings.orderedPlacementIds, updatedBindings.orderedPlacementIds)
+        assertEquals(151, updatedBindings.controls.single { it.controlId == control.id }.siCode)
+        assertEquals(151, saved.raceData.controls.single { it.id == control.id }.siCode)
+    }
+
     @Test fun controlDetailReviewPreservesEncryptedStorageUntilAccepted() {
         val imported = imported()
         val applied = DesktopCourseAnalysisApplier.commit(

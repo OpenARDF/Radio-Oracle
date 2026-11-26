@@ -274,6 +274,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.YearMonth
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
@@ -22791,21 +22792,17 @@ private fun ControlDetailRow(
     val detailsChanged = controlDetailsChanged(
         control, parsedSiCode, typeDraft, publicLabelDraft, notesDraft
     )
-    val locationChanged = controlLocationChanged(
-        showLocation, acceptedLatitude, acceptedLongitude, acceptedLatitudeText, acceptedLongitudeText,
-        parsedLatitude, parsedLongitude
-    )
+    val editedLocation = editedControlLocation(acceptedLatitude, acceptedLongitude, parsedLatitude, parsedLongitude)
     val applyDisabledReason = controlApplyDisabledReason(
         editingDisabledReason, parsedSiCode, locationInputPresent,
-        parsedLatitude, parsedLongitude, detailsChanged, locationChanged
+        parsedLatitude, parsedLongitude, detailsChanged, editedLocation != null
     )
     val canApply = applyDisabledReason == null
 
     fun applyDraft() {
         if (!canApply) return
         onApplyControlEdit(controlEditRequest(control, typeDraft, publicLabelDraft, notesDraft,
-            requireNotNull(parsedSiCode), parsedLatitude, parsedLongitude,
-            showLocation && parsedLatitude != null && parsedLongitude != null))
+            requireNotNull(parsedSiCode), editedLocation))
     }
 
     val warningText = warningReasons.joinToString(separator = "\n")
@@ -22930,18 +22927,18 @@ private fun controlDetailsChanged(
 ): Boolean = siCode != control.siCode || type != control.type ||
     publicLabel.trim() != control.publicLabel.trim() || notes.trim() != control.notes.trim()
 
-private fun controlLocationChanged(
-    showLocation: Boolean,
+private fun editedControlLocation(
     acceptedLatitude: Double?,
     acceptedLongitude: Double?,
-    acceptedLatitudeText: String,
-    acceptedLongitudeText: String,
     latitude: Double?,
     longitude: Double?
-): Boolean = showLocation && latitude != null && longitude != null && (
-    controlCoordinateChanged(acceptedLatitude, acceptedLatitudeText.toDoubleOrNull(), latitude) ||
-        controlCoordinateChanged(acceptedLongitude, acceptedLongitudeText.toDoubleOrNull(), longitude)
-    )
+): CourseControlLocation? {
+    if (latitude == null || longitude == null) return null
+    val updatedLatitude = controlCoordinateForEdit(acceptedLatitude, latitude)
+    val updatedLongitude = controlCoordinateForEdit(acceptedLongitude, longitude)
+    if (updatedLatitude == acceptedLatitude && updatedLongitude == acceptedLongitude) return null
+    return CourseControlLocation(updatedLatitude, updatedLongitude)
+}
 
 private fun controlApplyDisabledReason(
     editingDisabledReason: String?,
@@ -22960,13 +22957,12 @@ private fun controlApplyDisabledReason(
     else -> null
 }
 
-/** Six-decimal display rounding must not make an untouched accepted coordinate look edited. */
-private fun controlCoordinateChanged(accepted: Double?, displayedAccepted: Double?, draft: Double): Boolean =
-    accepted == null ||
-        !CourseCoordinateRules.same(accepted, draft) &&
-        displayedAccepted?.let { displayed ->
-            !CourseCoordinateRules.same(displayed, draft)
-        } != false
+/** Retain the stored precision of each untouched axis, including when the other axis moves. */
+private fun controlCoordinateForEdit(accepted: Double?, draft: Double): Double {
+    if (accepted == null) return draft
+    val matchesDisplay = CourseCoordinateRules.same(accepted.decimalText().toDouble(), draft)
+    return if (matchesDisplay || CourseCoordinateRules.same(accepted, draft)) accepted else draft
+}
 
 /** Converts validated row drafts into the shared request consumed by every review implementation. */
 private fun controlEditRequest(
@@ -22975,22 +22971,21 @@ private fun controlEditRequest(
     publicLabel: String,
     notes: String,
     siCode: Int,
-    latitude: Double?,
-    longitude: Double?,
-    includeLocation: Boolean
+    location: CourseControlLocation?
 ): CourseControlEditRequest = CourseControlEditRequest(
     controlId = control.id,
-    label = if (siCode != control.siCode || type != control.type) "" else control.label,
+    // Preserve the organizer's fox label when swapping stations. A generated label follows its SI code.
+    label = if (type != control.type || control.label == EventControlCatalog.defaultLabel(control.siCode, control.type)) {
+        EventControlCatalog.defaultLabel(siCode, type)
+    } else {
+        control.label
+    },
     siCode = siCode,
     type = type,
     scored = if (type != control.type) type.defaultScored() else control.scored,
     publicLabel = publicLabel,
     notes = notes,
-    location = if (includeLocation) {
-        CourseControlLocation(requireNotNull(latitude), requireNotNull(longitude))
-    } else {
-        null
-    }
+    location = location
 )
 
 @Composable
@@ -25878,8 +25873,9 @@ private fun LabeledTextField(
 private fun ProtectedCourseInfo.courseGeoPoints(): List<CourseGeoPoint> =
     finiteCourseGeoPoints()
 
+/** Coordinate input uses a decimal point in every locale. */
 internal fun Double.decimalText(): String =
-    "%.${6}f".format(this)
+    "%.6f".format(Locale.ROOT, this)
 
 private fun bytesText(bytes: Long): String =
     when {
