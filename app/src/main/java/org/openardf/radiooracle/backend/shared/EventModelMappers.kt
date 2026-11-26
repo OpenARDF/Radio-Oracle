@@ -24,6 +24,7 @@
 
 package org.openardf.radiooracle.backend.shared
 
+import kotlinx.serialization.json.Json
 import org.openardf.radiooracle.backend.room.entity.Alias
 import org.openardf.radiooracle.backend.room.entity.Category
 import org.openardf.radiooracle.backend.room.entity.Competitor
@@ -214,11 +215,14 @@ fun CategoryData.toEventCategoryData(): EventCategoryData =
     )
 
 /** Converts an Android competitor/category relation into the portable shared race model. */
-fun CompetitorCategory.toEventCompetitorCategory(): EventCompetitorCategory =
-    EventCompetitorCategory(
-        competitor = competitor.toEventCompetitor(),
-        category = category?.toEventCategory()
-    )
+fun CompetitorCategory.toEventCompetitorCategory(): EventCompetitorCategory {
+    val row = competitor.toEventCompetitor()
+    val pending = competitor.pendingCategory?.takeIf { row.categoryId == null && category == null }
+        ?.let { Json.decodeFromString<EventCategory>(it) }
+    // A pending reference can cross the Race File boundary without inventing a listed Room category.
+    return if (pending == null) EventCompetitorCategory(row, category?.toEventCategory())
+    else EventCompetitorCategory(row.copy(categoryId = pending.id), pending)
+}
 
 /** Converts an Android competitor aggregate into the portable shared race model. */
 fun CompetitorData.toEventCompetitorData(): EventCompetitorData =

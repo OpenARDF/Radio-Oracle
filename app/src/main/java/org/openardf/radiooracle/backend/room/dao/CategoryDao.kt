@@ -72,6 +72,10 @@ interface CategoryDao {
     @Upsert
     suspend fun createOrUpdateCategory(category: Category)
 
+    /** A legacy reference from another race must not be cleared by this race's empty-category review. */
+    @Query("DELETE FROM category WHERE id = :id AND race_id = :raceId AND NOT EXISTS (SELECT 1 FROM competitor WHERE category_id = :id)")
+    suspend fun deleteUnassignedCategory(id: UUID, raceId: UUID): Int
+
     /** Deletes one category by primary key. */
     @Query("DELETE FROM category WHERE id=(:id) ")
     suspend fun deleteCategory(id: UUID)

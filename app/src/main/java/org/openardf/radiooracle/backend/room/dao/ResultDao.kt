@@ -36,6 +36,10 @@ import java.util.UUID
 /** Room access methods for SI readout results and result aggregates. */
 @Dao
 interface ResultDao {
+    // Every saved row locks station assignments, including unmatched downloads.
+    @Query("SELECT EXISTS(SELECT 1 FROM result WHERE race_id = :raceId)")
+    suspend fun hasRecordedActivity(raceId: UUID): Boolean
+
     /** Returns one result entity by primary key. */
     @Query("SELECT * FROM result WHERE id=(:id)")
     suspend fun getResult(id: UUID): Result
@@ -53,6 +57,10 @@ interface ResultDao {
     /** Returns the result matched to a competitor, or null when absent. */
     @Query("SELECT * FROM result WHERE competitor_id=(:competitorId) LIMIT 1")
     suspend fun getResultByCompetitor(competitorId: UUID): Result?
+
+    /** Includes every saved Practice attempt owned by this registration in this race. */
+    @Query("SELECT * FROM result WHERE race_id = :raceId AND competitor_id = :competitorId ORDER BY readout_time")
+    suspend fun getResultsForCompetitor(raceId: UUID, competitorId: UUID): List<Result>
 
     /** Finds a result by SI card number within one race. */
     @Query("SELECT * FROM result WHERE si_number=(:siNumber) AND race_id=(:raceId) LIMIT 1")

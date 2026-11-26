@@ -924,4 +924,18 @@
     <string name="race_copy_help">Creates a standalone race with the same settings, categories, courses and controls. Results and drawn starts are cleared. You can add it to a series later.</string>
     <string name="race_copy_created">Created race: %1$s</string>
     <string name="race_copy_failed">Could not create race</string>
+    <string name="series_switch_race">Switch race in series</string>
+    <string name="edit_station_code">Change SI station code…</string>
+    <string name="station_locked_after_readout">Station codes locked after readout</string>
+    <string name="station_no_controls">This race has no controls to edit.</string>
+    <string name="station_number" translatable="false">%1$d</string>
+    <string name="station_enter_code">Enter a station number.</string>
+    <string name="station_review_change">%1$s\n%2$s: SI %3$d → SI %4$d</string>
+    <string name="station_change_saved">Station code saved.</string>
+    <string name="category_review_mismatches">Review category mismatches…</string>
+    <string name="category_sync_add">Add %1$s (registrations: %2$d)</string>
+    <string name="category_sync_repair">Repair assignments to %1$s (registrations: %2$d)</string>
+    <string name="category_sync_remove">Remove empty category %1$s</string>
+    <string name="category_sync_remove_course">Remove empty category %1$s and its course data</string>
+    <string name="category_sync_saved">Categories added: %1$d\nAssignments repaired: %2$d\nEmpty categories removed: %3$d</string>
 </resources>

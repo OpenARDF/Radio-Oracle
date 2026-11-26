@@ -284,3 +284,10 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
         db.execSQL("ALTER TABLE category ADD COLUMN is_open INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/** Existing registrations already use the Room category key. Only unresolved imports need this column. */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE competitor ADD COLUMN pending_category TEXT")
+    }
+}

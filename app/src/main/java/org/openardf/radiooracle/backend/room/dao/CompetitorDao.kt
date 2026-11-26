@@ -30,6 +30,7 @@ import androidx.room.RewriteQueriesToDropUnusedColumns
 import androidx.room.Transaction
 import androidx.room.Upsert
 import org.openardf.radiooracle.backend.room.entity.Competitor
+import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorCategory
 import org.openardf.radiooracle.backend.room.entity.embeddeds.CompetitorData
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
@@ -42,6 +43,11 @@ interface CompetitorDao {
     @Transaction
     @RewriteQueriesToDropUnusedColumns
     fun getCompetitorDataFlow(raceId: UUID): Flow<List<CompetitorData>>
+
+    /** A review needs one row per registration regardless of repeat Practice readouts. */
+    @Transaction
+    @Query("SELECT * FROM competitor WHERE race_id = :raceId")
+    suspend fun getRegistrationCategories(raceId: UUID): List<CompetitorCategory>
 
     /** Returns all competitor entities for a race. */
     @Query("SELECT * FROM competitor WHERE race_id=(:raceId) ")

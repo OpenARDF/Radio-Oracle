@@ -75,6 +75,9 @@ data class Competitor(
     @ColumnInfo(name = "drawn_start_time") var drawnRelativeStartTime: Duration? = null,
     @ColumnInfo(name = "bib_number", defaultValue = "''") var bibNumber: String = "",
     @ColumnInfo(name = "corridor", defaultValue = "''") var corridor: String = "",
+    // A portable registration can name a category absent from the race list. Room's foreign key
+    // stays null until the organizer reviews it; the embedded reference survives file transfers.
+    @ColumnInfo(name = "pending_category") var pendingCategory: String? = null,
 ) : Serializable {
     /** Returns the display name in the shared LASTNAME Firstname format. */
     fun getFullName(): String {

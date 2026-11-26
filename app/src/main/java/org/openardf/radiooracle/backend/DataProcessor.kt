@@ -84,6 +84,7 @@ import org.openardf.radiooracle.shared.domain.ProviderType
 import org.openardf.radiooracle.shared.domain.PunchStatus
 import org.openardf.radiooracle.shared.domain.RaceBand
 import org.openardf.radiooracle.shared.event.CategoryGender
+import org.openardf.radiooracle.shared.event.EventCategoryCompetitorSyncPlan
 import org.openardf.radiooracle.shared.domain.RaceLevel
 import org.openardf.radiooracle.shared.domain.RaceType
 import org.openardf.radiooracle.shared.domain.ResultServiceStatus
@@ -186,13 +187,14 @@ class DataProcessor private constructor(context: Context) {
         DebugLog.info("Races", "Created race=${race.id} name=${race.name}")
     }
 
-    suspend fun updateRace(race: Race) {
-        ardfRepository.updateRace(race)
+    suspend fun updateRace(race: Race): Race {
+        val updated = ardfRepository.updateRace(race)
         updateResultsByRace(race.id)
         currentState.value
             ?.takeIf { it.currentRace?.id == race.id }
-            ?.let { state -> currentState.postValue(AppState(race, state.siReaderState, state.resultServiceJob)) }
+            ?.let { state -> currentState.postValue(AppState(updated, state.siReaderState, state.resultServiceJob)) }
         DebugLog.info("Races", "Updated race=${race.id} name=${race.name}")
+        return updated
     }
 
     suspend fun deleteRace(id: UUID) {
@@ -270,6 +272,13 @@ class DataProcessor private constructor(context: Context) {
                 }
             }
         }
+    }
+
+    suspend fun applyCategoryReview(
+        raceId: UUID, reviewed: EventCategoryCompetitorSyncPlan, missingIds: Set<String>, emptyIds: Set<String>
+    ) = ardfRepository.raceSetup.applyCategoryReview(raceId, reviewed, missingIds, emptyIds) { competitorId, race ->
+        // Reviewing category assignments must not also assign an unmatched card to a runner.
+        updateResultsForCompetitor(competitorId, race, this, claimUnmatched = false)
     }
 
     suspend fun deleteCategory(categoryId: UUID, raceId: UUID, deleteCompetitors: Boolean) {
@@ -378,6 +387,9 @@ class DataProcessor private constructor(context: Context) {
 
     suspend fun getResultByCompetitor(competitorId: UUID) =
         ardfRepository.getResultByCompetitor(competitorId)
+
+    suspend fun getResultsForCompetitor(raceId: UUID, competitorId: UUID) =
+        ardfRepository.getResultsForCompetitor(raceId, competitorId)
 
     suspend fun getResultBySINumber(siNumber: Int, raceId: UUID) =
         ardfRepository.getResultBySINumber(siNumber, raceId)

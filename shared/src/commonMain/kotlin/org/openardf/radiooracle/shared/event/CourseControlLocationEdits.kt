@@ -1,6 +1,7 @@
 package org.openardf.radiooracle.shared.event
 
 import org.openardf.radiooracle.shared.domain.ControlPointType
+import org.openardf.radiooracle.shared.publicresults.ProtectedCourseCipher
 import kotlin.math.abs
 
 /** One portable definition of valid decimal-degree course coordinates. */
@@ -87,6 +88,30 @@ data class CourseControlFieldChange(
 
 /** Portable control-row comparison and catalog mutation shared by platform UIs. */
 object CourseControlEdits {
+    fun requireReviewable(project: EventProjectFile) {
+        EventCourseDrafts.requireDesignEditable(project)
+        EventCourseDrafts.requireCurrent(project)
+        require(project.raceData.courseDraft == null) {
+            "Apply or discard the current course draft before reviewing control changes."
+        }
+    }
+
+    /** Change only the station binding. Protected geometry is plaintext only inside this review. */
+    fun prepareStationCode(project: EventProjectFile, controlId: String, newCode: Int, password: String?): EventProjectFile {
+        requireReviewable(project)
+        val control = project.raceData.controls.single { it.id == controlId }
+        require(control.siCode != newCode) { "No control changes were made." }
+        val protected = project.hasEncryptedCourseData()
+        val plain = if (protected) ProtectedCourseCipher.removeProjectCourseProtection(project, password.orEmpty()) else project
+        // Native stores can materialize catalog labels as aliases. Drop the old derived alias
+        // before moving the station so it cannot survive as a second, independent assignment.
+        val updated = applyDetails(EventControlCatalog.removeCatalogAliases(plain), CourseControlEditRequest(
+            control.id, control.label, newCode, control.type, control.scored,
+            control.publicLabel.orEmpty(), control.notes.orEmpty()
+        ))
+        return if (protected) ProtectedCourseCipher.protectProjectCourseData(updated, password.orEmpty()) else updated
+    }
+
     fun changes(
         control: EventControl,
         currentLocation: CourseControlLocation?,

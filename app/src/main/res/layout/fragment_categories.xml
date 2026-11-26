@@ -15,6 +15,15 @@
         android:theme="@style/Theme.RadioOracle"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/category_review_mismatches"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:enabled="false"
+        android:text="@string/category_review_mismatches"
+        app:layout_constraintTop_toBottomOf="@id/category_toolbar"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/category_recycler_view"
         android:layout_width="match_parent"
@@ -22,7 +31,7 @@
         android:clipToPadding="false"
         app:layoutManager="LinearLayoutManager"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/category_toolbar"
+        app:layout_constraintTop_toBottomOf="@id/category_review_mismatches"
         tools:context=".ui.races.RaceSelectionFragment"
         tools:layout_editor_absoluteX="0dp"
         tools:listitem="@layout/recycler_item_race" />

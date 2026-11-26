@@ -595,4 +595,17 @@
         <item quantity="many">%d závodů</item>
         <item quantity="other">%d závodů</item>
     </plurals>
+    <string name="series_switch_race">Přepnout závod v sérii</string>
+    <string name="edit_station_code">Změnit kód stanice SI…</string>
+    <string name="station_locked_after_readout">Kódy stanic jsou po vyčtení čipu uzamčeny</string>
+    <string name="station_no_controls">Tento závod nemá žádné kontroly k úpravě.</string>
+    <string name="station_enter_code">Zadejte číslo stanice.</string>
+    <string name="station_review_change">%1$s\n%2$s: SI %3$d → SI %4$d</string>
+    <string name="station_change_saved">Kód stanice byl uložen.</string>
+    <string name="category_review_mismatches">Zkontrolovat nesrovnalosti v kategoriích…</string>
+    <string name="category_sync_add">Přidat %1$s (počet přihlášek: %2$d)</string>
+    <string name="category_sync_repair">Opravit přiřazení do %1$s (počet přihlášek: %2$d)</string>
+    <string name="category_sync_remove">Odebrat prázdnou kategorii %1$s</string>
+    <string name="category_sync_remove_course">Odebrat prázdnou kategorii %1$s včetně údajů o trati</string>
+    <string name="category_sync_saved">Přidané kategorie: %1$d, opravená přiřazení: %2$d, odebrané prázdné kategorie: %3$d.</string>
 </resources>
