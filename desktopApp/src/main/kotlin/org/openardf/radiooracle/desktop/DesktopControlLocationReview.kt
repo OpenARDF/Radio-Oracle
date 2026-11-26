@@ -55,7 +55,6 @@ internal object DesktopControlEditReviewer {
             edit = edit,
             password = storagePassword
         )
-        val detailsState = decryptedProtectedCourseState(detailsCandidate, password.orEmpty())
         val requestedLocation = edit.location
         val locationChanged = requestedLocation != null && (
             previousResolvedLocation == null ||
@@ -68,6 +67,7 @@ internal object DesktopControlEditReviewer {
             require(previousLocation.status == CourseResolutionStatus.RESOLVED && previousResolvedLocation != null) {
                 previousLocation.explanation ?: "This control does not have one accepted course location to edit."
             }
+            val detailsState = decryptedProtectedCourseState(detailsCandidate, password.orEmpty())
             val locationUpdate = DesktopProtectedControlLocationUpdater.applyControlLocations(
                 projectFile = detailsCandidate,
                 courseInfoByCategoryId = detailsState.protectedCourseInfoByCategoryId,
@@ -99,13 +99,18 @@ internal object DesktopControlEditReviewer {
         }
         checkCancelled()
 
-        val afterState = decryptedProtectedCourseState(candidateProject, password.orEmpty())
-        val changes = CourseControlLocationEdits.changes(
-            race = baseCandidate.raceData,
-            beforeByCategoryId = beforeState.protectedCourseInfoByCategoryId,
-            afterByCategoryId = afterState.protectedCourseInfoByCategoryId,
-            directlyAffectedCategoryIds = directlyAffectedCategoryIds
-        )
+        // A station or label edit refreshes stored bindings without recalculating a route.
+        val changes = if (locationChanged || control.type != edit.type) {
+            val afterState = decryptedProtectedCourseState(candidateProject, password.orEmpty())
+            CourseControlLocationEdits.changes(
+                race = baseCandidate.raceData,
+                beforeByCategoryId = beforeState.protectedCourseInfoByCategoryId,
+                afterByCategoryId = afterState.protectedCourseInfoByCategoryId,
+                directlyAffectedCategoryIds = directlyAffectedCategoryIds
+            )
+        } else {
+            emptyList()
+        }
         val updatedControl = candidateProject.raceData.controls.first { it.id == edit.controlId }
         return DesktopControlEditReview(
             baseProject = projectFile,
