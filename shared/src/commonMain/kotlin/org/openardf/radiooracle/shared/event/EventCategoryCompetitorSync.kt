@@ -38,6 +38,7 @@ data class EventCategoryCompetitorSyncEmptyCategory(
 )
 
 data class EventCategoryCompetitorSyncPlan(
+    val hasRegisteredCompetitors: Boolean,
     val missingCategories: List<EventCategoryCompetitorSyncMissingCategory>,
     val emptyCategories: List<EventCategoryCompetitorSyncEmptyCategory>
 ) {
@@ -54,6 +55,12 @@ data class EventCategoryCompetitorSyncOutcome(
 
 object EventCategoryCompetitorSync {
     fun plan(raceData: EventRaceData): EventCategoryCompetitorSyncPlan {
+        val registrations = raceData.competitorData.registrations()
+        // Categories can be prepared before registration opens.
+        if (registrations.isEmpty()) {
+            return EventCategoryCompetitorSyncPlan(false, emptyList(), emptyList())
+        }
+
         val categoriesById = raceData.categories.associateBy { it.category.id }
         val referencedCategoriesById = raceData.competitorData
             .mapNotNull { data ->
@@ -74,7 +81,7 @@ object EventCategoryCompetitorSync {
                 EventCategoryCompetitorSyncMissingCategory(
                     categoryId = categoryId,
                     categoryName = category.name,
-                    competitorCount = raceData.competitorData.registrations().count { data ->
+                    competitorCount = registrations.count { data ->
                         data.effectiveCategoryId() == categoryId
                     },
                     existingEquivalentCategoryId = equivalentCategoryId
@@ -83,7 +90,7 @@ object EventCategoryCompetitorSync {
             .sortedBy { it.categoryName }
         val categoryIdsReceivingRepairedAssignments = missingCategories
             .mapNotNullTo(mutableSetOf()) { it.existingEquivalentCategoryId }
-        val assignedCountsByCategoryId = raceData.competitorData.registrations()
+        val assignedCountsByCategoryId = registrations
             .mapNotNull { data -> data.effectiveCategoryId() }
             .groupingBy { it }
             .eachCount()
@@ -101,6 +108,7 @@ object EventCategoryCompetitorSync {
             }
             .sortedBy { it.categoryName }
         return EventCategoryCompetitorSyncPlan(
+            hasRegisteredCompetitors = true,
             missingCategories = missingCategories,
             emptyCategories = emptyCategories
         )
@@ -112,6 +120,11 @@ object EventCategoryCompetitorSync {
         emptyCategoryIdsToRemove: Set<String>
     ): EventCategoryCompetitorSyncOutcome {
         val syncPlan = plan(projectFile.raceData)
+        // A selection from an earlier roster can outlive the last registration.
+        if (!syncPlan.hasRegisteredCompetitors) {
+            return EventCategoryCompetitorSyncOutcome(projectFile, 0, 0, 0)
+        }
+
         var updatedProject = projectFile
         var addedCategoryCount = 0
         var repairedAssignmentCount = 0

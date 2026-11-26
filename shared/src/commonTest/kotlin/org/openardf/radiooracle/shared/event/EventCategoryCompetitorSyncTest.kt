@@ -31,6 +31,26 @@ import kotlin.test.assertTrue
 
 class EventCategoryCompetitorSyncTest {
     @Test
+    fun emptyRosterPreservesPreparedCategoriesEvenWithAStaleRemovalSelection() {
+        val m70 = category("m70", "M70").copy(controlPointsString = "31")
+        val project = project(categories = listOf(categoryData(m70)), competitors = emptyList())
+        val plan = EventCategoryCompetitorSync.plan(project.raceData)
+
+        assertFalse(plan.hasRegisteredCompetitors)
+        assertFalse(plan.hasMismatch)
+        assertTrue(plan.emptyCategories.isEmpty())
+
+        val outcome = EventCategoryCompetitorSync.apply(
+            project,
+            missingCategoryIdsToSync = emptySet(),
+            emptyCategoryIdsToRemove = setOf(m70.id)
+        )
+
+        assertEquals(0, outcome.removedCategoryCount)
+        assertEquals(project, outcome.projectFile)
+    }
+
+    @Test
     fun identifiesMissingAndEmptyCategories() {
         val m21 = category("m21", "M21")
         val w21 = category("w21", "W21").copy(lengthMeters = 4_000)
