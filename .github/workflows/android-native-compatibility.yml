@@ -98,7 +98,7 @@ jobs:
           target: google_apis_ps16k
           arch: x86_64
           profile: pixel_7
-          # The Google APIs image exhausts the Pixel 7 profile default during its first-boot service initialization.
-          ram-size: 4096M
+          # Google Play services can exhaust a 4 GiB guest during first boot, killing the app during the page-size check.
+          ram-size: 6144M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: node scripts/android-16kb-device-smoke.mjs app/build/outputs/apk/debug/app-debug.apk
