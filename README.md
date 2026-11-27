@@ -50,6 +50,7 @@ The control catalog owns control identities, labels, and station assignments. Se
 
 ## More Information
 
+- [Multiplatform roadmap](docs/multiplatform-roadmap.md)
 - [Development and release branch workflow](docs/development-workflow.md)
 - [Desktop preparation and packaging](docs/desktop-prep.md)
 - [Coding guidelines](docs/coding-guidelines.md)
