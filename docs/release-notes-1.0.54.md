@@ -29,6 +29,8 @@ Switch between races from the race toolbar. In Categories, review competitor ass
 
 Further physical-device and SPORTident testing was waived by the release owner for 1.0.54.
 
+The [release verification record](release-verification-1.0.54.md) includes the test results, bundle identity and publication evidence.
+
 The isolated Android unit-test manifest may report two specifically waived Firebase permission-removal notices because Firebase Measurement is absent from that test merge. The final packaged manifest is checked instead and must exclude both advertising-ID permissions. Mockito test workers may also report that class-data sharing is unavailable after Mockito appends their bootstrap classpath; this affects only test-VM startup optimization. Gradle 9.8.1 exposes two specifically waived upstream plugin deprecations: AGP's `Configuration.setVisible(boolean)` call and Compose Hot Reload's `HotReloadUsageType` attribute. Dependency-version availability notices remain in the separate Renovate maintenance lane. These notices are not Radio-Oracle source warnings.
 
 ## Standards compatibility
