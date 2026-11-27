@@ -230,6 +230,47 @@ These are deliberate limits in the current app, not necessarily defects.
 
 ## Near-Term Roadmap
 
+### Google Play production readiness
+
+Complete these items before applying for production access for `org.openardf.radiooracle`.
+Review this checklist monthly and before applying. Update the review date and
+open items here. When closing an item, link the build, test result, or dated
+Play Console observation that supports it.
+
+**Last reviewed November 27, 2026.** Version 1.0.54 (62) reached internal
+testing. Play showed an incomplete store listing, zero closed-test opt-ins,
+and a disabled production application. [Release verification](release-verification-1.0.54.md#google-play)
+
+- [ ] Adjust orientation handling on foldables. The main activity requests the
+  operator's portrait or landscape preference, and its manifest opts into
+  restricted resizing. Allow the foldable window to rotate and resize while
+  preserving the operator's preference on phones where appropriate.
+- [ ] Run the Tier 3 tests on both 1:1 and 4:3 foldable profiles. Rotate,
+  fold, unfold, and resize in split-screen during race selection, an unsaved
+  competitor edit, and SPORTident readout. Verify that controls stay reachable
+  without clipping or letterboxing, text and scroll position survive, and a
+  card read is neither lost nor duplicated. Record the build and results.
+  [Android Tier 3 tests](https://developer.android.com/docs/quality-guidelines/adaptive-app-quality/tier-3)
+- [ ] Test race or series transfer in both directions between a desktop and
+  an Android 17 device on the same local network. If direct access to the
+  desktop is blocked, evaluate the system device picker. If the picker cannot
+  support the workflow and broad access is essential, implement the runtime
+  permission and document why it is needed. Google schedules the declaration
+  form for June 2027 and enforcement for August 25, 2027. Record the transfer
+  result and any applicable declaration. [Android local network access](https://developer.android.com/privacy-and-security/local-network-permission) · [Play declaration timeline](https://support.google.com/googleplay/android-developer/answer/16935362)
+- [ ] Complete the listing and verify its screenshots in Play Console. Capture
+  two standard phone screenshots and three foldable views from a passing build
+  (1:1 unfolded, 4:3 unfolded, and 10:16 folded portrait). Google accepts
+  emulator captures. Tier 3 and foldable screenshots are required from April
+  2027. [Google Play adaptive quality requirements](https://developer.android.com/blog/posts/google-play-adaptive-quality-standards)
+- [ ] Check the candidate's merged release manifest and Play Console policy
+  status. Version 1.0.54 targeted API 37 and requested no location, SMS, or
+  call-log permissions. Record any new declarations or target-level requirements
+  and resolve outstanding policy items.
+- [ ] Complete the closed test shown in Play Console with at least 12 testers
+  continuously opted in for 14 days. Record the qualifying dates, tester
+  feedback, and Console confirmation that the application is available.
+
 ### Post-1.0.53 Development Readiness
 
 - Harden the hosted Android 16 KB emulator lane against transient runner

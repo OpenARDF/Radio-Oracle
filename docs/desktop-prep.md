@@ -412,7 +412,8 @@ saving the release. Treat the final rollout or submission action as an external
 publication that requires explicit owner approval. Production availability has
 additional Play Console setup and testing requirements; inspect and record the
 current requirements rather than assuming that a prior release's requirements
-remain current.
+remain current. Before applying for production access, review the
+[Google Play production readiness checklist](multiplatform-roadmap.md#google-play-production-readiness).
 
 ### Trusted Publishing
 
