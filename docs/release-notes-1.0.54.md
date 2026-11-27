@@ -33,4 +33,4 @@ The isolated Android unit-test manifest may report two specifically waived Fireb
 
 ## Standards compatibility
 
-The upstream ARDF JSON schema at `83eeaa413c6b0b7a0564247b45a1d93cfd5fc3c1` defines `category_gender` as a Boolean. Radio-Oracle uses an optional `category_open` flag to preserve mixed-gender categories in race and result JSON. The standards proposal for this field is pending. IOF XML 3.0 already defines the corresponding Class sex value `B`.
+Standards review outcome is **standards-pr-linked**. The upstream ARDF JSON schema at `83eeaa413c6b0b7a0564247b45a1d93cfd5fc3c1` defines `category_gender` as a Boolean. Radio-Oracle uses an optional `category_open` flag to preserve mixed-gender categories in race and result JSON. IOF XML 3.0 already defines the corresponding Class sex value `B`. [Upstream ARDF JSON proposal](https://github.com/AROB-CR/radio-o-standards/pull/9)
