@@ -13,7 +13,6 @@ const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
 const renovateConfig = JSON.parse(readFileSync("renovate.json", "utf8"));
 const appBuildGradle = readFileSync("app/build.gradle", "utf8");
 const rootBuildGradle = readFileSync("build.gradle", "utf8");
-const settingsGradle = readFileSync("settings.gradle", "utf8");
 const desktopBuildGradle = readFileSync("desktopApp/build.gradle", "utf8");
 const versionCatalog = readFileSync("gradle/libs.versions.toml", "utf8");
 const readme = readFileSync("README.md", "utf8");
@@ -193,8 +192,6 @@ if (!rootBuildGradle.includes(`ext.radioOracleVersion = "${packageJson.version}"
   fail("root radioOracleVersion must match package.json version");
 }
 
-requireIncludes("Gradle repositories", settingsGradle, "https://maven.pkg.jetbrains.space/public/p/compose/dev");
-
 if (!desktopBuildGradle.includes("packageVersion = rootProject.ext.radioOracleVersion")) {
   fail("desktop native packageVersion must use rootProject.ext.radioOracleVersion");
 }
@@ -359,6 +356,8 @@ execFileSync(process.execPath, ["--test", "scripts/release-workflow-policy.test.
 });
 
 const releaseBuildEnv = { RADIO_ORACLE_RELEASE_BUILD: "1" };
+// Resolve Compose through the project's configured repositories and verify the actual staged runtimes.
+// Stable Compose releases can come from Maven Central without the JetBrains development repository.
 runGradle([":desktopApp:verifyDesktopJdeployBundle"], releaseBuildEnv);
 
 const skikoVersion = versionCatalog.match(/^skiko = "([^"]+)"$/m)?.[1];
